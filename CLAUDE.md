@@ -75,14 +75,19 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - **Drift → flag it, don't silently absorb it.** While a work package is in progress, watch for scope drift: an unrelated fix, a second feature creeping in, or growth well beyond the stated goal. When it happens, say so explicitly ("this is drifting from *&lt;work package&gt;*") and propose how to proceed — typically one of: (a) move the extra work to its own branch off `dev`, (b) consciously widen the current work package if the addition genuinely belongs to it, or (c) defer/stash the tangent. Let the user choose.
 - **Keep branches focused and short-lived** so they stay reviewable and merge cleanly.
 
+**Never commit secrets.** API keys, tokens, passwords, private keys, connection strings, and service-account credentials must never enter the repository — not in code, config, tests, fixtures, notebooks, or commit messages. Read them from the environment or a secrets manager, and commit only a `.env.example` with placeholder values. Check `git status` and the staged diff before every commit; when a file is unfamiliar or machine-generated, look at its contents rather than trusting its name. The same rule covers the datasets and credentials of third parties.
+
+If a secret does get committed, **treat it as compromised and rotate it immediately** — rewriting history is not sufficient, because the value may already have been pushed, cloned, cached, or indexed. Rotate first, then clean the history.
+
 ## Documentation upkeep
 
-When a change alters the architecture or user-visible functionality in a major way (new module, new pipeline, new UI capability, changed data flow), update **all four** docs in the same change — they serve different readers and go stale independently:
+When a change alters the architecture or user-visible functionality in a major way (new module, new pipeline, new UI capability, changed data flow), update **all three** docs in the same change — they serve different readers and go stale independently:
 
 - **`README.md`** — what the app does and how to use it (for users and new developers)
 - **`docs/diagrams/`** — the user/developer diagrams (currently `docs/diagrams/architecture.md`), updated **following the principles in `docs/diagrams/DIAGRAMS.md`** (one diagram per story, sequence diagrams for temporal flows, ~7±2 boxes each), together with the references to these diagrams from `README.md`
-- **`docs/REQUIREMENTS.md`** — the behavioral spec (what the app must do, kept implementation-agnostic)
 - **`CLAUDE.md`** — this file's Architecture section (how the code is organized, for coding agents)
+
+The behavioral spec — what the app must do, kept implementation-agnostic — lives in **`openspec/specs/`**, maintained through the OpenSpec workflow rather than as a hand-written document. Write behavioral requirements as spec deltas on a change; they are promoted into `openspec/specs/` when the change is archived. See [ADR-0030](docs/decisions/0030-openspec-specs-as-the-behavioral-record.md).
 
 Small fixes and internal refactors that don't change behavior or structure don't need this.
 
