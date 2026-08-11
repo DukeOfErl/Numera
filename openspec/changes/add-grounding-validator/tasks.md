@@ -1,9 +1,9 @@
 ## 1. Scaffolding and corpus interface
 
-- [ ] 1.1 Create the `bionumbers` package under `src/` with the `uv` entry points, and add dependencies: `httpx`, `lxml`, `pint`, `anthropic`, `pytest`
-- [ ] 1.2 Define the corpus record shape (identifier, property, organism, value/range, units, source identifier, curator quotation fields) and a loader that reads JSONL from a supplied path
-- [ ] 1.3 Make the loader fail with an explanatory message when no corpus path is supplied, and add a test asserting no bundled data is used as a fallback
-- [ ] 1.4 Add a `.gitignore` entry for the corpus directory so the evaluation dataset cannot be committed
+- [x] 1.1 Create the `bionumbers` package under `src/` with the `uv` entry points, and add dependencies: `httpx`, `lxml`, `pint`, `anthropic`, `pytest`
+- [x] 1.2 Define the corpus record shape (identifier, property, organism, value/range, units, source identifier, curator quotation fields) and a loader that reads JSONL from a supplied path
+- [x] 1.3 Make the loader fail with an explanatory message when no corpus path is supplied, and add a test asserting no bundled data is used as a fallback
+- [x] 1.4 Add a `.gitignore` entry for the corpus directory so the evaluation dataset cannot be committed
 
 ## 2. Source retrieval
 

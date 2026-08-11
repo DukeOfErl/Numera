@@ -9,6 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
+# Evaluation corpus — an external input with unresolved licensing; never commit it
+corpus/
+
 # Secrets — see CLAUDE.md, "Never commit secrets"
 .env
 .env.*
