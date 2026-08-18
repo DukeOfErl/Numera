@@ -117,9 +117,25 @@ benchmark, not a derived constant.
 
 ### Adjudication model
 
-`claude-opus-5` via the official `anthropic` Python SDK, with structured outputs so the verdict
-comes back schema-validated rather than parsed out of prose. The model identity and whether a model
-was consulted at all are recorded per verdict, as the spec requires.
+Models are reached through **OpenRouter**, matching the account that is actually available and the
+approach used elsewhere in this work. **Claude Opus 5 is not available on that account** — an earlier
+draft of this section named it, which would not have run.
+
+Development uses an inexpensive model; **Claude Opus 4.7** is the most capable option available and is
+the target once the pipeline is proved. The model is configuration, so the same benchmark subset can
+be scored on both and compared. The model identity and whether a model was consulted at all are
+recorded per verdict, as the spec requires — which is also what keeps a weak model's failures
+distinguishable from a defect in the pipeline.
+
+*To verify before implementing group 5.* Two things follow from going through OpenRouter rather than
+a provider SDK directly. Structured output support varies by model there, and a model without native
+support returns prose that must be parsed — so either a model with native support is chosen, or the
+adjudicator tolerates parsing. And OpenRouter reports the cost of each request in its responses,
+which is a better source for any spend accounting here than a local price table.
+
+**Open question for the user:** whether a direct Anthropic API key exists for this project. If it
+does, the provider SDK remains an option and this decision is worth revisiting; if not, OpenRouter is
+the only route and the notes above apply.
 
 The adjudication prompt sees only the candidate span and its surrounding block, not the whole
 document — which keeps each call small and independently reviewable. Because most entries are
@@ -146,10 +162,23 @@ corpus size.
 - **Europe PMC is a single point of dependency.** → Confined behind the retrieval interface; the
   disk cache means an outage degrades development rather than blocking it.
 
+### Preprint version selection
+
+Where several preprint versions of a work exist, retrieval takes the one published **closest in
+date to the version of record**, falling back to the newest when no date is known. The curator read
+the published paper; the preprint nearest that date is the closest available proxy for what they
+saw, which is what the benchmark is scoring against.
+
+**To be revisited** when the project moves from benchmarking against curated entries to searching
+for new content to add to the database. At that point there is no curator and no citation date, and
+the newest version is likely the right default — the reason for this choice disappears with the use
+case that motivated it.
+
+*Implementation note.* Europe PMC exposes preprint versions as separate `PPR` records with distinct
+publication dates rather than as a version field; `versionNumber` is absent from core results. The
+recorded version label therefore carries publisher, date, and `PPR` id.
+
 ## Open Questions
 
 - Which structural-path serialisation to use for evidence locations. It affects only the record
   format and can be settled during implementation.
-- Whether preprint substitution should prefer the newest preprint version or the one closest in date
-  to the curator's citation. Only matters for entries where the two differ, which the benchmark will
-  count.

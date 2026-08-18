@@ -7,12 +7,12 @@
 
 ## 2. Source retrieval
 
-- [ ] 2.1 Define the typed unavailability reasons (`NON_ARTICLE_SOURCE`, `UNRESOLVED_REFERENCE`, `NO_FULL_TEXT`, `NO_OPEN_ACCESS`) and the retrieval result type that carries either a document or a reason
-- [ ] 2.2 Implement identifier resolution from a corpus record, recording a typed reason when no persistent identifier can be determined
-- [ ] 2.3 Implement Europe PMC lookup for open-access full text, returning JATS XML for the version of record
-- [ ] 2.4 Add preprint fallback when the version of record is not openly accessible, recording that the retrieved artifact is a preprint and its version
-- [ ] 2.5 Add a disk cache keyed by identifier and version, and a test that a second retrieval makes no network call
-- [ ] 2.6 Write tests covering each unavailability reason against recorded fixtures, asserting entries are retained rather than dropped
+- [x] 2.1 Define the typed unavailability reasons (`NON_ARTICLE_SOURCE`, `UNRESOLVED_REFERENCE`, `NO_FULL_TEXT`, `NO_OPEN_ACCESS`) and the retrieval result type that carries either a document or a reason
+- [x] 2.2 Implement identifier resolution from a corpus record, recording a typed reason when no persistent identifier can be determined
+- [x] 2.3 Implement Europe PMC lookup for open-access full text, returning JATS XML for the version of record
+- [x] 2.4 Add preprint fallback when the version of record is not openly accessible, recording that the retrieved artifact is a preprint and its version
+- [x] 2.5 Add a disk cache keyed by identifier and version, and a test that a second retrieval makes no network call
+- [x] 2.6 Write tests covering each unavailability reason against recorded fixtures, asserting entries are retained rather than dropped
 
 ## 3. Document structure
 
@@ -57,9 +57,11 @@
 
 ## 8. Documentation
 
+ADR numbers for this change are allocated `0040`–`0090`; `add-ask-agent` holds `0100`–`0150`.
+
 - [ ] 8.1 Write `README.md`: what the validator does, how to supply a corpus, and how to run the benchmark
-- [ ] 8.2 Create `docs/diagrams/DIAGRAMS.md` and an architecture diagram of the retrieval → candidates → adjudication → verdict flow, following the one-diagram-per-story principle
+- [ ] 8.2 Add an architecture diagram of the retrieval → candidates → adjudication → verdict flow to `docs/diagrams/`, following the principles already in `docs/diagrams/DIAGRAMS.md`
 - [ ] 8.3 Record an ADR for the two-stage split (deterministic candidates, model adjudication) and the reasoning behind it
 - [ ] 8.4 Record an ADR for the verdict vocabulary, in particular why `NOT_FOUND` and `UNVERIFIABLE` stay distinct
-- [ ] 8.5 Start `CHANGELOG.md` with the validator under `## [Unreleased]`
+- [ ] 8.5 Add the validator's entries under `## [Unreleased]` in the existing `CHANGELOG.md`
 - [ ] 8.6 Update the Architecture section of `CLAUDE.md` to describe the module layout
