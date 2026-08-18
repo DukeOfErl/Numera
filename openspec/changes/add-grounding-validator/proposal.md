@@ -61,6 +61,26 @@ Not in scope: extraction of previously unknown numbers, the human-in-the-loop re
 trust-ranking mechanics, contradiction *reporting* beyond emitting the verdict, subject areas beyond
 the cytoskeleton slice, and anything about monetisation.
 
+## Recorded for a follow-up: locating where a measure is defined
+
+Not built here, and noted so the connection is not rediscovered.
+
+A validated value can still be unusable, because the reader does not know what the measure means. A
+paper may use an uncommon metric or define its own, and the reference corpus shows the same hazard in
+its own property names: 193 entries mention "density", spanning mass density, linear gene density and
+areal counts, and 136 property strings appear under more than one unit — `generation time` occurs as
+both `Hours` and `Hour^-1`, which are reciprocals.
+
+A model asked to explain such a measure would be guessing, which is the unsourced answer this project
+exists to prevent. The answer is to point at where the measure is *defined* in the source.
+
+That is this change's machinery aimed at a different target. `evidence-grounding` already locates a
+claimed value in a retrieved document and returns a citable span with a structural location; a
+definition is the same kind of span, found the same way. The verdict vocabulary would need a
+counterpart for "the measure is defined at this location", and the benchmark would need gold spans
+for definitions rather than values. Worth taking up once the value-grounding path is proved, not
+before.
+
 ## Capabilities
 
 ### New Capabilities
