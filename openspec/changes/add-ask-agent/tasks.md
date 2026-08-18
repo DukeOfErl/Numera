@@ -1,19 +1,19 @@
 ## 1. Scaffolding and framework verification
 
-- [ ] 1.1 Create the `bionumbers_ask` package under `src/` with `uv` entry points, and add dependencies: `langchain` (>=1.1), `langgraph`, an OpenAI-compatible client for OpenRouter, a web application framework, and `pytest`
-- [ ] 1.2 Read the framework's built-in middleware list before writing any custom hook, and record which built-ins cover which requirements here
-- [ ] 1.3 Verify against the installed versions which agent constructor is current and what the middleware hook signatures are — do not rely on documentation or tutorials for this
-- [ ] 1.4 Write a spike that compiles an agent with a file-backed checkpointer, completes a turn, exits the process, and continues the same session by its thread identifier in a new process
-- [ ] 1.5 Turn that spike into a test, since conversation across turns in the web interface depends on the behaviour it proves
-- [ ] 1.6 Add configuration for the model, the per-question warning threshold, the run budget, and a fallback price table, selectable per run
-- [ ] 1.7 Confirm that OpenRouter reports per-request cost for the configured models, and whether it must be enabled per request
-- [ ] 1.8 Add `.gitignore` entries for the corpus directory, the checkpoint store, logs, and evaluation results
+- [x] 1.1 Create the `bionumbers_ask` package under `src/` with `uv` entry points, and add dependencies: `langchain` (>=1.1), `langgraph`, an OpenAI-compatible client for OpenRouter, a web application framework, and `pytest`
+- [x] 1.2 Read the framework's built-in middleware list before writing any custom hook, and record which built-ins cover which requirements here
+- [x] 1.3 Verify against the installed versions which agent constructor is current and what the middleware hook signatures are — do not rely on documentation or tutorials for this
+- [x] 1.4 Write a spike that compiles an agent with a file-backed checkpointer, completes a turn, exits the process, and continues the same session by its thread identifier in a new process
+- [x] 1.5 Turn that spike into a test, since conversation across turns in the web interface depends on the behaviour it proves
+- [x] 1.6 Add configuration for the model, the per-question warning threshold, the run budget, and a fallback price table, selectable per run
+- [x] 1.7 Confirm that OpenRouter reports per-request cost for the configured models, and whether it must be enabled per request
+- [x] 1.8 Add `.gitignore` entries for the corpus directory, the checkpoint store, logs, and evaluation results
 
 ## 2. Logging
 
 - [ ] 2.1 Add structured logging with a correlation identifier assigned per question and carried through every record for that question
 - [ ] 2.2 Name graph nodes and runs meaningfully, so traces are readable if tracing is switched on later
-- [ ] 2.3 Verify a question produces a coherent, readable trail from first tool call to answer
+- [ ] 2.3 Verify a question produces a coherent, readable trail from first tool call to answer, that a truncated search records both figures, and that two questions in one session carry different identifiers
 
 ## 3. Corpus and query tools
 
@@ -32,12 +32,14 @@
 - [ ] 4.2 Wrap the corpus tools for the agent, with descriptions stating when each should be used
 - [ ] 4.3 Build the agent with the verified constructor, a static system prompt carrying the answering rules, and a fixed tool list
 - [ ] 4.4 Attach the file-backed checkpointer and map a session identifier to a thread identifier
-- [ ] 4.5 Emit retrieval events as they happen, so a driver can show progress before the answer exists
+- [ ] 4.5 Emit retrieval events as they happen, so a driver can show progress before the answer exists, and an ending event naming why a question ended and what it consumed
 - [ ] 4.6 Test that two concurrent sessions share no conversation, no retrieved entries, and no spend
 - [ ] 4.7 Test that a follow-up question inherits context within a session and does not across sessions
 - [ ] 4.8 Configure reliability middleware: retried model calls with backoff, retried tool calls, and tool errors returned to the agent rather than ending the run
 - [ ] 4.9 Test that a transient provider failure is retried and the question continues, and that exhausted retries end the question as a provider failure rather than an answer
-- [ ] 4.10 Bound conversation growth: warn as the bound is approached, refuse further questions once reached, and never discard context silently
+- [ ] 4.10 Test that the same question through an attended and an unattended driver emits the same events, and that the agent takes no parameter naming its caller
+- [ ] 4.11 Test that a follow-up answer cites its supporting entries in full rather than referring back to an earlier answer's citations
+- [ ] 4.12 Bound conversation growth: warn as the bound is approached, refuse further questions once reached, and never discard context silently
 
 ## 5. Spend control
 
@@ -47,6 +49,7 @@
 - [ ] 5.4 End the question at the ceiling, presenting what was established with citations and marked incomplete
 - [ ] 5.5 Persist accumulated spend and the ceiling in session state, and test that spend continues rather than resetting when a session is continued
 - [ ] 5.6 Emit the warning when spend passes the threshold, without ending the question
+- [ ] 5.10 Test that a second question in a session starts with a fresh per-question ceiling while run spend keeps accumulating
 - [ ] 5.7 Implement the run budget across questions, stopping the run when it is reached
 - [ ] 5.8 Implement the pre-flight projection that flags an expensive question before work begins, and test that it never affects where work stops
 - [ ] 5.9 Report spend and the model with every answer

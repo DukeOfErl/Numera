@@ -9,8 +9,16 @@ wheels/
 # Virtual environments
 .venv
 
+# Evaluation corpus — an external input with unresolved licensing; never commit it
+corpus/
+
 # Secrets — see CLAUDE.md, "Never commit secrets"
 .env
 .env.*
 !.env.example
 *.key
+
+# Agent runtime state — regenerable, and session content should not be committed
+checkpoints/
+logs/
+eval-results/

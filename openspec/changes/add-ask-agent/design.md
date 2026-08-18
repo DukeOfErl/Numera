@@ -65,10 +65,42 @@ the agent. That works but sits one layer out from the actual dispatch, so the ch
 the agent's next step" rather than "before this model request" — and it means composing a graph by
 hand where the framework offers a hook.
 
-*Corollary:* prefer built-in middleware over writing our own. Several requirements here are covered
-by existing components (model and tool call limits, summarisation, PII detection, retries), and the
-framework's own guidance is to configure rather than reimplement. Read the built-in list before
-writing any custom hook.
+*Corollary:* prefer built-in middleware over writing our own. The framework's own guidance is to
+configure rather than reimplement, and most of what this change needs already exists. Verified against the installed
+packages on 2026-08-18 — `langchain` 1.3.15, `langgraph` 1.2.11, `langchain-core` 1.5.6 — rather than
+from documentation alone:
+
+| Requirement | Built-in | Status here |
+|---|---|---|
+| Retried model calls | `ModelRetryMiddleware` | Configure — MVP |
+| Retried tool calls | `ToolRetryMiddleware` | Configure — MVP |
+| Tool errors returned to the agent, not fatal | `ToolErrorMiddleware` | Configure — MVP |
+| Bounded retrieval effort per question and per run | `ModelCallLimitMiddleware` (`thread_limit`, `run_limit`) | Configure — MVP; the two limits map onto per-question and per-run bounds |
+| Routing to another model when one is unavailable | `ModelFallbackMiddleware` | Available, not configured yet |
+| Condensing a long conversation | `SummarizationMiddleware` (`trigger`, `keep`) | **Deferred** — see the conversation-bound decision below |
+| Capping tool calls specifically | `ToolCallLimitMiddleware` | **Deferred** — had unexpected consequences in `interv_preper` |
+| Redacting sensitive text | `PIIMiddleware` | **Deferred** with the guardrails work |
+| Selecting tools dynamically from a larger set | `LLMToolSelectorMiddleware` | **Deferred** — a later phase; the MVP has a fixed tool list |
+
+Only one hook here is genuinely custom: the spend gate, because no built-in bounds cost in currency
+rather than in call count. Everything else above is configuration.
+
+Hook signatures, read off `AgentMiddleware` in the installed package. Node-style hooks
+(`before_agent`, `before_model`, `after_model`, `after_agent`) take `(state, runtime)` and return
+`dict | None`. Wrapping hooks take `(request, handler)`: `wrap_model_call` receives a `ModelRequest`
+and a handler returning a `ModelResponse`, and `wrap_tool_call` the tool equivalent. An async
+`awrap_model_call` exists alongside. The handler is an ordinary callable, so calling it zero times is
+what makes the spend gate possible.
+
+`create_agent` lives in `langchain.agents` and takes `checkpointer` directly — so no `StateGraph` needs
+composing by hand, as an earlier draft assumed. Its parameters include `model`, `tools`,
+`system_prompt`, `middleware`, `state_schema`, `checkpointer`, `store`, and `interrupt_before` /
+`interrupt_after`, which is where the deferred approval flow would eventually attach.
+
+*Found by verifying rather than reading.* **`SqliteSaver` ships separately** from `langgraph`, in
+`langgraph-checkpoint-sqlite`. Only `InMemorySaver` is reachable from a plain `langgraph` install, and
+in-memory is exactly what the process-boundary requirement rules out — so the extra package is a direct
+dependency, not an option.
 
 *Consequence to respect.* The check runs between model calls, so the request that crosses the ceiling
 completes. Final spend can exceed the ceiling by at most one call, which `spend-control` states
@@ -132,6 +164,23 @@ actual spend rather than an estimate.
 
 A configured price table remains a fallback for a provider that reports only token counts, and the
 system refuses to run when it has neither.
+
+*Verified against OpenRouter on 2026-08-18.* Cost arrives at
+`response_metadata["token_usage"]["cost"]`, with a `cost_details` breakdown, and — answering the
+question the task raised — **it needs no per-request opt-in**: the figure was present without passing
+`usage: {"include": true}`, and identical with it. On a 14-in / 4-out call it reported `3.4e-05` USD,
+matching the price table computed from the published per-token rates exactly, which is the strongest
+available evidence that the fallback table and the reported figure agree.
+
+Two consequences for the ledger. The provider reports cost as a **float**, so conversion to integer
+micro-dollars is the one place a float is allowed in: round once at that boundary and stay integral
+afterwards. And money is held in **micro-dollars rather than cents**, because a thousand-token call on
+a cheap model costs a fraction of a cent — a ledger rounding each increment to whole cents would round
+most of them to zero and never move. The same reasoning applies to display: fixed two-decimal
+formatting renders development-scale spend as "$0", so precision follows magnitude.
+
+Model slugs confirmed from the models endpoint: `anthropic/claude-haiku-4.5` for development and
+`anthropic/claude-opus-4.7` as the capable target.
 
 ### Two-tier retrieval
 

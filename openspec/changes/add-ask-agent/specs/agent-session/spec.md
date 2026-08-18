@@ -40,9 +40,10 @@ event — render it, log it, or act on it — is the driver's responsibility.
 - **THEN** the driver records the outcome from the emitted events
 - **AND** the agent's behaviour is the same as it would be with a user present
 
-#### Scenario: Inspecting the agent for an unattended mode
-- **WHEN** the agent's behaviour is examined
-- **THEN** it carries no setting that distinguishes attended from unattended operation
+#### Scenario: The same question through an attended and an unattended driver
+- **WHEN** the same question is put through an interactive driver and an unattended one
+- **THEN** the events the agent emits are the same in both
+- **AND** the agent is given no parameter indicating which driver is calling it
 
 ### Requirement: Events carry enough detail to show progress and to explain an ending
 
@@ -73,9 +74,10 @@ between web requests — and the loss is silent until someone tries to continue.
 - **AND** a new process continues that session by its identifier
 - **THEN** a follow-up question is answered with the earlier conversation available to it
 
-#### Scenario: State that cannot be persisted
-- **WHEN** any state a session needs to continue cannot be written to the session
-- **THEN** this is a defect, not a limitation of the driver
+#### Scenario: Every kind of session state survives
+- **WHEN** a session is continued in a new process
+- **THEN** the conversation, the accumulated spend, and the ceiling in force are all present
+- **AND** none of them has reset to its initial value
 
 ### Requirement: A transient failure does not end a question
 
@@ -101,6 +103,30 @@ evaluation it consumes a question slot while measuring nothing.
 - **WHEN** a tool raises an exception
 - **THEN** the agent receives an error result it can act on
 - **AND** the run does not collapse
+
+### Requirement: The deterministic layer is logged under a per-question identifier
+
+Searches, retrievals, alias resolutions, truncation decisions, and each spend increment SHALL be
+recorded, and every record for one question SHALL carry the same identifier so the question's trail
+can be reassembled.
+
+Several failures here are silent rather than loud — an alias resolving to the wrong stored value, a
+truncated result treated as complete, spend accumulated from a response that reported no cost — and a
+non-deterministic agent reproduces them only sometimes. The identifier is what makes an intermittent
+failure investigable after the fact.
+
+#### Scenario: A question is answered
+- **WHEN** a question completes
+- **THEN** its searches, retrievals, and spend increments are recorded
+- **AND** every record for that question carries the same identifier
+
+#### Scenario: A search was truncated
+- **WHEN** a search matched more entries than were returned
+- **THEN** the record states how many matched and how many were returned
+
+#### Scenario: Two questions run in one session
+- **WHEN** two questions are answered in the same session
+- **THEN** their records carry different identifiers
 
 ### Requirement: Sessions are isolated from one another
 

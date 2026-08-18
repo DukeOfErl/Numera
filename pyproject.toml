@@ -21,6 +21,9 @@ validator = [
 ask = [
     "langchain>=1.1",
     "langgraph",
+    # SqliteSaver ships separately from langgraph; the file-backed checkpointer
+    # is load-bearing here, so it is a direct dependency rather than an option.
+    "langgraph-checkpoint-sqlite",
     "langchain-openai",
     "streamlit",
 ]
