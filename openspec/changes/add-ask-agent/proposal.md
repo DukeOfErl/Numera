@@ -141,6 +141,31 @@ here.
   the `interv_preper` project — before adopting it here, read that project's experience of what went
   wrong, starting from its ADR on the agent loop. Read it for the failure modes rather than the
   remedies; how it was resolved there may be specific to that implementation.
+- **What a property actually measures.** Two distinct problems, both real in this corpus and neither
+  addressed here.
+
+  *A property name can cover several quantities.* 193 entries mention "density" in their property,
+  spanning mass density (`g/cm^3`), linear gene density (`genes/kb`), areal counts (`NPC/μm^2`,
+  `stomata/mm^2`) and more. 136 property strings appear under more than one unit, and those divide
+  further: `genome size` in `Base pairs` and `Gbp` is one quantity in two scales, whereas
+  `mutation rate` as `1/genome/generation` and as `mutation/hour` are different quantities, and
+  `generation time` appears as both `Hours` and `Hour^-1` — reciprocals of each other. The dimensional
+  compatibility already required prevents these being averaged or presented as a range, which is the
+  arithmetic error. It does **not** prevent answering the wrong sense of the question with a correct
+  citation, which is the subtler failure and is not currently guarded against.
+
+  *A measure may be uncommon, or defined by the paper itself.* Here the value is right and the reader
+  still cannot use it, because the metric means nothing outside its source. The model must not explain
+  such a measure from its own knowledge — that is exactly the unsourced answer this project exists to
+  avoid — so the answer has to point at where the measure is defined rather than paraphrase it.
+
+  Two things bear on how this gets built. The corpus already carries part of the material: 50% of
+  entries have a `measurement_method`, often a verbatim quotation with a page pointer, which
+  `get_entry` already returns but nothing instructs the agent to use for disambiguation. That is the
+  cheapest first step and belongs here. The rest — locating where a measure is *defined* in the source
+  paper — is the grounding validator's machinery pointed at a different target: it already locates a
+  claimed value in a document and returns a citable span, and a definition is the same kind of span.
+  That belongs to a follow-up on `add-grounding-validator` rather than to either change as scoped.
 - **Latency monitoring.** The phased approach calls for watching calls, tokens, and latency. Calls and
   tokens are covered; latency is not measured in the MVP. When it is, the quantities worth recording
   are wall time per question, duration per tool call, and time from question to first emitted event —
