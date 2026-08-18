@@ -28,18 +28,18 @@
 
 ## 4. Agent — static prompt, fixed tools
 
-- [ ] 4.1 Define the event types the agent emits and the commands it accepts
-- [ ] 4.2 Wrap the corpus tools for the agent, with descriptions stating when each should be used
-- [ ] 4.3 Build the agent with the verified constructor, a static system prompt carrying the answering rules, and a fixed tool list
-- [ ] 4.4 Attach the file-backed checkpointer and map a session identifier to a thread identifier
-- [ ] 4.5 Emit retrieval events as they happen, so a driver can show progress before the answer exists, and an ending event naming why a question ended and what it consumed
-- [ ] 4.6 Test that two concurrent sessions share no conversation, no retrieved entries, and no spend
-- [ ] 4.7 Test that a follow-up question inherits context within a session and does not across sessions
-- [ ] 4.8 Configure reliability middleware: retried model calls with backoff, retried tool calls, and tool errors returned to the agent rather than ending the run
-- [ ] 4.9 Test that a transient provider failure is retried and the question continues, and that exhausted retries end the question as a provider failure rather than an answer
-- [ ] 4.10 Test that the same question through an attended and an unattended driver emits the same events, and that the agent takes no parameter naming its caller
-- [ ] 4.11 Test that a follow-up answer cites its supporting entries in full rather than referring back to an earlier answer's citations
-- [ ] 4.12 Bound conversation growth: warn as the bound is approached, refuse further questions once reached, and never discard context silently
+- [x] 4.1 Define the event types the agent emits and the commands it accepts
+- [x] 4.2 Wrap the corpus tools for the agent, with descriptions stating when each should be used
+- [x] 4.3 Build the agent with the verified constructor, a static system prompt carrying the answering rules, and a fixed tool list
+- [x] 4.4 Attach the file-backed checkpointer and map a session identifier to a thread identifier
+- [x] 4.5 Emit retrieval events as they happen, so a driver can show progress before the answer exists, and an ending event naming why a question ended and what it consumed
+- [x] 4.6 Test that two concurrent sessions share no conversation, no retrieved entries, and no spend
+- [x] 4.7 Test that a follow-up question inherits context within a session and does not across sessions
+- [x] 4.8 Configure reliability middleware: retried model calls with backoff, retried tool calls, and tool errors returned to the agent rather than ending the run
+- [x] 4.9 Test that a transient provider failure is retried and the question continues, and that exhausted retries end the question as a provider failure rather than an answer
+- [x] 4.10 Test that the same question through an attended and an unattended driver emits the same events, and that the agent takes no parameter naming its caller
+- [x] 4.11 Assert the prompt requires follow-up answers to cite in full; the behavioural check moves to 9.x, since whether the model complies is only measurable by scoring answers
+- [x] 4.12 Bound conversation growth: warn as the bound is approached, refuse further questions once reached, and never discard context silently
 
 ## 5. Spend control
 
@@ -84,6 +84,7 @@
 - [ ] 9.3 Implement the evaluation driver, recording outcomes from emitted events
 - [ ] 9.4 Score by comparing cited entries against expected entries, reporting unexpected citations separately
 - [ ] 9.5 Score refusals on unsupported questions, and report a quantity given for one as a fabrication
+- [ ] 9.5b Include follow-up questions in the set, and score whether their answers cite in full rather than referring back to an earlier answer
 - [ ] 9.6 Append each result as its question completes, carrying the question, answer, cited entries, expected entries, and model, in a shape external evaluation tooling can read
 - [ ] 9.7 Implement resumption against an existing results file, attempting only what is missing
 - [ ] 9.8 Support repeated runs of each question and report the variation across them

@@ -89,9 +89,9 @@ validator's retrieval layer and to a future discovery capability), and web acces
 - `agent-session`: The boundary between the agent and whatever drives it. Covers the event and
   command contract, resumption of a suspended session in another process, isolation between
   sessions, conversational context within a session, and the bound on conversation growth.
-- `spend-control`: Bound what questions may cost. Covers measuring spend from reported usage, the
-  pre-request gate, the per-question ceiling and the run budget, the approval cycle, persistence of
-  spend state, behaviour when no interactive user is present, and price configuration.
+- `spend-control`: Bound what questions may cost. Covers taking spend from what the provider reports,
+  the pre-request gate, the per-question ceiling and the run budget, what a question ended on a
+  ceiling still reports, persistence of spend state, and price configuration as a fallback.
 - `answer-evaluation`: Score answers against a held-out question set with known answering entries.
   Covers the question set, citation-based scoring, unsupported questions, run-to-run variation,
   incremental recording and resumption, and a record shape external evaluation tooling can read.
