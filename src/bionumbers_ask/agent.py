@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from collections import deque
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 
 from langchain.agents import create_agent
@@ -20,11 +20,20 @@ from langchain.agents.middleware import (
     ToolErrorMiddleware,
     ToolRetryMiddleware,
 )
+from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from .config import Config, micro_from_provider_cost
-from .events import Answer, EndReason, Event, QuestionEnded, QuestionStarted, Retrieval
+from .events import (
+    Answer,
+    ConversationWarning,
+    EndReason,
+    Event,
+    QuestionEnded,
+    QuestionStarted,
+    Retrieval,
+)
 from .repository import CorpusRepository
 from .tools import build_tools
 from .trace import start_question
@@ -58,6 +67,9 @@ one answer on its own must still be able to trace every number.
 # length partway through a question. A number to tune against real sessions; the
 # design records condensing instead as deferred.
 CONVERSATION_BOUND = 60
+# How close to the bound before the user is told. A session that went from
+# working to refusing with no notice gives no chance to finish a line of enquiry.
+CONVERSATION_WARN_AT = 0.75
 
 
 @dataclass
@@ -77,6 +89,24 @@ class _Spend:
             self.micro += micro_from_provider_cost(cost)
 
 
+def _text_of(message: object) -> str:
+    """Text from a message whose content may be a string or a list of blocks.
+
+    Anthropic-shaped and reasoning-model responses use block lists; treating only
+    strings as text silently yields a blank answer that still reports success.
+    """
+    content = getattr(message, "content", "")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            part.get("text", "")
+            for part in content
+            if isinstance(part, dict) and part.get("type") == "text"
+        )
+    return ""
+
+
 def default_model(config: Config) -> BaseChatModel:
     from langchain_openai import ChatOpenAI
 
@@ -87,17 +117,32 @@ def default_model(config: Config) -> BaseChatModel:
     )
 
 
-def _tool_error_message(exc: Exception, request: object) -> str:
-    """What the agent sees when a tool raises: the failure, and what to do next."""
+# Exceptions our own tools raise deliberately, for arguments the model got wrong.
+# Anything else is a defect here and must not be dressed up as a lookup failure.
+_EXPECTED_TOOL_ERRORS = (ValueError, KeyError, TypeError)
+
+
+def _tool_error_message(exc: Exception, request: object) -> str | None:
+    """What the agent sees when a tool raises -- or None to let it propagate.
+
+    Returning a message for every exception would hand a genuine defect to the
+    model as a retryable lookup failure: it would retry, fail again, and report
+    that the corpus has nothing on the subject. A wrong grounded-sounding answer
+    is far worse than a crash. Only argument errors are surfaced, and only by
+    type, since an exception message may carry internal detail.
+    """
+    if not isinstance(exc, _EXPECTED_TOOL_ERRORS):
+        return None
     return (
-        f"The tool failed: {type(exc).__name__}: {exc}. "
-        "Do not treat this as evidence about the corpus. Either retry with different "
-        "arguments, or report that the lookup could not be completed."
+        f"The tool rejected those arguments ({type(exc).__name__}). "
+        "This says nothing about what the corpus contains. Correct the arguments "
+        "and try again, or report that the lookup could not be completed."
     )
 
 
 # Retry settings, at module level so tests can shorten the delays without
 # reaching into the middleware list.
+RUN_CALL_LIMIT = 12
 MODEL_RETRIES = 2
 TOOL_RETRIES = 2
 RETRY_INITIAL_DELAY = 1.0
@@ -118,22 +163,27 @@ def _middleware() -> list:
             initial_delay=RETRY_INITIAL_DELAY,
             on_failure="error",
         ),
-        # Tool failures are left to continue, because ToolErrorMiddleware below
-        # turns them into something the agent can act on -- which is more useful
-        # than ending the question.
+        # Order matters and is not cosmetic. First in the list is outermost, and
+        # ToolRetryMiddleware only retries when the handler raises -- so with
+        # ToolErrorMiddleware inside it, every exception would be converted to a
+        # ToolMessage before retry ever saw one, and retries would silently never
+        # happen. ToolErrorMiddleware's own docstring specifies this arrangement:
+        # retry placed inner, with on_failure="error" so exhaustion propagates out
+        # to be turned into something the agent can act on.
+        ToolErrorMiddleware(on_error=_tool_error_message),
         ToolRetryMiddleware(
             max_retries=TOOL_RETRIES,
             backoff_factor=2.0,
             initial_delay=RETRY_INITIAL_DELAY,
+            on_failure="error",
         ),
-        # A tool that raises returns something the agent can act on instead of
-        # collapsing the run. The handler is required rather than defaulted, which
-        # is the right call by the framework: silently swallowing every tool
-        # exception is not a safe default.
-        ToolErrorMiddleware(on_error=_tool_error_message),
         # Brought forward from the retrieval-effort task: until the spend gate
         # exists, this is the only thing standing between a loop and the bill.
-        ModelCallLimitMiddleware(run_limit=12, exit_behavior="end"),
+        #
+        # exit_behavior="error" rather than "end": ending injects an AIMessage
+        # reading "Model call limits exceeded", which this loop would adopt as the
+        # answer and report as a complete one. Raising lets the limit be named.
+        ModelCallLimitMiddleware(run_limit=RUN_CALL_LIMIT, exit_behavior="error"),
     ]
 
 
@@ -156,10 +206,18 @@ class AskAgent:
             yield saver
 
     def conversation_length(self, session_id: str) -> int:
+        """How many messages a session holds.
+
+        Read straight from the checkpoint. Constructing an agent for this would
+        build a chat model, which reads the API key from the environment -- so a
+        driver asking how full a session is would fail wherever that key is
+        absent, to answer a question needing no model at all.
+        """
         with self._saver() as saver:
-            agent = create_agent(model=self._model or default_model(self._config), tools=[], checkpointer=saver)
-            state = agent.get_state({"configurable": {"thread_id": session_id}})
-            return len((state.values or {}).get("messages", []))
+            record = saver.get_tuple({"configurable": {"thread_id": session_id}})
+        if record is None:
+            return 0
+        return len((record.checkpoint.get("channel_values") or {}).get("messages", []))
 
     def ask(self, session_id: str, question: str) -> Iterator[Event]:
         """Answer a question, emitting events as the work happens.
@@ -205,46 +263,93 @@ class AskAgent:
                 )
                 return
 
+            if len(existing.get("messages", [])) >= CONVERSATION_BOUND * CONVERSATION_WARN_AT:
+                yield ConversationWarning(
+                    question_id=trace.question_id,
+                    messages=len(existing.get("messages", [])),
+                    bound=CONVERSATION_BOUND,
+                )
+
             answer_text = ""
             tool_calls = 0
-            reason = EndReason.ANSWERED
-            try:
-                for chunk in agent.stream(
-                    {"messages": [{"role": "user", "content": question}]},
-                    config=config,
-                    stream_mode="updates",
-                ):
+            stream = agent.stream(
+                {"messages": [{"role": "user", "content": question}]},
+                config=config,
+                stream_mode="updates",
+            )
+            # closing() so the stream is shut down before the checkpointer is.
+            # This generator can be abandoned at any yield -- a caller breaking
+            # out of the loop, or an exception from the processing below -- and
+            # unwinding would otherwise close the SQLite connection while
+            # LangGraph's worker threads are still writing to it, which segfaults
+            # the interpreter rather than raising.
+            with closing(stream):
+                while True:
+                    # The guard covers advancing the stream and nothing else. Wrapping
+                    # the processing below would report a defect in this file as a
+                    # provider failure, sending whoever debugs it to the wrong place.
+                    try:
+                        chunk = next(stream)
+                    except StopIteration:
+                        break
+                    except ModelCallLimitExceededError:
+                        trace.record("retrieval.bound_reached", tool_calls=tool_calls)
+                        yield QuestionEnded(
+                            question_id=trace.question_id,
+                            reason=EndReason.RETRIEVAL_BOUND,
+                            spend=spend.micro,
+                            model=self._config.model,
+                            tool_calls=tool_calls,
+                            incomplete=True,
+                        )
+                        return
+                    except Exception as exc:  # provider failure after retries are exhausted
+                        trace.record("provider.failed", error=type(exc).__name__)
+                        yield QuestionEnded(
+                            question_id=trace.question_id,
+                            reason=EndReason.PROVIDER_FAILURE,
+                            spend=spend.micro,
+                            model=self._config.model,
+                            tool_calls=tool_calls,
+                            incomplete=True,
+                        )
+                        return
+
                     while pending:
-                        event = pending.popleft()
                         tool_calls += 1
-                        yield event
+                        yield pending.popleft()
                     for update in chunk.values():
                         for message in (update or {}).get("messages", []) or []:
                             spend.add_from(message)
-                            text = getattr(message, "content", "")
-                            if getattr(message, "type", "") == "ai" and isinstance(text, str) and text.strip():
-                                answer_text = text
-            except Exception as exc:  # provider failure after retries are exhausted
-                trace.record("provider.failed", error=str(exc))
-                yield QuestionEnded(
-                    question_id=trace.question_id,
-                    reason=EndReason.PROVIDER_FAILURE,
-                    spend=spend.micro,
-                    model=self._config.model,
-                    tool_calls=tool_calls,
-                    incomplete=True,
-                )
-                return
+                            if getattr(message, "type", "") == "ai":
+                                text = _text_of(message)
+                                if text.strip():
+                                    answer_text = text
 
             while pending:
-                tool_calls += 1
-                yield pending.popleft()
+                    tool_calls += 1
+                    yield pending.popleft()
+
+        if not answer_text.strip():
+            # The loop finished without producing text. Reporting that as an
+            # answered question would hand the driver a blank answer marked
+            # complete, which is the silent failure this project cannot afford.
+            trace.record("question.no_answer", tool_calls=tool_calls)
+            yield QuestionEnded(
+                question_id=trace.question_id,
+                reason=EndReason.NO_ANSWER,
+                spend=spend.micro,
+                model=self._config.model,
+                tool_calls=tool_calls,
+                incomplete=True,
+            )
+            return
 
         trace.record("question.answered", spend_micro=spend.micro, tool_calls=tool_calls)
         yield Answer(question_id=trace.question_id, text=answer_text)
         yield QuestionEnded(
             question_id=trace.question_id,
-            reason=reason,
+            reason=EndReason.ANSWERED,
             spend=spend.micro,
             model=self._config.model,
             tool_calls=tool_calls,

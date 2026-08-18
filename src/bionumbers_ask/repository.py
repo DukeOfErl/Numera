@@ -18,6 +18,10 @@ from .corpus import Entry
 from .trace import QuestionTrace
 
 DEFAULT_LIMIT = 50
+# The model chooses `limit`, and a large value defeats the two-tier design
+# entirely -- asking for 20,000 rows would return the whole corpus in one tool
+# message, which is the context and spend blow-up this module exists to prevent.
+MAX_LIMIT = 200
 
 # Entry text cites other entries as "BNID 102065, 104333". Identifiers are six
 # digits beginning with 1.
@@ -136,7 +140,7 @@ class CorpusRepository:
         # limit arrives from the model as a tool argument. Negative values slice
         # from the end -- silently dropping the last match while reporting
         # truncation -- and zero returns nothing against a non-zero total.
-        limit = max(1, int(limit))
+        limit = max(1, min(int(limit), MAX_LIMIT))
         resolved = self._resolve_organism(organism) if organism else None
         matched = [
             e
@@ -173,7 +177,14 @@ class CorpusRepository:
 
     # -- vocabulary -------------------------------------------------------
 
-    def vocabulary(self, field: str, term: str = "", limit: int = 20) -> tuple[tuple[str, int], ...]:
+    def vocabulary(
+        self,
+        field: str,
+        term: str = "",
+        limit: int = 20,
+        *,
+        trace: QuestionTrace | None = None,
+    ) -> tuple[tuple[str, int], ...]:
         """Stored values matching a partial term, so nothing has to be guessed.
 
         A search that returns nothing is otherwise indistinguishable from a topic
@@ -188,7 +199,10 @@ class CorpusRepository:
         key = term.lower()
         hits = [(value, n) for value, n in counts.items() if key in value.lower()]
         hits.sort(key=lambda pair: (-pair[1], pair[0]))
-        return tuple(hits[:limit])
+        found = tuple(hits[:limit])
+        if trace is not None:
+            trace.record("vocabulary", field=field, term=term, found=len(found))
+        return found
 
     # -- retrieval --------------------------------------------------------
 

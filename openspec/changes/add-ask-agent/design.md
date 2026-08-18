@@ -141,6 +141,19 @@ than in Deferred.
 the ceiling. This is correct — the money was spent — but it means a retry storm consumes budget, which
 is precisely what the ceiling is for.
 
+### The stream is closed before the checkpointer
+
+`ask` is a generator, so it can be abandoned at any yield — a driver breaking out
+of the loop, or an exception raised from the processing around it. Unwinding then
+exits the checkpointer's context and closes its SQLite connection, while LangGraph's
+worker threads may still be writing checkpoints. That does not raise: it segfaults
+the interpreter, from a thread with no relation to the abandoning code.
+
+Closing the stream first, in a `finally`, is what makes abandonment safe. Measured
+before fixing it, the crash appeared in roughly half of runs — nondeterministic
+enough that a single green run proves nothing, which is worth knowing for anything
+else in this design that spans threads.
+
 ### Models: cheap while building, capable once proved
 
 Development runs on **Claude Haiku 4.5**; the later target is **Claude Opus 4.7**, the most capable

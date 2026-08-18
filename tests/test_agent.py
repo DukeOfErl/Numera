@@ -186,3 +186,147 @@ def test_the_prompt_states_the_rules_the_evaluation_will_score():
     assert "does not cover" in lowered
     assert "computed" in lowered
     assert "follow-up" in lowered
+
+
+# =========================================================================
+# Regressions from the second code review. Each names the silent failure it
+# prevents, because each was invisible to a green suite.
+# =========================================================================
+
+
+class _FailingRepo:
+    """A repository whose search always raises, counting attempts.
+
+    Fault injection at a seam we control. A retry policy that is never made to
+    fail is unverified by construction -- which is exactly how the tool-retry
+    ordering bug survived a passing suite.
+    """
+
+    def __init__(self, exc: Exception) -> None:
+        self.exc = exc
+        self.attempts = 0
+
+    def search(self, **kwargs):
+        self.attempts += 1
+        raise self.exc
+
+    def get(self, *a, **k):
+        return None
+
+    def vocabulary(self, *a, **k):
+        return ()
+
+
+def _agent_over(repo_double, config, tmp_path, model):
+    return AskAgent(repo_double, config, str(tmp_path / "c.sqlite"), model=model)
+
+
+def test_a_recoverable_tool_error_is_actually_retried(config, tmp_path):
+    from bionumbers_ask.agent import TOOL_RETRIES
+
+    failing = _FailingRepo(ValueError("bad argument"))
+    model = scripted(tool_call("search_entries", property="x"), says("gave up on that lookup"))
+    list(_agent_over(failing, config, tmp_path, model).ask("s", "q"))
+    # Before the ordering fix this was 1: ToolErrorMiddleware sat inside the retry
+    # middleware and converted every exception before retry could see one.
+    assert failing.attempts == TOOL_RETRIES + 1
+
+
+def test_an_unexpected_tool_error_is_not_dressed_up_as_a_lookup_failure(config, tmp_path):
+    failing = _FailingRepo(AttributeError("corpus schema changed"))
+    model = scripted(tool_call("search_entries", property="x"), says("unreachable"))
+    events = list(_agent_over(failing, config, tmp_path, model).ask("s", "q"))
+    end = events[-1]
+    # A defect must not reach the model as "the lookup failed", or it answers
+    # "the corpus has nothing on this" -- wrong, and sounding grounded.
+    assert end.reason is EndReason.PROVIDER_FAILURE
+    assert not any(isinstance(e, Answer) for e in events)
+
+
+def test_the_tool_error_message_names_the_type_not_the_exception_text(config):
+    from bionumbers_ask.agent import _tool_error_message
+
+    message = _tool_error_message(ValueError("secret internal detail"), None)
+    assert "ValueError" in message
+    assert "secret internal detail" not in message
+    assert _tool_error_message(AttributeError("boom"), None) is None
+
+
+def test_reaching_the_call_limit_names_the_limit_rather_than_answering(repo, config, tmp_path):
+    from bionumbers_ask.agent import RUN_CALL_LIMIT
+
+    # A model that only ever asks for another search never terminates on its own.
+    model = scripted(tool_call("search_entries", property="Cell"))
+    events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
+    end = events[-1]
+    # Before the fix this was ANSWERED, with the middleware's own string
+    # "Model call limits exceeded: run limit (12/12)" presented as the answer.
+    assert end.reason is EndReason.RETRIEVAL_BOUND
+    assert end.incomplete is True
+    assert not any(isinstance(e, Answer) for e in events)
+    assert end.tool_calls <= RUN_CALL_LIMIT + 1
+
+
+def test_an_answer_in_content_blocks_is_recovered(repo, config, tmp_path):
+    from langchain_core.messages import AIMessage
+
+    blocky = AIMessage(content=[{"type": "text", "text": "one micrometre (BNID 100002)"}])
+    events = list(agent_with(repo, config, tmp_path, scripted(blocky)).ask("s", "q"))
+    answer = next(e for e in events if isinstance(e, Answer))
+    assert "micrometre" in answer.text
+    assert events[-1].reason is EndReason.ANSWERED
+
+
+def test_a_blank_answer_is_not_reported_as_answered(repo, config, tmp_path):
+    from langchain_core.messages import AIMessage
+
+    events = list(agent_with(repo, config, tmp_path, scripted(AIMessage(content=""))).ask("s", "q"))
+    end = events[-1]
+    assert end.reason is EndReason.NO_ANSWER
+    assert end.incomplete is True
+    assert not any(isinstance(e, Answer) for e in events)
+
+
+def test_the_user_is_warned_before_the_conversation_bound_bites(repo, config, tmp_path, monkeypatch):
+    from bionumbers_ask.events import ConversationWarning
+
+    # Bound 5 warns at 3.75 messages. After two turns a session holds four, which
+    # is past the warning point and short of the bound -- the window in which the
+    # user can still finish what they were doing.
+    monkeypatch.setattr("bionumbers_ask.agent.CONVERSATION_BOUND", 5)
+    agent = agent_with(repo, config, tmp_path, scripted(says("a"), says("b"), says("c")))
+    assert not any(isinstance(e, ConversationWarning) for e in agent.ask("s", "first"))
+    assert not any(isinstance(e, ConversationWarning) for e in agent.ask("s", "second"))
+
+    warned = [e for e in agent.ask("s", "third") if isinstance(e, ConversationWarning)]
+    assert warned, "the session filled up with no warning"
+    assert warned[0].bound == 5 and warned[0].messages == 4
+
+
+def test_conversation_length_needs_no_model_and_no_api_key(repo, config, tmp_path, monkeypatch):
+    agent = agent_with(repo, config, tmp_path, scripted(says("hello")))
+    list(agent.ask("s", "q"))
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    bare = AskAgent(repo, config, str(tmp_path / "checkpoints.sqlite"))  # no model supplied
+    # Reading how full a session is must not construct a chat model.
+    assert bare.conversation_length("s") >= 2
+    assert bare.conversation_length("never-used") == 0
+
+
+def test_a_defect_in_our_own_code_is_not_labelled_a_provider_failure(repo, config, tmp_path, monkeypatch):
+    def explode(_message):
+        raise TypeError("a bug in this file, not the provider")
+
+    monkeypatch.setattr("bionumbers_ask.agent._text_of", explode)
+    # It must escape rather than be reported as PROVIDER_FAILURE, which would send
+    # whoever debugs it to the provider instead of to this file.
+    with pytest.raises(TypeError, match="a bug in this file"):
+        list(agent_with(repo, config, tmp_path, scripted(says("x"))).ask("s", "q"))
+
+
+def test_a_rejected_tool_call_still_appears_in_progress_and_the_count(repo, config, tmp_path):
+    model = scripted(tool_call("list_values", field="keyword", contains="x"), says("done"))
+    events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
+    retrievals = [e for e in events if isinstance(e, Retrieval)]
+    assert retrievals and retrievals[0].detail.get("rejected") is True
+    assert events[-1].tool_calls >= 1

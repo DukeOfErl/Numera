@@ -90,8 +90,18 @@ def build_tools(repo: CorpusRepository, trace: QuestionTrace, emit: Emit) -> lis
 
     def list_values(field: str, contains: str = "") -> str:
         try:
-            values = repo.vocabulary(field, contains, limit=20)
+            values = repo.vocabulary(field, contains, limit=20, trace=trace)
         except ValueError as exc:
+            # Emitted before returning: a call that happened must appear in the
+            # progress events and the tool count, whether or not it succeeded.
+            emit(
+                Retrieval(
+                    question_id=trace.question_id,
+                    tool="list_values",
+                    detail={"field": field, "contains": contains, "rejected": True},
+                )
+            )
+            trace.record("vocabulary.rejected", field=field)
             return str(exc)
         emit(
             Retrieval(

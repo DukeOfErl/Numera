@@ -17,6 +17,7 @@ class EndReason(StrEnum):
     """Why a question stopped. Every ending has one; none is a bare failure."""
 
     ANSWERED = "answered"
+    NO_ANSWER = "no_answer"
     SPEND_CEILING = "spend_ceiling"
     RUN_BUDGET = "run_budget"
     RETRIEVAL_BOUND = "retrieval_bound"
@@ -53,6 +54,19 @@ class Retrieval:
 
 
 @dataclass(frozen=True)
+class ConversationWarning:
+    """The session is nearing its length bound.
+
+    A session that went from working to refusing with no notice would give the
+    user no chance to finish what they were doing.
+    """
+
+    question_id: str
+    messages: int
+    bound: int
+
+
+@dataclass(frozen=True)
 class SpendWarning:
     question_id: str
     spent: int
@@ -77,4 +91,6 @@ class QuestionEnded:
     incomplete: bool = False
 
 
-Event = QuestionStarted | Retrieval | SpendWarning | Answer | QuestionEnded
+Event = (
+    QuestionStarted | Retrieval | ConversationWarning | SpendWarning | Answer | QuestionEnded
+)
