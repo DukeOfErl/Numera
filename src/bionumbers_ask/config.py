@@ -16,9 +16,21 @@ MICRO_PER_USD = 1_000_000
 
 
 def usd(amount: str) -> int:
-    """Micro-dollars from a decimal string. A string, so no float ever appears."""
-    whole, _, frac = amount.partition(".")
-    return int(whole) * MICRO_PER_USD + int((frac + "000000")[:6])
+    """Micro-dollars from a decimal string. A string, so no float ever appears.
+
+    Rejects what a misconfigured environment produces rather than propagating it:
+    an empty value would raise deep inside int(), and a negative amount parsed
+    naively loses its sign -- "-0.50" would become a positive limit.
+    """
+    text = (amount or "").strip()
+    if not text:
+        raise ValueError("expected an amount in USD, for example '0.50'")
+    if text.startswith("-"):
+        raise ValueError(f"amount must not be negative: {amount!r}")
+    whole, _, frac = text.lstrip("+").partition(".")
+    if not (whole or frac).isdigit() or (whole and not whole.isdigit()):
+        raise ValueError(f"not a decimal amount: {amount!r}")
+    return int(whole or 0) * MICRO_PER_USD + int((frac + "000000")[:6])
 
 
 def format_usd(micro: int) -> str:

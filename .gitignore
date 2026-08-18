@@ -9,8 +9,12 @@ wheels/
 # Virtual environments
 .venv
 
-# Evaluation corpus — an external input with unresolved licensing; never commit it
-corpus/
+# Evaluation corpus — an external input with unresolved licensing; never commit it.
+# Anchored, and matching the data file too: the corpus is a single JSONL file, so a
+# directory pattern alone would not stop `git add -A` committing it.
+/corpus/
+bionumbers*.jsonl
+*.corpus.jsonl
 
 # Secrets — see CLAUDE.md, "Never commit secrets"
 .env

@@ -170,3 +170,62 @@ def test_an_alias_resolution_is_recorded_so_a_wrong_one_is_visible(repo):
     configure(buf)
     repo.search(organism="e. coli", trace=start_question())
     assert "Bacteria Escherichia coli" in buf.getvalue()
+
+
+# -- hardening found by review --------------------------------------------
+
+
+def test_repeated_identifiers_are_refused_rather_than_collapsed(tmp_path):
+    import json
+
+    path = tmp_path / "dupe.jsonl"
+    path.write_text(
+        "\n".join(
+            json.dumps({"bnid": 7, "property": p, "units": "u", "value": 1.0})
+            for p in ("first", "second")
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    # Otherwise search shows two rows for one identifier while get() returns one,
+    # so the agent cites one entry and reads another's data.
+    with pytest.raises(ValueError, match="repeated identifiers"):
+        CorpusRepository(load(path))
+
+
+@pytest.mark.parametrize("limit", [-1, 0])
+def test_a_nonsensical_limit_does_not_silently_drop_matches(repo, limit):
+    # limit arrives from the model as a tool argument. Negative values slice from
+    # the end; zero returns nothing against a non-zero total.
+    result = repo.search(property="Cell", limit=limit)
+    assert len(result.rows) >= 1
+    assert result.total_matched == 4
+
+
+def test_an_unknown_vocabulary_field_is_recoverable(repo):
+    # The agent reaches for this when a search came back empty, so the failure has
+    # to be something it can act on rather than a KeyError.
+    with pytest.raises(ValueError, match="unknown field"):
+        repo.vocabulary("keyword", "x")
+
+
+def test_a_common_name_phrase_does_not_become_an_abbreviation():
+    from bionumbers_ask.repository import _abbreviated_binomials
+
+    # "African clawed frog Xenopus laevis" must not yield "a. clawed".
+    assert _abbreviated_binomials("African clawed frog Xenopus laevis") == {"x. laevis"}
+
+
+def test_a_binomial_followed_by_an_authority_is_still_abbreviated():
+    from bionumbers_ask.repository import _abbreviated_binomials
+
+    # Requiring the pair to be the final two tokens would lose this one.
+    assert _abbreviated_binomials("Peanut Arachis hypogaea L.") == {"a. hypogaea"}
+
+
+def test_trace_records_are_emitted_without_explicit_configuration():
+    import logging
+
+    # An unconfigured logger would inherit the root's WARNING level and discard
+    # every record silently -- the trail vanishing when nobody knows to look.
+    assert logging.getLogger("bionumbers_ask").getEffectiveLevel() == logging.INFO

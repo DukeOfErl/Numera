@@ -43,3 +43,53 @@ def test_unknown_fields_do_not_prevent_loading(tmp_path):
     path = tmp_path / "extra.jsonl"
     path.write_text(line, encoding="utf-8")
     assert load(path)[0].bnid == 1
+
+
+# -- coercion and shape tolerance (found by review) ------------------------
+
+
+def _write(tmp_path, *rows):
+    import json
+
+    path = tmp_path / "c.jsonl"
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+    return path
+
+
+def test_an_empty_string_value_does_not_blank_out_a_range(tmp_path):
+    # A spreadsheet-derived corpus writes "" for an absent scalar. Uncoerced, ""
+    # is not None, so the range would never be shown and the row would be blank.
+    path = _write(tmp_path, {"bnid": 1, "property": "p", "units": "u",
+                             "value": "", "range_low": 1.94, "range_high": 2.72})
+    entry = load(path)[0]
+    assert entry.value is None
+    assert entry.value_display == "1.94–2.72"
+
+
+def test_a_numeric_string_becomes_a_number(tmp_path):
+    path = _write(tmp_path, {"bnid": 1, "property": "p", "units": "u", "value": "1.94"})
+    assert load(path)[0].value == 1.94
+
+
+def test_a_half_open_range_is_not_rendered_with_none(tmp_path):
+    path = _write(tmp_path, {"bnid": 1, "property": "p", "units": "u", "range_low": 0.5})
+    assert load(path)[0].value_display == "at least 0.5"
+    path = _write(tmp_path, {"bnid": 2, "property": "p", "units": "u", "range_high": 9.0})
+    assert load(path)[0].value_display == "at most 9.0"
+
+
+def test_keywords_given_as_a_string_are_split_not_exploded(tmp_path):
+    # tuple("cell size") would give one entry per character, making every
+    # single-letter search match everything and every real term match nothing.
+    path = _write(tmp_path, {"bnid": 1, "property": "p", "units": "u",
+                             "keywords": "cell size,diameter"})
+    assert load(path)[0].keywords == ("cell size", "diameter")
+
+
+def test_amounts_are_validated_rather_than_misread():
+    from bionumbers_ask.config import usd
+
+    assert usd("0.50") == 500_000
+    for bad in ("", "-0.50", "abc"):
+        with pytest.raises(ValueError):
+            usd(bad)

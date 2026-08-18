@@ -72,8 +72,8 @@ def _abbreviated_binomials(organism: str) -> set[str]:
     """
     tokens = organism.split()
     out = set()
-    for first, second in zip(tokens, tokens[1:]):
-        if (
+    for index, (first, second) in enumerate(zip(tokens, tokens[1:])):
+        if not (
             first[:1].isupper()
             and first.isalpha()
             and len(first) > 2
@@ -81,7 +81,16 @@ def _abbreviated_binomials(organism: str) -> set[str]:
             and second.isalpha()
             and len(second) > 2
         ):
-            out.add(f"{first[0].lower()}. {second.lower()}")
+            continue
+        # A species epithet ends the name, give or take an authority or strain
+        # marker ("Arachis hypogaea L."). If another lowercase word follows, the
+        # pair is a common-name phrase -- "African clawed frog" would otherwise
+        # yield "a. clawed". Requiring the pair to be final instead would lose
+        # real binomials, since 79 stored names carry a suffix after them.
+        following = tokens[index + 2 : index + 3]
+        if following and following[0].islower() and following[0].isalpha():
+            continue
+        out.add(f"{first[0].lower()}. {second.lower()}")
     return out
 
 
@@ -89,6 +98,13 @@ class CorpusRepository:
     def __init__(self, entries: tuple[Entry, ...]) -> None:
         self._entries = entries
         self._by_id = {e.bnid: e for e in entries}
+        if len(self._by_id) != len(entries):
+            # Otherwise search would show two rows for one identifier while get()
+            # returned only the last, so the agent would cite one entry and read
+            # another's data.
+            seen: set[int] = set()
+            repeated = sorted({e.bnid for e in entries if e.bnid in seen or seen.add(e.bnid)})
+            raise ValueError(f"corpus contains repeated identifiers: {repeated[:5]}")
         self._organisms = Counter(e.organism for e in entries if e.organism)
         self._properties = Counter(e.property for e in entries if e.property)
         aliases: dict[str, set[str]] = defaultdict(set)
@@ -117,6 +133,10 @@ class CorpusRepository:
         limit: int = DEFAULT_LIMIT,
         trace: QuestionTrace | None = None,
     ) -> SearchResult:
+        # limit arrives from the model as a tool argument. Negative values slice
+        # from the end -- silently dropping the last match while reporting
+        # truncation -- and zero returns nothing against a non-zero total.
+        limit = max(1, int(limit))
         resolved = self._resolve_organism(organism) if organism else None
         matched = [
             e
@@ -159,7 +179,12 @@ class CorpusRepository:
         A search that returns nothing is otherwise indistinguishable from a topic
         the corpus does not cover.
         """
-        counts = {"organism": self._organisms, "property": self._properties}[field]
+        fields = {"organism": self._organisms, "property": self._properties}
+        if field not in fields:
+            # The agent reaches for this when a search came back empty; a KeyError
+            # is not something it can act on.
+            raise ValueError(f"unknown field {field!r}; choose one of {sorted(fields)}")
+        counts = fields[field]
         key = term.lower()
         hits = [(value, n) for value, n in counts.items() if key in value.lower()]
         hits.sort(key=lambda pair: (-pair[1], pair[0]))

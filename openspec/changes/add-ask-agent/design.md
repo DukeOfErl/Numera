@@ -204,6 +204,22 @@ memory it would be per-user, non-deterministic, and invisible when wrong.
 Built from the corpus at load time and shared. Determinism underneath, agent on top — the same
 principle the project applies elsewhere.
 
+*Scope, narrowed while implementing.* Plain case-insensitive substring matching already reaches a
+genus, a common name, or a group, since each is a substring of the stored value. The one variant it
+cannot reach is the abbreviated binomial — `e. coli` is not a substring of `Bacteria Escherichia
+coli` — so that is all the index covers.
+
+*Over-generation, accepted.* The rule takes any capitalized-then-lowercase token pair, which also
+catches common-name phrases. Rejecting a pair followed by another lowercase word removes the clear
+cases — `African clawed frog` no longer yields `a. clawed`, dropping 52 of 659 keys — but a few
+survive where a capitalized genus follows the phrase, `f. yeast` from `Fission yeast
+Schizosaccharomyces pombe`. Rejecting on a following capitalized word would remove those and also
+lose real binomials such as `Acanthamoeba polyphaga`; requiring the pair to be final would lose the
+79 stored names carrying a suffix after the binomial, `Peanut Arachis hypogaea L.` among them. The
+residual keys are inert, since an alias is only consulted when someone types it and nobody types
+`f. yeast`. Inert noise is preferable to losing a real abbreviation, and the index is inspectable, so
+a wrong key is visible rather than silent.
+
 ### Conversation memory is thread-scoped, and bounded by refusal
 
 Within a session the checkpointed state carries the conversation. Nothing persists across sessions:

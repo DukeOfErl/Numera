@@ -20,6 +20,12 @@ from typing import Any
 
 LOGGER_NAME = "bionumbers_ask"
 
+# Set at import, not only in configure(). An unconfigured logger inherits the
+# root's WARNING level, so every INFO record would be discarded without error --
+# the trail vanishing precisely when nobody knows to look for it, which is the
+# failure this module exists to prevent.
+logging.getLogger(LOGGER_NAME).setLevel(logging.INFO)
+
 
 class JsonLines(logging.Formatter):
     """One JSON object per record, so a trail can be filtered by question."""
