@@ -1,0 +1,72 @@
+"""The one test that talks to a real model.
+
+Everything else in this suite uses doubles, which is right: assertions should be
+about this code, not the model's mood. But a suite made entirely of doubles stops
+testing the live path the moment nobody runs it by hand, and the doubles encode
+what the provider returned *once*. This is the test that notices when that stops
+being true.
+
+Excluded by default via the `network` marker. To run it:
+
+    OPENROUTER_API_KEY=... uv run pytest -m network
+
+It uses the six-entry fixture rather than the real corpus, so it stays cheap: one
+question, a handful of tool calls, a fraction of a cent.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+
+import pytest
+
+from bionumbers_ask.agent import AskAgent
+from bionumbers_ask.config import Config
+from bionumbers_ask.corpus import load
+from bionumbers_ask.events import Answer, EndReason, QuestionEnded, Retrieval
+from bionumbers_ask.repository import CorpusRepository
+
+pytestmark = [
+    pytest.mark.network,
+    pytest.mark.skipif(
+        not os.environ.get("OPENROUTER_API_KEY"),
+        reason="set OPENROUTER_API_KEY to run the live-model check",
+    ),
+]
+
+
+@pytest.fixture(scope="module")
+def live_agent(tmp_path_factory) -> AskAgent:
+    repo = CorpusRepository(load("tests/fixtures/corpus_sample.jsonl"))
+    path = tmp_path_factory.mktemp("live") / "checkpoints.sqlite"
+    # The production configuration, not a test-shaped one: a fixture on a default
+    # config would be testing a different system than the one that ships.
+    return AskAgent(repo, Config.from_env(), str(path))
+
+
+def test_a_live_question_is_answered_with_a_citation(live_agent):
+    events = list(live_agent.ask("live", "How wide is an E. coli cell?"))
+    end = next(e for e in events if isinstance(e, QuestionEnded))
+    assert end.reason is EndReason.ANSWERED, f"ended as {end.reason}"
+
+    assert any(isinstance(e, Retrieval) for e in events), "no tool was used"
+    answer = next(e for e in events if isinstance(e, Answer)).text
+    # A quantity without a bnid beside it is the failure this project exists to
+    # prevent. Asserting a citation is present is a harness property; whether the
+    # right one was chosen is answer-evaluation's job, not this test's.
+    assert re.search(r"\b10000\d\b", answer), f"no entry cited in: {answer[:200]}"
+
+
+def test_the_provider_still_reports_cost_where_the_ledger_reads_it(live_agent):
+    """The live half of the pinned metadata shape.
+
+    The offline test preserves the shape recorded once; this one notices if the
+    provider stops returning it. Without this, a renamed field would leave spend
+    silently reading zero under a ceiling built on top of it.
+    """
+    events = list(live_agent.ask("live-cost", "How wide is an E. coli cell?"))
+    end = next(e for e in events if isinstance(e, QuestionEnded))
+    assert end.spend > 0, "the provider reported no cost where the ledger reads it"
+    # Sanity, not a budget: a fixture-sized question should be far under a cent.
+    assert end.spend < 10_000, f"unexpectedly expensive: {end.spend} micro-dollars"

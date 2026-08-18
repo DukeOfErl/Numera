@@ -330,3 +330,82 @@ def test_a_rejected_tool_call_still_appears_in_progress_and_the_count(repo, conf
     retrievals = [e for e in events if isinstance(e, Retrieval)]
     assert retrievals and retrievals[0].detail.get("rejected") is True
     assert events[-1].tool_calls >= 1
+
+
+# =========================================================================
+# Gaps found by auditing the suite against the harness-testing checklist,
+# rather than by reviewing the code.
+# =========================================================================
+
+
+def test_spend_is_read_from_the_shape_openrouter_actually_returns():
+    """Pin a live discovery as an offline regression test.
+
+    The field path was verified against OpenRouter once, by hand. Nothing checked
+    it afterwards, so a renamed field would have made spend read zero in silence --
+    under a ceiling built on top of it.
+    """
+    from langchain_core.messages import AIMessage
+
+    from agent_doubles import OPENROUTER_RESPONSE_METADATA
+    from bionumbers_ask.agent import _Spend
+
+    message = AIMessage(content="ok", response_metadata=OPENROUTER_RESPONSE_METADATA)
+    spend = _Spend()
+    spend.add_from(message)
+    # 3.4e-05 USD, the figure the live call reported, in micro-dollars.
+    assert spend.micro == 34
+
+
+def test_spend_accumulates_across_several_calls():
+    from langchain_core.messages import AIMessage
+
+    from agent_doubles import OPENROUTER_RESPONSE_METADATA
+    from bionumbers_ask.agent import _Spend
+
+    spend = _Spend()
+    for _ in range(3):
+        spend.add_from(AIMessage(content="ok", response_metadata=OPENROUTER_RESPONSE_METADATA))
+    assert spend.micro == 102
+
+
+def test_a_response_without_a_cost_adds_nothing_rather_than_guessing():
+    from langchain_core.messages import AIMessage
+
+    from bionumbers_ask.agent import _Spend
+
+    spend = _Spend()
+    spend.add_from(AIMessage(content="ok"))
+    spend.add_from(AIMessage(content="ok", response_metadata={"token_usage": {"total_tokens": 5}}))
+    # Spend-control requires a question to halt rather than continue with an
+    # unknown cost; that gate is group 5's, but the ledger must not invent one.
+    assert spend.micro == 0
+
+
+def test_several_tools_requested_in_one_hop_are_all_reported(repo, config, tmp_path):
+    """Real models batch tool calls; a fake that never does hides that path."""
+    from agent_doubles import batched_tool_calls
+
+    model = scripted(
+        batched_tool_calls(
+            ("search_entries", {"property": "Cell diameter"}),
+            ("search_entries", {"organism": "cerevisiae"}),
+            ("list_values", {"field": "organism", "contains": "coli"}),
+        ),
+        says("three lookups, one hop"),
+    )
+    events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
+    retrievals = [e for e in events if isinstance(e, Retrieval)]
+    # Each tool that ran must appear, and the count must not collapse them.
+    assert len(retrievals) == 3, [r.tool for r in retrievals]
+    assert events[-1].tool_calls == 3
+    assert {r.tool for r in retrievals} == {"search_entries", "list_values"}
+
+
+def test_batched_tool_calls_do_not_lose_events_under_concurrency(repo, config, tmp_path):
+    from agent_doubles import batched_tool_calls
+
+    many = batched_tool_calls(*[("search_entries", {"property": "Cell"}) for _ in range(8)])
+    events = list(agent_with(repo, config, tmp_path, scripted(many, says("done"))).ask("s", "q"))
+    # The framework may run these on worker threads, all appending to one queue.
+    assert len([e for e in events if isinstance(e, Retrieval)]) == 8
