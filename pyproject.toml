@@ -28,3 +28,7 @@ packages = ["src/bionumbers"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Tests import the doubles in tests/ directly, and default to offline.
+pythonpath = ["tests"]
+addopts = "-m 'not network'"
+markers = ["network: hits the real Europe PMC; run with `pytest -m network`"]

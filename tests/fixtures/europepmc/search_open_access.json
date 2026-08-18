@@ -1,0 +1,498 @@
+{
+ "version": "6.9",
+ "hitCount": 1,
+ "request": {
+  "queryString": "EXT_ID:9722616 AND SRC:MED",
+  "internalQuery": "EXT_ID:9722616 AND SRC:MED",
+  "resultType": "CORE",
+  "cursorMark": "*",
+  "pageSize": 25,
+  "sort": "",
+  "synonym": false
+ },
+ "resultList": {
+  "result": [
+   {
+    "id": "9722616",
+    "source": "MED",
+    "pmid": "9722616",
+    "pmcid": "PMC2132865",
+    "fullTextIdList": {
+     "fullTextId": [
+      "PMC2132865"
+     ]
+    },
+    "doi": "10.1083/jcb.142.4.1053",
+    "title": "The Ras target AF-6 is a substrate of the fam deubiquitinating enzyme.",
+    "authorString": "Taya S, Yamamoto T, Kano K, Kawano Y, Iwamatsu A, Tsuchiya T, Tanaka K, Kanai-Azuma M, Wood SA, Mattick JS, Kaibuchi K.",
+    "authorList": {
+     "author": [
+      {
+       "fullName": "Taya S",
+       "firstName": "S",
+       "lastName": "Taya",
+       "initials": "S",
+       "authorAffiliationDetailsList": {
+        "authorAffiliation": [
+         {
+          "affiliation": "Division of Signal Transduction, Nara Institute of Science and Technology, Ikoma 630-0101, Japan."
+         }
+        ]
+       }
+      },
+      {
+       "fullName": "Yamamoto T",
+       "firstName": "T",
+       "lastName": "Yamamoto",
+       "initials": "T"
+      },
+      {
+       "fullName": "Kano K",
+       "firstName": "K",
+       "lastName": "Kano",
+       "initials": "K"
+      },
+      {
+       "fullName": "Kawano Y",
+       "firstName": "Y",
+       "lastName": "Kawano",
+       "initials": "Y",
+       "authorId": {
+        "type": "ORCID",
+        "value": "0000-0003-0687-2777"
+       }
+      },
+      {
+       "fullName": "Iwamatsu A",
+       "firstName": "A",
+       "lastName": "Iwamatsu",
+       "initials": "A"
+      },
+      {
+       "fullName": "Tsuchiya T",
+       "firstName": "T",
+       "lastName": "Tsuchiya",
+       "initials": "T"
+      },
+      {
+       "fullName": "Tanaka K",
+       "firstName": "K",
+       "lastName": "Tanaka",
+       "initials": "K"
+      },
+      {
+       "fullName": "Kanai-Azuma M",
+       "firstName": "M",
+       "lastName": "Kanai-Azuma",
+       "initials": "M"
+      },
+      {
+       "fullName": "Wood SA",
+       "firstName": "S A",
+       "lastName": "Wood",
+       "initials": "SA",
+       "authorId": {
+        "type": "ORCID",
+        "value": "0000-0002-2576-7457"
+       }
+      },
+      {
+       "fullName": "Mattick JS",
+       "firstName": "J S",
+       "lastName": "Mattick",
+       "initials": "JS",
+       "authorId": {
+        "type": "ORCID",
+        "value": "0000-0002-7680-7527"
+       }
+      },
+      {
+       "fullName": "Kaibuchi K",
+       "firstName": "K",
+       "lastName": "Kaibuchi",
+       "initials": "K"
+      }
+     ]
+    },
+    "authorIdList": {
+     "authorId": [
+      {
+       "type": "ORCID",
+       "value": "0000-0002-2576-7457"
+      },
+      {
+       "type": "ORCID",
+       "value": "0000-0002-7680-7527"
+      },
+      {
+       "type": "ORCID",
+       "value": "0000-0003-0687-2777"
+      }
+     ]
+    },
+    "dataLinksTagsList": {
+     "dataLinkstag": [
+      "related_data",
+      "wikipedia"
+     ]
+    },
+    "journalInfo": {
+     "issue": "4",
+     "volume": "142",
+     "journalIssueId": 929736,
+     "dateOfPublication": "1998 Aug",
+     "monthOfPublication": 8,
+     "yearOfPublication": 1998,
+     "printPublicationDate": "1998-08-01",
+     "journal": {
+      "title": "The Journal of cell biology",
+      "medlineAbbreviation": "J Cell Biol",
+      "isoabbreviation": "J Cell Biol",
+      "nlmid": "0375356",
+      "essn": "1540-8140",
+      "issn": "0021-9525"
+     }
+    },
+    "pubYear": "1998",
+    "pageInfo": "1053-1062",
+    "abstractText": "The Ras target AF-6 has been shown to serve as one of the peripheral components of cell-cell adhesions, and is thought to participate in cell-cell adhesion regulation downstream of Ras. We here purified an AF-6-interacting protein with a molecular mass of approximately 220 kD (p220) to investigate the function of AF-6 at cell-cell adhesions. The peptide sequences of p220 were identical to the amino acid sequences of mouse Fam. Fam is homologous to a deubiquitinating enzyme in Drosophila, the product of the fat facets gene. Recent genetic analyses indicate that the deubiquitinating activity of the fat facets product plays a critical role in controlling the cell fate. We found that Fam accumulated at the cell-cell contact sites of MDCKII cells, but not at free ends of plasma membranes. Fam was partially colocalized with AF-6 and interacted with AF-6 in vivo and in vitro. We also showed that AF-6 was ubiquitinated in intact cells, and that Fam prevented the ubiquitination of AF-6.",
+    "affiliation": "Division of Signal Transduction, Nara Institute of Science and Technology, Ikoma 630-0101, Japan.",
+    "publicationStatus": "ppublish",
+    "language": "eng",
+    "pubModel": "Print",
+    "pubTypeList": {
+     "pubType": [
+      "Research Support, Non-U.S. Gov't",
+      "research-article",
+      "Journal Article"
+     ]
+    },
+    "meshHeadingList": {
+     "meshHeading": [
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Brain",
+       "meshQualifierList": {
+        "meshQualifier": [
+         {
+          "abbreviation": "ME",
+          "qualifierName": "metabolism",
+          "majorTopic_YN": "N"
+         }
+        ]
+       }
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Cell Line"
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Animals"
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Cattle"
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Multienzyme Complexes",
+       "meshQualifierList": {
+        "meshQualifier": [
+         {
+          "abbreviation": "PH",
+          "qualifierName": "physiology",
+          "majorTopic_YN": "N"
+         }
+        ]
+       }
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Proteasome Endopeptidase Complex"
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Myosins",
+       "meshQualifierList": {
+        "meshQualifier": [
+         {
+          "abbreviation": "PH",
+          "qualifierName": "physiology",
+          "majorTopic_YN": "Y"
+         }
+        ]
+       }
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Ubiquitin Thiolesterase"
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Endopeptidases",
+       "meshQualifierList": {
+        "meshQualifier": [
+         {
+          "abbreviation": "PH",
+          "qualifierName": "physiology",
+          "majorTopic_YN": "Y"
+         }
+        ]
+       }
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Cysteine Endopeptidases",
+       "meshQualifierList": {
+        "meshQualifier": [
+         {
+          "abbreviation": "PH",
+          "qualifierName": "physiology",
+          "majorTopic_YN": "N"
+         }
+        ]
+       }
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Leupeptins",
+       "meshQualifierList": {
+        "meshQualifier": [
+         {
+          "abbreviation": "PD",
+          "qualifierName": "pharmacology",
+          "majorTopic_YN": "N"
+         }
+        ]
+       }
+      },
+      {
+       "majorTopic_YN": "Y",
+       "descriptorName": "Drosophila Proteins"
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Recombinant Fusion Proteins",
+       "meshQualifierList": {
+        "meshQualifier": [
+         {
+          "abbreviation": "ME",
+          "qualifierName": "metabolism",
+          "majorTopic_YN": "N"
+         }
+        ]
+       }
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Ubiquitins",
+       "meshQualifierList": {
+        "meshQualifier": [
+         {
+          "abbreviation": "ME",
+          "qualifierName": "metabolism",
+          "majorTopic_YN": "N"
+         }
+        ]
+       }
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Fluorescent Antibody Technique"
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Immunohistochemistry"
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Transfection",
+       "meshQualifierList": {
+        "meshQualifier": [
+         {
+          "abbreviation": "GE",
+          "qualifierName": "genetics",
+          "majorTopic_YN": "N"
+         }
+        ]
+       }
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Cell Adhesion",
+       "meshQualifierList": {
+        "meshQualifier": [
+         {
+          "abbreviation": "PH",
+          "qualifierName": "physiology",
+          "majorTopic_YN": "Y"
+         }
+        ]
+       }
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Genes, ras",
+       "meshQualifierList": {
+        "meshQualifier": [
+         {
+          "abbreviation": "GE",
+          "qualifierName": "genetics",
+          "majorTopic_YN": "Y"
+         }
+        ]
+       }
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Kinesins",
+       "meshQualifierList": {
+        "meshQualifier": [
+         {
+          "abbreviation": "PH",
+          "qualifierName": "physiology",
+          "majorTopic_YN": "Y"
+         }
+        ]
+       }
+      }
+     ]
+    },
+    "chemicalList": {
+     "chemical": [
+      {
+       "name": "acetylleucyl-leucyl-norleucinal",
+       "registryNumber": "110044-82-1"
+      },
+      {
+       "name": "Endopeptidases",
+       "registryNumber": "EC 3.4.-"
+      },
+      {
+       "name": "Multienzyme Complexes",
+       "registryNumber": "0"
+      },
+      {
+       "name": "Leupeptins",
+       "registryNumber": "0"
+      },
+      {
+       "name": "Drosophila Proteins",
+       "registryNumber": "0"
+      },
+      {
+       "name": "Ubiquitins",
+       "registryNumber": "0"
+      },
+      {
+       "name": "Recombinant Fusion Proteins",
+       "registryNumber": "0"
+      },
+      {
+       "name": "Proteasome Endopeptidase Complex",
+       "registryNumber": "EC 3.4.25.1"
+      },
+      {
+       "name": "Cysteine Endopeptidases",
+       "registryNumber": "EC 3.4.22.-"
+      },
+      {
+       "name": "Myosins",
+       "registryNumber": "EC 3.6.4.1"
+      },
+      {
+       "name": "Ubiquitin Thiolesterase",
+       "registryNumber": "EC 3.4.19.12"
+      },
+      {
+       "name": "cno protein, Drosophila",
+       "registryNumber": "0"
+      },
+      {
+       "name": "Afdn protein, mouse",
+       "registryNumber": "0"
+      },
+      {
+       "name": "Usp9x protein, mouse",
+       "registryNumber": "EC 3.4.19.12"
+      },
+      {
+       "name": "Kinesins",
+       "registryNumber": "EC 3.6.4.4"
+      }
+     ]
+    },
+    "subsetList": {
+     "subset": [
+      {
+       "code": "IM",
+       "name": "Index Medicus"
+      }
+     ]
+    },
+    "fullTextUrlList": {
+     "fullTextUrl": [
+      {
+       "availability": "Free",
+       "availabilityCode": "F",
+       "documentStyle": "pdf",
+       "site": "Unpaywall",
+       "url": "http://jcb.rupress.org/content/jcb/142/4/1053.full.pdf"
+      },
+      {
+       "availability": "Subscription required",
+       "availabilityCode": "S",
+       "documentStyle": "doi",
+       "site": "DOI",
+       "url": "https://doi.org/10.1083/jcb.142.4.1053"
+      },
+      {
+       "availability": "Open access",
+       "availabilityCode": "OA",
+       "documentStyle": "html",
+       "site": "Europe_PMC",
+       "url": "https://europepmc.org/articles/PMC2132865"
+      },
+      {
+       "availability": "Open access",
+       "availabilityCode": "OA",
+       "documentStyle": "pdf",
+       "site": "Europe_PMC",
+       "url": "https://europepmc.org/articles/PMC2132865?pdf=render"
+      }
+     ]
+    },
+    "isOpenAccess": "Y",
+    "inEPMC": "Y",
+    "inPMC": "Y",
+    "hasPDF": "Y",
+    "hasBook": "N",
+    "hasSuppl": "N",
+    "citedByCount": 93,
+    "hasData": "Y",
+    "hasReferences": "Y",
+    "hasTextMinedTerms": "Y",
+    "hasDbCrossReferences": "Y",
+    "dbCrossReferenceList": {
+     "dbName": [
+      "OMIM"
+     ]
+    },
+    "hasLabsLinks": "Y",
+    "license": "cc by-nc-sa",
+    "hasEvaluations": "N",
+    "authMan": "N",
+    "epmcAuthMan": "N",
+    "nihAuthMan": "N",
+    "hasTMAccessionNumbers": "N",
+    "dateOfCompletion": "1998-09-25",
+    "dateOfCreation": "1998-08-29",
+    "firstIndexDate": "2009-12-24",
+    "fullTextReceivedDate": "2020-07-12",
+    "dateOfRevision": "2021-12-03",
+    "firstPublicationDate": "1998-08-01"
+   }
+  ]
+ }
+}

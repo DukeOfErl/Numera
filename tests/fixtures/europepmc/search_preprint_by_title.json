@@ -1,0 +1,161 @@
+{
+ "version": "6.9",
+ "hitCount": 1,
+ "request": {
+  "queryString": "SRC:PPR AND TITLE:\"Gαi2 coordinates neuronal microtubule and neurofilament networks to regulate axon initiation in vivo\"",
+  "resultType": "core",
+  "cursorMark": "*",
+  "pageSize": 25,
+  "sort": "",
+  "synonym": false
+ },
+ "resultList": {
+  "result": [
+   {
+    "id": "PPR1218639",
+    "source": "PPR",
+    "fullTextIdList": {
+     "fullTextId": [
+      "PPR1218639"
+     ]
+    },
+    "doi": "10.64898/2026.03.20.713162",
+    "title": "Gαi2 coordinates neuronal microtubule and neurofilament networks to regulate axon initiation  <i>in vivo</i>",
+    "authorString": "Higgs VE, Anwas D, Astapenka A, Toro-Tapia G, Das RM.",
+    "authorList": {
+     "author": [
+      {
+       "fullName": "Higgs VE",
+       "firstName": "Victoria",
+       "lastName": "Higgs",
+       "initials": "VE"
+      },
+      {
+       "fullName": "Anwas D",
+       "firstName": "Danny",
+       "lastName": "Anwas",
+       "initials": "D",
+       "authorId": {
+        "type": "ORCID",
+        "value": "0009-0005-7719-1612"
+       }
+      },
+      {
+       "fullName": "Astapenka A",
+       "firstName": "Artur",
+       "lastName": "Astapenka",
+       "initials": "A"
+      },
+      {
+       "fullName": "Toro-Tapia G",
+       "firstName": "Gabriela",
+       "lastName": "Toro-Tapia",
+       "initials": "G"
+      },
+      {
+       "fullName": "Das RM",
+       "firstName": "Raman",
+       "lastName": "Das",
+       "initials": "RM",
+       "authorId": {
+        "type": "ORCID",
+        "value": "0000-0003-3375-619X"
+       }
+      }
+     ]
+    },
+    "authorIdList": {
+     "authorId": [
+      {
+       "type": "ORCID",
+       "value": "0000-0003-3375-619X"
+      },
+      {
+       "type": "ORCID",
+       "value": "0009-0005-7719-1612"
+      }
+     ]
+    },
+    "dataLinksTagsList": {
+     "dataLinkstag": [
+      "supporting_data"
+     ]
+    },
+    "pubYear": "2026",
+    "abstractText": "Neurons possess a highly polarised morphology, established through axon formation. However, the mechanisms regulating stable axon initiation during embryonic development remain poorly understood. Here, using fixed-tissue super-resolution and high-resolution live-tissue imaging in developing chick spinal cord, we demonstrate that the multifunctional G-protein Gαi2 coordinates the interconnected neurofilament and microtubule networks to achieve stable axon outgrowth. Before axon initiation, microtubule network orientation shifts towards the site of the future axon where coiled Gαi2-associated neurofilaments accumulate asymmetrically before unfurling into the initiating axon behind microtubules. Crucially, Gαi2 is associated with neurofilaments and microtubules at points of contact. Gαi2 depletion reduces engagement between these cytoskeletal networks, and leads to impaired passage of neurofilaments into initiating axons and disrupted axon outgrowth, supporting a role for Gαi2 in regulating microtubule-driven incorporation of neurofilaments in nascent axons. These findings advance mechanistic understanding of polarity establishment and offer an enriched view of cytoskeletal regulation during axon formation.",
+    "pubTypeList": {
+     "pubType": [
+      "Preprint"
+     ]
+    },
+    "bookOrReportDetails": {
+     "publisher": "bioRxiv",
+     "yearOfPublication": 2026
+    },
+    "grantsList": {
+     "grant": [
+      {
+       "grantId": "222749/Z/21/Z",
+       "agency": "Wellcome Trust",
+       "orderIn": 0
+      }
+     ]
+    },
+    "fullTextUrlList": {
+     "fullTextUrl": [
+      {
+       "availability": "Free",
+       "availabilityCode": "F",
+       "documentStyle": "doi",
+       "site": "DOI",
+       "url": "https://doi.org/10.64898/2026.03.20.713162"
+      },
+      {
+       "availability": "Open access",
+       "availabilityCode": "OA",
+       "documentStyle": "html",
+       "site": "Europe_PMC",
+       "url": "https://europepmc.org/article/PPR/PPR1218639"
+      },
+      {
+       "availability": "Open access",
+       "availabilityCode": "OA",
+       "documentStyle": "pdf",
+       "site": "Europe_PMC",
+       "url": "https://europepmc.org/api/fulltextRepo?pprId=PPR1218639&type=FILE&fileName=EMS215230-pdf.pdf&mimeType=application/pdf"
+      }
+     ]
+    },
+    "isOpenAccess": "Y",
+    "inEPMC": "Y",
+    "inPMC": "N",
+    "hasPDF": "Y",
+    "hasBook": "N",
+    "hasSuppl": "N",
+    "citedByCount": 0,
+    "hasData": "Y",
+    "hasReferences": "N",
+    "hasTextMinedTerms": "Y",
+    "hasDbCrossReferences": "N",
+    "hasLabsLinks": "N",
+    "license": "cc by",
+    "hasEvaluations": "N",
+    "authMan": "N",
+    "epmcAuthMan": "Y",
+    "nihAuthMan": "N",
+    "manuscriptId": "EMS215230",
+    "hasTMAccessionNumbers": "Y",
+    "tmAccessionTypeList": {
+     "accessionType": [
+      "refseq",
+      "doi"
+     ]
+    },
+    "dateOfCreation": "2026-05-19",
+    "firstIndexDate": "2026-05-19",
+    "fullTextReceivedDate": "2026-07-13",
+    "firstPublicationDate": "2026-03-23"
+   }
+  ]
+ }
+}
