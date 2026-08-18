@@ -11,20 +11,20 @@
 
 ## 2. Logging
 
-- [ ] 2.1 Add structured logging with a correlation identifier assigned per question and carried through every record for that question
-- [ ] 2.2 Name graph nodes and runs meaningfully, so traces are readable if tracing is switched on later
-- [ ] 2.3 Verify a question produces a coherent, readable trail from first tool call to answer, that a truncated search records both figures, and that two questions in one session carry different identifiers
+- [x] 2.1 Add structured logging with a correlation identifier assigned per question and carried through every record for that question
+- [x] 2.2 Name graph nodes and runs meaningfully, so traces are readable if tracing is switched on later
+- [x] 2.3 Verify a question produces a coherent, readable trail from first tool call to answer, that a truncated search records both figures, and that two questions in one session carry different identifiers
 
 ## 3. Corpus and query tools
 
-- [ ] 3.1 Define the corpus record shape and a loader that reads JSONL from a supplied path, failing with an explanatory message when none is supplied
-- [ ] 3.2 Build the search index over property, organism, and keywords, matching case-insensitively on substrings
-- [ ] 3.3 Build the alias index from the corpus at load time, mapping common naming variants to stored values, and make it inspectable
-- [ ] 3.4 Implement search returning capped compact rows plus the total match count, logging what matched and what was truncated
-- [ ] 3.5 Implement vocabulary discovery: list stored organism and property values matching a partial term, with entry counts
-- [ ] 3.6 Implement single-entry retrieval, parsing cited entry identifiers out of the entry's text into a list
-- [ ] 3.7 Test that no tool can create, modify, or delete a corpus entry
-- [ ] 3.8 Test the case that motivated the two-tier design: a search matching over a thousand entries returns a bounded payload and an honest total
+- [x] 3.1 Define the corpus record shape and a loader that reads JSONL from a supplied path, failing with an explanatory message when none is supplied
+- [x] 3.2 Build the search index over property, organism, and keywords, matching case-insensitively on substrings
+- [x] 3.3 Build the alias index from the corpus at load time, mapping common naming variants to stored values, and make it inspectable
+- [x] 3.4 Implement search returning capped compact rows plus the total match count, logging what matched and what was truncated
+- [x] 3.5 Implement vocabulary discovery: list stored organism and property values matching a partial term, with entry counts
+- [x] 3.6 Implement single-entry retrieval, parsing cited entry identifiers out of the entry's text into a list
+- [x] 3.7 Test that no tool can create, modify, or delete a corpus entry
+- [x] 3.8 Test the case that motivated the two-tier design: a search matching over a thousand entries returns a bounded payload and an honest total
 
 ## 4. Agent — static prompt, fixed tools
 

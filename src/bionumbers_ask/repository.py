@@ -1,0 +1,181 @@
+"""A read-only repository over the corpus (the Repository pattern).
+
+Nothing else reaches the corpus, and nothing here mutates it. Retrieval is two
+tier: search returns compact rows plus the total that matched, and full entries
+are fetched one at a time. A single-word property search matches up to 1,656 of
+the corpus's 14,294 entries, and a full entry averages roughly eight times a
+compact row, so returning matches in full would be a six-figure token result for
+one tool call -- and would bury the few relevant entries among the rest.
+"""
+
+from __future__ import annotations
+
+import re
+from collections import Counter, defaultdict
+from dataclasses import dataclass
+
+from .corpus import Entry
+from .trace import QuestionTrace
+
+DEFAULT_LIMIT = 50
+
+# Entry text cites other entries as "BNID 102065, 104333". Identifiers are six
+# digits beginning with 1.
+_CITED = re.compile(r"\bBNIDs?\s*((?:\s*1\d{5}\s*(?:,|and)?)+)", re.IGNORECASE)
+_ID = re.compile(r"\b1\d{5}\b")
+
+
+@dataclass(frozen=True)
+class CompactRow:
+    """What search returns: enough to choose, not enough to answer from."""
+
+    bnid: int
+    property: str
+    organism: str
+    value: str
+    units: str
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    rows: tuple[CompactRow, ...]
+    total_matched: int
+
+    @property
+    def truncated(self) -> bool:
+        return self.total_matched > len(self.rows)
+
+
+@dataclass(frozen=True)
+class FullEntry:
+    entry: Entry
+    cited_bnids: tuple[int, ...]
+
+
+def _compact(entry: Entry) -> CompactRow:
+    return CompactRow(
+        bnid=entry.bnid,
+        property=entry.property,
+        organism=entry.organism,
+        value=entry.value_display,
+        units=entry.units,
+    )
+
+
+def _abbreviated_binomials(organism: str) -> set[str]:
+    """Abbreviations a reader would type: "E. coli" for "Escherichia coli".
+
+    This is the one variant plain substring matching cannot reach -- "e. coli" is
+    not a substring of "Bacteria Escherichia coli" -- which is why an index exists
+    at all. Everything else a user is likely to type (a genus, a common name, a
+    group) is already a substring of the stored value, and needs no mapping.
+    """
+    tokens = organism.split()
+    out = set()
+    for first, second in zip(tokens, tokens[1:]):
+        if (
+            first[:1].isupper()
+            and first.isalpha()
+            and len(first) > 2
+            and second.islower()
+            and second.isalpha()
+            and len(second) > 2
+        ):
+            out.add(f"{first[0].lower()}. {second.lower()}")
+    return out
+
+
+class CorpusRepository:
+    def __init__(self, entries: tuple[Entry, ...]) -> None:
+        self._entries = entries
+        self._by_id = {e.bnid: e for e in entries}
+        self._organisms = Counter(e.organism for e in entries if e.organism)
+        self._properties = Counter(e.property for e in entries if e.property)
+        aliases: dict[str, set[str]] = defaultdict(set)
+        for organism in self._organisms:
+            for alias in _abbreviated_binomials(organism):
+                aliases[alias].add(organism)
+        self._aliases = {k: frozenset(v) for k, v in aliases.items()}
+
+    # -- inspection -------------------------------------------------------
+
+    def aliases(self) -> dict[str, frozenset[str]]:
+        """The index, readable and correctable. Deliberately not learned."""
+        return dict(self._aliases)
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    # -- search -----------------------------------------------------------
+
+    def search(
+        self,
+        *,
+        property: str | None = None,
+        organism: str | None = None,
+        keyword: str | None = None,
+        limit: int = DEFAULT_LIMIT,
+        trace: QuestionTrace | None = None,
+    ) -> SearchResult:
+        resolved = self._resolve_organism(organism) if organism else None
+        matched = [
+            e
+            for e in self._entries
+            if (property is None or property.lower() in e.property.lower())
+            and (resolved is None or e.organism in resolved)
+            and (
+                keyword is None
+                or any(keyword.lower() in k.lower() for k in e.keywords)
+                or keyword.lower() in e.property.lower()
+            )
+        ]
+        rows = tuple(_compact(e) for e in matched[:limit])
+        result = SearchResult(rows=rows, total_matched=len(matched))
+        if trace is not None:
+            trace.record(
+                "search",
+                property=property,
+                organism=organism,
+                keyword=keyword,
+                matched=result.total_matched,
+                returned=len(rows),
+                truncated=result.truncated,
+                organism_resolved_to=sorted(resolved) if resolved else None,
+            )
+        return result
+
+    def _resolve_organism(self, term: str) -> frozenset[str]:
+        """Stored organism values a term refers to: aliases first, then substrings."""
+        key = " ".join(term.lower().split())
+        stored = set(self._aliases.get(key, ()))
+        stored.update(o for o in self._organisms if key in o.lower())
+        return frozenset(stored)
+
+    # -- vocabulary -------------------------------------------------------
+
+    def vocabulary(self, field: str, term: str = "", limit: int = 20) -> tuple[tuple[str, int], ...]:
+        """Stored values matching a partial term, so nothing has to be guessed.
+
+        A search that returns nothing is otherwise indistinguishable from a topic
+        the corpus does not cover.
+        """
+        counts = {"organism": self._organisms, "property": self._properties}[field]
+        key = term.lower()
+        hits = [(value, n) for value, n in counts.items() if key in value.lower()]
+        hits.sort(key=lambda pair: (-pair[1], pair[0]))
+        return tuple(hits[:limit])
+
+    # -- retrieval --------------------------------------------------------
+
+    def get(self, bnid: int, *, trace: QuestionTrace | None = None) -> FullEntry | None:
+        entry = self._by_id.get(bnid)
+        if entry is None:
+            if trace is not None:
+                trace.record("entry.missing", bnid=bnid)
+            return None
+        cited = tuple(
+            sorted({int(i) for group in _CITED.findall(entry.quotation_text) for i in _ID.findall(group)})
+        )
+        if trace is not None:
+            trace.record("entry.retrieved", bnid=bnid, cited_bnids=list(cited))
+        return FullEntry(entry=entry, cited_bnids=cited)
