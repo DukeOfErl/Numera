@@ -42,6 +42,7 @@ dev = [
     # lines does no test ever run", which is the signature of a real path hidden
     # behind an injected fake.
     "pytest-cov>=5.0",
+    "ruff>=0.16",
 ]
 
 [build-system]
@@ -62,3 +63,24 @@ testpaths = ["tests"]
 pythonpath = ["tests"]
 addopts = "-m 'not network'"
 markers = ["network: hits a real external service; run with `pytest -m network`"]
+
+# Linting and formatting, both from ruff: `ruff check` finds problems, `ruff
+# format` rewrites layout. The config lives here on dev so both work packages
+# lint against the same rules; each branch fixes its own tree after merging,
+# since dev carries no source of its own.
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+# E/F are the pycodestyle+pyflakes core, I keeps imports ordered, UP keeps the
+# syntax current with the floor in requires-python, and B (bugbear) flags the
+# patterns that fail silently -- which is the failure mode this project cannot
+# afford. Deliberately no style-opinion families (SIM/C4/RET): they found one
+# thing across the whole codebase, and it read worse than what was there.
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+# Without this ruff reads the packages as third-party and removes the blank line
+# separating them from real third-party imports, making every test file worse.
+[tool.ruff.lint.isort]
+known-first-party = ["bionumbers", "bionumbers_ask", "agent_doubles"]
