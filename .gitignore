@@ -12,6 +12,11 @@ wheels/
 # Evaluation corpus — an external input with unresolved licensing; never commit it
 corpus/
 
+# Coverage data -- a discovery tool run locally, never a committed artefact
+.coverage
+.coverage.*
+htmlcov/
+
 # Secrets — see CLAUDE.md, "Never commit secrets"
 .env
 .env.*
