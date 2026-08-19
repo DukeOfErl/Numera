@@ -94,7 +94,9 @@ RetrievalOutcome = RetrievedDocument | Unavailable
 
 _PMID = re.compile(r"^(?:pmid|pubmed)\s*[:\s]\s*(\d+)$", re.IGNORECASE)
 _PMCID = re.compile(r"^(?:pmcid\s*[:\s]\s*)?(PMC\d+)$", re.IGNORECASE)
-_DOI = re.compile(r"^(?:doi\s*[:\s]\s*|https?://(?:dx\.)?doi\.org/)?(10\.\d{4,9}/\S+)$", re.IGNORECASE)
+_DOI = re.compile(
+    r"^(?:doi\s*[:\s]\s*|https?://(?:dx\.)?doi\.org/)?(10\.\d{4,9}/\S+)$", re.IGNORECASE
+)
 _BARE_DIGITS = re.compile(r"^\d{1,8}$")
 
 _NON_ARTICLE_MARKERS = (

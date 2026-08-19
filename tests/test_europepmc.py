@@ -3,18 +3,6 @@
 import json
 
 import pytest
-
-from bionumbers.cache import DocumentCache
-from bionumbers.corpus import CorpusEntry
-from bionumbers.europepmc import VERSION_OF_RECORD, EuropePMC
-from bionumbers.retrieval import (
-    ArtifactKind,
-    RetrievedDocument,
-    SourceIdentifier,
-    Unavailable,
-    UnavailabilityReason,
-    resolve_identifier,
-)
 from europepmc_double import (
     NOT_INDEXED_PMID,
     OPEN_ACCESS_PMCID,
@@ -26,6 +14,18 @@ from europepmc_double import (
     fixture,
     offline_client,
     preprint_versions,
+)
+
+from bionumbers.cache import DocumentCache
+from bionumbers.corpus import CorpusEntry
+from bionumbers.europepmc import VERSION_OF_RECORD, EuropePMC
+from bionumbers.retrieval import (
+    ArtifactKind,
+    RetrievedDocument,
+    SourceIdentifier,
+    UnavailabilityReason,
+    Unavailable,
+    resolve_identifier,
 )
 
 

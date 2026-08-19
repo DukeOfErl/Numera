@@ -7,8 +7,8 @@ from bionumbers.retrieval import (
     ArtifactKind,
     RetrievedDocument,
     SourceIdentifier,
-    Unavailable,
     UnavailabilityReason,
+    Unavailable,
     count_by_reason,
     resolve_identifier,
 )

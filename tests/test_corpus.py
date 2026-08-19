@@ -1,4 +1,5 @@
 import pytest
+from conftest import record_json
 
 from bionumbers.corpus import (
     CorpusEntry,
@@ -7,7 +8,6 @@ from bionumbers.corpus import (
     MalformedCorpusError,
     load_corpus,
 )
-from conftest import record_json
 
 MICRO_SIGN = "µm"  # U+00B5 MICRO SIGN
 GREEK_MU = "μm"  # U+03BC GREEK SMALL LETTER MU

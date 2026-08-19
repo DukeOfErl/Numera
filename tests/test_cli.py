@@ -5,9 +5,9 @@ import sys
 from pathlib import Path
 
 import pytest
+from conftest import record_json
 
 from bionumbers.cli import main
-from conftest import record_json
 
 CONSOLE_SCRIPT = Path(sys.executable).parent / "bionumbers"
 

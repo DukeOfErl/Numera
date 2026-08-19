@@ -22,8 +22,8 @@ from bionumbers.retrieval import (
     RetrievalOutcome,
     RetrievedDocument,
     SourceIdentifier,
-    Unavailable,
     UnavailabilityReason,
+    Unavailable,
 )
 
 DEFAULT_BASE_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest"
