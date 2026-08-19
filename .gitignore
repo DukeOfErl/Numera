@@ -9,6 +9,11 @@ wheels/
 # Virtual environments
 .venv
 
+# Coverage data -- a discovery tool run locally, never a committed artefact
+.coverage
+.coverage.*
+htmlcov/
+
 # Secrets — see CLAUDE.md, "Never commit secrets"
 .env
 .env.*
