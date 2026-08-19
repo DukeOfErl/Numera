@@ -59,8 +59,17 @@ def _write(tmp_path, *rows):
 def test_an_empty_string_value_does_not_blank_out_a_range(tmp_path):
     # A spreadsheet-derived corpus writes "" for an absent scalar. Uncoerced, ""
     # is not None, so the range would never be shown and the row would be blank.
-    path = _write(tmp_path, {"bnid": 1, "property": "p", "units": "u",
-                             "value": "", "range_low": 1.94, "range_high": 2.72})
+    path = _write(
+        tmp_path,
+        {
+            "bnid": 1,
+            "property": "p",
+            "units": "u",
+            "value": "",
+            "range_low": 1.94,
+            "range_high": 2.72,
+        },
+    )
     entry = load(path)[0]
     assert entry.value is None
     assert entry.value_display == "1.94–2.72"
@@ -81,8 +90,9 @@ def test_a_half_open_range_is_not_rendered_with_none(tmp_path):
 def test_keywords_given_as_a_string_are_split_not_exploded(tmp_path):
     # tuple("cell size") would give one entry per character, making every
     # single-letter search match everything and every real term match nothing.
-    path = _write(tmp_path, {"bnid": 1, "property": "p", "units": "u",
-                             "keywords": "cell size,diameter"})
+    path = _write(
+        tmp_path, {"bnid": 1, "property": "p", "units": "u", "keywords": "cell size,diameter"}
+    )
     assert load(path)[0].keywords == ("cell size", "diameter")
 
 
@@ -99,7 +109,9 @@ def test_a_malformed_line_is_refused_with_its_line_number(tmp_path):
     # Coverage found this branch unexercised: a corpus half-written or truncated
     # would otherwise fail somewhere less obvious than at load.
     path = tmp_path / "broken.jsonl"
-    path.write_text('{"bnid": 1, "property": "p", "units": "u"}\nnot json at all\n', encoding="utf-8")
+    path.write_text(
+        '{"bnid": 1, "property": "p", "units": "u"}\nnot json at all\n', encoding="utf-8"
+    )
     with pytest.raises(CorpusUnavailable, match="line 2"):
         load(path)
 

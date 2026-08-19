@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import pytest
+from conftest import agent_with, run
 
+from agent_doubles import costing, says, scripted, tool_call
 from bionumbers_ask.agent import CONVERSATION_BOUND, SYSTEM_PROMPT, AskAgent
 from bionumbers_ask.config import Config, usd
 from bionumbers_ask.events import Answer, EndReason, QuestionEnded, QuestionStarted, Retrieval
-
-from agent_doubles import costing, says, scripted, tool_call
-from conftest import agent_with, run
-
 
 # -- the event contract ---------------------------------------------------
 
@@ -112,7 +110,9 @@ def test_exhausted_retries_end_the_question_as_a_provider_failure(repo, config, 
 def test_the_same_question_emits_the_same_events_whoever_drives(repo, config, tmp_path):
     def once(name):
         model = scripted(tool_call("search_entries", property="Cell"), says("same"))
-        return [type(e).__name__ for e in run(agent_with(repo, config, tmp_path, model, name), "s", "q")]
+        return [
+            type(e).__name__ for e in run(agent_with(repo, config, tmp_path, model, name), "s", "q")
+        ]
 
     assert once("a.sqlite") == once("b.sqlite")
 
@@ -130,7 +130,9 @@ def test_the_agent_takes_no_parameter_naming_its_caller(repo, config, tmp_path):
 # -- the conversation bound ----------------------------------------------
 
 
-def test_a_session_at_the_bound_refuses_rather_than_dropping_context(repo, config, tmp_path, monkeypatch):
+def test_a_session_at_the_bound_refuses_rather_than_dropping_context(
+    repo, config, tmp_path, monkeypatch
+):
     monkeypatch.setattr("bionumbers_ask.agent.CONVERSATION_BOUND", 2)
     agent = agent_with(repo, config, tmp_path, scripted(says("first"), says("second")))
     run(agent, "s1", "first question")
@@ -261,7 +263,9 @@ def test_a_blank_answer_is_not_reported_as_answered(repo, config, tmp_path):
     assert not any(isinstance(e, Answer) for e in events)
 
 
-def test_the_user_is_warned_before_the_conversation_bound_bites(repo, config, tmp_path, monkeypatch):
+def test_the_user_is_warned_before_the_conversation_bound_bites(
+    repo, config, tmp_path, monkeypatch
+):
     from bionumbers_ask.events import ConversationWarning
 
     # Bound 5 warns at 3.75 messages. After two turns a session holds four, which
@@ -287,7 +291,9 @@ def test_conversation_length_needs_no_model_and_no_api_key(repo, config, tmp_pat
     assert bare.conversation_length("never-used") == 0
 
 
-def test_a_defect_in_our_own_code_is_not_labelled_a_provider_failure(repo, config, tmp_path, monkeypatch):
+def test_a_defect_in_our_own_code_is_not_labelled_a_provider_failure(
+    repo, config, tmp_path, monkeypatch
+):
     def explode(_message):
         raise TypeError("a bug in this file, not the provider")
 

@@ -13,11 +13,10 @@ Money is integer micro-dollars throughout -- see `config` for why not cents.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Annotated, Any
+from typing import Annotated, Any, NotRequired
 
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import AgentState, PrivateStateAttr
-from typing_extensions import NotRequired
 
 from .config import MICRO_PER_USD, Config, ModelPrices, micro_from_provider_cost
 from .events import EndReason, SpendWarning

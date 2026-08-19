@@ -18,7 +18,7 @@ import textwrap
 # Each turn runs in its own interpreter. The only thing carried between them is
 # the checkpoint file and the thread id -- the same two things a redeployed web
 # app would have.
-_TURN = '''
+_TURN = """
 import sys
 from langchain.agents import create_agent
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
@@ -41,7 +41,7 @@ with SqliteSaver.from_conn_string(db) as saver:
 # on what survived rather than on what this process just produced.
 for message in result["messages"]:
     print(f"{type(message).__name__}: {message.content}")
-'''
+"""
 
 
 def _run_turn(db: str, thread_id: str, reply: str, question: str) -> str:
@@ -86,7 +86,7 @@ def test_a_different_thread_id_does_not_inherit(tmp_path):
 # another process, so the run budget silently bounds nothing. Driving the real
 # AskAgent here rather than a bare create_agent, because what is under test is the
 # ledger's persistence, not the checkpointer's.
-_ASK_TURN = '''
+_ASK_TURN = """
 import sys
 from agent_doubles import costing, says, scripted
 from bionumbers_ask.agent import AskAgent
@@ -103,7 +103,7 @@ agent = AskAgent(CorpusRepository(load(corpus)), config, db, model=model)
 
 end = [e for e in agent.ask(thread_id, question) if isinstance(e, QuestionEnded)][0]
 print(f"question={end.spend} run={end.run_spend} reason={end.reason.value}")
-'''
+"""
 
 
 def _ask_turn(db: str, thread_id: str, question: str) -> str:

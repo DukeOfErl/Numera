@@ -31,10 +31,12 @@ class ScriptedModel(BaseChatModel):
     def _llm_type(self) -> str:
         return "scripted"
 
-    def bind_tools(self, tools: Any, **kwargs: Any) -> "ScriptedModel":
+    def bind_tools(self, tools: Any, **kwargs: Any) -> ScriptedModel:
         return self
 
-    def _generate(self, messages: list[BaseMessage], stop: Any = None, run_manager: Any = None, **kwargs: Any) -> ChatResult:
+    def _generate(
+        self, messages: list[BaseMessage], stop: Any = None, run_manager: Any = None, **kwargs: Any
+    ) -> ChatResult:
         self.attempts += 1
         if self.attempts <= self.failures:
             raise RuntimeError(f"upstream unavailable (attempt {self.attempts})")
@@ -45,18 +47,14 @@ class ScriptedModel(BaseChatModel):
         # test running down a path no real call takes -- and would have left the
         # gate, which reads exactly this, unexercised.
         if self.reports_cost and not message.response_metadata:
-            message = message.model_copy(
-                update={"response_metadata": OPENROUTER_RESPONSE_METADATA}
-            )
+            message = message.model_copy(update={"response_metadata": OPENROUTER_RESPONSE_METADATA})
         return ChatResult(generations=[ChatGeneration(message=message)])
 
 
 def scripted(
     *responses: BaseMessage, failures: int = 0, reports_cost: bool = True
 ) -> ScriptedModel:
-    return ScriptedModel(
-        responses=list(responses), failures=failures, reports_cost=reports_cost
-    )
+    return ScriptedModel(responses=list(responses), failures=failures, reports_cost=reports_cost)
 
 
 def tool_call(name: str, **args: Any) -> AIMessage:

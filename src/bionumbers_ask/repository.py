@@ -213,7 +213,13 @@ class CorpusRepository:
                 trace.record("entry.missing", bnid=bnid)
             return None
         cited = tuple(
-            sorted({int(i) for group in _CITED.findall(entry.quotation_text) for i in _ID.findall(group)})
+            sorted(
+                {
+                    int(i)
+                    for group in _CITED.findall(entry.quotation_text)
+                    for i in _ID.findall(group)
+                }
+            )
         )
         if trace is not None:
             trace.record("entry.retrieved", bnid=bnid, cited_bnids=list(cited))

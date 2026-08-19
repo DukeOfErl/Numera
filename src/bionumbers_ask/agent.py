@@ -259,7 +259,9 @@ class AskAgent:
         when to consume, so nothing here waits on an interface.
         """
         trace = start_question()
-        yield QuestionStarted(question_id=trace.question_id, session_id=session_id, question=question)
+        yield QuestionStarted(
+            question_id=trace.question_id, session_id=session_id, question=question
+        )
 
         # Retrievals and spend warnings both arrive from inside the agent loop, so
         # they queue here and are drained at each step of the stream.

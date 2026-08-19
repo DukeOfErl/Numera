@@ -9,8 +9,17 @@ times the model was called, because that is what "not dispatched" means.
 from __future__ import annotations
 
 import pytest
+from conftest import agent_with
 from langchain_core.messages import AIMessage, ToolMessage
 
+from agent_doubles import (
+    OPENROUTER_RESPONSE_METADATA,
+    costing,
+    reports_usage_only,
+    says,
+    scripted,
+    tool_call,
+)
 from bionumbers_ask.agent import RUN_CALL_LIMIT, AskAgent
 from bionumbers_ask.config import FALLBACK_PRICES, Config, ModelPrices, usd
 from bionumbers_ask.events import (
@@ -26,16 +35,6 @@ from bionumbers_ask.spend import (
     Unpriceable,
     project_question_cost,
 )
-
-from agent_doubles import (
-    OPENROUTER_RESPONSE_METADATA,
-    costing,
-    reports_usage_only,
-    says,
-    scripted,
-    tool_call,
-)
-from conftest import agent_with
 
 # 100 micro-dollars, so the derived ceiling is 120. Costs in these tests are chosen
 # relative to those two figures.
@@ -216,8 +215,9 @@ def test_the_retry_predicate_excludes_the_gate_and_unpriceable_responses():
     assert _retry_on(RuntimeError("upstream unavailable")) is True
 
 
-def test_declining_at_the_ceiling_does_not_sleep_through_the_backoff(repo, tight, tmp_path,
-                                                                    monkeypatch):
+def test_declining_at_the_ceiling_does_not_sleep_through_the_backoff(
+    repo, tight, tmp_path, monkeypatch
+):
     """The predicate wired in, measured end to end.
 
     The autouse fixture zeroes the retry delay, which would make this pass whether
@@ -241,9 +241,7 @@ def test_declining_at_the_ceiling_does_not_sleep_through_the_backoff(repo, tight
 # -- per-question versus per-run -----------------------------------------
 
 
-def test_a_second_question_gets_a_fresh_ceiling_while_run_spend_accumulates(
-    repo, tight, tmp_path
-):
+def test_a_second_question_gets_a_fresh_ceiling_while_run_spend_accumulates(repo, tight, tmp_path):
     model = scripted(costing(says("about 1 micrometre (BNID 100002)"), 0.000_110))
     agent = agent_with(repo, tight, tmp_path, model)
 
@@ -256,9 +254,7 @@ def test_a_second_question_gets_a_fresh_ceiling_while_run_spend_accumulates(
 
 
 def test_the_run_budget_refuses_the_next_question_before_dispatching(repo, config, tmp_path):
-    budgeted = Config(
-        model=config.model, warning_threshold=usd("0.50"), run_budget=usd("0.000200")
-    )
+    budgeted = Config(model=config.model, warning_threshold=usd("0.50"), run_budget=usd("0.000200"))
     model = scripted(costing(says("about 1 micrometre (BNID 100002)"), 0.000_110))
     agent = agent_with(repo, budgeted, tmp_path, model)
 
@@ -278,9 +274,7 @@ def test_the_run_budget_can_end_a_question_part_way(repo, config, tmp_path):
     Its threshold is set well above what this question spends, so an ending of
     SPEND_CEILING here would mean the wrong limit was reported.
     """
-    budgeted = Config(
-        model=config.model, warning_threshold=usd("0.50"), run_budget=usd("0.000150")
-    )
+    budgeted = Config(model=config.model, warning_threshold=usd("0.50"), run_budget=usd("0.000150"))
     model = scripted(costing(tool_call("search_entries", property="Cell"), 0.000_110))
     end = ended(list(agent_with(repo, budgeted, tmp_path, model).ask("s", "q")))
 
@@ -366,9 +360,7 @@ def test_the_projection_is_absent_without_configured_prices(config):
 
 def test_a_flagged_question_is_still_answered(repo, config, tmp_path, monkeypatch):
     """The projection is an estimate, and the gate acts on measured spend alone."""
-    monkeypatch.setattr(
-        "bionumbers_ask.agent.project_question_cost", lambda *_: usd("999.00")
-    )
+    monkeypatch.setattr("bionumbers_ask.agent.project_question_cost", lambda *_: usd("999.00"))
     model = scripted(costing(says("about 1 micrometre (BNID 100002)"), 0.000_110))
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
 
