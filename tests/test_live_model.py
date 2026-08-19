@@ -11,7 +11,7 @@ Excluded by default via the `network` marker. To run it:
     OPENROUTER_API_KEY=... uv run pytest -m network
 
 It uses the six-entry fixture rather than the real corpus, so it stays cheap: one
-question, a handful of tool calls, a fraction of a cent.
+question, a handful of tool calls, and about a cent.
 """
 
 from __future__ import annotations
@@ -68,5 +68,9 @@ def test_the_provider_still_reports_cost_where_the_ledger_reads_it(live_agent):
     events = list(live_agent.ask("live-cost", "How wide is an E. coli cell?"))
     end = next(e for e in events if isinstance(e, QuestionEnded))
     assert end.spend > 0, "the provider reported no cost where the ledger reads it"
-    # Sanity, not a budget: a fixture-sized question should be far under a cent.
-    assert end.spend < 10_000, f"unexpectedly expensive: {end.spend} micro-dollars"
+    # Sanity, not a budget. Measured on 2026-08-19: 10,417 micro-dollars ($0.0104)
+    # over 5 model calls on the six-entry fixture -- the transcript is re-sent on
+    # every call, so cost grows with the square of the retrieval, not linearly. The
+    # bound is roughly ten times that, well under the $0.60 per-question ceiling,
+    # so it catches a runaway without failing on an ordinary run that searched more.
+    assert end.spend < 100_000, f"unexpectedly expensive: {end.spend} micro-dollars"

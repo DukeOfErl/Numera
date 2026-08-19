@@ -11,7 +11,6 @@ import os
 from collections import deque
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from dataclasses import dataclass
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import (
@@ -24,10 +23,11 @@ from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededE
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from .config import Config, NotConfigured, micro_from_provider_cost
+from .config import Config, NotConfigured, format_usd
 from .events import (
     Answer,
     ConversationWarning,
+    CostProjection,
     EndReason,
     Event,
     QuestionEnded,
@@ -35,6 +35,13 @@ from .events import (
     Retrieval,
 )
 from .repository import CorpusRepository
+from .spend import (
+    SpendGate,
+    SpendLedger,
+    SpendLimitReached,
+    Unpriceable,
+    project_question_cost,
+)
 from .tools import build_tools
 from .trace import start_question
 
@@ -70,23 +77,6 @@ CONVERSATION_BOUND = 60
 # How close to the bound before the user is told. A session that went from
 # working to refusing with no notice gives no chance to finish a line of enquiry.
 CONVERSATION_WARN_AT = 0.75
-
-
-@dataclass
-class _Spend:
-    """Minimal accumulation so an ending can report what it consumed.
-
-    The ledger proper -- persistence, the gate, thresholds -- is spend-control's
-    work. This is only enough to make QuestionEnded honest.
-    """
-
-    micro: int = 0
-
-    def add_from(self, message: object) -> None:
-        meta = getattr(message, "response_metadata", None) or {}
-        cost = (meta.get("token_usage") or {}).get("cost")
-        if cost:
-            self.micro += micro_from_provider_cost(cost)
 
 
 def _text_of(message: object) -> str:
@@ -157,7 +147,19 @@ TOOL_RETRIES = 2
 RETRY_INITIAL_DELAY = 1.0
 
 
-def _middleware() -> list:
+def _retry_on(exc: Exception) -> bool:
+    """Retry transient failures, but never a spend limit or an unpriceable response.
+
+    The default is `(Exception,)`, which would retry the gate's own refusal: the
+    question would sleep through the full backoff and then fail anyway, so a
+    question stopped on its ceiling would take seconds longer to say so. Retrying
+    an unpriceable response is equally futile -- a provider that reports no cost
+    will not start reporting one on the second attempt.
+    """
+    return not isinstance(exc, (SpendLimitReached, Unpriceable))
+
+
+def _middleware(gate: SpendGate) -> list:
     return [
         # A transient gateway failure should not end a question, and in an
         # evaluation it would waste a question slot and its spend.
@@ -171,6 +173,7 @@ def _middleware() -> list:
             backoff_factor=2.0,
             initial_delay=RETRY_INITIAL_DELAY,
             on_failure="error",
+            retry_on=_retry_on,
         ),
         # Order matters and is not cosmetic. First in the list is outermost, and
         # ToolRetryMiddleware only retries when the handler raises -- so with
@@ -186,14 +189,29 @@ def _middleware() -> list:
             initial_delay=RETRY_INITIAL_DELAY,
             on_failure="error",
         ),
-        # Brought forward from the retrieval-effort task: until the spend gate
-        # exists, this is the only thing standing between a loop and the bill.
+        # A retrieval bound, not a cost guard -- the spend gate below is what
+        # bounds the bill. This limits how much searching one question may do.
         #
         # exit_behavior="error" rather than "end": ending injects an AIMessage
         # reading "Model call limits exceeded", which this loop would adopt as the
         # answer and report as a complete one. Raising lets the limit be named.
         ModelCallLimitMiddleware(run_limit=RUN_CALL_LIMIT, exit_behavior="error"),
+        # Innermost, so it is the last thing between the loop and a dispatched
+        # request, and so each attempt the retry middleware makes passes through it.
+        gate,
     ]
+
+
+def _persisted(saver: SqliteSaver, session_id: str) -> dict:
+    """The session's persisted state, or an empty mapping if it has none.
+
+    Read straight from the checkpoint rather than through the agent, because the
+    gate has to be constructed from these values before there is an agent to ask.
+    """
+    record = saver.get_tuple({"configurable": {"thread_id": session_id}})
+    if record is None:
+        return {}
+    return record.checkpoint.get("channel_values") or {}
 
 
 class AskAgent:
@@ -223,10 +241,16 @@ class AskAgent:
         absent, to answer a question needing no model at all.
         """
         with self._saver() as saver:
-            record = saver.get_tuple({"configurable": {"thread_id": session_id}})
-        if record is None:
-            return 0
-        return len((record.checkpoint.get("channel_values") or {}).get("messages", []))
+            return len(_persisted(saver, session_id).get("messages") or [])
+
+    def run_spend(self, session_id: str) -> int:
+        """What this session has spent so far, across all its questions.
+
+        Same reasoning as conversation_length: a driver deciding whether to offer
+        another question needs this without building a model.
+        """
+        with self._saver() as saver:
+            return _persisted(saver, session_id).get("run_spend") or 0
 
     def ask(self, session_id: str, question: str) -> Iterator[Event]:
         """Answer a question, emitting events as the work happens.
@@ -237,9 +261,10 @@ class AskAgent:
         trace = start_question()
         yield QuestionStarted(question_id=trace.question_id, session_id=session_id, question=question)
 
-        pending: deque[Retrieval] = deque()
+        # Retrievals and spend warnings both arrive from inside the agent loop, so
+        # they queue here and are drained at each step of the stream.
+        pending: deque[Event] = deque()
         tools = build_tools(self._repo, trace, pending.append)
-        spend = _Spend()
         try:
             model = self._model or default_model(self._config)
         except NotConfigured as exc:
@@ -254,6 +279,7 @@ class AskAgent:
                 question_id=trace.question_id,
                 reason=EndReason.NOT_CONFIGURED,
                 spend=0,
+                run_spend=0,
                 model=self._config.model,
                 tool_calls=0,
                 incomplete=True,
@@ -261,18 +287,40 @@ class AskAgent:
             return
 
         with self._saver() as saver:
-            agent = create_agent(
-                model=model,
-                tools=tools,
-                system_prompt=SYSTEM_PROMPT,
-                middleware=_middleware(),
-                checkpointer=saver,
-            )
-            config = {"configurable": {"thread_id": session_id}, **trace.run_config("ask")}
+            # One read of the checkpoint, before the agent exists: the conversation
+            # bound, the run budget, and the ceiling in force all come from it, and
+            # the gate must be constructed with them.
+            persisted = _persisted(saver, session_id)
+            messages = persisted.get("messages") or []
+            run_spend = persisted.get("run_spend") or 0
+            # The ceiling a session was created with is the one it keeps. A session
+            # resumed by a process with a different environment must not be handed a
+            # larger budget part-way through; reconfiguring bounds new sessions.
+            ceiling = persisted.get("spend_ceiling") or self._config.question_ceiling
 
-            existing = agent.get_state(config).values or {}
-            if len(existing.get("messages", [])) >= CONVERSATION_BOUND:
-                trace.record("conversation.bound_reached", messages=len(existing["messages"]))
+            if run_spend >= self._config.run_budget:
+                trace.record("run.budget_reached", run_spend=run_spend)
+                yield Answer(
+                    question_id=trace.question_id,
+                    text=(
+                        f"This run has spent {format_usd(run_spend)} of its "
+                        f"{format_usd(self._config.run_budget)} budget, so no further "
+                        "question can be started. Raise the budget or start a new run."
+                    ),
+                )
+                yield QuestionEnded(
+                    question_id=trace.question_id,
+                    reason=EndReason.RUN_BUDGET,
+                    spend=0,
+                    run_spend=run_spend,
+                    model=self._config.model,
+                    tool_calls=0,
+                    incomplete=True,
+                )
+                return
+
+            if len(messages) >= CONVERSATION_BOUND:
+                trace.record("conversation.bound_reached", messages=len(messages))
                 yield Answer(
                     question_id=trace.question_id,
                     text=(
@@ -284,18 +332,55 @@ class AskAgent:
                     question_id=trace.question_id,
                     reason=EndReason.CONVERSATION_BOUND,
                     spend=0,
+                    run_spend=run_spend,
                     model=self._config.model,
                     tool_calls=0,
                     incomplete=True,
                 )
                 return
 
-            if len(existing.get("messages", [])) >= CONVERSATION_BOUND * CONVERSATION_WARN_AT:
+            if len(messages) >= CONVERSATION_BOUND * CONVERSATION_WARN_AT:
                 yield ConversationWarning(
                     question_id=trace.question_id,
-                    messages=len(existing.get("messages", [])),
+                    messages=len(messages),
                     bound=CONVERSATION_BOUND,
                 )
+
+            # Before any work: an upper bound on what this question could cost,
+            # flagged only if it exceeds the warning threshold. An estimate, never
+            # enforcement -- the gate below acts on measured spend alone.
+            projected = project_question_cost(self._config, question, RUN_CALL_LIMIT)
+            if projected is not None and projected > self._config.warning_threshold:
+                trace.record("spend.projected", projected=projected)
+                yield CostProjection(
+                    question_id=trace.question_id,
+                    projected=projected,
+                    threshold=self._config.warning_threshold,
+                )
+
+            ledger = SpendLedger(
+                model=self._config.model,
+                prices=self._config.prices_for(self._config.model),
+                run_spend=run_spend,
+            )
+            gate = SpendGate(
+                ledger=ledger,
+                ceiling=ceiling,
+                run_budget=self._config.run_budget,
+                warning_threshold=self._config.warning_threshold,
+                question_id=trace.question_id,
+                emit=pending.append,
+                trace=trace,
+            )
+
+            agent = create_agent(
+                model=model,
+                tools=tools,
+                system_prompt=SYSTEM_PROMPT,
+                middleware=_middleware(gate),
+                checkpointer=saver,
+            )
+            config = {"configurable": {"thread_id": session_id}, **trace.run_config("ask")}
 
             answer_text = ""
             tool_calls = 0
@@ -319,12 +404,57 @@ class AskAgent:
                         chunk = next(stream)
                     except StopIteration:
                         break
+                    except SpendLimitReached as limit:
+                        trace.record(
+                            "spend.limit_reached",
+                            reason=limit.reason.value,
+                            spent=limit.spent,
+                            limit=limit.limit,
+                        )
+                        # The question is not discarded. Whatever the model had
+                        # established is presented, and the ending marks it
+                        # incomplete -- an empty answer here would throw away work
+                        # that was already paid for.
+                        yield Answer(
+                            question_id=trace.question_id,
+                            text=answer_text.strip()
+                            or (
+                                "I stopped on a spend limit before establishing anything I "
+                                "could cite, so there is no partial answer to give."
+                            ),
+                        )
+                        yield QuestionEnded(
+                            question_id=trace.question_id,
+                            reason=limit.reason,
+                            spend=ledger.question,
+                            run_spend=ledger.run,
+                            model=self._config.model,
+                            tool_calls=tool_calls,
+                            incomplete=True,
+                        )
+                        return
+                    except Unpriceable as exc:
+                        # Spend cannot be accounted for, so there is no working
+                        # control: stop rather than continue blind.
+                        trace.record("spend.unpriceable", detail=str(exc))
+                        yield Answer(question_id=trace.question_id, text=str(exc))
+                        yield QuestionEnded(
+                            question_id=trace.question_id,
+                            reason=EndReason.NOT_CONFIGURED,
+                            spend=ledger.question,
+                            run_spend=ledger.run,
+                            model=self._config.model,
+                            tool_calls=tool_calls,
+                            incomplete=True,
+                        )
+                        return
                     except ModelCallLimitExceededError:
                         trace.record("retrieval.bound_reached", tool_calls=tool_calls)
                         yield QuestionEnded(
                             question_id=trace.question_id,
                             reason=EndReason.RETRIEVAL_BOUND,
-                            spend=spend.micro,
+                            spend=ledger.question,
+                            run_spend=ledger.run,
                             model=self._config.model,
                             tool_calls=tool_calls,
                             incomplete=True,
@@ -335,27 +465,33 @@ class AskAgent:
                         yield QuestionEnded(
                             question_id=trace.question_id,
                             reason=EndReason.PROVIDER_FAILURE,
-                            spend=spend.micro,
+                            spend=ledger.question,
+                            run_spend=ledger.run,
                             model=self._config.model,
                             tool_calls=tool_calls,
                             incomplete=True,
                         )
                         return
 
+                    # Only retrievals are tool calls. Counting every queued event
+                    # would inflate the figure by one for each spend warning.
                     while pending:
-                        tool_calls += 1
-                        yield pending.popleft()
+                        event = pending.popleft()
+                        if isinstance(event, Retrieval):
+                            tool_calls += 1
+                        yield event
                     for update in chunk.values():
                         for message in (update or {}).get("messages", []) or []:
-                            spend.add_from(message)
                             if getattr(message, "type", "") == "ai":
                                 text = _text_of(message)
                                 if text.strip():
                                     answer_text = text
 
             while pending:
+                event = pending.popleft()
+                if isinstance(event, Retrieval):
                     tool_calls += 1
-                    yield pending.popleft()
+                yield event
 
         if not answer_text.strip():
             # The loop finished without producing text. Reporting that as an
@@ -365,19 +501,26 @@ class AskAgent:
             yield QuestionEnded(
                 question_id=trace.question_id,
                 reason=EndReason.NO_ANSWER,
-                spend=spend.micro,
+                spend=ledger.question,
+                run_spend=ledger.run,
                 model=self._config.model,
                 tool_calls=tool_calls,
                 incomplete=True,
             )
             return
 
-        trace.record("question.answered", spend_micro=spend.micro, tool_calls=tool_calls)
+        trace.record(
+            "question.answered",
+            spend_micro=ledger.question,
+            run_spend_micro=ledger.run,
+            tool_calls=tool_calls,
+        )
         yield Answer(question_id=trace.question_id, text=answer_text)
         yield QuestionEnded(
             question_id=trace.question_id,
             reason=EndReason.ANSWERED,
-            spend=spend.micro,
+            spend=ledger.question,
+            run_spend=ledger.run,
             model=self._config.model,
             tool_calls=tool_calls,
         )

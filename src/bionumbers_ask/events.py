@@ -69,8 +69,27 @@ class ConversationWarning:
 
 @dataclass(frozen=True)
 class SpendWarning:
+    """Spend has passed the warning threshold. Work continues.
+
+    The threshold is notice and the ceiling is the stop; a run that only ever
+    announced the stop would give no chance to intervene first.
+    """
+
     question_id: str
     spent: int
+    threshold: int
+
+
+@dataclass(frozen=True)
+class CostProjection:
+    """An upper-bound estimate emitted before work begins, never enforcement.
+
+    Emitted only when the projection exceeds the warning threshold, so it is a
+    flag rather than a running commentary.
+    """
+
+    question_id: str
+    projected: int
     threshold: int
 
 
@@ -87,11 +106,18 @@ class QuestionEnded:
     question_id: str
     reason: EndReason
     spend: int
+    run_spend: int
     model: str
     tool_calls: int
     incomplete: bool = False
 
 
 Event = (
-    QuestionStarted | Retrieval | ConversationWarning | SpendWarning | Answer | QuestionEnded
+    QuestionStarted
+    | Retrieval
+    | ConversationWarning
+    | SpendWarning
+    | CostProjection
+    | Answer
+    | QuestionEnded
 )

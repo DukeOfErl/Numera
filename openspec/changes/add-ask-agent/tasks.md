@@ -43,16 +43,16 @@
 
 ## 5. Spend control
 
-- [ ] 5.1 Implement the spend ledger, reading provider-reported cost where present and falling back to configured prices, in integer minor units
-- [ ] 5.2 Refuse to start when a model reports no cost and has no configured prices
-- [ ] 5.3 Implement the spend gate as a `wrap_model_call` middleware that declines to call the handler once the ceiling is reached
-- [ ] 5.4 End the question at the ceiling, presenting what was established with citations and marked incomplete
-- [ ] 5.5 Persist accumulated spend and the ceiling in session state, and test that spend continues rather than resetting when a session is continued
-- [ ] 5.6 Emit the warning when spend passes the threshold, without ending the question
-- [ ] 5.10 Test that a second question in a session starts with a fresh per-question ceiling while run spend keeps accumulating
-- [ ] 5.7 Implement the run budget across questions, stopping the run when it is reached
-- [ ] 5.8 Implement the pre-flight projection that flags an expensive question before work begins, and test that it never affects where work stops
-- [ ] 5.9 Report spend and the model with every answer
+- [x] 5.1 Implement the spend ledger, reading provider-reported cost where present and falling back to configured prices, in integer minor units
+- [x] 5.2 Refuse to start when a model reports no cost and has no configured prices
+- [x] 5.3 Implement the spend gate as a `wrap_model_call` middleware that declines to call the handler once the ceiling is reached
+- [x] 5.4 End the question at the ceiling, presenting what was established with citations and marked incomplete
+- [x] 5.5 Persist accumulated spend and the ceiling in session state, and test that spend continues rather than resetting when a session is continued
+- [x] 5.6 Emit the warning when spend passes the threshold, without ending the question
+- [x] 5.10 Test that a second question in a session starts with a fresh per-question ceiling while run spend keeps accumulating
+- [x] 5.7 Implement the run budget across questions, stopping the run when it is reached
+- [x] 5.8 Implement the pre-flight projection that flags an expensive question before work begins, and test that it never affects where work stops
+- [x] 5.9 Report spend and the model with every answer
 
 ## 6. Answering behaviour
 

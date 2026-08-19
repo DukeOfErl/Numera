@@ -79,3 +79,76 @@ def test_a_different_thread_id_does_not_inherit(tmp_path):
 
     # Isolation: a second session sharing the same store sees none of the first.
     assert "How wide is an E. coli cell?" not in other, other
+
+
+# Spend has the same problem as the conversation and a worse failure mode: a run
+# total that lives only in memory restarts at zero when a session resumes in
+# another process, so the run budget silently bounds nothing. Driving the real
+# AskAgent here rather than a bare create_agent, because what is under test is the
+# ledger's persistence, not the checkpointer's.
+_ASK_TURN = '''
+import sys
+from agent_doubles import costing, says, scripted
+from bionumbers_ask.agent import AskAgent
+from bionumbers_ask.config import Config, usd
+from bionumbers_ask.corpus import load
+from bionumbers_ask.events import QuestionEnded
+from bionumbers_ask.repository import CorpusRepository
+
+db, thread_id, corpus, question = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+
+config = Config(model="fake/model", warning_threshold=usd("0.50"), run_budget=usd("1.20"))
+model = scripted(costing(says("about 1 micrometre (BNID 100002)"), 0.000110))
+agent = AskAgent(CorpusRepository(load(corpus)), config, db, model=model)
+
+end = [e for e in agent.ask(thread_id, question) if isinstance(e, QuestionEnded)][0]
+print(f"question={end.spend} run={end.run_spend} reason={end.reason.value}")
+'''
+
+
+def _ask_turn(db: str, thread_id: str, question: str) -> str:
+    import os
+    from pathlib import Path
+
+    tests_dir = Path(__file__).parent
+    env = {**os.environ, "PYTHONPATH": str(tests_dir)}
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            textwrap.dedent(_ASK_TURN),
+            db,
+            thread_id,
+            str(tests_dir / "fixtures" / "corpus_sample.jsonl"),
+            question,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+    assert completed.returncode == 0, completed.stderr
+    return completed.stdout.strip()
+
+
+def test_run_spend_continues_across_a_process_boundary(tmp_path):
+    db = str(tmp_path / "spend.sqlite")
+
+    first = _ask_turn(db, "session-under-test", "How wide is an E. coli cell?")
+    assert first == "question=110 run=110 reason=answered", first
+
+    # A different interpreter, given only the checkpoint file and the thread id.
+    second = _ask_turn(db, "session-under-test", "And yeast?")
+
+    # The per-question figure resets; the run total does not.
+    assert second == "question=110 run=220 reason=answered", second
+
+
+def test_run_spend_does_not_leak_between_sessions_across_processes(tmp_path):
+    db = str(tmp_path / "spend.sqlite")
+    _ask_turn(db, "session-one", "How wide is an E. coli cell?")
+
+    other = _ask_turn(db, "session-two", "How wide is an E. coli cell?")
+
+    # Spend accumulated in one session is not counted against another.
+    assert other == "question=110 run=110 reason=answered", other

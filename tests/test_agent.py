@@ -6,36 +6,10 @@ import pytest
 
 from bionumbers_ask.agent import CONVERSATION_BOUND, SYSTEM_PROMPT, AskAgent
 from bionumbers_ask.config import Config, usd
-from bionumbers_ask.corpus import load
 from bionumbers_ask.events import Answer, EndReason, QuestionEnded, QuestionStarted, Retrieval
-from bionumbers_ask.repository import CorpusRepository
 
-from agent_doubles import says, scripted, tool_call
-
-FIXTURE = "tests/fixtures/corpus_sample.jsonl"
-
-
-@pytest.fixture(autouse=True)
-def _fast_retries(monkeypatch):
-    monkeypatch.setattr("bionumbers_ask.agent.RETRY_INITIAL_DELAY", 0.0)
-
-
-@pytest.fixture
-def config() -> Config:
-    return Config(model="fake/model", warning_threshold=usd("0.50"), run_budget=usd("1.20"))
-
-
-@pytest.fixture
-def repo() -> CorpusRepository:
-    return CorpusRepository(load(FIXTURE))
-
-
-def agent_with(repo, config, tmp_path, model, name="checkpoints.sqlite") -> AskAgent:
-    return AskAgent(repo, config, str(tmp_path / name), model=model)
-
-
-def run(agent: AskAgent, session: str, question: str) -> list:
-    return list(agent.ask(session, question))
+from agent_doubles import costing, says, scripted, tool_call
+from conftest import agent_with, run
 
 
 # -- the event contract ---------------------------------------------------
@@ -348,38 +322,28 @@ def test_spend_is_read_from_the_shape_openrouter_actually_returns():
     from langchain_core.messages import AIMessage
 
     from agent_doubles import OPENROUTER_RESPONSE_METADATA
-    from bionumbers_ask.agent import _Spend
+    from bionumbers_ask.spend import SpendLedger
 
     message = AIMessage(content="ok", response_metadata=OPENROUTER_RESPONSE_METADATA)
-    spend = _Spend()
-    spend.add_from(message)
+    ledger = SpendLedger(model="m", prices=None)
+    ledger.add_response([message])
     # 3.4e-05 USD, the figure the live call reported, in micro-dollars.
-    assert spend.micro == 34
+    assert ledger.question == 34
+    assert ledger.run == 34
 
 
 def test_spend_accumulates_across_several_calls():
     from langchain_core.messages import AIMessage
 
     from agent_doubles import OPENROUTER_RESPONSE_METADATA
-    from bionumbers_ask.agent import _Spend
+    from bionumbers_ask.spend import SpendLedger
 
-    spend = _Spend()
+    ledger = SpendLedger(model="m", prices=None)
     for _ in range(3):
-        spend.add_from(AIMessage(content="ok", response_metadata=OPENROUTER_RESPONSE_METADATA))
-    assert spend.micro == 102
-
-
-def test_a_response_without_a_cost_adds_nothing_rather_than_guessing():
-    from langchain_core.messages import AIMessage
-
-    from bionumbers_ask.agent import _Spend
-
-    spend = _Spend()
-    spend.add_from(AIMessage(content="ok"))
-    spend.add_from(AIMessage(content="ok", response_metadata={"token_usage": {"total_tokens": 5}}))
-    # Spend-control requires a question to halt rather than continue with an
-    # unknown cost; that gate is group 5's, but the ledger must not invent one.
-    assert spend.micro == 0
+        ledger.add_response(
+            [AIMessage(content="ok", response_metadata=OPENROUTER_RESPONSE_METADATA)]
+        )
+    assert ledger.question == 102
 
 
 def test_several_tools_requested_in_one_hop_are_all_reported(repo, config, tmp_path):
@@ -441,23 +405,68 @@ def test_every_non_raising_path_ends_with_a_question_ended(repo, config, tmp_pat
         return AskAgent(repo, config, str(tmp_path / "u.sqlite")), "s"
 
     def at_conversation_bound():
+        # Must ask once first: with a fresh session the bound is not yet reached,
+        # so lowering it alone produced an ordinary answer rather than a refusal.
+        # Last in the list, because the patched bound outlives this closure.
         monkeypatch.setattr("bionumbers_ask.agent.CONVERSATION_BOUND", 1)
-        return agent_with(repo, config, tmp_path, scripted(says("a"), says("b")), "c.sqlite"), "s"
+        agent = agent_with(repo, config, tmp_path, scripted(says("a"), says("b")), "c.sqlite")
+        list(agent.ask("s", "a first question, which fills the conversation"))
+        return agent, "s"
 
+    def at_spend_ceiling():
+        tight = Config(
+            model=config.model, warning_threshold=usd("0.000100"), run_budget=usd("1.20")
+        )
+        model = scripted(costing(tool_call("search_entries", property="Cell"), 0.000_200))
+        return AskAgent(repo, tight, str(tmp_path / "sc.sqlite"), model=model), "s"
+
+    def at_run_budget():
+        budgeted = Config(
+            model=config.model, warning_threshold=usd("0.50"), run_budget=usd("0.000050")
+        )
+        model = scripted(costing(says("an answer"), 0.000_110))
+        agent = AskAgent(repo, budgeted, str(tmp_path / "rb.sqlite"), model=model)
+        list(agent.ask("s", "a first question, which exhausts the budget"))
+        return agent, "s"
+
+    def unpriceable():
+        model = scripted(says("an answer"), reports_cost=False)
+        return agent_with(repo, config, tmp_path, model, "up.sqlite"), "s"
+
+    builds = (
+        normal,
+        blank,
+        provider_dead,
+        call_limit,
+        unconfigured,
+        at_spend_ceiling,
+        at_run_budget,
+        unpriceable,
+        at_conversation_bound,
+    )
     reasons = set()
-    for build in (normal, blank, provider_dead, call_limit, unconfigured, at_conversation_bound):
+    for build in builds:
         agent, session = build()
         events = list(agent.ask(session, "How wide is an E. coli cell?"))
         assert events, f"{build.__name__}: emitted nothing"
         assert isinstance(events[0], QuestionStarted), f"{build.__name__}: no start"
-        assert isinstance(events[-1], QuestionEnded), (
+        end = events[-1]
+        assert isinstance(end, QuestionEnded), (
             f"{build.__name__}: ended without a QuestionEnded -- "
             f"got {[type(e).__name__ for e in events]}"
         )
-        reasons.add(events[-1].reason)
+        # Spend is always reported, whatever ended the question, and is only
+        # interpretable next to the model that incurred it.
+        assert end.model, f"{build.__name__}: ending named no model"
+        assert end.spend >= 0 and end.run_spend >= end.spend, (
+            f"{build.__name__}: question spend {end.spend} exceeds run spend {end.run_spend}"
+        )
+        reasons.add(end.reason)
 
-    # And the paths exercised really are distinct endings, not the same one six times.
-    assert len(reasons) >= 5, reasons
+    # Nine builds, eight distinct endings -- the unconfigured and unpriceable paths
+    # share NOT_CONFIGURED. Asserting the exact count so a build that silently
+    # collapsed onto another ending would be caught rather than absorbed.
+    assert len(reasons) == 8, sorted(r.value for r in reasons)
 
 
 # -- gaps found by coverage, not by reading -------------------------------
