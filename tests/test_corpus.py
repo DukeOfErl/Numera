@@ -93,3 +93,17 @@ def test_amounts_are_validated_rather_than_misread():
     for bad in ("", "-0.50", "abc"):
         with pytest.raises(ValueError):
             usd(bad)
+
+
+def test_a_malformed_line_is_refused_with_its_line_number(tmp_path):
+    # Coverage found this branch unexercised: a corpus half-written or truncated
+    # would otherwise fail somewhere less obvious than at load.
+    path = tmp_path / "broken.jsonl"
+    path.write_text('{"bnid": 1, "property": "p", "units": "u"}\nnot json at all\n', encoding="utf-8")
+    with pytest.raises(CorpusUnavailable, match="line 2"):
+        load(path)
+
+
+def test_an_entry_with_no_value_at_all_says_so(tmp_path):
+    path = _write(tmp_path, {"bnid": 1, "property": "p", "units": "u", "table_link": "http://x"})
+    assert load(path)[0].value_display == "(no scalar value)"

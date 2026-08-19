@@ -15,6 +15,14 @@ from dataclasses import dataclass, field
 MICRO_PER_USD = 1_000_000
 
 
+class NotConfigured(Exception):
+    """Something the run needs is absent from the environment.
+
+    Distinct from a defect: a missing credential is a condition a driver can
+    report to its user, so it must not be indistinguishable from a bug.
+    """
+
+
 def usd(amount: str) -> int:
     """Micro-dollars from a decimal string. A string, so no float ever appears.
 

@@ -18,6 +18,7 @@ class EndReason(StrEnum):
 
     ANSWERED = "answered"
     NO_ANSWER = "no_answer"
+    NOT_CONFIGURED = "not_configured"
     SPEND_CEILING = "spend_ceiling"
     RUN_BUDGET = "run_budget"
     RETRIEVAL_BOUND = "retrieval_bound"

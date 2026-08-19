@@ -38,6 +38,10 @@ bionumbers-ask = "bionumbers_ask.cli:main"
 [dependency-groups]
 dev = [
     "pytest>=8.3",
+    # Coverage is used here as a discovery tool, not a target: it answers "which
+    # lines does no test ever run", which is the signature of a real path hidden
+    # behind an injected fake.
+    "pytest-cov>=5.0",
 ]
 
 [build-system]

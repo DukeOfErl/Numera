@@ -259,6 +259,28 @@ specifications say nothing about it, the caching and session-state requirements 
 properties rather than as Streamlit APIs, and swapping it means writing another adapter. Expect it to
 change when this is shown to testers.
 
+### Coverage as a discovery tool, not a target
+
+Injecting a fake for every test leaves the real construction path unrun, and
+nothing announces that. `default_model` had never executed in any offline test,
+because every agent test supplies a model — so a missing credential raised a bare
+`KeyError` after the driver had already been told a question was in flight.
+
+The mechanical check for this is coverage, read as "which lines does no test ever
+run". Used that way it found `get_entry` — the tool behind every citation —
+completely unexercised offline, along with the empty-search message that steers the
+agent towards vocabulary discovery and the loader's malformed-line branch.
+
+Coverage as a *number to raise* would be the wrong use: it says nothing about
+whether what ran was checked. It is a floor, and its value here is specifically
+that a fake-shaped blind spot shows up as an unrun line.
+
+Two structural companions. Construction of real dependencies belongs at the edge
+rather than behind an `or` inside the code under test, so there is no untested
+branch to hide in. And a contract with several exits wants an invariant test across
+all of them — "every non-raising path ends with a `QuestionEnded`" — rather than one
+case per exit, since the missing case is by definition the one nobody thought of.
+
 ### Logging the deterministic layer
 
 Structured records, one correlation identifier per question, at the tool, spend, and session

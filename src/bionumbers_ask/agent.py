@@ -24,7 +24,7 @@ from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededE
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from .config import Config, micro_from_provider_cost
+from .config import Config, NotConfigured, micro_from_provider_cost
 from .events import (
     Answer,
     ConversationWarning,
@@ -110,10 +110,19 @@ def _text_of(message: object) -> str:
 def default_model(config: Config) -> BaseChatModel:
     from langchain_openai import ChatOpenAI
 
+    key = os.environ.get("OPENROUTER_API_KEY")
+    if not key:
+        # Raised as a named condition rather than a bare KeyError, so `ask` can
+        # end the question properly instead of the driver seeing a question start
+        # and then an exception where an ending belongs.
+        raise NotConfigured(
+            "OPENROUTER_API_KEY is not set, so no model can be reached. "
+            "Set it in the environment; it must never be committed."
+        )
     return ChatOpenAI(
         model=config.model,
         base_url="https://openrouter.ai/api/v1",
-        api_key=os.environ["OPENROUTER_API_KEY"],
+        api_key=key,
     )
 
 
@@ -231,7 +240,25 @@ class AskAgent:
         pending: deque[Retrieval] = deque()
         tools = build_tools(self._repo, trace, pending.append)
         spend = _Spend()
-        model = self._model or default_model(self._config)
+        try:
+            model = self._model or default_model(self._config)
+        except NotConfigured as exc:
+            # Every path out of this generator that does not raise must end with a
+            # QuestionEnded: a driver pairing starts with endings, or rendering
+            # progress until one arrives, otherwise waits for an event that never
+            # comes. Only NotConfigured is caught here -- a genuine defect must
+            # still surface as one rather than be dressed up as an ending.
+            trace.record("not_configured", detail=str(exc))
+            yield Answer(question_id=trace.question_id, text=str(exc))
+            yield QuestionEnded(
+                question_id=trace.question_id,
+                reason=EndReason.NOT_CONFIGURED,
+                spend=0,
+                model=self._config.model,
+                tool_calls=0,
+                incomplete=True,
+            )
+            return
 
         with self._saver() as saver:
             agent = create_agent(

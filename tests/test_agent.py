@@ -409,3 +409,109 @@ def test_batched_tool_calls_do_not_lose_events_under_concurrency(repo, config, t
     events = list(agent_with(repo, config, tmp_path, scripted(many, says("done"))).ask("s", "q"))
     # The framework may run these on worker threads, all appending to one queue.
     assert len([e for e in events if isinstance(e, Retrieval)]) == 8
+
+
+def test_every_non_raising_path_ends_with_a_question_ended(repo, config, tmp_path, monkeypatch):
+    """The contract property, not another case.
+
+    A driver pairs a start with an ending, or renders progress until one arrives.
+    A path that returns without one leaves it waiting for an event that never
+    comes. Enumerated per-case tests keep missing the path nobody thought of --
+    this asserts the invariant across every ending the agent can produce.
+    """
+    from langchain_core.messages import AIMessage
+
+    from bionumbers_ask.agent import AskAgent
+
+    def normal():
+        return agent_with(repo, config, tmp_path, scripted(says("an answer")), "n.sqlite"), "s"
+
+    def blank():
+        return agent_with(repo, config, tmp_path, scripted(AIMessage(content="")), "b.sqlite"), "s"
+
+    def provider_dead():
+        return agent_with(repo, config, tmp_path, scripted(says("x"), failures=99), "p.sqlite"), "s"
+
+    def call_limit():
+        model = scripted(tool_call("search_entries", property="Cell"))
+        return agent_with(repo, config, tmp_path, model, "l.sqlite"), "s"
+
+    def unconfigured():
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        return AskAgent(repo, config, str(tmp_path / "u.sqlite")), "s"
+
+    def at_conversation_bound():
+        monkeypatch.setattr("bionumbers_ask.agent.CONVERSATION_BOUND", 1)
+        return agent_with(repo, config, tmp_path, scripted(says("a"), says("b")), "c.sqlite"), "s"
+
+    reasons = set()
+    for build in (normal, blank, provider_dead, call_limit, unconfigured, at_conversation_bound):
+        agent, session = build()
+        events = list(agent.ask(session, "How wide is an E. coli cell?"))
+        assert events, f"{build.__name__}: emitted nothing"
+        assert isinstance(events[0], QuestionStarted), f"{build.__name__}: no start"
+        assert isinstance(events[-1], QuestionEnded), (
+            f"{build.__name__}: ended without a QuestionEnded -- "
+            f"got {[type(e).__name__ for e in events]}"
+        )
+        reasons.add(events[-1].reason)
+
+    # And the paths exercised really are distinct endings, not the same one six times.
+    assert len(reasons) >= 5, reasons
+
+
+# -- gaps found by coverage, not by reading -------------------------------
+
+
+def test_get_entry_returns_the_detail_an_answer_needs_to_cite(repo, config, tmp_path):
+    """Coverage found this tool entirely unexercised offline.
+
+    It is the one that produces every citation: the live test ran it, so it worked,
+    but nothing offline would have noticed it breaking.
+    """
+    model = scripted(tool_call("get_entry", bnid=100001), says("cited it"))
+    events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
+    retrieval = next(e for e in events if isinstance(e, Retrieval))
+    assert retrieval.tool == "get_entry"
+    assert retrieval.detail == {"bnid": 100001, "found": True}
+
+
+def test_get_entry_text_carries_value_units_reference_and_cross_references(repo, config, tmp_path):
+    from bionumbers_ask.tools import build_tools
+    from bionumbers_ask.trace import QuestionTrace
+
+    tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), lambda _e: None)}
+    text = tools["get_entry"].invoke({"bnid": 100001})
+    for expected in ("bnid: 100001", "Cell length", "1.94–2.72", "μm", "reference:", "cites:"):
+        assert expected in text, f"{expected!r} missing from:\n{text}"
+    assert "102065" in text, "cross-referenced identifiers must be listed"
+
+
+def test_an_unknown_bnid_says_so_rather_than_inventing(repo, config, tmp_path):
+    from bionumbers_ask.tools import build_tools
+    from bionumbers_ask.trace import QuestionTrace
+
+    seen: list = []
+    tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), seen.append)}
+    assert "No entry 999999" in tools["get_entry"].invoke({"bnid": 999999})
+    assert seen[0].detail == {"bnid": 999999, "found": False}
+
+
+def test_an_empty_search_points_the_agent_at_vocabulary_discovery(repo):
+    from bionumbers_ask.tools import build_tools
+    from bionumbers_ask.trace import QuestionTrace
+
+    tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), lambda _e: None)}
+    text = tools["search_entries"].invoke({"property": "nothing matches this"})
+    # Distinguishing "absent" from "worded differently" is the whole point of the
+    # message; without it the agent concludes the corpus has nothing.
+    assert "list_values" in text
+
+
+def test_an_empty_vocabulary_lookup_says_the_corpus_has_nothing_under_that_wording(repo):
+    from bionumbers_ask.tools import build_tools
+    from bionumbers_ask.trace import QuestionTrace
+
+    tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), lambda _e: None)}
+    text = tools["list_values"].invoke({"field": "organism", "contains": "Drosophila"})
+    assert "nothing under that wording" in text
