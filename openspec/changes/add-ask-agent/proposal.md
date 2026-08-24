@@ -116,6 +116,15 @@ here.
 - **Observability tooling.** Adopting LangSmith or Langfuse is configuration rather than a rewrite,
   given LangChain. What is not free later is meaningful naming: nodes and runs are named and tagged
   now so that traces are worth reading when tracing is switched on.
+- **Alerting on cost drift.** Total spend rising is growth; cost per question rising on flat traffic
+  after a change is a regression that was shipped, and only the second is worth waking up for.
+  Detecting it needs a baseline — per-question cost across repeated runs of the same question set —
+  which `answer-evaluation` produces but nothing yet compares between runs. The comparison belongs
+  with the observability tooling above rather than inside the agent. What is not free later is the
+  tagging: an alert computed over a total that mixes evaluation runs with hand-driven use fires on the
+  mix rather than on a regression, so the run label and the per-increment model are in place now.
+  **Raise this again once the same question set has been run more than once and a baseline exists** —
+  that is task 9.8's output, not a date.
 - **External evaluation frameworks.** Ragas, DeepEval, and similar tools consume a question, an
   answer, retrieved context, and an expected result. `answer-evaluation` records exactly that shape,
   so adopting one later is a reading exercise rather than a re-run.

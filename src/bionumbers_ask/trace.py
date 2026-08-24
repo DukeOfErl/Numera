@@ -38,6 +38,9 @@ class JsonLines(logging.Formatter):
         question_id = getattr(record, "question_id", None)
         if question_id is not None:
             payload["question_id"] = question_id
+        run_label = getattr(record, "run_label", None)
+        if run_label is not None:
+            payload["run"] = run_label
         payload.update(getattr(record, "fields", {}) or {})
         return json.dumps(payload, default=str)
 
@@ -55,13 +58,23 @@ def configure(stream: Any = None, level: int = logging.INFO) -> logging.Logger:
 
 @dataclass(frozen=True)
 class QuestionTrace:
-    """Records for one question. Every record carries the same identifier."""
+    """Records for one question. Every record carries the same identifier.
+
+    And the same run label, so a trail covering an evaluation run and a
+    hand-driven session can be told apart when the spend figures are added up.
+    """
 
     question_id: str
+    run_label: str = "dev"
 
     def record(self, event: str, **fields: Any) -> None:
         logging.getLogger(LOGGER_NAME).info(
-            event, extra={"question_id": self.question_id, "fields": fields}
+            event,
+            extra={
+                "question_id": self.question_id,
+                "run_label": self.run_label,
+                "fields": fields,
+            },
         )
 
     def run_config(self, name: str) -> dict[str, Any]:
@@ -72,10 +85,10 @@ class QuestionTrace:
         """
         return {
             "run_name": f"{name}:{self.question_id}",
-            "tags": ["bionumbers-ask", name],
-            "metadata": {"question_id": self.question_id},
+            "tags": ["bionumbers-ask", name, f"run:{self.run_label}"],
+            "metadata": {"question_id": self.question_id, "run": self.run_label},
         }
 
 
-def start_question() -> QuestionTrace:
-    return QuestionTrace(question_id=uuid.uuid4().hex[:12])
+def start_question(run_label: str = "dev") -> QuestionTrace:
+    return QuestionTrace(question_id=uuid.uuid4().hex[:12], run_label=run_label)

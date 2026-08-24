@@ -258,7 +258,7 @@ class AskAgent:
         A generator rather than a callback or a blocking call: the driver decides
         when to consume, so nothing here waits on an interface.
         """
-        trace = start_question()
+        trace = start_question(self._config.run_label)
         yield QuestionStarted(
             question_id=trace.question_id, session_id=session_id, question=question
         )

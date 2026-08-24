@@ -82,6 +82,12 @@ class Config:
     warning_threshold: int
     run_budget: int
     prices: dict[str, ModelPrices] = field(default_factory=dict)
+    # What this run is, carried on every record. Without it an evaluation's spend
+    # and a person's spend are one undifferentiated total, and that cannot be
+    # separated afterwards: records already written carry no label to filter on.
+    # A label for the run, deliberately not a name for the caller -- the agent is
+    # given nothing it could branch on to behave differently for one driver.
+    run_label: str = "dev"
 
     @property
     def question_ceiling(self) -> int:
@@ -98,6 +104,7 @@ class Config:
             warning_threshold=usd(os.environ.get("BIONUMBERS_ASK_WARN_USD", "0.50")),
             run_budget=usd(os.environ.get("BIONUMBERS_ASK_RUN_BUDGET_USD", "1.20")),
             prices=dict(FALLBACK_PRICES),
+            run_label=os.environ.get("BIONUMBERS_ASK_RUN", "").strip() or "dev",
         )
 
 

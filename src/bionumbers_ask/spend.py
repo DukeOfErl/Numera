@@ -57,7 +57,9 @@ class SpendLedger:
     """
 
     def __init__(self, model: str, prices: ModelPrices | None, run_spend: int = 0) -> None:
-        self._model = model
+        # Public: every spend record names the model, so a trail spanning a model
+        # change can be split by model without joining back to the ending event.
+        self.model = model
         self._prices = prices
         self.question = 0
         self.run = run_spend
@@ -94,12 +96,12 @@ class SpendLedger:
         output_tokens = usage.get("output_tokens")
         if input_tokens is None and output_tokens is None:
             raise Unpriceable(
-                f"{self._model} reported neither a cost nor token usage for a request, "
+                f"{self.model} reported neither a cost nor token usage for a request, "
                 "so spend cannot be accounted for. Configure a model that reports one."
             )
         if self._prices is None:
             raise Unpriceable(
-                f"{self._model} reported token usage but no cost, and no prices are "
+                f"{self.model} reported token usage but no cost, and no prices are "
                 "configured for it. Add prices for this model or use one that reports cost."
             )
         return (
@@ -180,6 +182,7 @@ class SpendGate(AgentMiddleware):
         increment = self._ledger.add_response(getattr(response, "result", []) or [])
         self._trace.record(
             "spend.increment",
+            model=self._ledger.model,
             increment=increment,
             question_total=self._ledger.question,
             run_total=self._ledger.run,

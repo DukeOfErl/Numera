@@ -14,6 +14,8 @@
 - [x] 2.1 Add structured logging with a correlation identifier assigned per question and carried through every record for that question
 - [x] 2.2 Name graph nodes and runs meaningfully, so traces are readable if tracing is switched on later
 - [x] 2.3 Verify a question produces a coherent, readable trail from first tool call to answer, that a truncated search records both figures, and that two questions in one session carry different identifiers
+- [x] 2.4 Carry a run label from configuration on every record and every framework run, so an evaluation run's spend is separable from hand-driven use — it is a label for the run, not a name for the caller, which the agent is required not to have
+- [x] 2.5 Record the model on every spend increment, so a trail spanning a model change can be split by model without joining each record back to its ending event
 
 ## 3. Corpus and query tools
 
@@ -88,6 +90,7 @@
 - [ ] 9.6 Append each result as its question completes, carrying the question, answer, cited entries, expected entries, and model, in a shape external evaluation tooling can read
 - [ ] 9.7 Implement resumption against an existing results file, attempting only what is missing
 - [ ] 9.8 Support repeated runs of each question and report the variation across them
+  - Repeated runs are also the baseline a cost-drift alert would need. That alert is out of scope here — see the proposal's Deferred section, *Alerting on cost drift* — and this task's output is what makes it possible, so revisit it once this lands.
 - [ ] 9.9 Produce the report from the results file, stating coverage when partial, breaking figures down per model, and distinguishing a run stopped on budget from a completed one
 - [ ] 9.10 Report cost and tool calls per question and in aggregate, and separate spend in this session from total spend across a resumed run
 - [ ] 9.11 Assemble a first question set from the corpus and record a baseline on the development model
