@@ -13,6 +13,7 @@ Money is integer micro-dollars throughout -- see `config` for why not cents.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import Annotated, Any, NotRequired
 
 from langchain.agents.middleware import AgentMiddleware
@@ -48,6 +49,47 @@ class SpendLimitReached(Exception):
         super().__init__(f"{reason.value}: {spent} of {limit} micro-dollars spent")
 
 
+@dataclass(frozen=True)
+class Charge:
+    """What one model response cost, and the usage behind it.
+
+    Cost on its own cannot tell a question that got dearer because the provider
+    repriced from one that got dearer because it retrieved more. Tokens are what
+    separate the two, and the provider already reports them.
+    """
+
+    micro: int = 0
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+
+
+def _usage(message: Any) -> tuple[int | None, int | None]:
+    """Prompt and completion tokens, from whichever shape carries them.
+
+    `usage_metadata` is the framework's normalised form and `token_usage` is what
+    the provider returned. Which one is populated depends on the client rather
+    than on anything here, so both are read.
+    """
+    usage = getattr(message, "usage_metadata", None) or {}
+    if usage:
+        return usage.get("input_tokens"), usage.get("output_tokens")
+    token_usage = (getattr(message, "response_metadata", None) or {}).get("token_usage") or {}
+    return token_usage.get("prompt_tokens"), token_usage.get("completion_tokens")
+
+
+def _total(left: int | None, right: int | None) -> int | None:
+    """Sum, treating "not reported" as different from zero.
+
+    A response that reported nothing must not be recorded as having used no
+    tokens: the first is an unknown, the second is a measurement.
+    """
+    if left is None:
+        return right
+    if right is None:
+        return left
+    return left + right
+
+
 class SpendLedger:
     """Accumulates what the provider reports, against two counters.
 
@@ -64,20 +106,25 @@ class SpendLedger:
         self.question = 0
         self.run = run_spend
 
-    def add_response(self, messages: Sequence[Any]) -> int:
+    def add_response(self, messages: Sequence[Any]) -> Charge:
         """Price the model output in one response and accumulate it.
 
         Only assistant messages are priced. A response may also carry a tool
         message -- the framework returns one for structured output -- and pricing
         that would raise Unpriceable over something that never cost anything.
         """
-        increment = 0
+        charge = Charge()
         for message in messages:
             if getattr(message, "type", "") == "ai":
-                increment += self._price(message)
-        self.question += increment
-        self.run += increment
-        return increment
+                prompt, completion = _usage(message)
+                charge = Charge(
+                    micro=charge.micro + self._price(message),
+                    prompt_tokens=_total(charge.prompt_tokens, prompt),
+                    completion_tokens=_total(charge.completion_tokens, completion),
+                )
+        self.question += charge.micro
+        self.run += charge.micro
+        return charge
 
     def _price(self, message: Any) -> int:
         """Provider-reported cost first, configured prices second, else stop.
@@ -91,9 +138,7 @@ class SpendLedger:
         if cost:
             return micro_from_provider_cost(cost)
 
-        usage = getattr(message, "usage_metadata", None) or {}
-        input_tokens = usage.get("input_tokens")
-        output_tokens = usage.get("output_tokens")
+        input_tokens, output_tokens = _usage(message)
         if input_tokens is None and output_tokens is None:
             raise Unpriceable(
                 f"{self.model} reported neither a cost nor token usage for a request, "
@@ -179,11 +224,15 @@ class SpendGate(AgentMiddleware):
             raise limit
 
         response = handler(request)
-        increment = self._ledger.add_response(getattr(response, "result", []) or [])
+        charge = self._ledger.add_response(getattr(response, "result", []) or [])
+        # Tokens are recorded even when None: an absent field cannot be told apart
+        # from a provider that reported nothing, and that distinction is the point.
         self._trace.record(
             "spend.increment",
             model=self._ledger.model,
-            increment=increment,
+            increment=charge.micro,
+            prompt_tokens=charge.prompt_tokens,
+            completion_tokens=charge.completion_tokens,
             question_total=self._ledger.question,
             run_total=self._ledger.run,
         )

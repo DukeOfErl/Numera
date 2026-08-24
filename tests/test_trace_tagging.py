@@ -92,3 +92,48 @@ def test_a_question_records_its_run_label_and_the_model_it_spent_on(repo, tmp_pa
     assert {r["run"] for r in increments} == {"eval-2026-08-24"}
     # Spend for this run, reconstructed from the trail alone.
     assert sum(r["increment"] for r in increments) == 20
+
+
+def test_the_increment_records_the_tokens_behind_the_cost(repo, tmp_path):
+    """Cost alone cannot separate a reprice from deeper retrieval.
+
+    Both raise the bill; only one is a regression somebody shipped. The tokens are
+    already in the response, so recording them is what makes the two separable
+    later -- and, like the run label, cannot be added to records already written.
+    """
+    buf = io.StringIO()
+    configure(buf)
+    config = Config(model="fake/model", warning_threshold=usd("0.50"), run_budget=usd("1.20"))
+    # The pinned OpenRouter shape: 14 prompt tokens, 4 completion, $0.000034.
+    model = scripted(says("about 1 micrometre (BNID 100002)"))
+    list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
+
+    increment = next(r for r in records(buf) if r["event"] == "spend.increment")
+    assert (increment["prompt_tokens"], increment["completion_tokens"]) == (14, 4)
+    assert increment["increment"] == 34
+
+
+def test_a_provider_reporting_no_tokens_is_recorded_as_unknown_not_zero():
+    """Zero tokens is a measurement; no tokens is an absence. They must differ."""
+    from langchain_core.messages import AIMessage
+
+    from bionumbers_ask.spend import SpendLedger
+
+    ledger = SpendLedger(model="m", prices=None)
+    charge = ledger.add_response(
+        [AIMessage(content="ok", response_metadata={"token_usage": {"cost": 3.4e-05}})]
+    )
+    assert charge.micro == 34
+    assert charge.prompt_tokens is None and charge.completion_tokens is None
+
+
+def test_usage_metadata_is_read_when_the_provider_shape_is_absent():
+    """The framework's normalised form, which a different client may populate instead."""
+    from agent_doubles import reports_usage_only
+    from bionumbers_ask.config import ModelPrices
+    from bionumbers_ask.spend import SpendLedger
+
+    ledger = SpendLedger(model="m", prices=ModelPrices(1_000_000, 5_000_000))
+    charge = ledger.add_response([reports_usage_only("ok", input_tokens=1_000, output_tokens=100)])
+    assert (charge.prompt_tokens, charge.completion_tokens) == (1_000, 100)
+    assert charge.micro == 1_500
