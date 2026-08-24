@@ -74,3 +74,42 @@ def test_the_provider_still_reports_cost_where_the_ledger_reads_it(live_agent):
     # bound is roughly ten times that, well under the $0.60 per-question ceiling,
     # so it catches a runaway without failing on an ordinary run that searched more.
     assert end.spend < 100_000, f"unexpectedly expensive: {end.spend} micro-dollars"
+
+
+_corpus_path = os.environ.get("BIONUMBERS_ASK_CORPUS", "")
+
+
+@pytest.mark.skipif(
+    not (_corpus_path and os.path.isfile(os.path.expanduser(_corpus_path))),
+    reason="set BIONUMBERS_ASK_CORPUS to a JSONL corpus to run the end-to-end check",
+)
+def test_the_terminal_driver_answers_from_the_real_corpus_with_a_citation(tmp_path):
+    """The whole path: driver, agent, tools, real corpus, real model.
+
+    Everything else runs against a six-entry fixture, where a search returns six
+    rows rather than a capped fifty. This is the only test where the two-tier
+    retrieval the design exists for is actually under load.
+    """
+    import io
+
+    from bionumbers_ask.cli import run
+    from bionumbers_ask.corpus import load
+
+    repo = CorpusRepository(load(os.path.expanduser(_corpus_path)))
+    agent = AskAgent(repo, Config.from_env(), str(tmp_path / "e2e.sqlite"))
+
+    out = io.StringIO()
+    assert run(agent, "e2e", ["How wide is an E. coli cell?"], out) == 0
+
+    text = out.getvalue()
+    assert "answered" in text, text[-400:]
+
+    # The citation must be in the answer, not merely somewhere in the output: the
+    # rendered retrieval lines carry bnids too, so asserting over the whole text
+    # would pass on an answer that cited nothing.
+    body = text.split("\n  — ")[0]
+    answer = "\n".join(line for line in body.splitlines() if not line.startswith("  · "))
+    assert re.search(r"\b1\d{5}\b", answer), f"no entry cited in the answer: {answer[:400]}"
+
+    # The driver rendered progress before the answer, not only the answer.
+    assert "  · " in text

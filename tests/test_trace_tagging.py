@@ -137,3 +137,43 @@ def test_usage_metadata_is_read_when_the_provider_shape_is_absent():
     charge = ledger.add_response([reports_usage_only("ok", input_tokens=1_000, output_tokens=100)])
     assert (charge.prompt_tokens, charge.completion_tokens) == (1_000, 100)
     assert charge.micro == 1_500
+
+
+def test_tokens_from_several_assistant_messages_in_one_response_are_summed():
+    """Rare but reachable, and the branch where unknown-versus-zero actually bites."""
+    from langchain_core.messages import AIMessage
+
+    from agent_doubles import OPENROUTER_RESPONSE_METADATA, reports_usage_only
+    from bionumbers_ask.config import ModelPrices
+    from bionumbers_ask.spend import SpendLedger
+
+    # Prices configured, because the second message reports usage and no cost --
+    # without them the ledger correctly refuses rather than guessing.
+    ledger = SpendLedger(model="m", prices=ModelPrices(1_000_000, 5_000_000))
+    charge = ledger.add_response(
+        [
+            AIMessage(content="a", response_metadata=OPENROUTER_RESPONSE_METADATA),
+            reports_usage_only("b", input_tokens=100, output_tokens=10),
+        ]
+    )
+    # 14 + 100 and 4 + 10: the reported figures added, neither treated as zero.
+    assert (charge.prompt_tokens, charge.completion_tokens) == (114, 14)
+    # Reported cost for the first, the price table for the second: 34 + 150.
+    assert charge.micro == 184
+
+
+def test_a_known_count_beside_an_unknown_one_keeps_the_known_figure():
+    from langchain_core.messages import AIMessage
+
+    from agent_doubles import OPENROUTER_RESPONSE_METADATA
+    from bionumbers_ask.spend import SpendLedger
+
+    ledger = SpendLedger(model="m", prices=None)
+    charge = ledger.add_response(
+        [
+            AIMessage(content="a", response_metadata=OPENROUTER_RESPONSE_METADATA),
+            AIMessage(content="b", response_metadata={"token_usage": {"cost": 1e-06}}),
+        ]
+    )
+    assert (charge.prompt_tokens, charge.completion_tokens) == (14, 4)
+    assert charge.micro == 35

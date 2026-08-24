@@ -67,9 +67,9 @@
 
 ## 7. Terminal driver
 
-- [ ] 7.1 Implement the terminal driver: render events, accept questions as commands
-- [ ] 7.2 Verify end to end against the corpus that a question is answered with citations
-- [ ] 7.3 Verify that the driver holds no agent state of its own beyond the session identifier
+- [x] 7.1 Implement the terminal driver: render events, accept questions as commands
+- [x] 7.2 Verify end to end against the corpus that a question is answered with citations
+- [x] 7.3 Verify that the driver holds no agent state of its own beyond the session identifier
 
 ## 8. Web interface
 
