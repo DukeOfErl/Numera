@@ -83,6 +83,7 @@
 
 - [ ] 9.1 Read up before building: LangGraph persistence and store semantics, and the LangSmith evaluation documentation — both post-date the design and may replace parts of what follows
 - [ ] 9.2 Define the question set format, including questions the corpus cannot answer, and require one to be supplied
+  - Include questions that separate an object from its measure — a volume asked of two different objects, a size asked where only a diameter exists, E. coli's nucleus. The proposal's Deferred section, *Faceting the property field into object and measure*, turns on the failure rate these measure.
 - [ ] 9.3 Implement the evaluation driver, recording outcomes from emitted events
 - [ ] 9.4 Score by comparing cited entries against expected entries, reporting unexpected citations separately
 - [ ] 9.5 Score refusals on unsupported questions, and report a quantity given for one as a fabrication

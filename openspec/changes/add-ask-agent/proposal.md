@@ -175,6 +175,50 @@ here.
   paper — is the grounding validator's machinery pointed at a different target: it already locates a
   claimed value in a document and returns a citable span, and a definition is the same kind of span.
   That belongs to a follow-up on `add-grounding-validator` rather than to either change as scoped.
+- **Faceting the property field into object and measure.** `property` conflates *what was measured*
+  with *what was measured about it*: `Cell volume`, `Cytoplasm volume` and `Nuclear (DNA+protein)
+  volume` differ only in the object, while `Volume occupied by water` shares the word and is a
+  fraction. Searching one free-text field cannot separate them, and with 1,656 entries matching
+  `number of` the fifty returned are arbitrary. The obvious remedy — storing organism, object and
+  measure as separate fields — was examined against the corpus and is not taken here.
+
+  *What the corpus shows.* Only 31% of property strings open with a measure word and there are 1,853
+  distinct first words, so `measure` is a long tail rather than a controlled vocabulary. 2,594 entries
+  carry `N/A` units and 35% have units from which no dimension can be read; `Morphological data` and
+  `Dimensions` have no single object or measure to extract. Real strings carry at least five things,
+  not three — `Fraction of periplasm out of total cell volume estimated by electron microscopy` is a
+  measure, an object, a normaliser and a method — so a three-field schema pushes the remainder back
+  into free text.
+
+  *Why the retrofit is the wrong shape.* Those fields do not exist in the corpus and would have to be
+  inferred for all 14,294 entries. An inference error in an answer is visible and citable; an error in
+  the index is silent and permanent, because a misclassified object makes an entry unreachable and
+  nothing announces it. That is an unsourced guess underneath a system whose premise is that nothing is
+  unsourced — the same reasoning that made the alias index rule-based and inspectable.
+
+  *A concrete case against a controlled vocabulary.* E. coli is a prokaryote and has no nucleus, yet
+  the corpus files `Nuclear (DNA+protein) volume` under it, meaning the nucleoid. Free text lets a
+  technically wrong query find the biologically right entry. A fixed `object` term would either assert
+  that E. coli has a nucleus or hide the entry from anyone asking for one. Free text makes a claim
+  about what was written; a taxonomy makes a claim about biology.
+
+  *What is already available instead.* Units supply the measure dimension for the 65% of entries whose
+  units are dimensional, machine-checkably and without inference, which is what the required
+  dimensional-compatibility check rests on — volume, diameter and mass can already never be presented
+  as one range. Ranking matches by quality (exact, then prefix, then substring) is deterministic, needs
+  no new data, and addresses the arbitrary-fifty problem directly. `measurement_method` carries the
+  conditions for half the corpus and is returned but unused, as noted in the entry above.
+
+  *Where it does belong.* Long-term aggregation, contradiction finding and gap mapping cannot run over
+  substrings, so facets are probably inevitable — but captured at **extraction time**, with a source
+  span, by the same machinery `add-grounding-validator` builds, rather than retrofitted onto another
+  corpus's free text where they would have no provenance. This is an extraction-time concern that
+  presents as a search-time one.
+
+  **Raise this again once the evaluation set has been run and the failure rate is known.** Neither the
+  cheap remedies nor the schema should be chosen on argument: task 9.2 should include questions that
+  target this directly — a volume asked of two different objects, a size asked where only a diameter
+  exists, and E. coli's nucleus — and the measured failure rate decides.
 - **Latency monitoring.** The phased approach calls for watching calls, tokens, and latency. Calls and
   tokens are covered; latency is not measured in the MVP. When it is, the quantities worth recording
   are wall time per question, duration per tool call, and time from question to first emitted event —
