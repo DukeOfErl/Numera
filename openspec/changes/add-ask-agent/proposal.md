@@ -263,6 +263,29 @@ here.
   biology, and that is the decision to make. **Raise this again once the MVP is merged**, with
   alpha and beta testers' questions as the evidence, since real questions will show which
   equivalences actually matter.
+
+  Four conclusions reached while scoping it, recorded so they are not re-derived. *What the model
+  would be trusted with is a search term, not a value* -- a wrong term costs a tool call and puts
+  real cited entries in the table, where the dimensional check still applies, so the failure mode is
+  noise rather than a fabricated number. *No new tool is needed*: `list_values` already returns the
+  corpus's own stored property wordings for a partial term, with counts and no invention; what is
+  missing is an instruction to consult it before concluding. *A tool call, not a graph node*, because
+  a node fires on every question whether or not the wording is ambiguous, and the judgement of when
+  the wording matters is exactly what the model should be spending. *After the first search, not
+  before*, since before is unconditional cost -- but the trigger cannot be "the search found
+  nothing": 21 matches for `diameter` looked like success, which is why nothing looked further.
+
+  **Whichever form it takes, an expansion SHALL be visible in the output.** A question answered over
+  terms the user did not ask for, presented as though it were answered over the term they did, is a
+  silent change to what the answer means -- and while the expansion is the model's judgement, the
+  reader is the only one who can catch it choosing wrongly. This holds beyond the development period
+  that motivates it: the same reasoning already puts the search terms, the matched counts and the
+  uncited entries on screen.
+
+  Two costs to size when it is built: a second search doubles the retrieved set, so the table grows
+  and the transcript grows quadratically (about USD 0.002 on the measured question), and a merged
+  `width` and `diameter` result mixes nm with um freely -- which turns the normalised-units column
+  below from a convenience into a prerequisite.
 - **A normalised-units column.** The table shows `400.0 nm` above `490.0 um`, quantities three
   orders of magnitude apart, in a column meant for comparison. A second column carrying each value
   converted to one unit per query -- beside the stored value and units, never replacing them, so the
