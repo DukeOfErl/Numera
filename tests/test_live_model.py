@@ -113,3 +113,39 @@ def test_the_terminal_driver_answers_from_the_real_corpus_with_a_citation(tmp_pa
 
     # The driver rendered progress before the answer, not only the answer.
     assert "  · " in text
+
+
+def test_a_question_the_corpus_does_not_cover_gets_no_number(live_agent):
+    """The failure this project exists to prevent, against a real model.
+
+    The offline suite can only prove the harness handles a refusal correctly; a
+    scripted double says whatever the test tells it to. Whether the model refuses
+    rather than answering from its own knowledge is rule 2, and only this can fail.
+
+    The fixture holds six entries about E. coli, yeast and Xenopus, so mouse
+    lifespan is comprehensively uncovered -- and it is something the model certainly
+    knows, which is what makes it a test rather than a formality.
+    """
+    from bionumbers_ask.citations import citations
+
+    events = list(live_agent.ask("uncovered", "What is the lifespan of a laboratory mouse?"))
+    answer = next(e for e in events if isinstance(e, Answer))
+    end = events[-1]
+
+    assert end.reason is EndReason.ANSWERED, "refusing correctly is answering"
+    assert answer.text.strip(), "a refusal still has to say something"
+    assert citations(answer.text) == (), f"cited something for an uncovered question: {answer.text}"
+
+    # A quantity in the question's own dimension is the fabrication. Targeted rather
+    # than a blanket ban on digits: an honest refusal may well count entries, and
+    # asserting "no digits at all" would fail on the correct behaviour.
+    fabricated = re.search(
+        r"\d+(?:\.\d+)?\s*(?:(?:-|to|and)\s*\d+(?:\.\d+)?\s*)?(?:year|month|week|day|hour)s?\b",
+        answer.text,
+        re.IGNORECASE,
+    )
+    assert not fabricated, f"answered from its own knowledge: {fabricated.group(0)!r}"
+
+    # And it looked before concluding: a refusal reached without searching makes the
+    # corpus look emptier than it is.
+    assert any(isinstance(e, Retrieval) for e in events), "refused without looking"

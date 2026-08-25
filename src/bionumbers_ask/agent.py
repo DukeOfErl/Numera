@@ -420,6 +420,11 @@ class AskAgent:
 
             answer_text = ""
             tool_calls = 0
+            # Read from the call-limit middleware's own state updates rather than
+            # counted here, so the number reported is the one that trips the bound.
+            # Its run counter is untracked, so it never reaches the checkpoint and
+            # has to be caught in flight.
+            model_calls = 0
             # Insertion-ordered: the order entries were retrieved is the order a
             # reader met them in, and the order the table falls back to.
             retrieved = _Retrieved()
@@ -430,9 +435,13 @@ class AskAgent:
                 Emitted before every ending that got as far as retrieving, a limit
                 included: a question stopped part-way still found entries, and
                 throwing them away would discard work already paid for.
+
+                The citation check runs whether or not anything was retrieved. It
+                used to return early when nothing was, which skipped it exactly
+                where it matters most: a search that matched nothing, followed by an
+                answer citing an entry no tool call returned, is the model answering
+                from its own memory -- and it was reported as a clean answer.
                 """
-                if not retrieved.bnids:
-                    return
                 cited = citations(answer_text)
                 unknown = tuple(b for b in cited if self._repo.get(b) is None)
                 unretrieved = tuple(
@@ -450,6 +459,11 @@ class AskAgent:
                         unknown=unknown,
                         unretrieved=unretrieved,
                     )
+                if not (retrieved.bnids or retrieved.searches or cited):
+                    # Nothing retrieved, nothing searched, nothing cited: there is no
+                    # evidence to present, and an empty table with no counts beside it
+                    # would describe a question that never looked.
+                    return
                 yield AnswerEntries(
                     question_id=trace.question_id,
                     cited=cited,
@@ -506,6 +520,8 @@ class AskAgent:
                             run_spend=ledger.run,
                             model=self._config.model,
                             tool_calls=tool_calls,
+                            model_calls=model_calls,
+                            call_limit=RUN_CALL_LIMIT,
                             incomplete=True,
                         )
                         return
@@ -522,11 +538,33 @@ class AskAgent:
                             run_spend=ledger.run,
                             model=self._config.model,
                             tool_calls=tool_calls,
+                            model_calls=model_calls,
+                            call_limit=RUN_CALL_LIMIT,
                             incomplete=True,
                         )
                         return
                     except ModelCallLimitExceededError:
-                        trace.record("retrieval.bound_reached", tool_calls=tool_calls)
+                        trace.record(
+                            "retrieval.bound_reached",
+                            tool_calls=tool_calls,
+                            model_calls=model_calls,
+                            call_limit=RUN_CALL_LIMIT,
+                        )
+                        # Same reasoning as the spend limit above, and it was missing
+                        # here: a question stopped at the bound may already have
+                        # established something citable, and discarding it threw away
+                        # work already paid for. The middleware's own message never
+                        # reaches this -- with exit_behavior="error" it lives in the
+                        # exception, not in a message the model appears to have said.
+                        yield Answer(
+                            question_id=trace.question_id,
+                            text=answer_text.strip()
+                            or (
+                                "I reached the limit on how much retrieval one question "
+                                "may do before establishing anything I could cite, so "
+                                "there is no partial answer to give."
+                            ),
+                        )
                         yield from evidence()
                         yield QuestionEnded(
                             question_id=trace.question_id,
@@ -535,6 +573,8 @@ class AskAgent:
                             run_spend=ledger.run,
                             model=self._config.model,
                             tool_calls=tool_calls,
+                            model_calls=model_calls,
+                            call_limit=RUN_CALL_LIMIT,
                             incomplete=True,
                         )
                         return
@@ -548,6 +588,8 @@ class AskAgent:
                             run_spend=ledger.run,
                             model=self._config.model,
                             tool_calls=tool_calls,
+                            model_calls=model_calls,
+                            call_limit=RUN_CALL_LIMIT,
                             incomplete=True,
                         )
                         return
@@ -561,6 +603,9 @@ class AskAgent:
                             _collect(retrieved, event)
                         yield event
                     for update in chunk.values():
+                        model_calls = max(
+                            model_calls, (update or {}).get("run_model_call_count") or 0
+                        )
                         for message in (update or {}).get("messages", []) or []:
                             if getattr(message, "type", "") == "ai":
                                 text = _text_of(message)
@@ -587,6 +632,8 @@ class AskAgent:
                 run_spend=ledger.run,
                 model=self._config.model,
                 tool_calls=tool_calls,
+                model_calls=model_calls,
+                call_limit=RUN_CALL_LIMIT,
                 incomplete=True,
             )
             return
@@ -596,6 +643,8 @@ class AskAgent:
             spend_micro=ledger.question,
             run_spend_micro=ledger.run,
             tool_calls=tool_calls,
+            model_calls=model_calls,
+            call_limit=RUN_CALL_LIMIT,
         )
         yield Answer(question_id=trace.question_id, text=answer_text)
         yield from evidence()
@@ -606,4 +655,6 @@ class AskAgent:
             run_spend=ledger.run,
             model=self._config.model,
             tool_calls=tool_calls,
+            model_calls=model_calls,
+            call_limit=RUN_CALL_LIMIT,
         )

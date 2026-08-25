@@ -297,3 +297,24 @@ def test_the_interactive_entry_point_announces_the_session_and_exits(
     assert exit_info.value.code == 0
     out = capsys.readouterr().out
     assert "6 entries" in out and "chosen-session" in out
+
+
+# -- reporting an answer produced against the retrieval bound --------------
+
+
+def test_the_meta_line_names_the_bound_only_when_it_was_reached():
+    """The pair means something precisely when there was no room for another call.
+    On every other answer it is a number beside the ones that matter."""
+    at_bound = render(ended(EndReason.ANSWERED, model_calls=12, call_limit=12))
+    assert "12 of 12 model calls" in at_bound
+    assert at_bound.startswith("  — answered ·")
+
+    spare = render(ended(EndReason.ANSWERED, model_calls=4, call_limit=12))
+    assert "model calls" not in spare
+    assert "3 tool calls" in spare, "the rest of the line is unchanged"
+
+
+def test_an_ending_carrying_no_bound_says_nothing_about_one():
+    """A question that never reached the model met no bound, and "0 of 0" would
+    describe one it did."""
+    assert "model calls" not in render(ended(EndReason.RUN_BUDGET, incomplete=True))

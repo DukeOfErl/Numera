@@ -110,10 +110,18 @@ def render(event: Event, repo: CorpusRepository | None = None) -> str | None:
         return f"\n{event.text}\n"
     if isinstance(event, QuestionEnded):
         mark = " (incomplete)" if event.incomplete else ""
+        # Only when the bound was actually reached. Printing the pair on every
+        # answer would put a number nobody needs beside the ones they do, and the
+        # figure means something precisely when there was no room for another call.
+        bound = (
+            f" · {event.model_calls} of {event.call_limit} model calls"
+            if event.at_retrieval_bound
+            else ""
+        )
         return (
             f"  — {event.reason.value}{mark} · {format_usd(event.spend)} "
             f"(run {format_usd(event.run_spend)}) · {event.model} · "
-            f"{event.tool_calls} tool calls"
+            f"{event.tool_calls} tool calls{bound}"
         )
     return None
 

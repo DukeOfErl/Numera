@@ -16,7 +16,7 @@ import re
 # is asked of the model, which makes it a preference rather than a control: a
 # parser that rejected "BNID: 100002" would score a good answer as uncited, and a
 # false negative in evaluation is worse than the ambiguity it removes.
-PATTERN = re.compile(r"(?i)\bbnid[\s:#\-=]*(\d+)\b")
+PATTERN = re.compile(r"(?i)\bbnids?[\s:#\-=]*(\d+)\b")
 
 # What the model is told to write, and what a driver writes when it renders one.
 FORM = "BNID 100002"

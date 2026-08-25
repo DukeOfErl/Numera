@@ -37,6 +37,12 @@ TERMINAL_ROWS = 5
 # that is claimed: nothing here grades an entry that does record one.
 NO_METHOD = "\u2020"
 NO_METHOD_LEGEND = f"{NO_METHOD} no measurement method recorded"
+
+# Marks a row the answer cited but no tool call returned -- the entry exists, so
+# nothing about the row looks wrong, and that is exactly the problem. Without the
+# mark it sits among the cited entries as though the answer rested on it legitimately.
+NOT_RETRIEVED = "\u2021"
+NOT_RETRIEVED_LEGEND = f"{NOT_RETRIEVED} cited but not retrieved during this question"
 UNCITED_BANNER = "not cited in the answer"
 
 # Words that carry no topic. Kept small on purpose -- this is a tie-breaker for
@@ -65,6 +71,14 @@ class Row:
     reference: str
     cited: bool
     method_recorded: bool = True
+    retrieved: bool = True
+
+    def markers(self) -> str:
+        applying = (
+            (NOT_RETRIEVED, not self.retrieved),
+            (NO_METHOD, not self.method_recorded),
+        )
+        return "".join(mark for mark, applies in applying if applies)
 
     def cell(self, field: str) -> str:
         return str(getattr(self, field))
@@ -142,6 +156,7 @@ def rows_for(
                 reference=entry.reference,
                 cited=bnid in cited,
                 method_recorded=bool(entry.measurement_method.strip()),
+                retrieved=bnid in retrieved,
             )
         )
     return tuple(out)
@@ -217,7 +232,8 @@ def render(
             # from the ones it does not. The rest are still shown, because what the
             # corpus held and the answer passed over is part of the evidence.
             out.append(_banner(len(rule)))
-        label = row.property if row.method_recorded else f"{NO_METHOD} {row.property}"
+        marks = row.markers()
+        label = f"{marks} {row.property}" if marks else row.property
         cells = [
             _cell_lines(label if field == "property" else row.cell(field), width)
             for field, _, width in COLUMNS
@@ -231,6 +247,8 @@ def render(
     retrieved = total if total is not None else len(rows)
     if retrieved > len(shown) or matched > len(shown):
         out.append(summarise(len(shown), retrieved, matched, searches))
+    if any(not row.retrieved for row in shown):
+        out.append(NOT_RETRIEVED_LEGEND)
     if any(not row.method_recorded for row in shown):
         out.append(NO_METHOD_LEGEND)
     return "\n".join(out)

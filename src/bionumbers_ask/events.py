@@ -150,6 +150,22 @@ class QuestionEnded:
     model: str
     tool_calls: int
     incomplete: bool = False
+    # Model calls the question used, against the bound on them. Carried on every
+    # ending, because an answer produced with no room left to search is a
+    # different thing from one produced with room to spare, and the two are
+    # otherwise indistinguishable. Zero means no model call completed.
+    model_calls: int = 0
+    call_limit: int = 0
+
+    @property
+    def at_retrieval_bound(self) -> bool:
+        """Whether the question used every model call it was allowed.
+
+        Exact rather than within-a-margin: what can be stated without judgement is
+        that there was no room for another call, and a margin would be a tuning
+        knob dressed as a fact.
+        """
+        return bool(self.call_limit) and self.model_calls >= self.call_limit
 
 
 Event = (

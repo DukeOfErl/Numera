@@ -8,7 +8,14 @@ from conftest import agent_with, run
 from agent_doubles import costing, says, scripted, tool_call
 from bionumbers_ask.agent import CONVERSATION_BOUND, SYSTEM_PROMPT, AskAgent
 from bionumbers_ask.config import Config, usd
-from bionumbers_ask.events import Answer, EndReason, QuestionEnded, QuestionStarted, Retrieval
+from bionumbers_ask.events import (
+    Answer,
+    AnswerEntries,
+    EndReason,
+    QuestionEnded,
+    QuestionStarted,
+    Retrieval,
+)
 
 # -- the event contract ---------------------------------------------------
 
@@ -242,8 +249,149 @@ def test_reaching_the_call_limit_names_the_limit_rather_than_answering(repo, con
     # "Model call limits exceeded: run limit (12/12)" presented as the answer.
     assert end.reason is EndReason.RETRIEVAL_BOUND
     assert end.incomplete is True
-    assert not any(isinstance(e, Answer) for e in events)
     assert end.tool_calls <= RUN_CALL_LIMIT + 1
+
+    # This model established nothing, so what it gets is an explanation rather than
+    # a partial answer -- and never the middleware's own message, which with
+    # exit_behavior="error" lives in the exception and not in a model message.
+    answer = next(e for e in events if isinstance(e, Answer))
+    assert "limit on how much retrieval" in answer.text
+    assert "Model call limits exceeded" not in answer.text
+
+
+def test_what_was_established_before_the_bound_is_still_presented(repo, config, tmp_path):
+    """The spend ceiling already did this; the retrieval bound discarded it. A
+    question stopped at the bound may already hold something citable, and throwing
+    it away discards work that was paid for."""
+    from langchain_core.messages import AIMessage
+
+    monkey = AIMessage(
+        content="Cell length is 1.94-2.72 um (BNID 100001), and I am still looking.",
+        tool_calls=[{"name": "search_entries", "args": {"property": "Cell"}, "id": "c1"}],
+    )
+    # Prose and a tool call in the same message, every hop: the model never stops,
+    # so the bound does -- with real findings already on the table.
+    events = list(agent_with(repo, config, tmp_path, scripted(monkey)).ask("s", "q"))
+    end = events[-1]
+    assert end.reason is EndReason.RETRIEVAL_BOUND
+
+    answer = next(e for e in events if isinstance(e, Answer))
+    assert "BNID 100001" in answer.text
+    entries = next(e for e in events if isinstance(e, AnswerEntries))
+    assert 100001 in entries.cited, "the citations in the partial answer were lost"
+
+
+def test_the_bound_ending_reports_the_count_that_tripped_it(repo, config, tmp_path):
+    """The ending already named the bound; it did not say what reached it, so
+    nothing downstream could tell a bound set too low from a model that looped."""
+    from bionumbers_ask.agent import RUN_CALL_LIMIT
+
+    model = scripted(tool_call("search_entries", property="Cell"))
+    end = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))[-1]
+    assert (end.model_calls, end.call_limit) == (RUN_CALL_LIMIT, RUN_CALL_LIMIT)
+    assert end.at_retrieval_bound is True
+
+
+def test_an_answer_produced_with_no_calls_left_is_marked(repo, config, tmp_path, monkeypatch):
+    """An answer reached at the wall stopped searching because it ran out of room,
+    not because it was satisfied -- and it is otherwise indistinguishable from one
+    produced with calls to spare."""
+    monkeypatch.setattr("bionumbers_ask.agent.RUN_CALL_LIMIT", 3)
+    model = scripted(
+        tool_call("search_entries", property="Cell"),
+        tool_call("get_entry", bnid=100001),
+        says("Cell length is 1.94-2.72 um (BNID 100001)."),
+    )
+    events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
+    end = events[-1]
+    assert end.reason is EndReason.ANSWERED
+    # Answered, and complete: the bound is a fact about how it was reached, not a
+    # reason to distrust the answer.
+    assert end.incomplete is False
+    assert (end.model_calls, end.call_limit) == (3, 3)
+    assert end.at_retrieval_bound is True
+
+
+def test_an_answer_with_calls_to_spare_is_not_marked(repo, config, tmp_path, monkeypatch):
+    monkeypatch.setattr("bionumbers_ask.agent.RUN_CALL_LIMIT", 3)
+    model = scripted(
+        tool_call("search_entries", property="Cell"),
+        says("Cell length is 1.94-2.72 um (BNID 100001)."),
+    )
+    end = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))[-1]
+    assert (end.model_calls, end.call_limit) == (2, 3)
+    assert end.at_retrieval_bound is False
+
+
+def test_a_retried_call_is_counted_once(repo, config, tmp_path, monkeypatch):
+    """The count has to be the middleware's own, not attempts made here: a provider
+    failure that succeeds on retry is one model call against the bound, and counting
+    attempts would report a question as cornered when it had every call left."""
+    monkeypatch.setattr("bionumbers_ask.agent.RUN_CALL_LIMIT", 3)
+    model = scripted(says("Cell length is 1.94-2.72 um (BNID 100001)."), failures=1)
+    end = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))[-1]
+    assert model.attempts == 2, "the double did not actually fail once"
+    assert end.model_calls == 1
+    assert end.at_retrieval_bound is False
+
+
+def test_a_question_that_never_reaches_the_model_claims_no_bound(repo, config, tmp_path):
+    """No bound was applied, so reporting one -- even as zero of twelve -- would
+    describe a limit the question never met."""
+    spent = Config(model="fake/model", warning_threshold=usd("0.50"), run_budget=usd("0.00"))
+    agent = AskAgent(repo, spent, str(tmp_path / "c.sqlite"), model=scripted(says("x")))
+    end = list(agent.ask("s", "q"))[-1]
+    assert end.reason is EndReason.RUN_BUDGET
+    assert (end.model_calls, end.call_limit) == (0, 0)
+    assert end.at_retrieval_bound is False
+
+
+def test_a_question_the_corpus_does_not_cover_is_presented_as_answered(repo, config, tmp_path):
+    """Refusing correctly *is* answering. Reporting it as a failure would push a
+    driver to retry, or to show an error where the right thing happened.
+
+    This is the harness half of the requirement. Whether the model refuses at all
+    is rule 2, and a scripted double cannot test that -- it says whatever the test
+    tells it to. The live suite covers that half.
+    """
+    from bionumbers_ask.citations import citations
+
+    model = scripted(
+        tool_call("search_entries", property="lifespan", organism="mouse"),
+        tool_call("list_values", field="property", contains="lifespan"),
+        says("The corpus holds no entries on mouse lifespan, so I cannot answer this."),
+    )
+    events = list(agent_with(repo, config, tmp_path, model).ask("s", "how long do mice live?"))
+    end = events[-1]
+    assert end.reason is EndReason.ANSWERED
+    assert end.incomplete is False
+
+    answer = next(e for e in events if isinstance(e, Answer))
+    assert citations(answer.text) == ()
+
+
+def test_a_refusal_claims_no_entries_and_no_coverage(repo, config, tmp_path):
+    """The presentation must not suggest evidence that is not there: no table, and
+    no matched figure, since "0 matched" beside a refusal reads as a measurement of
+    the corpus rather than of the search."""
+    from bionumbers_ask.cli import render as render_event
+    from bionumbers_ask.events import AnswerEntries, CitationWarning
+
+    model = scripted(
+        tool_call("search_entries", property="lifespan", organism="mouse"),
+        says("The corpus holds no entries on mouse lifespan, so I cannot answer this."),
+    )
+    events = list(agent_with(repo, config, tmp_path, model).ask("s", "how long do mice live?"))
+
+    entries = next(e for e in events if isinstance(e, AnswerEntries))
+    assert (entries.cited, entries.retrieved) == ((), ())
+    assert entries.matched == 0
+    assert render_event(entries, repo=repo) is None, "a refusal must render no table"
+
+    # Citing nothing is not a citation defect. The warning is for citing something
+    # the corpus does not hold, and firing it here would turn the correct behaviour
+    # into a reported fault.
+    assert not any(isinstance(e, CitationWarning) for e in events)
 
 
 def test_an_answer_in_content_blocks_is_recovered(repo, config, tmp_path):

@@ -72,6 +72,10 @@ was working from, and the reference is what lets them go to the paper rather tha
 model or the corpus. This is the same reasoning as citing identifiers, carried through to what a
 person actually reads.
 
+An entry an answer cited that no tool call returned SHALL be marked as such where it is shown. The
+entry exists, so nothing about the row looks wrong, which is why it needs the mark: unmarked it sits
+among the cited entries as though the answer rested on it legitimately.
+
 The reference SHALL NOT be included in what is sent to the model. It is presentation, not evidence
 the model reasons over, and references are long enough that carrying them into every search result
 would more than double what a search costs.
@@ -96,6 +100,12 @@ would more than double what a search costs.
 - **WHEN** an entry whose measurement method the corpus does not record is shown
 - **THEN** it is marked as such
 - **AND** what the marking means is stated where it is shown
+
+#### Scenario: An entry was cited but never retrieved
+- **WHEN** an answer cites an entry the corpus holds but no tool call returned
+- **THEN** the citation is reported as unsupported
+- **AND** the entry is shown marked as cited without being retrieved
+- **AND** this holds whether or not anything else was retrieved
 
 #### Scenario: The presentation is not the model's work
 - **WHEN** the entries are presented
@@ -186,9 +196,25 @@ SHALL identify the number as computed and cite the entries supplying every input
 The system SHALL bound the number of tool calls made in answering a single question, and SHALL
 report when an answer was produced against that bound rather than because retrieval was complete.
 
+An answer produced with no calls left stopped searching because it ran out of room, not because it
+was satisfied, and the two are otherwise indistinguishable. The report SHALL state the calls used
+against the bound, and SHALL do so only where the bound was actually reached: a figure printed
+beside every answer is noise where it means nothing. Whether the bound was reached SHALL be
+determined by the count that enforces it, so a call retried after a provider failure counts once.
+
 #### Scenario: Question is answered within the bound
 - **WHEN** retrieval completes before the bound is reached
 - **THEN** the answer is returned with no truncation notice
+- **AND** nothing is said about the bound
+
+#### Scenario: An answer is produced with no calls left
+- **WHEN** an answer is produced on the last call the bound allows
+- **THEN** the calls used and the bound are both reported
+- **AND** the answer is not marked incomplete, the bound being a fact about how it was reached
+
+#### Scenario: A question never reaches the model
+- **WHEN** a question ends before any model call
+- **THEN** no bound is reported, since none was applied
 
 #### Scenario: Bound is reached first
 - **WHEN** the tool-call bound is reached before retrieval is complete

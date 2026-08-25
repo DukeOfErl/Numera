@@ -67,8 +67,11 @@
 - [ ] 6.2 Establish dimensional compatibility before presenting two entries as differing estimates, and test it against a mass-versus-count pair
 - [ ] 6.3 Report disagreement with the conditions that distinguish the values
 - [ ] 6.4 Mark computed values as computed and cite every input
-- [ ] 6.5 Bound retrieval effort per question using the built-in call-limit middleware, and report when an answer was produced against that bound
-- [ ] 6.6 Test that a question the corpus does not cover produces a statement to that effect and no quantity
+- [x] 6.5 Bound retrieval effort per question using the built-in call-limit middleware, and report when an answer was produced against that bound — the count read from the middleware's own state so a retried call counts once, reported only where the bound was reached
+- [x] 6.5a Present what a question established before the bound stopped it, as the spend ceiling already did — the bound was discarding a partial answer and its citations
+- [x] 6.6 Test that a question the corpus does not cover produces a statement to that effect and no quantity, offline for the harness and live for the model
+- [x] 6.6a Run the citation check whether or not anything was retrieved, and mark an entry cited without being retrieved where it is shown — an answer that cited an entry after an empty search was reported as clean
+- [x] 6.6b Parse the plural citation marker, so "BNIDs 100002" is not read as an uncited answer
 
 ## 7. Terminal driver
 

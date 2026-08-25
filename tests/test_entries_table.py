@@ -25,6 +25,20 @@ FIRST, SECOND = 100001, 100002
 # -- the parser -----------------------------------------------------------
 
 
+def test_the_plural_marker_parses():
+    """A model listing entries writes "BNIDs 100002" naturally. Parsed as uncited,
+    that turned a well-cited answer into one with no citations at all: no cited rows,
+    no unknown-or-unretrieved check, and a scorer recording zero."""
+    assert citations("see BNIDs 100002") == (100002,)
+
+
+def test_only_the_marked_identifier_in_a_list_counts():
+    """The second number in "BNIDs 100002 and 100003" carries no marker, and the
+    rule the model is given is to write the marker every time. Reading a bare number
+    as an identifier is the ambiguity this module exists to refuse."""
+    assert citations("see BNIDs 100002 and 100003") == (100002,)
+
+
 def test_a_bare_number_is_not_a_citation():
     """The reason the format is stated at all: a six-digit quantity is not an id."""
     assert citations("the cell holds 100000 ribosomes") == ()
@@ -216,12 +230,22 @@ def test_the_identifiers_are_not_printed_on_the_progress_line(repo, config, tmp_
 
 def test_citing_an_entry_that_was_never_retrieved_is_reported(repo, config, tmp_path):
     """The failure this project exists to catch: a number from the model's memory,
-    dressed as a citation. Silent otherwise."""
+    dressed as a citation.
+
+    An answer given with no tool call at all is the purest form of it. This test
+    previously asserted the opposite of its own name -- that no event was emitted --
+    on the reasoning that an absent event was itself the signal. It is not one: the
+    absence is indistinguishable from a question that never looked, and it also
+    suppressed the citation check, so the fabrication was reported as a clean
+    answer.
+    """
     model = scripted(says(f"about 1 micrometre ({format_citation(SECOND)})"))
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
-    # No tool was called, so nothing was retrieved -- and with nothing retrieved
-    # there is no evidence event at all, which is itself the signal.
-    assert not any(isinstance(e, AnswerEntries) for e in events)
+
+    warning = next(e for e in events if isinstance(e, CitationWarning))
+    assert warning.unretrieved == (SECOND,)
+    entries = next(e for e in events if isinstance(e, AnswerEntries))
+    assert (entries.cited, entries.retrieved) == ((SECOND,), ())
 
 
 def test_a_citation_absent_from_the_corpus_is_named(repo, config, tmp_path):
@@ -422,6 +446,31 @@ def test_entries_the_score_cannot_separate_keep_the_order_they_were_met_in():
     )
     rows = entries_table.rows_for(repo, cited=(), retrieved=(2, 1), question="diameter")
     assert [row.bnid for row in rows] == [2, 1]
+
+
+def test_a_row_cited_without_being_retrieved_is_marked(repo):
+    """The entry exists, so nothing about the row looks wrong -- which is exactly the
+    problem. Unmarked it sits among the cited entries as though the answer rested on
+    it legitimately."""
+    rows = entries_table.rows_for(repo, cited=(FIRST,), retrieved=())
+    text = entries_table.render(rows)
+    assert rows[0].retrieved is False
+    assert text.splitlines()[2].startswith(entries_table.NOT_RETRIEVED)
+    assert entries_table.NOT_RETRIEVED_LEGEND in text
+
+
+def test_a_retrieved_row_carries_no_such_mark(repo):
+    text = entries_table.render(entries_table.rows_for(repo, cited=(FIRST,), retrieved=(FIRST,)))
+    assert entries_table.NOT_RETRIEVED not in text
+
+
+def test_both_marks_can_apply_to_one_row(repo):
+    """SECOND records no method and is cited without retrieval. Suppressing either
+    mark because the other applies would hide a fact about the entry."""
+    text = entries_table.render(entries_table.rows_for(repo, cited=(SECOND,), retrieved=()))
+    assert entries_table.NOT_RETRIEVED in text and entries_table.NO_METHOD in text
+    assert entries_table.NOT_RETRIEVED_LEGEND in text
+    assert entries_table.NO_METHOD_LEGEND in text
 
 
 def test_a_banner_separates_the_entries_the_answer_rests_on_from_the_rest(repo):
