@@ -149,3 +149,37 @@ def test_a_question_the_corpus_does_not_cover_gets_no_number(live_agent):
     # And it looked before concluding: a refusal reached without searching makes the
     # corpus look emptier than it is.
     assert any(isinstance(e, Retrieval) for e in events), "refused without looking"
+
+
+def test_disagreeing_entries_are_reported_with_what_distinguishes_them(live_agent):
+    """Rule 4 against a real model. Only a live run can fail this: a scripted
+    double says whatever the test tells it to.
+
+    The fixture holds two entries for `Cell diameter` in the same units and with
+    very different values -- 1.0-1.1 um for E. coli, 5.0 um for budding yeast --
+    distinguished by nothing but the organism. Asked without naming one, the
+    tempting wrong answer is "cell diameter ranges from 1 to 5 um", which is a
+    spread across two organisms presented as a measurement of one.
+    """
+    from bionumbers_ask.citations import citations
+
+    events = list(live_agent.ask("disagree", "How wide is a cell, in micrometres?"))
+    answer = next(e for e in events if isinstance(e, Answer))
+    cited = citations(answer.text)
+
+    assert 100002 in cited and 100010 in cited, f"did not present both: {answer.text[:400]}"
+
+    lowered = answer.text.lower()
+    assert "coli" in lowered and ("yeast" in lowered or "cerevisiae" in lowered), (
+        f"cited both but named neither organism: {answer.text[:400]}"
+    )
+
+    # The fabrication is one spread built across the two. Targeted at a range whose
+    # ends are the two entries' values, rather than banning the digits themselves:
+    # a correct answer quotes both numbers, and must be free to.
+    fused = re.search(
+        r"\b1(?:\.\d+)?\s*(?:-|–|—|to)\s*5(?:\.0+)?\s*(?:µ|μ|u)?m\b",
+        answer.text,
+        re.IGNORECASE,
+    )
+    assert fused is None, f"presented two organisms as one range: {fused.group(0)!r}"

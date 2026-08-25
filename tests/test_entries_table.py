@@ -624,3 +624,75 @@ def test_a_long_footnote_wraps_to_the_table(repo):
     flat = " ".join(line.strip() for line in text.splitlines())
     assert "4 kinds of quantity (dimensionless, length, mass, volume)" in flat
     assert "not alternatives for one another" in flat
+
+
+# -- the conditions that distinguish differing values ----------------------
+
+
+def _row(bnid, method="", cited=True, value="1.0"):
+    return entries_table.Row(
+        bnid=bnid,
+        property="Cell volume",
+        organism="Bacteria Escherichia coli",
+        value=value,
+        units="μm^3",
+        reference="r",
+        cited=cited,
+        method_recorded=bool(method),
+        method=method,
+    )
+
+
+def test_the_methods_of_cited_entries_are_shown():
+    """A reader checking why two cited entries give different numbers has nothing
+    to go on otherwise: the table said only when a method was absent, so a textbook
+    page and a count over a thousand cells were both just rows."""
+    text = entries_table.render(
+        (_row(1, "Transmission electron microscopy"), _row(2, "Coulter counter", value="9.0"))
+    )
+    assert "how the cited entries were measured:" in text
+    assert "Transmission electron microscopy" in text
+    assert "Coulter counter" in text
+
+
+def test_one_cited_entry_has_nothing_to_be_distinguished_from():
+    """The block answers "why do these differ", which a single entry does not ask."""
+    text = entries_table.render((_row(1, "Transmission electron microscopy"),))
+    assert "how the cited entries were measured" not in text
+
+
+def test_the_methods_of_uncited_entries_are_not_shown():
+    """The answer does not rest on them, and the block would then explain a
+    difference the prose never claimed."""
+    text = entries_table.render(
+        (_row(1, "Electron microscopy"), _row(2, "Coulter counter", cited=False, value="9.0"))
+    )
+    assert "how the cited entries were measured" not in text
+
+
+def test_an_entry_recording_no_method_is_left_out_but_still_marked():
+    """Its absence is already carried by the marker; a blank line in the block
+    would say the same thing twice and invite reading it as an empty method."""
+    text = entries_table.render(
+        (
+            _row(1, "Electron microscopy"),
+            _row(2, "Coulter counter", value="9.0"),
+            _row(3, "", value="4.0"),
+        )
+    )
+    block = text.split("how the cited entries were measured:")[1].splitlines()
+    listed = [line for line in block if line.startswith("  BNID")]
+    assert len(listed) == 2, "the entry with no method should not be listed"
+    assert entries_table.format_citation(3) not in text
+    assert entries_table.NO_METHOD_LEGEND in text
+
+
+def test_a_long_method_is_cut_to_the_table_and_says_so():
+    """The median recorded method is 231 characters and the longest 2,382. No
+    terminal table carries that, and a line running past the rule reads as
+    something else."""
+    long_method = "Coulter counter " * 40
+    text = entries_table.render((_row(1, long_method), _row(2, "Microscopy", value="9.0")))
+    width = sum(w for _, _, w in entries_table.COLUMNS) + 2 * (len(entries_table.COLUMNS) - 1)
+    assert all(len(line) <= width for line in text.splitlines()), "a method line overran"
+    assert "…" in text

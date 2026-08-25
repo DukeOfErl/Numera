@@ -13,6 +13,7 @@ import re
 import textwrap
 from dataclasses import dataclass
 
+from .citations import format_citation
 from .repository import CorpusRepository
 from .units import dimensions_of
 
@@ -73,6 +74,7 @@ class Row:
     cited: bool
     method_recorded: bool = True
     retrieved: bool = True
+    method: str = ""
 
     def markers(self) -> str:
         applying = (
@@ -158,6 +160,7 @@ def rows_for(
                 cited=bnid in cited,
                 method_recorded=bool(entry.measurement_method.strip()),
                 retrieved=bnid in retrieved,
+                method=" ".join(entry.measurement_method.split()),
             )
         )
     return tuple(out)
@@ -216,6 +219,44 @@ def _banner(width: int) -> str:
     return "-" * left + label + "-" * (fill - left)
 
 
+def _methods_block(shown: tuple[Row, ...], width: int) -> list[str]:
+    """How each cited entry was measured, where the corpus records it.
+
+    Rule 4 asks an answer that reports differing values to say what distinguishes
+    them, and the conditions are the answer to that. Until now the table said only
+    when a method was *absent*: a textbook page and a count over a thousand cells
+    were both just rows, and a reader could not check the prose's claim about why
+    two entries differ. One entry cited on its own needs no distinguishing, so this
+    starts at two.
+
+    First line only. The median recorded method is 231 characters and the longest
+    2,382, which no terminal table can carry -- but the opening phrase is what
+    separates "Transmission electron microscopy" from "Coulter counter" from a
+    caption to a figure, which is exactly the distinction being drawn.
+    """
+    cited = [row for row in shown if row.cited and row.method]
+    if len(cited) < 2:
+        return []
+    out = ["how the cited entries were measured:"]
+    for row in cited:
+        prefix = f"  {format_citation(row.bnid)}  "
+        out.append(prefix + _clamp(row.method, width - len(prefix)))
+    return out
+
+
+def _clamp(text: str, width: int) -> str:
+    """One line, cut at a word where it can be, with the cut marked."""
+    if len(text) <= width or width < 2:
+        return text[:width]
+    cut = text[: width - 1]
+    spaced = cut.rsplit(" ", 1)[0]
+    # Only back up to a word boundary when that leaves most of the line; a very
+    # long first word would otherwise collapse the cell to almost nothing.
+    if len(spaced) >= width // 2:
+        cut = spaced
+    return cut.rstrip(" ,;:") + "\u2026"
+
+
 def render(
     rows: tuple[Row, ...],
     limit: int = TERMINAL_ROWS,
@@ -270,6 +311,7 @@ def render(
         # Wrapped to the table, because the number of dimensions is unbounded and
         # a footnote running past the rule reads as a line of a different table.
         out.extend(textwrap.wrap(note, len(rule), subsequent_indent="  "))
+    out.extend(_methods_block(shown, len(rule)))
     if any(not row.retrieved for row in shown):
         out.append(NOT_RETRIEVED_LEGEND)
     if any(not row.method_recorded for row in shown):

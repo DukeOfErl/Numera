@@ -217,6 +217,22 @@ entries describe the same quantity is a judgment the agent makes, not a lookup.
 - **WHEN** the answer presents a single value while other retrieved entries disagree
 - **THEN** the answer states that other entries differ and why this one was preferred
 
+The presentation SHALL make the recorded conditions visible for the entries an answer cites, so a
+reader can check the prose's account of what distinguishes them rather than taking it on trust.
+Marking only the *absence* of a method is not enough: a textbook page and a count over a thousand
+cells appear identical in a table, and which of the two produced a number is exactly what a reader is
+there to judge. Where a recorded condition is too long to show whole, it SHALL be abbreviated with
+the abbreviation marked, never silently cut.
+
+#### Scenario: Cited entries record how they were measured
+- **WHEN** an answer cites two or more entries whose measurement method the corpus records
+- **THEN** the presentation shows each of those entries' recorded method beside its identifier
+- **AND** an entry recording no method is left out of that listing, its absence already marked
+
+#### Scenario: A single cited entry
+- **WHEN** an answer cites only one entry
+- **THEN** no distinguishing conditions are listed, there being nothing to distinguish it from
+
 ### Requirement: Computed values are shown with their inputs
 
 WHERE an answer presents a number that appears in no entry — a conversion, a ratio, an average — it
