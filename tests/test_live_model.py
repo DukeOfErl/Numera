@@ -183,3 +183,43 @@ def test_disagreeing_entries_are_reported_with_what_distinguishes_them(live_agen
         re.IGNORECASE,
     )
     assert fused is None, f"presented two organisms as one range: {fused.group(0)!r}"
+
+
+def test_a_converted_value_is_marked_as_computed_and_cites_its_input(live_agent):
+    """Rule 5 against a real model, on the case that prompted the rule.
+
+    A unit conversion is the tempting one: the arithmetic is trivial and correct,
+    which is exactly why an unmarked conversion reads as a stored measurement. The
+    corpus holds E. coli cell length as 1.94-2.72 um and nothing in nanometres, so
+    the question cannot be answered without computing, and the computed figure must
+    say that it was computed.
+    """
+    from bionumbers_ask.citations import citations
+
+    events = list(live_agent.ask("converted", "What is the cell length of E. coli in nanometres?"))
+    answer = next(e for e in events if isinstance(e, Answer))
+
+    assert 100001 in citations(answer.text), f"did not cite its input: {answer.text[:400]}"
+    assert re.search(r"comput|convert|derive", answer.text, re.IGNORECASE), (
+        f"converted without saying so: {answer.text[:400]}"
+    )
+    # The conversion itself is right: 1.94 um is 1940 nm, however it is punctuated.
+    assert re.search(r"1[,\s]?940", answer.text), f"no converted value: {answer.text[:400]}"
+
+
+def test_a_computation_needing_an_absent_input_is_not_presented(live_agent):
+    """The other half of rule 5. The fixture has how many ribosomes an E. coli
+    holds and nothing about what one weighs, so the mass cannot be reached from it
+    -- and a model that knows the answer anyway is the failure this project is
+    built around.
+    """
+    events = list(live_agent.ask("absent-input", "What is the mass of a single E. coli ribosome?"))
+    answer = next(e for e in events if isinstance(e, Answer))
+
+    # A mass, in any of the units such an answer would reach for. Targeted rather
+    # than a ban on digits: naming the entry it does hold, and its count, is correct.
+    fabricated = re.search(
+        r"\d[\d,.]*\s*(?:x\s*10|×\s*10|e)?\s*[-−]?\d*\s*(?:k?Da|dalton|[munp]?g)\b",
+        answer.text,
+    )
+    assert fabricated is None, f"produced a mass the corpus does not hold: {fabricated}"
