@@ -23,6 +23,7 @@ class EndReason(StrEnum):
     RUN_BUDGET = "run_budget"
     RETRIEVAL_BOUND = "retrieval_bound"
     PROVIDER_FAILURE = "provider_failure"
+    INTERNAL_ERROR = "internal_error"
     CONVERSATION_BOUND = "conversation_bound"
 
 

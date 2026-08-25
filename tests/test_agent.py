@@ -224,9 +224,41 @@ def test_an_unexpected_tool_error_is_not_dressed_up_as_a_lookup_failure(config, 
     events = list(_agent_over(failing, config, tmp_path, model).ask("s", "q"))
     end = events[-1]
     # A defect must not reach the model as "the lookup failed", or it answers
-    # "the corpus has nothing on this" -- wrong, and sounding grounded.
-    assert end.reason is EndReason.PROVIDER_FAILURE
+    # "the corpus has nothing on this" -- wrong, and sounding grounded. Nor is it
+    # the provider's fault: that reading says "try again", and this will fail the
+    # same way every time.
+    assert end.reason is EndReason.INTERNAL_ERROR
+    assert end.incomplete
     assert not any(isinstance(e, Answer) for e in events)
+
+
+def test_a_failing_provider_is_still_reported_as_the_provider(config, tmp_path):
+    """The other side of the split. A request that failed is worth retrying, and
+    saying otherwise sends the reader to look for a bug that is not there."""
+    failing = _FailingRepo(ConnectionError("upstream reset"))
+    model = scripted(tool_call("search_entries", property="x"), says("unreachable"))
+    events = list(_agent_over(failing, config, tmp_path, model).ask("s", "q"))
+    assert events[-1].reason is EndReason.PROVIDER_FAILURE
+
+
+def test_the_trail_says_where_our_own_defect_was_raised(repo):
+    """Reported without a location, an internal error is only marginally better
+    than the provider's name: it says the fault is ours without saying where.
+
+    Only our own frames are named, so a defect surfacing deep inside a library
+    still points at the line of ours that led there rather than at the library."""
+    from bionumbers_ask.agent import _origin
+
+    try:
+        repo.vocabulary("not-a-field")
+    except ValueError as exc:
+        where = _origin(exc)
+    assert where.startswith("repository.py:"), where
+
+    try:
+        raise AttributeError("raised outside the package")
+    except AttributeError as exc:
+        assert _origin(exc) == "", "nothing of ours is on that traceback"
 
 
 def test_the_tool_error_message_names_the_type_not_the_exception_text(config):

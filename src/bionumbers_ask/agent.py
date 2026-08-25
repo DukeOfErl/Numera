@@ -12,6 +12,7 @@ from collections import deque
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import (
@@ -147,6 +148,37 @@ def _tool_error_message(exc: Exception, request: object) -> str | None:
 
 # Retry settings, at module level so tests can shorten the delays without
 # reaching into the middleware list.
+# Exceptions that mean this code is wrong, not that a request failed. A network
+# error, a rate limit or a malformed provider response are conditions to retry;
+# these are defects, and no number of retries fixes one. Deliberately the
+# unambiguous ones only: a KeyError can come from a provider payload shaped
+# differently than expected, which is a bad response as much as a bad assumption.
+OUR_DEFECT = (
+    AttributeError,
+    NameError,
+    TypeError,
+    IndexError,
+    ZeroDivisionError,
+    AssertionError,
+)
+
+
+def _origin(exc: BaseException) -> str:
+    """Where in this package the exception was raised, for the trail.
+
+    The innermost of our own frames, so a defect surfacing deep inside a library
+    still points at the line of ours that led there.
+    """
+    frame = exc.__traceback__
+    where = ""
+    while frame is not None:
+        name = frame.tb_frame.f_code.co_filename
+        if "bionumbers_ask" in name:
+            where = f"{Path(name).name}:{frame.tb_lineno}"
+        frame = frame.tb_next
+    return where
+
+
 RUN_CALL_LIMIT = 12
 MODEL_RETRIES = 2
 TOOL_RETRIES = 2
@@ -591,12 +623,26 @@ class AskAgent:
                             incomplete=True,
                         )
                         return
-                    except Exception as exc:  # provider failure after retries are exhausted
-                        trace.record("provider.failed", error=type(exc).__name__)
+                    except Exception as exc:  # the provider, or us
+                        # Told apart, because they ask different things of the
+                        # reader. "provider_failure" means try again; a defect in
+                        # this code will do exactly the same thing on every retry,
+                        # and reporting it as the provider's fault sends whoever
+                        # sees it to look in the wrong place -- or to blame a
+                        # service that did nothing wrong.
+                        ours = isinstance(exc, OUR_DEFECT)
+                        trace.record(
+                            "internal.failed" if ours else "provider.failed",
+                            error=type(exc).__name__,
+                            message=str(exc)[:200],
+                            where=_origin(exc),
+                        )
                         yield from evidence()
                         yield QuestionEnded(
                             question_id=trace.question_id,
-                            reason=EndReason.PROVIDER_FAILURE,
+                            reason=(
+                                EndReason.INTERNAL_ERROR if ours else EndReason.PROVIDER_FAILURE
+                            ),
                             spend=ledger.question,
                             run_spend=ledger.run,
                             model=self._config.model,
