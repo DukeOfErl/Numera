@@ -84,7 +84,7 @@
 - [ ] 8.3 Render retrieval progress from events while a question is being answered
 - [ ] 8.4 Verify that a follow-up question is answered correctly after the application has been restarted mid-session
 - [ ] 8.5 Verify that the agent code is unchanged from the terminal driver's version
-- [ ] 8.6 Render the entries table after each answer, the first ten to twenty entries with a way to reach the rest, and make a row open the full entry
+- [ ] 8.6 Render the entries table after each answer, the first ten to twenty entries with a way to reach the rest, and make a row open the full entry. Distinguish the entries the answer cited by colour rather than by the terminal's dashed banner, and carry the no-recorded-method marking through
 
 ## 9. Evaluation
 
