@@ -14,6 +14,7 @@ from langchain_core.tools import StructuredTool
 from .events import Retrieval
 from .repository import DEFAULT_LIMIT, CorpusRepository
 from .trace import QuestionTrace
+from .units import dimensions_of
 
 Emit = Callable[[Retrieval], None]
 
@@ -61,7 +62,20 @@ def build_tools(repo: CorpusRepository, trace: QuestionTrace, emit: Emit) -> lis
             if result.truncated
             else f"{result.total_matched} entries matched; all shown."
         )
-        return "\n".join([header, "bnid\tproperty\torganism\tvalue", *lines])
+        out = [header, "bnid\tproperty\torganism\tvalue", *lines]
+        spanned = dimensions_of([row.units for row in result.rows])
+        if len(spanned) > 1:
+            # Said here rather than left to the system prompt. The prompt's rule
+            # about not presenting a mass and a count as one range is a paragraph
+            # read before the question; this is the same rule at the moment of
+            # choosing, against the rows it applies to.
+            out.append(
+                f"NOTE: these rows measure {len(spanned)} different kinds of quantity "
+                f"({', '.join(spanned)}). Values of different kinds are not "
+                "alternative estimates of one quantity and must not be presented as "
+                "a range or an average."
+            )
+        return "\n".join(out)
 
     def get_entry(bnid: int) -> str:
         found = repo.get(bnid, trace=trace)

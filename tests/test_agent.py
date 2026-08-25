@@ -681,3 +681,44 @@ def test_an_empty_vocabulary_lookup_says_the_corpus_has_nothing_under_that_wordi
     tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), lambda _e: None)}
     text = tools["list_values"].invoke({"field": "organism", "contains": "Drosophila"})
     assert "nothing under that wording" in text
+
+
+# -- dimensional compatibility at the point of decision --------------------
+
+
+def test_a_search_spanning_kinds_of_quantity_says_so_in_the_tool_result(repo, config, tmp_path):
+    """The system prompt already forbids presenting a mass and a count as one range.
+    This is the same rule where the decision is made, against the rows it applies to
+    -- an instruction read before the question is not a control."""
+    from bionumbers_ask.tools import build_tools
+    from bionumbers_ask.trace import start_question
+
+    search = next(
+        t for t in build_tools(repo, start_question(), lambda e: None) if t.name == "search_entries"
+    )
+    spanning = search.func(organism="e. coli")
+    assert "different kinds of quantity" in spanning
+    assert "must not be presented as a range or an average" in spanning
+
+    # And silent when every row measures the same kind, or it becomes boilerplate
+    # the model learns to skip.
+    assert "different kinds of quantity" not in search.func(property="Cell diameter")
+
+
+def test_an_answer_citing_a_mass_and_a_count_is_shown_the_mismatch(repo, config, tmp_path):
+    """End to end, on the pair the requirement names: mass in micrograms against a
+    ribosome count. The check is on the units, so it holds whatever the prose says."""
+    from bionumbers_ask.cli import render as render_event
+    from bionumbers_ask.events import AnswerEntries
+
+    model = scripted(
+        tool_call("search_entries", organism="e. coli"),
+        says("Values range from 25 (BNID 100030) to 72000 (BNID 100020)."),
+    )
+    events = list(agent_with(repo, config, tmp_path, model).ask("s", "how big is it?"))
+    entries = next(e for e in events if isinstance(e, AnswerEntries))
+    assert 100030 in entries.cited and 100020 in entries.cited
+
+    table = render_event(entries, repo=repo)
+    assert "2 kinds of quantity" in table
+    assert "dimensionless, mass" in table

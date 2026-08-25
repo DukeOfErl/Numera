@@ -527,3 +527,63 @@ def test_the_corpus_and_the_answers_are_read_by_one_parser(repo):
 
     assert not hasattr(repository, "_CITED"), "a second citation parser has reappeared"
     assert repo.get(FIRST).cited_bnids == (102065, 104333)
+
+
+# -- dimensional compatibility --------------------------------------------
+
+MASS, COUNT, VOLUME = 100030, 100020, 100003
+
+
+def test_the_table_says_when_cited_entries_measure_different_kinds_of_thing(repo):
+    """The mass-versus-count pair. A reader comparing an answer against the entries
+    it cites needs to see that a range across these two is not a range."""
+    rows = entries_table.rows_for(repo, cited=(MASS, COUNT), retrieved=(MASS, COUNT))
+    text = entries_table.render(rows)
+    assert "2 kinds of quantity" in text
+    assert "dimensionless, mass" in text
+    assert "not alternatives for one another" in text
+
+
+def test_nothing_is_said_when_the_cited_entries_agree(repo):
+    """Stated as a fact about the units, not a fault -- so it must be silent when
+    there is no fact to state, or it becomes noise nobody reads."""
+    text = entries_table.render(entries_table.rows_for(repo, (FIRST, SECOND), (FIRST, SECOND)))
+    assert "kinds of quantity" not in text
+
+
+def test_only_the_cited_entries_are_weighed(repo):
+    """An uncited entry of another kind is not something the answer rests on, and
+    flagging it would fire on almost every search."""
+    text = entries_table.render(entries_table.rows_for(repo, (FIRST,), (FIRST, COUNT)))
+    assert "kinds of quantity" not in text
+
+
+def test_a_cited_entry_below_the_row_limit_still_counts(repo):
+    """The answer rests on every entry it cited, not on the ones that happened to
+    fit."""
+    rows = entries_table.rows_for(repo, cited=(MASS, COUNT), retrieved=(MASS, COUNT))
+    assert "2 kinds of quantity" in entries_table.render(rows, limit=1)
+
+
+def test_a_number_is_never_split_across_two_lines(repo):
+    """Split, "6800.0-72000.0" read as "6800.0-72000." above a lone "0" -- a value
+    the corpus does not hold, shown with nothing to say it had been altered."""
+    text = entries_table.render(entries_table.rows_for(repo, (COUNT,), (COUNT,)))
+    value_column = next(w for field, _, w in entries_table.COLUMNS if field == "value")
+    assert "6800.0–72000…" in text
+    assert not any(line.strip() == "0" for line in text.splitlines())
+    assert all(len(line) <= 106 for line in text.splitlines()), "a column overran"
+    assert value_column == 13
+
+
+def test_a_long_footnote_wraps_to_the_table(repo):
+    """The number of dimensions is unbounded, and four already overran the rule. A
+    footnote running past it reads as a line belonging to something else."""
+    width = sum(w for _, _, w in entries_table.COLUMNS) + 2 * (len(entries_table.COLUMNS) - 1)
+    cited = (VOLUME, COUNT, MASS, FIRST)
+    text = entries_table.render(entries_table.rows_for(repo, cited, cited))
+    assert all(len(line) <= width for line in text.splitlines()), "a line overran the rule"
+    # Rejoined, because wrapping is exactly what splits the sentence.
+    flat = " ".join(line.strip() for line in text.splitlines())
+    assert "4 kinds of quantity (dimensionless, length, mass, volume)" in flat
+    assert "not alternatives for one another" in flat

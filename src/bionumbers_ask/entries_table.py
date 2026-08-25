@@ -14,6 +14,7 @@ import textwrap
 from dataclasses import dataclass
 
 from .repository import CorpusRepository
+from .units import dimensions_of
 
 # Column order and relative widths follow the reference database's results page,
 # so output can be compared against it by eye. Two text lines per row, cells
@@ -167,11 +168,20 @@ def _cell_lines(text: str, width: int) -> list[str]:
 
     Truncating rather than wrapping further keeps every row the same height, which
     is what makes a long table scannable and what the reference page does.
+
+    A single token is never broken across lines. "6800.0-72000.0" is one character
+    wider than the value column, and split it read as "6800.0-72000." above a lone
+    "0" -- a value the corpus does not hold, shown without any sign that it had been
+    altered. An ellipsis at least says that something was cut.
     """
-    wrapped = textwrap.wrap(text, width=width) or [""]
+    wrapped = textwrap.wrap(text, width=width, break_long_words=False) or [""]
     lines = wrapped[:LINES_PER_ROW]
     if len(wrapped) > LINES_PER_ROW and width >= 2:
         lines[-1] = lines[-1][: width - 1].rstrip() + "…"
+    # With long words kept whole, a line may still overrun the column and would
+    # push every column after it out of alignment.
+    if width >= 2:
+        lines = [line if len(line) <= width else line[: width - 1] + "…" for line in lines]
     return lines + [""] * (LINES_PER_ROW - len(lines))
 
 
@@ -247,6 +257,19 @@ def render(
     retrieved = total if total is not None else len(rows)
     if retrieved > len(shown) or matched > len(shown):
         out.append(summarise(len(shown), retrieved, matched, searches))
+    spanned = dimensions_of([row.units for row in rows if row.cited])
+    if len(spanned) > 1:
+        # Over every cited row, not only the shown ones: the answer rests on all of
+        # them. Stated as a fact about the units rather than as a fault, because
+        # citing a length and a mass together is often exactly right -- what is
+        # wrong is reading them as one another's alternatives.
+        note = (
+            f"cited entries measure {len(spanned)} kinds of quantity "
+            f"({', '.join(spanned)}) -- not alternatives for one another"
+        )
+        # Wrapped to the table, because the number of dimensions is unbounded and
+        # a footnote running past the rule reads as a line of a different table.
+        out.extend(textwrap.wrap(note, len(rule), subsequent_indent="  "))
     if any(not row.retrieved for row in shown):
         out.append(NOT_RETRIEVED_LEGEND)
     if any(not row.method_recorded for row in shown):

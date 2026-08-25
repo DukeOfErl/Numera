@@ -64,7 +64,9 @@
 - [x] 6.1c Build the entries table an answer is presented with — property, organism, value, units, identifier, reference — cited entries first, stating how many were retrieved when more were retrieved than are shown. Shared by the drivers; the reference is looked up for display and never sent to the model, since carrying it into search results would more than double what a search costs
 - [x] 6.1d Present a stored single measurement as one number where the corpus holds it as a range with equal bounds, and drop the matched figure from the count line when every match was retrieved
 - [x] 6.1e Order the entries an answer did not cite by wording overlap with the question and the cited properties, discounting words the property repeats from its organism; separate them from the cited entries visibly, and mark an entry whose measurement method the corpus does not record
-- [ ] 6.2 Establish dimensional compatibility before presenting two entries as differing estimates, and test it against a mass-versus-count pair
+- [x] 6.2 Establish dimensional compatibility before presenting two entries as differing estimates, and test it against a mass-versus-count pair. Three-valued, so a unit nobody classified is never claimed compatible and never mistaken for dimensionless — 2,305 distinct unit strings make complete classification permanently unavailable, and the table covers 45% of the corpus's entries
+- [x] 6.2a Say it where the decision is made: a search result spanning more than one dimension names the kinds it carries, and the entries table footnotes the same over every cited entry
+- [x] 6.2b Never break a number across two lines — the value column split "6800.0-72000.0" into a figure the corpus does not hold, shown with no sign it had been altered
 - [ ] 6.3 Report disagreement with the conditions that distinguish the values
 - [ ] 6.4 Mark computed values as computed and cite every input
 - [x] 6.5 Bound retrieval effort per question using the built-in call-limit middleware, and report when an answer was produced against that bound — the count read from the middleware's own state so a retried call counts once, reported only where the bound was reached

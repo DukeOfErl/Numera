@@ -80,10 +80,20 @@ The reference SHALL NOT be included in what is sent to the model. It is presenta
 the model reasons over, and references are long enough that carrying them into every search result
 would more than double what a search costs.
 
+A value SHALL be shown as the corpus holds it or visibly abbreviated, never silently altered. Where
+a cell does not fit, the truncation SHALL be marked. Splitting a number across two lines is
+forbidden: `6800.0-72000.0` broken over a line read as `6800.0-72000.` above a lone `0` — a value the
+corpus does not hold, displayed with nothing to say it had been changed.
+
 #### Scenario: A question is answered
 - **WHEN** an answer is produced
 - **THEN** the entries retrieved for it are presented alongside it
 - **AND** each shows its property, organism, value, units, identifier and reference
+
+#### Scenario: A value too wide for its column
+- **WHEN** a value does not fit the space the presentation gives it
+- **THEN** it is abbreviated with a visible mark rather than broken across lines
+- **AND** no number the corpus does not hold is displayed
 
 #### Scenario: More entries than are shown
 - **WHEN** more entries were retrieved than the presentation shows
@@ -153,10 +163,40 @@ entries produces exactly that.
 - **WHEN** two retrieved entries describe the same quantity with dimensionally compatible units
 - **THEN** they may be presented together as differing estimates
 
+Compatibility SHALL be three-valued: compatible, incompatible, or unknown. A unit the system does
+not recognise SHALL NOT be treated as compatible with anything, and SHALL NOT be treated as
+dimensionless either. Classification will always be partial — the reference corpus carries over two
+thousand distinct unit strings, whose forty-five commonest cover under two thirds of it — so
+"unknown" is the normal case and must be a first-class answer rather than a gap that defaults to a
+guess. Where case alone distinguishes two quantities, as in millimolar and millimetres, it SHALL be
+honoured; where a symbol is genuinely ambiguous across dimensions, the answer SHALL be unknown.
+
+Where a set of entries offered to the model spans more than one dimension, the system SHALL say so
+in the tool result carrying those entries — at the point the model decides what to say, not only in
+a rule stated earlier — naming how many kinds of quantity are present and that values of different
+kinds are not alternative estimates of one quantity.
+
 #### Scenario: Two entries report related quantities in incompatible units
 - **WHEN** two retrieved entries carry units of different dimensions
 - **THEN** they are not presented as a range or a disagreement
 - **AND** each is reported separately with its own units
+
+#### Scenario: An unrecognised unit
+- **WHEN** an entry carries units the system does not recognise
+- **THEN** its compatibility with any other unit is reported as unknown
+- **AND** it is not presented as comparable to anything on the strength of that
+
+#### Scenario: A search returns entries of more than one kind
+- **WHEN** the entries returned for a search span more than one dimension
+- **THEN** the result says how many kinds of quantity they measure and names them
+- **AND** states that values of different kinds are not alternative estimates of one quantity
+
+#### Scenario: An answer cites entries of more than one kind
+- **WHEN** the entries an answer cites span more than one dimension
+- **THEN** the presentation states how many kinds of quantity they measure and names them
+- **AND** this covers every cited entry, not only the ones the presentation had room to show
+- **AND** nothing is stated where the cited entries measure one kind, so the statement stays
+  readable as a fact rather than as noise
 
 ### Requirement: Disagreement is reported with its conditions
 
