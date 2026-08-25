@@ -82,6 +82,12 @@ def dimension(units: str) -> str | None:
     treating it as compatible with anything is exactly the guess to avoid.
     """
     raw = (units or "").strip()
+    # The first two clauses are redundant and kept deliberately. Neither "" nor
+    # "N/A" is in the lookup, so both would miss and return None anyway -- mutation
+    # testing found this, by breaking each of them in turn without any test
+    # noticing. They stay because 2,594 of the corpus's entries carry "N/A", and
+    # naming that here says the corpus recorded no unit, which a silent lookup miss
+    # does not. The third clause is load-bearing: without it "nS" resolves to time.
     if not raw or raw.upper() == "N/A" or raw in _AMBIGUOUS:
         return None
     if raw in _CASE_SENSITIVE:
