@@ -10,10 +10,10 @@ one tool call -- and would bury the few relevant entries among the rest.
 
 from __future__ import annotations
 
-import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 
+from .citations import citations
 from .corpus import Entry
 from .trace import QuestionTrace
 
@@ -22,11 +22,6 @@ DEFAULT_LIMIT = 50
 # entirely -- asking for 20,000 rows would return the whole corpus in one tool
 # message, which is the context and spend blow-up this module exists to prevent.
 MAX_LIMIT = 200
-
-# Entry text cites other entries as "BNID 102065, 104333". Identifiers are six
-# digits beginning with 1.
-_CITED = re.compile(r"\bBNIDs?\s*((?:\s*1\d{5}\s*(?:,|and)?)+)", re.IGNORECASE)
-_ID = re.compile(r"\b1\d{5}\b")
 
 
 @dataclass(frozen=True)
@@ -213,15 +208,12 @@ class CorpusRepository:
             if trace is not None:
                 trace.record("entry.missing", bnid=bnid)
             return None
-        cited = tuple(
-            sorted(
-                {
-                    int(i)
-                    for group in _CITED.findall(entry.quotation_text)
-                    for i in _ID.findall(group)
-                }
-            )
-        )
+        # The same parser the answers use. Entry text cites other entries in exactly
+        # the form a model does -- "See BNID 102065, 104333" -- and two parsers for
+        # one notation drifted: this one read the run and the answer parser did not.
+        # It also hardcoded identifiers as six digits beginning with 1, which is a
+        # fact about this corpus rather than about a citation.
+        cited = tuple(sorted(set(citations(entry.quotation_text))))
         if trace is not None:
             trace.record("entry.retrieved", bnid=bnid, cited_bnids=list(cited))
         return FullEntry(entry=entry, cited_bnids=cited)

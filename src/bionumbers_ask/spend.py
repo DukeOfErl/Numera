@@ -135,7 +135,12 @@ class SpendLedger:
         """
         meta = getattr(message, "response_metadata", None) or {}
         cost = (meta.get("token_usage") or {}).get("cost")
-        if cost:
+        # `is not None`, not truthiness: a reported cost of zero is a fact about the
+        # call, not the absence of one. Read as absent it falls through to the price
+        # table, and with no prices configured the question ends unable to account
+        # for spend -- on a call that succeeded and cost nothing. Any free model
+        # slug reports exactly this.
+        if cost is not None:
             return micro_from_provider_cost(cost)
 
         input_tokens, output_tokens = _usage(message)

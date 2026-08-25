@@ -16,7 +16,25 @@ import re
 # is asked of the model, which makes it a preference rather than a control: a
 # parser that rejected "BNID: 100002" would score a good answer as uncited, and a
 # false negative in evaluation is worse than the ambiguity it removes.
-PATTERN = re.compile(r"(?i)\bbnids?[\s:#\-=]*(\d+)\b")
+#
+# One marker may introduce a run: "BNIDs 100002 and 100003" is how the corpus's own
+# entry text writes several, and it is what a model listing entries writes without
+# being asked. Read as a single citation, a well-cited answer scored as having none
+# at all. Identifiers after the first are inferred from position rather than from a
+# marker of their own, so each must look like the first -- the same number of digits
+# -- and the run stops at the first thing that does not. That is what keeps
+# "BNID 100002 and 3 other entries" from reading 3 as an identifier, without
+# hardcoding how wide an identifier is.
+#
+# A floor on width, not a width. Some entry text writes an identifier with an
+# internal space -- "BNID 104 678" -- and without a floor the leading "104" reads
+# as an identifier, turning a citation this parser used to miss into a wrong one it
+# confidently reports. Three digits is not an identifier in any scheme worth
+# building, and a floor leaves room for a corpus whose identifiers are wider than
+# this one's six digits.
+MIN_DIGITS = 4
+PATTERN = re.compile(r"(?i)\bbnids?[\s:#\-=]*(\d+)((?:\s*(?:,|and|&)\s*\d+)*)")
+_RUN = re.compile(r"\d+")
 
 # What the model is told to write, and what a driver writes when it renders one.
 FORM = "BNID 100002"
@@ -34,5 +52,12 @@ def citations(text: str) -> tuple[int, ...]:
     """
     seen: dict[int, None] = {}
     for match in PATTERN.finditer(text or ""):
-        seen.setdefault(int(match.group(1)), None)
+        first = match.group(1)
+        if len(first) < MIN_DIGITS:
+            continue
+        seen.setdefault(int(first), None)
+        for following in _RUN.findall(match.group(2) or ""):
+            if len(following) != len(first):
+                break
+            seen.setdefault(int(following), None)
     return tuple(seen)

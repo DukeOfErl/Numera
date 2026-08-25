@@ -15,9 +15,10 @@ import os
 import sys
 import uuid
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Any, TextIO
 
-from . import entries_table
+from . import entries_table, trace
 from .agent import AskAgent
 from .citations import format_citation
 from .config import Config, format_usd
@@ -35,6 +36,11 @@ from .events import (
     SpendWarning,
 )
 from .repository import CorpusRepository
+
+# Inside the repository but gitignored: the trail is this project's own output, not
+# corpus data, and the records carry search terms, identifiers and token counts --
+# no entry text, so nothing of the corpus's licensing travels with them.
+DEFAULT_TRACE = "logs/trace.jsonl"
 
 # Endings that finish the run rather than the question. Continuing past a spent
 # budget or a full conversation would put the same refusal on every subsequent
@@ -154,10 +160,16 @@ def run(
             line = render(event, repo)
             if line is not None:
                 print(line, file=out, flush=True)
-            if isinstance(event, QuestionEnded) and event.reason in STOP_THE_RUN:
-                if event.reason is EndReason.NOT_CONFIGURED:
+            if isinstance(event, QuestionEnded):
+                if event.incomplete:
+                    # Any ending that did not finish as intended, not only a
+                    # configuration error: a provider outage, a blank answer and an
+                    # exhausted budget all exited zero, so a script driving --ask
+                    # read them as success. `incomplete` is already the flag that
+                    # says the question did not finish as intended.
                     code = 1
-                return code
+                if event.reason in STOP_THE_RUN:
+                    return code
     return code
 
 
@@ -171,6 +183,30 @@ def _questions_from_terminal(out: TextIO) -> Iterable[str]:
         if line.strip() in {"exit", "quit"}:
             return
         yield line
+
+
+def configure_trace(spec: str) -> None:
+    """Point the structured trail somewhere a real run can be read from.
+
+    Nothing called this outside the tests, so every search, alias resolution,
+    truncation decision and spend increment was discarded in every real run: the
+    logger is at INFO with no handler, and the handler-less root drops the records
+    at WARNING without error. The trail vanished precisely where nobody would think
+    to look for it, which is the failure the trace module exists to prevent.
+
+    Never stdout: the rendered answer goes there, and interleaving JSON with it
+    would corrupt both.
+    """
+    if not spec:
+        return
+    if spec == "-":
+        trace.configure(sys.stderr)
+        return
+    path = Path(spec)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Appended and left open for the life of the process: a run is a sequence of
+    # questions, and each carries its own identifier for filtering afterwards.
+    trace.configure(path.open("a", encoding="utf-8"))
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -194,11 +230,18 @@ def main(argv: list[str] | None = None) -> None:
         help="session to continue; a new one is created and printed if omitted",
     )
     parser.add_argument(
+        "--trace",
+        default=os.environ.get("BIONUMBERS_ASK_TRACE", DEFAULT_TRACE),
+        help=f"where the structured trail is written (default {DEFAULT_TRACE}); "
+        "'-' for stderr, empty to discard it",
+    )
+    parser.add_argument(
         "--ask",
         default="",
         help="ask a single question and exit, instead of reading from the terminal",
     )
     args = parser.parse_args(argv)
+    configure_trace(args.trace)
 
     try:
         repo = CorpusRepository(load(args.corpus))

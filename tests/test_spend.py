@@ -376,3 +376,13 @@ def test_no_projection_event_when_it_stays_under_the_threshold(repo, config, tmp
     model = scripted(says("about 1 micrometre (BNID 100002)"))
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
     assert not [e for e in events if isinstance(e, CostProjection)]
+
+
+def test_a_reported_cost_of_zero_is_a_cost_not_a_missing_one():
+    """`if cost:` read 0.0 as "nothing reported", fell through to the price table,
+    and with no prices configured ended the question unable to account for spend --
+    on a call that succeeded and cost nothing. Any free model slug reports this."""
+    ledger = SpendLedger(model="free/model", prices=None)
+    free = says("answered").model_copy(update={"response_metadata": {"token_usage": {"cost": 0.0}}})
+    assert ledger.add_response([free]).micro == 0
+    assert ledger.question == 0

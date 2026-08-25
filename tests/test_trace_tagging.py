@@ -11,12 +11,13 @@ from __future__ import annotations
 import io
 import json
 
+import pytest
+from conftest import agent_with
+
+from agent_doubles import costing, says, scripted, tool_call
 from bionumbers_ask.config import Config, usd
 from bionumbers_ask.events import QuestionEnded
 from bionumbers_ask.trace import configure, start_question
-
-from agent_doubles import costing, says, scripted, tool_call
-from conftest import agent_with
 
 
 def records(buf: io.StringIO) -> list[dict]:
@@ -177,3 +178,73 @@ def test_a_known_count_beside_an_unknown_one_keeps_the_known_figure():
     )
     assert (charge.prompt_tokens, charge.completion_tokens) == (14, 4)
     assert charge.micro == 35
+
+
+# -- pointing the trail somewhere a real run can be read from --------------
+
+
+def test_the_driver_writes_a_trail_when_it_runs(tmp_path, monkeypatch):
+    """The gap this closes: `configure` was called only from tests, so every record
+    a real run produced was discarded -- at INFO, through a handler-less root, which
+    drops it at WARNING without raising. The trail vanished exactly where nobody
+    would think to look.
+
+    Driven through `main` rather than by asserting the default is non-empty. An
+    earlier version of this test checked the constant and the function existed,
+    which passed just as happily with the call removed from `main` -- the same blind
+    spot that let the original defect through.
+
+    No API key, so the question ends unconfigured. That is enough: an ending is a
+    record, and what is under test is whether anything reaches the file at all.
+    """
+    from conftest import FIXTURE
+
+    from bionumbers_ask.cli import DEFAULT_TRACE, main
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(SystemExit):
+        main(["--corpus", FIXTURE, "--checkpoints", str(tmp_path / "c.sqlite"), "--ask", "q"])
+
+    written = (tmp_path / DEFAULT_TRACE).read_text()
+    assert '"event": "not_configured"' in written, written
+
+
+def test_the_trail_is_written_as_json_lines_to_the_given_path(tmp_path):
+    from bionumbers_ask.cli import configure_trace
+
+    path = tmp_path / "nested" / "trace.jsonl"
+    configure_trace(str(path))
+    start_question("run-a").record("search", matched=7)
+
+    written = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    assert [(r["event"], r["run"], r["matched"]) for r in written] == [("search", "run-a", 7)]
+
+
+def test_the_trail_can_be_sent_to_stderr(capsys):
+    """Never stdout: the rendered answer and the table go there, and interleaving
+    JSON with them would corrupt both."""
+    from bionumbers_ask.cli import configure_trace
+
+    configure_trace("-")
+    start_question("run-b").record("search", matched=1)
+    captured = capsys.readouterr()
+    assert '"matched": 1' in captured.err
+    assert captured.out == ""
+
+
+def test_an_empty_spec_adds_no_handler_and_writes_no_file(tmp_path, monkeypatch):
+    """Opting out has to be genuinely silent -- not a file quietly created and left
+    empty, which reads as a trail that recorded nothing."""
+    import logging
+
+    from bionumbers_ask.cli import configure_trace
+    from bionumbers_ask.trace import LOGGER_NAME
+
+    logger = logging.getLogger(LOGGER_NAME)
+    monkeypatch.setattr(logger, "handlers", [])
+    monkeypatch.chdir(tmp_path)
+
+    configure_trace("")
+    assert logger.handlers == []
+    assert not list(tmp_path.iterdir())

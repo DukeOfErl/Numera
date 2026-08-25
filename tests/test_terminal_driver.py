@@ -318,3 +318,37 @@ def test_an_ending_carrying_no_bound_says_nothing_about_one():
     """A question that never reached the model met no bound, and "0 of 0" would
     describe one it did."""
     assert "model calls" not in render(ended(EndReason.RUN_BUDGET, incomplete=True))
+
+
+# -- what the process exit code says --------------------------------------
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        EndReason.PROVIDER_FAILURE,
+        EndReason.NO_ANSWER,
+        EndReason.SPEND_CEILING,
+        EndReason.RETRIEVAL_BOUND,
+        EndReason.RUN_BUDGET,
+        EndReason.NOT_CONFIGURED,
+    ],
+)
+def test_a_question_that_did_not_finish_exits_non_zero(reason):
+    """Only a configuration error used to. A provider outage, a blank answer and an
+    exhausted budget all exited zero, so a script driving --ask read them as
+    success."""
+
+    class OneEnding:
+        def ask(self, session_id, question):
+            yield ended(reason, incomplete=True)
+
+    assert run(OneEnding(), "s", ["q"], io.StringIO()) == 1
+
+
+def test_an_answered_question_exits_zero():
+    class Answered:
+        def ask(self, session_id, question):
+            yield ended(EndReason.ANSWERED)
+
+    assert run(Answered(), "s", ["q"], io.StringIO()) == 0

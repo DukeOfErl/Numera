@@ -32,11 +32,21 @@ def test_the_plural_marker_parses():
     assert citations("see BNIDs 100002") == (100002,)
 
 
-def test_only_the_marked_identifier_in_a_list_counts():
-    """The second number in "BNIDs 100002 and 100003" carries no marker, and the
-    rule the model is given is to write the marker every time. Reading a bare number
-    as an identifier is the ambiguity this module exists to refuse."""
-    assert citations("see BNIDs 100002 and 100003") == (100002,)
+def test_one_marker_introduces_a_run_of_identifiers():
+    """The form the corpus's own entry text uses, and what a model listing entries
+    writes unprompted. Both readings were in the codebase: the corpus parser read the
+    run, the answer parser read only the first."""
+    assert citations("see BNIDs 100002 and 100003") == (100002, 100003)
+    assert citations("See BNID 102065, 104333") == (102065, 104333)
+    assert citations("BNIDs 100002, 100003 & 100004") == (100002, 100003, 100004)
+
+
+def test_a_run_stops_at_something_that_is_not_an_identifier():
+    """Identifiers after the first are inferred from position, so each has to look
+    like the first. Otherwise "and 3 other entries" contributes an entry 3, and the
+    run's own tail is no longer trustworthy either."""
+    assert citations("BNID 100002 and 3 other entries") == (100002,)
+    assert citations("BNID 100002, 3, 100004") == (100002,)
 
 
 def test_a_bare_number_is_not_a_citation():
@@ -57,7 +67,9 @@ def test_the_marker_is_required_but_the_glue_is_not(text):
 
 
 def test_citations_keep_their_order_without_repeating():
-    assert citations("BNID 3 then BNID 1 then BNID 3") == (3, 1)
+    # Realistic widths: identifiers below MIN_DIGITS are refused, because a
+    # two-digit number after the marker is a fragment or a page, not an entry.
+    assert citations("BNID 100003 then BNID 100001 then BNID 100003") == (100003, 100001)
 
 
 def test_the_written_form_is_the_form_that_parses():
@@ -496,3 +508,22 @@ def test_the_banner_is_not_drawn_for_a_break_below_the_row_limit(repo):
     """It marks a break the reader can see, not one that was cut off."""
     text = entries_table.render(entries_table.rows_for(repo, (FIRST,), (FIRST, SECOND)), limit=1)
     assert entries_table.UNCITED_BANNER not in text
+
+
+def test_a_number_too_short_to_be_an_identifier_is_refused():
+    """34 entries write a cross-reference as "BNID 104 678". Reading the digits up to
+    the space turns a citation this parser used to miss into a wrong one it reports
+    with confidence, which is the worse of the two failures."""
+    from bionumbers_ask.citations import MIN_DIGITS
+
+    assert citations("see BNID 104 678") == ()
+    assert len(str(citations("see BNID 104678")[0])) >= MIN_DIGITS
+
+
+def test_the_corpus_and_the_answers_are_read_by_one_parser(repo):
+    """Two parsers for one notation drifted once already: the corpus side read a run
+    of identifiers and the answer side read only the first."""
+    from bionumbers_ask import repository
+
+    assert not hasattr(repository, "_CITED"), "a second citation parser has reappeared"
+    assert repo.get(FIRST).cited_bnids == (102065, 104333)

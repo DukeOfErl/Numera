@@ -72,6 +72,10 @@
 - [x] 6.6 Test that a question the corpus does not cover produces a statement to that effect and no quantity, offline for the harness and live for the model
 - [x] 6.6a Run the citation check whether or not anything was retrieved, and mark an entry cited without being retrieved where it is shown — an answer that cited an entry after an empty search was reported as clean
 - [x] 6.6b Parse the plural citation marker, so "BNIDs 100002" is not read as an uncited answer
+- [x] 6.6c Read a run of identifiers introduced by one marker, with one parser shared by the corpus text and the answers — two existed and had already drifted, and the corpus-side one hardcoded identifiers as six digits beginning with 1
+- [x] 2.1a Point the structured trail at a file from the driver, since nothing outside the tests configured it and every record a real run produced was discarded
+- [x] 2.1b Read a provider-reported cost of zero as a cost, not as an absent one
+- [x] 5.6a Exit non-zero from the terminal driver when a question did not finish, not only on a configuration error
 
 ## 7. Terminal driver
 

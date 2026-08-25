@@ -314,6 +314,25 @@ here.
   number 100x too large that reads as a plausible length. Whether such entries should be excluded
   from search, flagged in the table, or left alone with the record as a lookout list is not decided
   here.
+- **Fusing the citation marker to the identifier.** The model is asked to write
+  `BNID 100002`, and it treats `BNID` as the word "ID" -- a label it then pluralises
+  over a list, "BNIDs 100002 and 100003". Reading a run of identifiers after one marker
+  fixes that without asking anything of the model, and is what this change does. The
+  alternative is to make the label part of the identifier: instruct `BNID100002`, which
+  cannot be pluralised into a shared label at all, so the failure becomes structurally
+  impossible rather than merely handled.
+
+  Not taken now, for two reasons. The corpus writes the spaced form in its own entry
+  text ("See BNID 102065, 104333"), so the model would be reading one form and asked to
+  emit another -- an instruction-following cost against a model that has already been
+  observed ignoring an explicit formatting rule. And the spaced form is the more
+  readable one, which matters for the human consistency the table is built around.
+
+  Nothing blocks it technically: the parser's glue class already accepts the fused
+  form, so this is a one-line change to the instruction, not to the reader.
+  **Raise this again once the evaluation harness reports a citation-parse rate** --
+  if answers still carry forms the parser misses, fuse; the measurement decides, not
+  the argument.
 - **Latency monitoring.** The phased approach calls for watching calls, tokens, and latency. Calls and
   tokens are covered; latency is not measured in the MVP. When it is, the quantities worth recording
   are wall time per question, duration per tool call, and time from question to first emitted event —
