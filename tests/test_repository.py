@@ -281,3 +281,18 @@ def test_trace_records_are_emitted_without_explicit_configuration():
     # An unconfigured logger would inherit the root's WARNING level and discard
     # every record silently -- the trail vanishing when nobody knows to look.
     assert logging.getLogger("bionumbers_ask").getEffectiveLevel() == logging.INFO
+
+
+@pytest.mark.parametrize("term", ["E. coli", "E.coli", "e.coli", "E coli", "e coli"])
+def test_an_abbreviated_binomial_resolves_however_it_is_punctuated(repo, term):
+    """Only the spaced-and-dotted form resolved. The others returned no entries at
+    all -- and no entries is the answer that means "the corpus does not cover
+    this", which is the one answer that has to be true."""
+    assert repo.search(organism=term).total_matched == 4
+
+
+def test_the_readable_alias_index_keeps_its_punctuation(repo):
+    """The index is meant to be read and corrected by a person, so the key stays
+    the form a person would write; the punctuation-insensitive lookup sits beside
+    it rather than replacing it."""
+    assert "e. coli" in repo.aliases()

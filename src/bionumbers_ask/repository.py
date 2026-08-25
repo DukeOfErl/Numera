@@ -61,6 +61,18 @@ def _compact(entry: Entry) -> CompactRow:
     )
 
 
+def _unpunctuated(term: str) -> str:
+    """One key for the punctuation a reader may or may not type.
+
+    "E. coli", "E.coli" and "E coli" are the same request. Only the first resolved,
+    and the other two returned no entries at all rather than a near miss -- which
+    reads as "the corpus does not cover this", the one answer that must be true.
+    The period becomes a space rather than being dropped, or "E.coli" would key on
+    "ecoli" and reach nothing.
+    """
+    return " ".join(term.replace(".", " ").lower().split())
+
+
 def _abbreviated_binomials(organism: str) -> set[str]:
     """Abbreviations a reader would type: "E. coli" for "Escherichia coli".
 
@@ -111,6 +123,10 @@ class CorpusRepository:
             for alias in _abbreviated_binomials(organism):
                 aliases[alias].add(organism)
         self._aliases = {k: frozenset(v) for k, v in aliases.items()}
+        # The same index keyed without punctuation, so "E.coli" and "E coli" reach
+        # what "E. coli" reaches. The readable form stays the one `aliases()`
+        # exposes, because that index is meant to be read and corrected by a person.
+        self._alias_keys = {_unpunctuated(k): k for k in self._aliases}
 
     # -- inspection -------------------------------------------------------
 
@@ -167,7 +183,8 @@ class CorpusRepository:
     def _resolve_organism(self, term: str) -> frozenset[str]:
         """Stored organism values a term refers to: aliases first, then substrings."""
         key = " ".join(term.lower().split())
-        stored = set(self._aliases.get(key, ()))
+        canonical = self._alias_keys.get(_unpunctuated(term))
+        stored = set(self._aliases.get(canonical or key, ()))
         stored.update(o for o in self._organisms if key in o.lower())
         return frozenset(stored)
 
