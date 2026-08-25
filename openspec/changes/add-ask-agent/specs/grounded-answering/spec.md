@@ -70,6 +70,17 @@ would more than double what a search costs.
 #### Scenario: More entries than are shown
 - **WHEN** more entries were retrieved than the presentation shows
 - **THEN** how many were retrieved is stated
+- **AND** how many the corpus matched is stated, which may exceed what was retrieved
+
+#### Scenario: The presentation is not the model's work
+- **WHEN** the entries are presented
+- **THEN** every field shown is read from the corpus
+- **AND** an identifier the corpus does not hold produces no row
+
+#### Scenario: Several searches contributed
+- **WHEN** more than one search ran
+- **THEN** the number of searches is stated alongside the matched total
+- **AND** the total is not presented as a count of distinct entries
 
 #### Scenario: A question ends without an answer
 - **WHEN** a question ends on a limit having retrieved entries

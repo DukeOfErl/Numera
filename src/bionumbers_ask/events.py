@@ -119,6 +119,14 @@ class AnswerEntries:
     question_id: str
     cited: tuple[int, ...] = ()
     retrieved: tuple[int, ...] = ()
+    # How many entries the searches matched, and how many searches there were.
+    # Matched exceeds retrieved whenever a search hit the row cap, and it is the
+    # more telling figure: it says how much of the corpus was never looked at.
+    # Summed per search with the search count given, because two searches may
+    # match the same entry and the identities beyond the cap are unknown -- so a
+    # union cannot be computed, only reported as what it is.
+    matched: int = 0
+    searches: int = 0
 
 
 @dataclass(frozen=True)

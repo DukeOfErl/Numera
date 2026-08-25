@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from collections import deque
+from dataclasses import dataclass, field
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 
@@ -206,21 +207,33 @@ def _middleware(gate: SpendGate) -> list:
     ]
 
 
-def _collect(retrieved: dict[int, None], event: Retrieval) -> None:
+@dataclass
+class _Retrieved:
+    """What a question put in front of the model, and how much it passed over."""
+
+    bnids: dict[int, None] = field(default_factory=dict)
+    matched: int = 0
+    searches: int = 0
+
+
+def _collect(retrieved: _Retrieved, event: Retrieval) -> None:
     """Record which entries a retrieval put in front of the model.
 
     A search reports every identifier it returned; a fetch reports the one it
     found. Both count: an entry shown in a search row carries enough to be cited
     from, so requiring a fetch would flag legitimate citations.
     """
+    if "matched" in event.detail:
+        retrieved.matched += int(event.detail["matched"])
+        retrieved.searches += 1
     for bnid in event.detail.get("bnids") or ():
-        retrieved.setdefault(int(bnid), None)
+        retrieved.bnids.setdefault(int(bnid), None)
     # Both keys are required. `found` alone is not a fetch marker: list_values
     # reports how many vocabulary values it found under the same key, and reading
     # a bnid off that raises.
     bnid = event.detail.get("bnid")
     if bnid is not None and event.detail.get("found"):
-        retrieved.setdefault(int(bnid), None)
+        retrieved.bnids.setdefault(int(bnid), None)
 
 
 def _persisted(saver: SqliteSaver, session_id: str) -> dict:
@@ -409,7 +422,7 @@ class AskAgent:
             tool_calls = 0
             # Insertion-ordered: the order entries were retrieved is the order a
             # reader met them in, and the order the table falls back to.
-            retrieved: dict[int, None] = {}
+            retrieved = _Retrieved()
 
             def evidence() -> Iterator[Event]:
                 """What the answer rests on, and anything it should not rest on.
@@ -418,12 +431,12 @@ class AskAgent:
                 included: a question stopped part-way still found entries, and
                 throwing them away would discard work already paid for.
                 """
-                if not retrieved:
+                if not retrieved.bnids:
                     return
                 cited = citations(answer_text)
                 unknown = tuple(b for b in cited if self._repo.get(b) is None)
                 unretrieved = tuple(
-                    b for b in cited if b not in unknown and b not in retrieved
+                    b for b in cited if b not in unknown and b not in retrieved.bnids
                 )
                 if unknown or unretrieved:
                     # A cited entry no tool call returned came from the model's own
@@ -440,7 +453,9 @@ class AskAgent:
                 yield AnswerEntries(
                     question_id=trace.question_id,
                     cited=cited,
-                    retrieved=tuple(retrieved),
+                    retrieved=tuple(retrieved.bnids),
+                    matched=retrieved.matched,
+                    searches=retrieved.searches,
                 )
 
             stream = agent.stream(

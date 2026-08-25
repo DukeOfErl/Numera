@@ -99,7 +99,12 @@ def render(event: Event, repo: CorpusRepository | None = None) -> str | None:
         if repo is None:
             return None
         rows = entries_table.rows_for(repo, event.cited, event.retrieved)
-        table = entries_table.render(rows, total=len(event.retrieved))
+        table = entries_table.render(
+            rows,
+            total=len(event.retrieved),
+            matched=event.matched,
+            searches=event.searches,
+        )
         return f"{table}\n" if table else None
     if isinstance(event, Answer):
         return f"\n{event.text}\n"

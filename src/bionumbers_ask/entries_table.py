@@ -91,12 +91,40 @@ def _cell_lines(text: str, width: int) -> list[str]:
     return lines + [""] * (LINES_PER_ROW - len(lines))
 
 
-def render(rows: tuple[Row, ...], limit: int = TERMINAL_ROWS, total: int | None = None) -> str:
+def summarise(shown: int, retrieved: int, matched: int = 0, searches: int = 0) -> str:
+    """The line under the table: what is shown, what was retrieved, what matched.
+
+    Three numbers, because each answers a different question. Shown is what fits.
+    Retrieved is how many entries the agent actually had. Matched is how many the
+    corpus held, and it is the one worth having: when a search hits the row cap,
+    matched is the size of what was never looked at, and a table reporting only
+    the first two reads as though the corpus had nothing more.
+    """
+    if not retrieved:
+        return ""
+    parts = [f"showing {shown} of {retrieved} entries retrieved"]
+    if searches:
+        # Stated as a per-search sum rather than a union: beyond the row cap the
+        # identities are unknown, so the entries two searches share cannot be
+        # counted once. Naming the number of searches is what keeps that honest.
+        across = f" across {searches} searches" if searches > 1 else ""
+        parts.append(f"{matched} matched{across}")
+    return "… " + "; ".join(parts)
+
+
+def render(
+    rows: tuple[Row, ...],
+    limit: int = TERMINAL_ROWS,
+    total: int | None = None,
+    matched: int = 0,
+    searches: int = 0,
+) -> str:
     """The table as text. Empty when there is nothing to show.
 
-    `total` is how many entries were retrieved, which may exceed what is shown --
-    a table silently displaying five of forty would read as the whole corpus's
-    answer.
+    Nothing here comes from the model. Every cell is read from the corpus, and the
+    only thing the answer influences is which rows come first -- a cited
+    identifier the corpus does not hold produces no row at all, so the table
+    cannot show something that was made up.
     """
     if not rows:
         return ""
@@ -112,6 +140,6 @@ def render(rows: tuple[Row, ...], limit: int = TERMINAL_ROWS, total: int | None 
             if line:
                 out.append(line)
     retrieved = total if total is not None else len(rows)
-    if retrieved > len(shown):
-        out.append(f"… showing {len(shown)} of {retrieved} entries retrieved")
+    if retrieved > len(shown) or matched > len(shown):
+        out.append(summarise(len(shown), retrieved, matched, searches))
     return "\n".join(out)
