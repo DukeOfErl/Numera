@@ -111,23 +111,41 @@ def test_a_blank_line_is_not_put_to_the_agent(repo, config, tmp_path):
     assert model.attempts == 1, "a blank line was charged for"
 
 
+class Counting:
+    """The real agent, with every question put to it recorded.
+
+    The driver's claim is about control flow -- which questions it puts to the
+    agent -- so that is what this makes observable. Asserting over rendered text
+    instead would couple the test to a line prefix, which is cosmetic: changing how
+    an ending is printed would fail a test about when the loop stops.
+    """
+
+    def __init__(self, inner) -> None:
+        self._inner = inner
+        self.asked: list[str] = []
+
+    def ask(self, session_id: str, question: str):
+        self.asked.append(question)
+        yield from self._inner.ask(session_id, question)
+
+
 def test_the_run_stops_when_the_budget_is_spent(repo, config, tmp_path):
     """Continuing would put the same refusal on every remaining question."""
     budgeted = Config(model=config.model, warning_threshold=usd("0.50"),
                       run_budget=usd("0.000050"))
     out = io.StringIO()
     model = scripted(costing(says("an answer"), 0.000_110))
-    agent = agent_with(repo, budgeted, tmp_path, model)
+    agent = Counting(agent_with(repo, budgeted, tmp_path, model))
 
     run(agent, "s", ["first", "second", "third"], out)
 
-    text = out.getvalue()
-    assert model.attempts == 1, "questions were asked after the budget was spent"
-    assert "run_budget" in text
-    # Counting the endings, not just checking the reason appears: without the stop
-    # the remaining questions are each refused identically, so a check that
-    # "run_budget" is present passes whether the loop stopped or ran three times.
-    assert text.count("  — ") == 2, f"the loop continued past the budget:\n{text}"
+    # The second question is refused by the agent, before dispatch. The third is
+    # never asked at all, and only the driver can be responsible for that -- which
+    # is why the model call count cannot stand in for this: the agent's own
+    # pre-dispatch guard keeps it at one whether the loop stops or not.
+    assert agent.asked == ["first", "second"]
+    assert model.attempts == 1
+    assert "run_budget" in out.getvalue()
 
 
 def test_a_missing_key_exits_non_zero_rather_than_looping(repo, config, tmp_path, monkeypatch):
