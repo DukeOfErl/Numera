@@ -99,7 +99,13 @@ def test_every_row_occupies_the_same_number_of_lines(repo):
     """Uniform height is what makes a long table scannable, and what the
     reference page does -- cells wrap to two lines, then truncate."""
     rows = entries_table.rows_for(repo, (), (FIRST, SECOND))
-    body = entries_table.render(rows).splitlines()[2:]
+    # Everything after the header and its rule, less the footnotes the table may
+    # append below the rows.
+    body = [
+        line
+        for line in entries_table.render(rows).splitlines()[2:]
+        if line != entries_table.NO_METHOD_LEGEND and not line.startswith("…")
+    ]
     assert len(body) == 2 * entries_table.LINES_PER_ROW
 
 
@@ -318,3 +324,126 @@ def test_fetching_an_entry_is_not_counted_as_a_search(repo, config, tmp_path):
     entries = next(e for e in events if isinstance(e, AnswerEntries))
     assert (entries.searches, entries.matched) == (0, 0)
     assert "matched" not in (render(entries, repo=repo) or "")
+
+
+# -- provenance, ordering and the cited/uncited break ----------------------
+
+
+def _repo_of(*specs):
+    """A repository over entries written for a test, where the fixture has no case."""
+    from bionumbers_ask.corpus import Entry
+    from bionumbers_ask.repository import CorpusRepository
+
+    return CorpusRepository(
+        tuple(
+            Entry(
+                bnid=bnid, property=prop, organism=organism, units="μm", value=1.0,
+                range_low=None, range_high=None, reference="r", reference_pubmed_id=None,
+                measurement_method=method, comments="", keywords=(),
+            )
+            for bnid, prop, organism, method in specs
+        )
+    )
+
+
+def test_the_matched_count_is_dropped_when_every_match_was_retrieved():
+    """Equal means nothing was left unlooked-at, so the second number only repeats
+    the first -- and a reader who sees two numbers goes looking for the difference."""
+    assert entries_table.summarise(5, 21, matched=21, searches=1) == (
+        "… showing 5 of 21 entries retrieved"
+    )
+    assert "50 matched" in entries_table.summarise(5, 21, matched=50, searches=1)
+
+
+def test_nothing_is_summarised_when_nothing_was_retrieved():
+    """The line describes retrieval, so with no retrieval there is nothing to say --
+    and "showing 0 of 0" reads as a failure rather than as a question answered
+    without one."""
+    assert entries_table.summarise(0, 0) == ""
+
+
+def test_an_entry_whose_method_the_corpus_does_not_record_is_marked(repo):
+    """A textbook page and a measurement over a thousand cells otherwise look
+    identical in a table, and telling them apart is what a reader is here to do."""
+    by_id = {row.bnid: row for row in entries_table.rows_for(repo, (), (FIRST, SECOND))}
+    assert by_id[FIRST].method_recorded is True
+    assert by_id[SECOND].method_recorded is False
+
+
+def test_the_marker_and_its_legend_appear_only_when_a_marked_row_is_shown(repo):
+    unmarked = entries_table.render(entries_table.rows_for(repo, (), (FIRST,)))
+    assert entries_table.NO_METHOD not in unmarked
+
+    marked = entries_table.render(entries_table.rows_for(repo, (), (SECOND,)))
+    assert marked.splitlines()[2].startswith(f"{entries_table.NO_METHOD} ")
+    assert marked.splitlines()[-1] == entries_table.NO_METHOD_LEGEND
+
+
+def test_the_marker_is_not_appended_to_the_identifier(repo):
+    """The id has to stay copyable, and will one day be a link."""
+    row_line = entries_table.render(entries_table.rows_for(repo, (), (SECOND,))).splitlines()[2]
+    assert f"{SECOND}" in row_line and f"{SECOND}{entries_table.NO_METHOD}" not in row_line
+
+
+def test_uncited_entries_are_ordered_by_closeness_to_the_topic(repo):
+    """Retrieval order for a single search is the corpus's own identifier order,
+    which carries no relevance -- it is what put a chromosome in the top five of a
+    question about a cell."""
+    rows = entries_table.rows_for(
+        repo,
+        cited=(SECOND,),
+        retrieved=(SECOND, 100020, 100010),
+        question="what is the diameter of e. coli?",
+    )
+    # 100010 is another cell diameter and was retrieved last; 100020 counts
+    # ribosomes and was retrieved first.
+    assert [row.bnid for row in rows] == [SECOND, 100010, 100020]
+
+
+def test_wording_a_property_repeats_from_its_organism_does_not_score():
+    """The organism was matched before the search ran, so a property echoing it says
+    nothing. Without the discount, "Diameter of fimbriae of E. coli" outranks every
+    entry about the cell itself."""
+    repo = _repo_of(
+        (1, "Cell diameter", "Bacteria Escherichia coli", ""),
+        (2, "Diameter of fimbriae of E. coli", "Bacteria Escherichia coli", ""),
+    )
+    # Retrieved in this order, so a promotion is what the assertion catches: without
+    # the discount the fimbriae entry scores twice -- "diameter" and "coli" -- and
+    # overtakes the cell entry, which scores once.
+    rows = entries_table.rows_for(repo, cited=(), retrieved=(1, 2), question="diameter of e. coli")
+    assert [row.bnid for row in rows] == [1, 2]
+
+
+def test_entries_the_score_cannot_separate_keep_the_order_they_were_met_in():
+    repo = _repo_of(
+        (1, "Cell diameter", "Bacteria Escherichia coli", ""),
+        (2, "Cell diameter", "Bacteria Escherichia coli", ""),
+    )
+    rows = entries_table.rows_for(repo, cited=(), retrieved=(2, 1), question="diameter")
+    assert [row.bnid for row in rows] == [2, 1]
+
+
+def test_a_banner_separates_the_entries_the_answer_rests_on_from_the_rest(repo):
+    """Both groups are shown -- what the corpus held and the answer passed over is
+    part of the evidence -- but a reader must not have to work out which is which."""
+    text = entries_table.render(entries_table.rows_for(repo, (FIRST,), (FIRST, SECOND)))
+    lines = text.splitlines()
+    banner = next(i for i, line in enumerate(lines) if entries_table.UNCITED_BANNER in line)
+    assert f"{FIRST}" in "\n".join(lines[:banner])
+    assert f"{SECOND}" in "\n".join(lines[banner:])
+
+
+def test_no_banner_when_every_shown_entry_falls_on_one_side(repo):
+    nothing_cited = entries_table.render(entries_table.rows_for(repo, (), (FIRST, SECOND)))
+    all_cited = entries_table.render(
+        entries_table.rows_for(repo, (FIRST, SECOND), (FIRST, SECOND))
+    )
+    assert entries_table.UNCITED_BANNER not in nothing_cited
+    assert entries_table.UNCITED_BANNER not in all_cited
+
+
+def test_the_banner_is_not_drawn_for_a_break_below_the_row_limit(repo):
+    """It marks a break the reader can see, not one that was cut off."""
+    text = entries_table.render(entries_table.rows_for(repo, (FIRST,), (FIRST, SECOND)), limit=1)
+    assert entries_table.UNCITED_BANNER not in text

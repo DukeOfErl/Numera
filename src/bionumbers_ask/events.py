@@ -127,6 +127,10 @@ class AnswerEntries:
     # union cannot be computed, only reported as what it is.
     matched: int = 0
     searches: int = 0
+    # The question, carried only so a driver can rank the entries nobody cited by
+    # how close their wording is to what was asked. Presentation, like the
+    # reference: it never travels the other way, into the model.
+    question: str = ""
 
 
 @dataclass(frozen=True)

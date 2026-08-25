@@ -50,8 +50,22 @@ does.
 
 An answer SHALL be accompanied by the corpus entries the question retrieved, presented as a table
 carrying at least the property, the organism, the value, the units, the identifier and the
-reference. Entries an answer cited SHALL be shown before those it did not. Where more entries were
-retrieved than are shown, the presentation SHALL say so.
+reference. Entries an answer cited SHALL be shown before those it did not, and the boundary between
+the two SHALL be visible. Where more entries were retrieved than are shown, the presentation SHALL
+say so.
+
+An entry whose measurement method the corpus does not record SHALL be marked as such. A textbook
+page and a measurement over a thousand cells otherwise read identically in a table, and which of the
+two a number came from is exactly what a reader is there to judge. Only the absence is asserted:
+nothing grades an entry that does record a method.
+
+Entries an answer did not cite SHALL be ordered by relevance to the question rather than by the
+order they were retrieved in. For a single search, retrieval order is the corpus's own identifier
+order, which carries no relevance at all -- it is what put a 490 um chromosome among the top five
+entries shown for a question about a 1 um cell. The ordering in this change is string overlap
+between the question, the cited entries' properties and each candidate's property: enough to sink
+entries that are plainly about another object, and not enough to tell a flagellum from a cell. A
+better one is deferred, not forgotten.
 
 Prose alone cannot be checked. A reader given the entries beside the answer can see what the model
 was working from, and the reference is what lets them go to the paper rather than trusting either the
@@ -71,6 +85,17 @@ would more than double what a search costs.
 - **WHEN** more entries were retrieved than the presentation shows
 - **THEN** how many were retrieved is stated
 - **AND** how many the corpus matched is stated, which may exceed what was retrieved
+
+#### Scenario: The entries an answer rests on are distinguishable
+- **WHEN** both cited and uncited entries are shown
+- **THEN** the boundary between them is visible
+- **AND** the uncited entries are still shown, because what the corpus held and the answer passed
+  over is part of the evidence
+
+#### Scenario: An entry records no measurement method
+- **WHEN** an entry whose measurement method the corpus does not record is shown
+- **THEN** it is marked as such
+- **AND** what the marking means is stated where it is shown
 
 #### Scenario: The presentation is not the model's work
 - **WHEN** the entries are presented

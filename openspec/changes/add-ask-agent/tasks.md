@@ -62,6 +62,8 @@
 - [x] 6.1a Record the identifiers a search returned, so a citation can be checked against what the agent was shown and a driver can present the entries without re-running the search
 - [x] 6.1b Check that every cited identifier exists and was returned by a tool call during that question, and report one that was not rather than accepting it
 - [x] 6.1c Build the entries table an answer is presented with — property, organism, value, units, identifier, reference — cited entries first, stating how many were retrieved when more were retrieved than are shown. Shared by the drivers; the reference is looked up for display and never sent to the model, since carrying it into search results would more than double what a search costs
+- [x] 6.1d Present a stored single measurement as one number where the corpus holds it as a range with equal bounds, and drop the matched figure from the count line when every match was retrieved
+- [x] 6.1e Order the entries an answer did not cite by wording overlap with the question and the cited properties, discounting words the property repeats from its organism; separate them from the cited entries visibly, and mark an entry whose measurement method the corpus does not record
 - [ ] 6.2 Establish dimensional compatibility before presenting two entries as differing estimates, and test it against a mass-versus-count pair
 - [ ] 6.3 Report disagreement with the conditions that distinguish the values
 - [ ] 6.4 Mark computed values as computed and cite every input

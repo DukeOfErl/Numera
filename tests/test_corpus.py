@@ -87,6 +87,16 @@ def test_a_half_open_range_is_not_rendered_with_none(tmp_path):
     assert load(path)[0].value_display == "at most 9.0"
 
 
+def test_a_range_whose_bounds_are_equal_reads_as_a_single_number(tmp_path):
+    """1,403 of the corpus's entries store one measurement as a range with equal
+    bounds. "400.0-400.0" invites a reader to look for a spread that is not there."""
+    path = _write(
+        tmp_path,
+        {"bnid": 1, "property": "p", "units": "nm", "range_low": 400.0, "range_high": 400.0},
+    )
+    assert load(path)[0].value_display == "400.0"
+
+
 def test_keywords_given_as_a_string_are_split_not_exploded(tmp_path):
     # tuple("cell size") would give one entry per character, making every
     # single-letter search match everything and every real term match nothing.

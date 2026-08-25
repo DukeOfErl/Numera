@@ -219,6 +219,78 @@ here.
   cheap remedies nor the schema should be chosen on argument: task 9.2 should include questions that
   target this directly — a volume asked of two different objects, a size asked where only a diameter
   exists, and E. coli's nucleus — and the measured failure rate decides.
+- **Marking numbers an answer states that appear in no entry.** The prompt names conversions,
+  ratios and averages as things that must be declared computed, and a live answer converted three
+  values -- `1.0-1.1 um` to `(1000-1100 nm)`, and two more -- without declaring any of them. The
+  instruction was explicit and was not followed, which is the point worth keeping: an instruction is
+  not a control. The durable form is not a better sentence in the prompt but a check outside the
+  model -- middleware that reads the finished answer, matches each number against the entries the
+  question actually retrieved, and marks the ones that appear in none, so a reader can see at a
+  glance which figures the corpus supports verbatim and which the model produced. Nothing about it
+  requires trusting the model, which is why it belongs here rather than in the prompt.
+
+  Note what is *not* being deferred to that check: arithmetic on stored values is data manipulation,
+  and the premise of this project is that data manipulation by the model is not trusted. The open
+  question is whether to mark such numbers or to stop producing them; marking is the smaller step
+  and comes first. **This is the next change after the MVP merges**, not an open-ended deferral.
+- **Role guidelines as swappable prompt files.** The behavioural rules -- cite, refuse, hedge,
+  report disagreement -- are currently one system prompt with no way to vary them. A live answer
+  closed with "the most commonly cited value is around 1.0-1.1 um" where two of the four cited
+  entries fell in that range and two did not: technically a mode, and misleading as a summary,
+  because it presents a tally as a consensus. Whether stronger hedging instructions fix that, and
+  whether readers find a hedged answer more useful or merely more evasive, is a question about
+  readers rather than about the model, and it cannot be settled by argument.
+
+  The shape: two or three role files -- a scientist role carrying the full hedging and
+  disagreement-reporting guidance, and a plainer control carrying none -- selected by configuration,
+  with the role recorded on every answer and every evaluation result exactly as the model already
+  is. That makes the comparison possible; running it needs a question set. **Raise this again once
+  task 9.2's question set exists**, since the same set run under two roles is the whole experiment.
+- **Question terms that need biology to expand.** "What is the diameter of E. coli?" searched
+  `property='diameter'` and matched 21 entries. Searching `property='width'` matches 12 -- and the
+  two sets have **no entry in common**. For a rod-shaped bacterium the two words name the same
+  quantity, so an answer that searches one of them reports a range determined by which word the
+  model happened to choose, and presents it as a fact about biology. The `width` set holds direct
+  cell-width measurements (`106576` at 1.0-1.5 um, `111686` at 0.73 um) that a `diameter` search
+  never sees.
+
+  This is not the faceting problem, though it shares a root: faceting is about telling *objects*
+  apart, and this is about recognising that two *measures* are one. Nor is it a synonym list --
+  "width" and "diameter" coincide for a cylinder and not for a sphere, so the equivalence is a fact
+  about the object, which is what makes it need biology rather than a thesaurus. The candidate
+  remedies (asking the model for alternative wordings before answering, asking the user, or
+  building the equivalences into the corpus at extraction time) differ in who is trusted with the
+  biology, and that is the decision to make. **Raise this again once the MVP is merged**, with
+  alpha and beta testers' questions as the evidence, since real questions will show which
+  equivalences actually matter.
+- **A normalised-units column.** The table shows `400.0 nm` above `490.0 um`, quantities three
+  orders of magnitude apart, in a column meant for comparison. A second column carrying each value
+  converted to one unit per query -- beside the stored value and units, never replacing them, so the
+  original stays verifiable -- would fix it. It is deferred because conversion is arithmetic on
+  stored data, which is the thing this project does not do casually; it needs a unit parser it can
+  defend and it belongs with the marking check above rather than before it.
+- **Ordering the entries an answer cited.** They are shown in citation order, which is the model's
+  choice, and a reader scanning the top of a table reads the first rows as the important ones. Worth
+  offering: by value in normalised units, by publication year either way, or deliberately randomised
+  -- the last because a fixed order is a standing thumb on the scale for whichever papers it
+  favours, and this project will eventually be measured on which papers it sends people to. Blocked
+  on the normalised-units column above for the value ordering, and on nothing for the others.
+- **A better order for the entries an answer did not cite.** String overlap between the question,
+  the cited properties and the candidate property is what this change ships. It is enough to sink
+  the plainly-wrong object -- verified against the live corpus, where it moves four genuine
+  cell-dimension entries above a chromosome, a flagellum and a pilus -- and it cannot do better,
+  because no amount of string overlap knows any biology. Successors worth trying: ranking by match
+  quality (exact, then prefix, then substring), by unit agreement with the cited entries, or by
+  embedding similarity. **Raise this again with the faceting question**, since both are answered by
+  the same measurement.
+- **A record of corpus entries that are clearly wrong.** Kept as a file beside the corpus, outside
+  every code repository, because the corpus is unlicensed and must not enter one. It exists so a
+  defect is not rediscovered from scratch, and distinguishes what the entry's own text contradicts
+  from what is merely implausible. The first confirmed case: `115577` stores the width of E. coli
+  as `0.5-72.0 um`, where 72 is a generation time in minutes that was captured as a bound -- a
+  number 100x too large that reads as a plausible length. Whether such entries should be excluded
+  from search, flagged in the table, or left alone with the record as a lookout list is not decided
+  here.
 - **Latency monitoring.** The phased approach calls for watching calls, tokens, and latency. Calls and
   tokens are covered; latency is not measured in the MVP. When it is, the quantities worth recording
   are wall time per question, duration per tool call, and time from question to first emitted event —

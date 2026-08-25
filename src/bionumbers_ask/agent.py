@@ -456,6 +456,7 @@ class AskAgent:
                     retrieved=tuple(retrieved.bnids),
                     matched=retrieved.matched,
                     searches=retrieved.searches,
+                    question=question,
                 )
 
             stream = agent.stream(

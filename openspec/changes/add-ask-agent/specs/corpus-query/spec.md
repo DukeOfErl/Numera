@@ -26,6 +26,24 @@ selection decision the agent needs to make.
 - **THEN** an empty result is returned with a total of zero
 - **AND** no entries are invented or approximated to fill it
 
+### Requirement: A stored value is presented as what it measures
+
+A value SHALL be presented as the single number it is where the corpus stores one measurement as a
+range whose bounds are equal, rather than reproduced literally as a range. 1,403 of the reference
+corpus's entries are stored that way; rendered literally, "400.0-400.0" invites a reader to look for
+a spread that is not there, and reaches the model as one too.
+
+A range whose bounds genuinely differ SHALL be presented as a range, and a half-open range SHALL NOT
+be rendered with a missing bound.
+
+#### Scenario: A single measurement stored as a range
+- **WHEN** an entry's lower and upper bounds are equal
+- **THEN** the value is presented as one number
+
+#### Scenario: A genuine range
+- **WHEN** an entry's bounds differ
+- **THEN** both are presented
+
 ### Requirement: A search records which entries it returned
 
 A search SHALL record the identifiers of the entries it returned, not only how many matched and how

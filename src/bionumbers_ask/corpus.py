@@ -40,6 +40,11 @@ class Entry:
         # Both bounds are required: a half-open range rendered as "0.5–None" would
         # be handed to the model as this entry's value and could be cited.
         if self.range_low is not None and self.range_high is not None:
+            # 1,403 of the corpus's entries store a single measurement as a range
+            # whose bounds are equal. Rendered literally that reads "400.0–400.0",
+            # which invites a reader to look for a spread that is not there.
+            if self.range_low == self.range_high:
+                return str(self.range_low)
             return f"{self.range_low}–{self.range_high}"
         if self.range_low is not None:
             return f"at least {self.range_low}"

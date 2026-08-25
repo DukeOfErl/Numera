@@ -9,6 +9,7 @@ presentation, and at a median 183 characters it would more than double what a
 
 from __future__ import annotations
 
+import re
 import textwrap
 from dataclasses import dataclass
 
@@ -30,6 +31,29 @@ COLUMNS: tuple[tuple[str, str, int], ...] = (
 LINES_PER_ROW = 2
 TERMINAL_ROWS = 5
 
+# Marks an entry whose measurement method the corpus does not record. A textbook
+# page and a measurement over a thousand cells otherwise look identical in a
+# table, and the difference is what a reader is here to judge. The absence is all
+# that is claimed: nothing here grades an entry that does record one.
+NO_METHOD = "\u2020"
+NO_METHOD_LEGEND = f"{NO_METHOD} no measurement method recorded"
+UNCITED_BANNER = "not cited in the answer"
+
+# Words that carry no topic. Kept small on purpose -- this is a tie-breaker for
+# rows nobody cited, not a retrieval engine.
+_STOPWORDS = frozenset(
+    "the of a an in on at and or is are was were for to from with by what "
+    "which its their per between during under over into".split()
+)
+
+
+def _topic_words(text: str) -> frozenset[str]:
+    return frozenset(
+        word
+        for word in re.findall(r"[a-z0-9]+", text.lower())
+        if len(word) > 2 and word not in _STOPWORDS
+    )
+
 
 @dataclass(frozen=True)
 class Row:
@@ -40,23 +64,67 @@ class Row:
     units: str
     reference: str
     cited: bool
+    method_recorded: bool = True
 
     def cell(self, field: str) -> str:
         return str(getattr(self, field))
 
 
-def rows_for(repo: CorpusRepository, cited: tuple[int, ...], retrieved: tuple[int, ...]) -> tuple[Row, ...]:
-    """Cited entries first, then the rest in the order they were retrieved.
+def _relevance(repo: CorpusRepository, cited: tuple[int, ...], question: str):
+    """Score an uncited entry by how much of the topic's wording its property shares.
+
+    The topic is the question plus the properties of the entries the answer cited:
+    the question alone is too thin to separate "Cell diameter" from "Diameter of
+    flagella", while the cited properties say which object the answer settled on.
+    Words already in the row's own organism are discounted, since the organism was
+    matched before the search ran and repeating it in a property says nothing --
+    without that, "Diameter of fimbriae of E. coli" outranks every cell entry.
+
+    Deliberately crude, and known to be. It sinks the entries that are plainly
+    about another object, which is what it is for; it cannot tell a flagellum from
+    a cell, because no amount of string overlap knows any biology.
+    """
+    vocabulary = _topic_words(question)
+    for bnid in cited:
+        found = repo.get(bnid)
+        if found is not None:
+            vocabulary |= _topic_words(found.entry.property)
+
+    def score(bnid: int) -> int:
+        found = repo.get(bnid)
+        if found is None:  # pragma: no cover - filtered before scoring
+            return 0
+        entry = found.entry
+        return len((_topic_words(entry.property) - _topic_words(entry.organism)) & vocabulary)
+
+    return score
+
+
+def rows_for(
+    repo: CorpusRepository,
+    cited: tuple[int, ...],
+    retrieved: tuple[int, ...],
+    question: str = "",
+) -> tuple[Row, ...]:
+    """Cited entries first, then the rest by how close their wording is to the topic.
 
     Cited first because those are the ones the answer stands on, and a reader
-    checking prose against a table should not have to hunt for them.
+    checking prose against a table should not have to hunt for them. The rest are
+    ranked rather than left in retrieval order, which for a single search is the
+    corpus's own identifier order and so carries no relevance at all -- it is what
+    put a 490 um chromosome in the top five of a question about a 1 um cell.
     """
     ordered: list[int] = [b for b in cited if repo.get(b) is not None]
     seen = set(ordered)
+    rest = []
     for bnid in retrieved:
         if bnid not in seen and repo.get(bnid) is not None:
-            ordered.append(bnid)
+            rest.append(bnid)
             seen.add(bnid)
+    score = _relevance(repo, cited, question)
+    # Stable, so entries the score cannot separate stay in the order they were met.
+    rest.sort(key=lambda bnid: -score(bnid))
+    ordered += rest
 
     out = []
     for bnid in ordered:
@@ -73,6 +141,7 @@ def rows_for(repo: CorpusRepository, cited: tuple[int, ...], retrieved: tuple[in
                 units=entry.units,
                 reference=entry.reference,
                 cited=bnid in cited,
+                method_recorded=bool(entry.measurement_method.strip()),
             )
         )
     return tuple(out)
@@ -103,13 +172,23 @@ def summarise(shown: int, retrieved: int, matched: int = 0, searches: int = 0) -
     if not retrieved:
         return ""
     parts = [f"showing {shown} of {retrieved} entries retrieved"]
-    if searches:
+    # Equal means every match was retrieved, so nothing was left unlooked-at and
+    # the second number would only repeat the first.
+    if searches and matched != retrieved:
         # Stated as a per-search sum rather than a union: beyond the row cap the
         # identities are unknown, so the entries two searches share cannot be
         # counted once. Naming the number of searches is what keeps that honest.
         across = f" across {searches} searches" if searches > 1 else ""
         parts.append(f"{matched} matched{across}")
     return "… " + "; ".join(parts)
+
+
+def _banner(width: int) -> str:
+    """A dashed rule naming what follows, so the break is not read as the table ending."""
+    label = f" {UNCITED_BANNER} "
+    fill = max(0, width - len(label))
+    left = fill // 2
+    return "-" * left + label + "-" * (fill - left)
 
 
 def render(
@@ -129,10 +208,20 @@ def render(
     if not rows:
         return ""
     shown = rows[:limit]
+    rule = "  ".join("-" * width for _, _, width in COLUMNS)
     header = "  ".join(title.ljust(width) for _, title, width in COLUMNS).rstrip()
-    out = [header, "  ".join("-" * width for _, _, width in COLUMNS)]
-    for row in shown:
-        cells = [_cell_lines(row.cell(field), width) for field, _, width in COLUMNS]
+    out = [header, rule]
+    for index, row in enumerate(shown):
+        if index and shown[index - 1].cited and not row.cited:
+            # A reader checking the prose needs the entries it rests on separated
+            # from the ones it does not. The rest are still shown, because what the
+            # corpus held and the answer passed over is part of the evidence.
+            out.append(_banner(len(rule)))
+        label = row.property if row.method_recorded else f"{NO_METHOD} {row.property}"
+        cells = [
+            _cell_lines(label if field == "property" else row.cell(field), width)
+            for field, _, width in COLUMNS
+        ]
         for line_number in range(LINES_PER_ROW):
             line = "  ".join(
                 cells[i][line_number].ljust(width) for i, (_, _, width) in enumerate(COLUMNS)
@@ -142,4 +231,6 @@ def render(
     retrieved = total if total is not None else len(rows)
     if retrieved > len(shown) or matched > len(shown):
         out.append(summarise(len(shown), retrieved, matched, searches))
+    if any(not row.method_recorded for row in shown):
+        out.append(NO_METHOD_LEGEND)
     return "\n".join(out)

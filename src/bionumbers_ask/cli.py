@@ -98,7 +98,7 @@ def render(event: Event, repo: CorpusRepository | None = None) -> str | None:
         # reference deliberately never travels through the agent.
         if repo is None:
             return None
-        rows = entries_table.rows_for(repo, event.cited, event.retrieved)
+        rows = entries_table.rows_for(repo, event.cited, event.retrieved, event.question)
         table = entries_table.render(
             rows,
             total=len(event.retrieved),
