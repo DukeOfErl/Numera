@@ -132,6 +132,12 @@ def test_vocabulary_leads_with_the_commonest_value(repo):
     survived."""
     counts = [n for _, n in repo.vocabulary("property", "cell")]
     assert counts == sorted(counts, reverse=True)
+    # Organisms, because there the count order and the alphabetical order differ.
+    # Among properties they coincide, so that listing cannot tell a real sort from
+    # no sort at all -- which is how dropping the key entirely went unnoticed.
+    values = [value for value, _ in repo.vocabulary("organism", "")]
+    assert values[0].startswith("Bacteria"), "the commonest organism should lead"
+    assert values != sorted(values), "this is not merely alphabetical"
     # Ties broken by name, so the listing is stable between runs.
     tied = [v for v, n in repo.vocabulary("property", "cell") if n == 1]
     assert tied == sorted(tied)
