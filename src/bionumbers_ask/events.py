@@ -94,6 +94,34 @@ class CostProjection:
 
 
 @dataclass(frozen=True)
+class CitationWarning:
+    """An answer cited something it should not have been able to.
+
+    `unknown` is not in the corpus at all; `unretrieved` exists but was never
+    returned by a tool call during this question, which means it came from the
+    model's own memory rather than from the corpus.
+    """
+
+    question_id: str
+    unknown: tuple[int, ...] = ()
+    unretrieved: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class AnswerEntries:
+    """The entries a question retrieved, so an answer can be checked against them.
+
+    Identifiers rather than whole entries: a driver has the corpus and can look up
+    what it displays, and the reference column is long enough that carrying it
+    through the agent would tempt someone into sending it to the model.
+    """
+
+    question_id: str
+    cited: tuple[int, ...] = ()
+    retrieved: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
 class Answer:
     question_id: str
     text: str
@@ -119,5 +147,7 @@ Event = (
     | SpendWarning
     | CostProjection
     | Answer
+    | CitationWarning
+    | AnswerEntries
     | QuestionEnded
 )

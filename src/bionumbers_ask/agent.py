@@ -24,8 +24,11 @@ from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from .config import Config, NotConfigured, format_usd
+from .citations import citations
 from .events import (
     Answer,
+    AnswerEntries,
+    CitationWarning,
     ConversationWarning,
     CostProjection,
     EndReason,
@@ -51,8 +54,9 @@ entries, reached through your tools. You have no other source.
 
 Rules, in order of importance:
 
-1. Cite every quantity you state, by its bnid. A quantity you cannot attribute to \
-an entry you retrieved does not go in the answer.
+1. Cite every quantity you state, by its bnid, written as "BNID 100002" -- the \
+word BNID, a space, then the number, every time. A quantity you cannot attribute \
+to an entry you retrieved does not go in the answer.
 2. If the corpus does not cover the question, say so. Do not answer from your own \
 knowledge, and do not offer a number you did not retrieve. A plausible unsourced \
 number is the worst thing you can produce here.
@@ -200,6 +204,23 @@ def _middleware(gate: SpendGate) -> list:
         # request, and so each attempt the retry middleware makes passes through it.
         gate,
     ]
+
+
+def _collect(retrieved: dict[int, None], event: Retrieval) -> None:
+    """Record which entries a retrieval put in front of the model.
+
+    A search reports every identifier it returned; a fetch reports the one it
+    found. Both count: an entry shown in a search row carries enough to be cited
+    from, so requiring a fetch would flag legitimate citations.
+    """
+    for bnid in event.detail.get("bnids") or ():
+        retrieved.setdefault(int(bnid), None)
+    # Both keys are required. `found` alone is not a fetch marker: list_values
+    # reports how many vocabulary values it found under the same key, and reading
+    # a bnid off that raises.
+    bnid = event.detail.get("bnid")
+    if bnid is not None and event.detail.get("found"):
+        retrieved.setdefault(int(bnid), None)
 
 
 def _persisted(saver: SqliteSaver, session_id: str) -> dict:
@@ -386,6 +407,42 @@ class AskAgent:
 
             answer_text = ""
             tool_calls = 0
+            # Insertion-ordered: the order entries were retrieved is the order a
+            # reader met them in, and the order the table falls back to.
+            retrieved: dict[int, None] = {}
+
+            def evidence() -> Iterator[Event]:
+                """What the answer rests on, and anything it should not rest on.
+
+                Emitted before every ending that got as far as retrieving, a limit
+                included: a question stopped part-way still found entries, and
+                throwing them away would discard work already paid for.
+                """
+                if not retrieved:
+                    return
+                cited = citations(answer_text)
+                unknown = tuple(b for b in cited if self._repo.get(b) is None)
+                unretrieved = tuple(
+                    b for b in cited if b not in unknown and b not in retrieved
+                )
+                if unknown or unretrieved:
+                    # A cited entry no tool call returned came from the model's own
+                    # memory. Reported rather than accepted: it is the failure this
+                    # project exists to catch, and it is silent otherwise.
+                    trace.record(
+                        "citations.unsupported", unknown=unknown, unretrieved=unretrieved
+                    )
+                    yield CitationWarning(
+                        question_id=trace.question_id,
+                        unknown=unknown,
+                        unretrieved=unretrieved,
+                    )
+                yield AnswerEntries(
+                    question_id=trace.question_id,
+                    cited=cited,
+                    retrieved=tuple(retrieved),
+                )
+
             stream = agent.stream(
                 {"messages": [{"role": "user", "content": question}]},
                 config=config,
@@ -425,6 +482,7 @@ class AskAgent:
                                 "could cite, so there is no partial answer to give."
                             ),
                         )
+                        yield from evidence()
                         yield QuestionEnded(
                             question_id=trace.question_id,
                             reason=limit.reason,
@@ -440,6 +498,7 @@ class AskAgent:
                         # control: stop rather than continue blind.
                         trace.record("spend.unpriceable", detail=str(exc))
                         yield Answer(question_id=trace.question_id, text=str(exc))
+                        yield from evidence()
                         yield QuestionEnded(
                             question_id=trace.question_id,
                             reason=EndReason.NOT_CONFIGURED,
@@ -452,6 +511,7 @@ class AskAgent:
                         return
                     except ModelCallLimitExceededError:
                         trace.record("retrieval.bound_reached", tool_calls=tool_calls)
+                        yield from evidence()
                         yield QuestionEnded(
                             question_id=trace.question_id,
                             reason=EndReason.RETRIEVAL_BOUND,
@@ -464,6 +524,7 @@ class AskAgent:
                         return
                     except Exception as exc:  # provider failure after retries are exhausted
                         trace.record("provider.failed", error=type(exc).__name__)
+                        yield from evidence()
                         yield QuestionEnded(
                             question_id=trace.question_id,
                             reason=EndReason.PROVIDER_FAILURE,
@@ -481,6 +542,7 @@ class AskAgent:
                         event = pending.popleft()
                         if isinstance(event, Retrieval):
                             tool_calls += 1
+                            _collect(retrieved, event)
                         yield event
                     for update in chunk.values():
                         for message in (update or {}).get("messages", []) or []:
@@ -493,6 +555,7 @@ class AskAgent:
                 event = pending.popleft()
                 if isinstance(event, Retrieval):
                     tool_calls += 1
+                    _collect(retrieved, event)
                 yield event
 
         if not answer_text.strip():
@@ -500,6 +563,7 @@ class AskAgent:
             # answered question would hand the driver a blank answer marked
             # complete, which is the silent failure this project cannot afford.
             trace.record("question.no_answer", tool_calls=tool_calls)
+            yield from evidence()
             yield QuestionEnded(
                 question_id=trace.question_id,
                 reason=EndReason.NO_ANSWER,
@@ -518,6 +582,7 @@ class AskAgent:
             tool_calls=tool_calls,
         )
         yield Answer(question_id=trace.question_id, text=answer_text)
+        yield from evidence()
         yield QuestionEnded(
             question_id=trace.question_id,
             reason=EndReason.ANSWERED,

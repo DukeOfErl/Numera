@@ -22,7 +22,10 @@ def test_a_question_emits_start_retrieval_answer_and_end(repo, config, tmp_path)
     kinds = [type(e).__name__ for e in events]
     assert kinds[0] == "QuestionStarted"
     assert "Retrieval" in kinds
-    assert kinds[-2:] == ["Answer", "QuestionEnded"]
+    # The answer, then the entries it rests on, then the ending. The entries come
+    # after the answer because a reader checks prose against a table, not the
+    # other way round.
+    assert kinds[-3:] == ["Answer", "AnswerEntries", "QuestionEnded"]
     end = events[-1]
     assert end.reason is EndReason.ANSWERED
     assert end.tool_calls >= 1

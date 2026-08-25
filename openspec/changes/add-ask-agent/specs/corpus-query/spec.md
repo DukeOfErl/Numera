@@ -26,6 +26,21 @@ selection decision the agent needs to make.
 - **THEN** an empty result is returned with a total of zero
 - **AND** no entries are invented or approximated to fill it
 
+### Requirement: A search records which entries it returned
+
+A search SHALL record the identifiers of the entries it returned, not only how many matched and how
+many were returned.
+
+Without them, an answer's citations cannot be checked against what the agent was actually shown, and
+a citation drawn from the model's own memory is indistinguishable from one drawn from the corpus.
+They are also what lets a driver present the entries behind an answer without asking the corpus a
+second question.
+
+#### Scenario: A search returns rows
+- **WHEN** a search returns rows
+- **THEN** the identifiers of those rows are recorded
+- **AND** they are available to a driver without re-running the search
+
 ### Requirement: Organism and property matching is tolerant, not exact
 
 Search SHALL match organism and property terms case-insensitively against substrings of the stored

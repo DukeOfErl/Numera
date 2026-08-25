@@ -163,6 +163,7 @@ class CorpusRepository:
                 keyword=keyword,
                 matched=result.total_matched,
                 returned=len(rows),
+                bnids=[row.bnid for row in rows],
                 truncated=result.truncated,
                 organism_resolved_to=sorted(resolved) if resolved else None,
             )

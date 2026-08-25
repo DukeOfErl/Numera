@@ -58,7 +58,10 @@
 
 ## 6. Answering behaviour
 
-- [ ] 6.1 Implement the answer format carrying a citation for every quantity
+- [x] 6.1 Implement the answer format carrying a citation for every quantity, in one stated form, and a single parser that requires the marker rather than inferring a citation from a bare number — used by every driver and by the evaluation harness, so they agree on what was cited
+- [x] 6.1a Record the identifiers a search returned, so a citation can be checked against what the agent was shown and a driver can present the entries without re-running the search
+- [x] 6.1b Check that every cited identifier exists and was returned by a tool call during that question, and report one that was not rather than accepting it
+- [x] 6.1c Build the entries table an answer is presented with — property, organism, value, units, identifier, reference — cited entries first, stating how many were retrieved when more were retrieved than are shown. Shared by the drivers; the reference is looked up for display and never sent to the model, since carrying it into search results would more than double what a search costs
 - [ ] 6.2 Establish dimensional compatibility before presenting two entries as differing estimates, and test it against a mass-versus-count pair
 - [ ] 6.3 Report disagreement with the conditions that distinguish the values
 - [ ] 6.4 Mark computed values as computed and cite every input
@@ -70,6 +73,7 @@
 - [x] 7.1 Implement the terminal driver: render events, accept questions as commands
 - [x] 7.2 Verify end to end against the corpus that a question is answered with citations
 - [x] 7.3 Verify that the driver holds no agent state of its own beyond the session identifier
+- [x] 7.4 Render the entries table after each answer, the first five entries only, in the column order and relative widths of the reference database's results page — two text lines per row, cells wrapped then truncated — so output can be compared against it by eye
 
 ## 8. Web interface
 
@@ -78,6 +82,7 @@
 - [ ] 8.3 Render retrieval progress from events while a question is being answered
 - [ ] 8.4 Verify that a follow-up question is answered correctly after the application has been restarted mid-session
 - [ ] 8.5 Verify that the agent code is unchanged from the terminal driver's version
+- [ ] 8.6 Render the entries table after each answer, the first ten to twenty entries with a way to reach the rest, and make a row open the full entry
 
 ## 9. Evaluation
 

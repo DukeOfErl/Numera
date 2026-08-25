@@ -40,6 +40,10 @@ def build_tools(repo: CorpusRepository, trace: QuestionTrace, emit: Emit) -> lis
                     "keyword": keyword,
                     "matched": result.total_matched,
                     "returned": len(result.rows),
+                    # So a citation can be checked against what the agent was
+                    # actually shown, and a driver can table these entries without
+                    # asking the corpus a second question.
+                    "bnids": tuple(row.bnid for row in result.rows),
                 },
             )
         )

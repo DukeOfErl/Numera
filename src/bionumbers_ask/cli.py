@@ -17,11 +17,15 @@ import uuid
 from collections.abc import Iterable
 from typing import Any, TextIO
 
+from . import entries_table
 from .agent import AskAgent
+from .citations import format_citation
 from .config import Config, format_usd
 from .corpus import CorpusUnavailable, load
 from .events import (
     Answer,
+    AnswerEntries,
+    CitationWarning,
     ConversationWarning,
     CostProjection,
     EndReason,
@@ -42,11 +46,20 @@ STOP_THE_RUN = {
 }
 
 
+# Carried for the entries table and the citation check, not for a person to read:
+# fifty identifiers on a progress line would bury what the search was for.
+_UNRENDERED_DETAIL = {"bnids"}
+
+
 def _detail(detail: dict[str, Any]) -> str:
-    return " ".join(f"{k}={v!r}" for k, v in detail.items() if v is not None)
+    return " ".join(
+        f"{k}={v!r}"
+        for k, v in detail.items()
+        if v is not None and k not in _UNRENDERED_DETAIL
+    )
 
 
-def render(event: Event) -> str | None:
+def render(event: Event, repo: CorpusRepository | None = None) -> str | None:
     """One line for an event, or None for one a terminal need not show.
 
     A pure function so the rendering can be tested without a terminal, and so the
@@ -70,6 +83,24 @@ def render(event: Event) -> str | None:
             f"  ! this question could cost up to {format_usd(event.projected)}, "
             f"above the {format_usd(event.threshold)} threshold (an estimate)"
         )
+    if isinstance(event, CitationWarning):
+        parts = []
+        if event.unknown:
+            parts.append(f"not in the corpus: {', '.join(map(format_citation, event.unknown))}")
+        if event.unretrieved:
+            parts.append(
+                "cited without being retrieved: "
+                + ", ".join(map(format_citation, event.unretrieved))
+            )
+        return f"  ! {'; '.join(parts)}"
+    if isinstance(event, AnswerEntries):
+        # Needs the corpus to show anything: the event carries identifiers, and the
+        # reference deliberately never travels through the agent.
+        if repo is None:
+            return None
+        rows = entries_table.rows_for(repo, event.cited, event.retrieved)
+        table = entries_table.render(rows, total=len(event.retrieved))
+        return f"{table}\n" if table else None
     if isinstance(event, Answer):
         return f"\n{event.text}\n"
     if isinstance(event, QuestionEnded):
@@ -87,6 +118,7 @@ def run(
     session_id: str,
     questions: Iterable[str],
     out: TextIO | None = None,
+    repo: CorpusRepository | None = None,
 ) -> int:
     """Put each question to the agent and render what comes back.
 
@@ -106,7 +138,7 @@ def run(
         if not question:
             continue
         for event in agent.ask(session_id, question):
-            line = render(event)
+            line = render(event, repo)
             if line is not None:
                 print(line, file=out, flush=True)
             if isinstance(event, QuestionEnded) and event.reason in STOP_THE_RUN:
@@ -173,8 +205,10 @@ def main(argv: list[str] | None = None) -> None:
     agent = AskAgent(repo, config, args.checkpoints)
 
     if args.ask:
-        raise SystemExit(run(agent, session_id, [args.ask]))
+        raise SystemExit(run(agent, session_id, [args.ask], repo=repo))
 
     print(f"{len(repo)} entries · session {session_id} · {config.model}")
     print("Ask a question, or 'exit'. Continue this session later with --session.")
-    raise SystemExit(run(agent, session_id, _questions_from_terminal(sys.stdout)))
+    raise SystemExit(
+        run(agent, session_id, _questions_from_terminal(sys.stdout), repo=repo)
+    )

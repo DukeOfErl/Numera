@@ -20,6 +20,62 @@ SHALL NOT state a quantity that cannot be attributed to a retrieved entry.
 - **WHEN** a quantity under consideration does not correspond to any retrieved entry
 - **THEN** it is omitted from the answer
 
+### Requirement: Citations use one stated format
+
+Entry identifiers SHALL be written in a single stated form wherever they appear in an answer. The
+form SHALL be given to the model as an instruction, and parsing SHALL require the identifier to carry
+its marker rather than inferring one from a bare number.
+
+Two reasons, and both matter. A reader comparing several answers should see citations look the same
+every time. And a bare six-digit number is indistinguishable from a six-digit quantity, so a parser
+without a marker cannot tell a citation from a measurement — an ambiguity that grows as the corpus
+does.
+
+#### Scenario: An answer cites an entry
+- **WHEN** an answer rests on an entry
+- **THEN** the identifier appears in the stated form
+- **AND** the same form is used for every identifier in that answer
+
+#### Scenario: A quantity resembles an identifier
+- **WHEN** an answer states a quantity whose digits could be read as an identifier
+- **THEN** it is not parsed as a citation
+- **AND** only identifiers carrying the marker are counted
+
+#### Scenario: An identifier that was never retrieved
+- **WHEN** an answer cites an identifier that no tool call returned
+- **THEN** this is detectable from the emitted events
+- **AND** it is reported rather than accepted
+
+### Requirement: Every answer is accompanied by the entries behind it
+
+An answer SHALL be accompanied by the corpus entries the question retrieved, presented as a table
+carrying at least the property, the organism, the value, the units, the identifier and the
+reference. Entries an answer cited SHALL be shown before those it did not. Where more entries were
+retrieved than are shown, the presentation SHALL say so.
+
+Prose alone cannot be checked. A reader given the entries beside the answer can see what the model
+was working from, and the reference is what lets them go to the paper rather than trusting either the
+model or the corpus. This is the same reasoning as citing identifiers, carried through to what a
+person actually reads.
+
+The reference SHALL NOT be included in what is sent to the model. It is presentation, not evidence
+the model reasons over, and references are long enough that carrying them into every search result
+would more than double what a search costs.
+
+#### Scenario: A question is answered
+- **WHEN** an answer is produced
+- **THEN** the entries retrieved for it are presented alongside it
+- **AND** each shows its property, organism, value, units, identifier and reference
+
+#### Scenario: More entries than are shown
+- **WHEN** more entries were retrieved than the presentation shows
+- **THEN** how many were retrieved is stated
+
+#### Scenario: A question ends without an answer
+- **WHEN** a question ends on a limit having retrieved entries
+- **THEN** those entries are still presented
+- **AND** the reader can see what had been found before it stopped
+
 ### Requirement: Answers come only from the corpus
 
 The system SHALL answer from retrieved entries alone. WHERE the corpus does not cover a question,
