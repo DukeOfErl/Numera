@@ -12,7 +12,7 @@ import io
 import pytest
 
 from bionumbers_ask import entries_table
-from bionumbers_ask.citations import citations, format_citation
+from bionumbers_ask.citations import MIN_DIGITS, citations, format_citation
 from bionumbers_ask.cli import render, run
 from bionumbers_ask.events import AnswerEntries, CitationWarning
 
@@ -47,6 +47,23 @@ def test_a_run_stops_at_something_that_is_not_an_identifier():
     run's own tail is no longer trustworthy either."""
     assert citations("BNID 100002 and 3 other entries") == (100002,)
     assert citations("BNID 100002, 3, 100004") == (100002,)
+
+
+def test_a_number_too_short_does_not_stop_the_rest_of_the_text_parsing():
+    """Found by mutation testing: turning the skip into a stop survived every test.
+    It would lose every citation after the first fragment, and an answer that did
+    cite its entries would be reported as uncited."""
+    assert citations("BNID 12 and BNID 100002") == (100002,)
+    assert citations("see BNID 104 678, then BNID 100003") == (100003,)
+
+
+def test_the_shortest_acceptable_identifier_is_pinned():
+    """The boundary is the whole point of the constant, and nothing held it: the
+    corpus runs 100001-117360, so the floor is conservative on purpose, but a
+    silent drift to five would start dropping real identifiers."""
+    shortest = "1" * MIN_DIGITS
+    assert citations(f"BNID {shortest}") == (int(shortest),)
+    assert citations(f"BNID {'1' * (MIN_DIGITS - 1)}") == ()
 
 
 def test_a_bare_number_is_not_a_citation():
