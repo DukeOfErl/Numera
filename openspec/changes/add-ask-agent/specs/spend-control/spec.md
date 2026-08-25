@@ -183,6 +183,22 @@ while spend belongs to the run, because that is what the budget bounds.
 - **THEN** each question's spend is recorded against that question
 - **AND** the session's total is the sum of them
 
+The two limits SHALL therefore differ in what reconfiguring them reaches, and the difference is
+deliberate rather than incidental. A ceiling is fixed when a session is created, so a conversation
+already under way cannot be handed a larger one by changing the environment between two processes.
+A budget bounds a run and remains the operator's to move, because a run stopped on budget is told to
+raise it — a promise made in words that the behaviour has to keep. Raising a budget SHALL release a
+run stopped on it, and SHALL NOT forgive the spend already made, which counts against the new figure.
+
+#### Scenario: A budget is raised for a stopped run
+- **WHEN** a run stopped on its budget is resumed under a larger one
+- **THEN** questions are accepted again
+- **AND** the spend already accumulated counts against the new budget
+
+#### Scenario: A ceiling is raised for an existing session
+- **WHEN** a session is resumed under a larger configured ceiling
+- **THEN** the session keeps the ceiling it was created with
+
 ### Requirement: An expensive question is flagged before work begins
 
 Before beginning work on a question, the system SHALL project its cost from the retrieval the

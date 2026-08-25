@@ -455,3 +455,38 @@ def test_a_zero_charge_touches_nothing(tmp_path):
     assert run_ledger.read(db, "eval-1") == 0
     run_ledger.add(db, "eval-1", 110)
     assert run_ledger.read(db, "eval-1") == 110
+
+
+def test_raising_the_budget_lets_a_stopped_run_continue(repo, tmp_path):
+    """The refusal says "Raise the budget or start a new run", so raising it has to
+    work -- and nothing held it to that.
+
+    This is the opposite of the ceiling, deliberately: a ceiling is frozen into the
+    session so a conversation already under way cannot quietly be handed a larger
+    one, while a budget bounds a run and is the operator's to move. The asymmetry
+    is intended, and both halves are now pinned, because either drifting to match
+    the other would break a promise made in words to whoever is reading.
+    """
+    from dataclasses import replace
+
+    path = str(tmp_path / "raise.sqlite")
+    tiny = Config(
+        model="fake/model",
+        warning_threshold=usd("0.50"),
+        run_budget=usd("0.000100"),
+        run_label="raise-me",
+    )
+    spender = scripted(costing(says("about 1 micrometre (BNID 100002)"), 0.000_110))
+    assert ended(list(AskAgent(repo, tiny, path, model=spender).ask("s", "q1"))).reason is (
+        EndReason.ANSWERED
+    )
+
+    blocked = AskAgent(repo, tiny, path, model=scripted(says("x")))
+    assert ended(list(blocked.ask("s", "q2"))).reason is EndReason.RUN_BUDGET
+
+    raised = replace(tiny, run_budget=usd("1.00"))
+    answering = scripted(costing(says("about 1 micrometre (BNID 100002)"), 0.000_010))
+    end = ended(list(AskAgent(repo, raised, path, model=answering).ask("s", "q3")))
+    assert end.reason is EndReason.ANSWERED, "raising the budget did not release the run"
+    # The spend already made is kept, not forgiven: it counts against the new budget.
+    assert end.run_spend == 120
