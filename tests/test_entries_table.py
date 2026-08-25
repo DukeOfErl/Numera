@@ -468,6 +468,26 @@ def test_wording_a_property_repeats_from_its_organism_does_not_score():
     assert [row.bnid for row in rows] == [1, 2]
 
 
+def test_the_cited_entries_wording_orders_the_rest(repo):
+    """Found by mutation testing: dropping the cited entries from the topic
+    vocabulary survived every test. That half is the whole point of the score --
+    the question alone cannot say which object the answer settled on."""
+    # No question at all, so the cited entry's property is the only signal there is.
+    rows = entries_table.rows_for(repo, cited=(SECOND,), retrieved=(COUNT, YEAST), question="")
+    uncited = [row.bnid for row in rows if not row.cited]
+    assert uncited == [YEAST, COUNT], "the entry sharing the cited property should lead"
+
+
+def test_the_question_wording_orders_the_rest_too(repo):
+    """The other half, and it failed the same way: taking only the cited
+    properties, and dropping the question, also survived."""
+    rows = entries_table.rows_for(
+        repo, cited=(SECOND,), retrieved=(MASS, COUNT), question="ribosomes"
+    )
+    uncited = [row.bnid for row in rows if not row.cited]
+    assert uncited == [COUNT, MASS], "the entry matching the question should lead"
+
+
 def test_entries_the_score_cannot_separate_keep_the_order_they_were_met_in():
     repo = _repo_of(
         (1, "Cell diameter", "Bacteria Escherichia coli", ""),
@@ -548,7 +568,7 @@ def test_the_corpus_and_the_answers_are_read_by_one_parser(repo):
 
 # -- dimensional compatibility --------------------------------------------
 
-MASS, COUNT, VOLUME = 100030, 100020, 100003
+MASS, COUNT, VOLUME, YEAST = 100030, 100020, 100003, 100010
 
 
 def test_the_table_says_when_cited_entries_measure_different_kinds_of_thing(repo):

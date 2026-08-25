@@ -12,6 +12,7 @@ from bionumbers_ask.repository import CorpusRepository
 from bionumbers_ask.trace import configure, start_question
 
 FIXTURE = "tests/fixtures/corpus_sample.jsonl"
+SECOND, COUNT = 100002, 100020
 
 
 @pytest.fixture
@@ -90,6 +91,50 @@ def test_vocabulary_distinguishes_absent_from_differently_worded(repo):
     assert repo.vocabulary("organism", "Drosophila") == ()
     # Stored, but under wording a caller might not guess.
     assert repo.vocabulary("organism", "frog")[0][0].startswith("African clawed frog")
+
+
+def test_a_keyword_matches_an_entrys_keywords(repo):
+    """Found by mutation testing: inverting this match to `not in` survived the
+    whole suite. Keyword search is a retrieval path -- matching the wrong entries
+    silently changes what the model is allowed to answer from."""
+    # "radius" appears only in an entry's keywords, never in a property.
+    assert [row.bnid for row in repo.search(keyword="radius").rows] == [SECOND]
+
+
+def test_a_keyword_matches_a_property_the_keywords_do_not_carry(repo):
+    """The second half of the same condition: "ribosomes" is in the property and
+    not in the keywords, which are stored singular. Joining the two checks with
+    `and` instead of `or` also survived."""
+    assert [row.bnid for row in repo.search(keyword="ribosomes").rows] == [COUNT]
+
+
+@pytest.mark.parametrize("keyword", ["RADIUS", "Radius"])
+def test_keyword_matching_ignores_case_on_both_sides(repo, keyword):
+    """The model writes the question's wording, not the curator's. Case-folding
+    either side away survived every test."""
+    assert [row.bnid for row in repo.search(keyword=keyword).rows] == [SECOND]
+
+
+def test_vocabulary_lists_properties_as_well_as_organisms(repo):
+    """Only the organism field was exercised: renaming the property key to
+    "PROPERTY" survived. This is how the agent discovers the corpus's wording
+    after an empty search, and properties are the harder half to guess."""
+    assert repo.vocabulary("property", "cell") == (
+        ("Cell diameter", 2),
+        ("Cell length", 1),
+        ("Cell volume", 1),
+    )
+
+
+def test_vocabulary_leads_with_the_commonest_value(repo):
+    """The order carries the meaning -- it tells the agent which wording the
+    corpus actually uses. Inverting the sort, and dropping it entirely, both
+    survived."""
+    counts = [n for _, n in repo.vocabulary("property", "cell")]
+    assert counts == sorted(counts, reverse=True)
+    # Ties broken by name, so the listing is stable between runs.
+    tied = [v for v, n in repo.vocabulary("property", "cell") if n == 1]
+    assert tied == sorted(tied)
 
 
 # -- full entries and cross-references ------------------------------------
@@ -198,7 +243,8 @@ def test_a_nonsensical_limit_does_not_silently_drop_matches(repo, limit):
     # limit arrives from the model as a tool argument. Negative values slice from
     # the end; zero returns nothing against a non-zero total.
     result = repo.search(property="Cell", limit=limit)
-    assert len(result.rows) >= 1
+    # Exactly one, not "at least one": >= 1 let a clamp to any floor survive.
+    assert len(result.rows) == 1
     assert result.total_matched == 4
 
 
