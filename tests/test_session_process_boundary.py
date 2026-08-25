@@ -95,9 +95,14 @@ from bionumbers_ask.corpus import load
 from bionumbers_ask.events import QuestionEnded
 from bionumbers_ask.repository import CorpusRepository
 
-db, thread_id, corpus, question = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+db, thread_id, corpus, question, run_label = sys.argv[1:6]
 
-config = Config(model="fake/model", warning_threshold=usd("0.50"), run_budget=usd("1.20"))
+config = Config(
+    model="fake/model",
+    warning_threshold=usd("0.50"),
+    run_budget=usd("1.20"),
+    run_label=run_label,
+)
 model = scripted(costing(says("about 1 micrometre (BNID 100002)"), 0.000110))
 agent = AskAgent(CorpusRepository(load(corpus)), config, db, model=model)
 
@@ -106,7 +111,7 @@ print(f"question={end.spend} run={end.run_spend} reason={end.reason.value}")
 """
 
 
-def _ask_turn(db: str, thread_id: str, question: str) -> str:
+def _ask_turn(db: str, thread_id: str, question: str, run_label: str = "dev") -> str:
     import os
     from pathlib import Path
 
@@ -121,6 +126,7 @@ def _ask_turn(db: str, thread_id: str, question: str) -> str:
             thread_id,
             str(tests_dir / "fixtures" / "corpus_sample.jsonl"),
             question,
+            run_label,
         ],
         capture_output=True,
         text=True,
@@ -144,11 +150,34 @@ def test_run_spend_continues_across_a_process_boundary(tmp_path):
     assert second == "question=110 run=220 reason=answered", second
 
 
-def test_run_spend_does_not_leak_between_sessions_across_processes(tmp_path):
+def test_run_spend_accumulates_across_sessions_in_one_run(tmp_path):
+    """A run is not a session, and the budget bounds the run.
+
+    This test previously asserted the opposite -- that a second session starts at
+    zero -- which is what made the budget bound nothing for any driver that opens a
+    session per question. An evaluation set is exactly that driver, and the budget
+    is the figure that says what an evaluation may cost.
+    """
     db = str(tmp_path / "spend.sqlite")
     _ask_turn(db, "session-one", "How wide is an E. coli cell?")
 
     other = _ask_turn(db, "session-two", "How wide is an E. coli cell?")
+    assert other == "question=110 run=220 reason=answered", other
 
-    # Spend accumulated in one session is not counted against another.
+
+def test_run_spend_does_not_leak_between_runs_across_processes(tmp_path):
+    """What the per-session isolation was reaching for, keyed on the right thing.
+
+    Without this, a run label would be a label and nothing more, and an evaluation
+    would be charged for the hand-driven questions that shared its checkpoint file.
+    """
+    db = str(tmp_path / "spend.sqlite")
+    # Neither label is the default: with the spender on the default, a write that
+    # ignored the label would still land where the reader was not looking, and the
+    # test would pass against code that keyed nothing.
+    _ask_turn(db, "session-one", "How wide is an E. coli cell?", run_label="eval-1")
+    same_run = _ask_turn(db, "session-two", "How wide is an E. coli cell?", run_label="eval-1")
+    assert same_run == "question=110 run=220 reason=answered", same_run
+
+    other = _ask_turn(db, "session-three", "How wide is an E. coli cell?", run_label="eval-2")
     assert other == "question=110 run=110 reason=answered", other

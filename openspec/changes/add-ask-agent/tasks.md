@@ -76,6 +76,7 @@
 - [x] 2.1a Point the structured trail at a file from the driver, since nothing outside the tests configured it and every record a real run produced was discarded
 - [x] 2.1b Read a provider-reported cost of zero as a cost, not as an absent one
 - [x] 5.6a Exit non-zero from the terminal driver when a question did not finish, not only on a configuration error
+- [x] 5.6b Key accumulated run spend to the run rather than to the session, recorded as each charge is made, so a driver opening a session per question is still bounded by the run budget
 
 ## 7. Terminal driver
 

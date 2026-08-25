@@ -301,12 +301,21 @@ def test_the_ceiling_a_session_was_created_with_is_the_one_it_keeps(repo, tight,
     )
 
 
-def test_spend_and_the_ceiling_are_readable_from_the_checkpoint(repo, tight, tmp_path):
+def test_the_run_total_and_the_ceiling_are_readable_without_a_model(repo, tight, tmp_path):
+    """A driver deciding whether to offer another question needs both, and building
+    an agent to ask would read the API key from the environment for a question that
+    needs no model at all."""
+    from dataclasses import replace
+
     model = scripted(costing(says("about 1 micrometre (BNID 100002)"), 0.000_110))
     agent = agent_with(repo, tight, tmp_path, model)
     list(agent.ask("s", "q"))
-    assert agent.run_spend("s") == 110
-    assert agent.run_spend("never-asked") == 0
+    assert agent.run_spend() == 110
+
+    # Keyed on the run, so another run over the same file starts at nothing. The
+    # ceiling stays with the session, which is why it is read per session.
+    other_run = AskAgent(repo, replace(tight, run_label="other"), agent._checkpoint_path)
+    assert other_run.run_spend() == 0
 
 
 # -- accounting failures --------------------------------------------------
@@ -386,3 +395,63 @@ def test_a_reported_cost_of_zero_is_a_cost_not_a_missing_one():
     free = says("answered").model_copy(update={"response_metadata": {"token_usage": {"cost": 0.0}}})
     assert ledger.add_response([free]).micro == 0
     assert ledger.question == 0
+
+
+def test_a_run_budget_reached_in_one_session_stops_another(repo, tmp_path):
+    """The point of keying spend to the run: the budget has to stop the next
+    question wherever it is asked, not only in the session that spent the money."""
+    from dataclasses import replace
+
+    # Not the default label, so a write that ignored the label would put the spend
+    # where this run does not read it and the budget would appear to hold.
+    tiny = Config(
+        model="fake/model",
+        warning_threshold=usd("0.50"),
+        run_budget=usd("0.000100"),
+        run_label="eval-1",
+    )
+    spender = scripted(costing(says("about 1 micrometre (BNID 100002)"), 0.000_110))
+    first = AskAgent(repo, tiny, str(tmp_path / "c.sqlite"), model=spender)
+    assert list(first.ask("session-one", "q"))[-1].reason is EndReason.ANSWERED
+
+    fresh = AskAgent(repo, tiny, str(tmp_path / "c.sqlite"), model=scripted(says("x")))
+    end = list(fresh.ask("session-two", "q"))[-1]
+    assert end.reason is EndReason.RUN_BUDGET
+    assert end.run_spend == 110
+
+    # A different run over the same file is unaffected.
+    other = AskAgent(
+        repo,
+        replace(tiny, run_label="eval-2"),
+        str(tmp_path / "c.sqlite"),
+        model=scripted(says("x")),
+    )
+    assert list(other.ask("session-three", "q"))[-1].reason is not EndReason.RUN_BUDGET
+
+
+def test_spend_is_recorded_as_each_charge_is_made(repo, tmp_path):
+    """Not at the end of the question: one that ends by raising must still have its
+    spend counted, or a crash loop is free."""
+    from bionumbers_ask import run_ledger
+
+    config = Config(model="fake/model", warning_threshold=usd("0.50"), run_budget=usd("1.20"))
+    db = str(tmp_path / "c.sqlite")
+    model = scripted(
+        costing(tool_call("search_entries", property="Cell"), 0.000_110),
+        costing(says("about 1 micrometre (BNID 100002)"), 0.000_110),
+    )
+    list(AskAgent(repo, config, db, model=model).ask("s", "q"))
+    assert run_ledger.read(db, "dev") == 220
+
+
+def test_a_zero_charge_touches_nothing(tmp_path):
+    """A model call the provider reported as free is still a call. Writing a zero
+    row would create a run in the ledger that had spent nothing, which reads as a run
+    that ran."""
+    from bionumbers_ask import run_ledger
+
+    db = str(tmp_path / "c.sqlite")
+    run_ledger.add(db, "eval-1", 0)
+    assert run_ledger.read(db, "eval-1") == 0
+    run_ledger.add(db, "eval-1", 110)
+    assert run_ledger.read(db, "eval-1") == 110

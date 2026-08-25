@@ -186,8 +186,8 @@ def test_spend_accumulates_across_calls_to_the_driver(repo, config, tmp_path):
     run(agent, "s", ["first"], out)
     run(agent, "s", ["second"], out)
 
-    # The run total is the checkpoint's, not something the driver added up.
-    assert agent.run_spend("s") == 220
+    # The run total is the run ledger's, not something the driver added up.
+    assert agent.run_spend() == 220
     assert "run $0.000220" in out.getvalue()
 
 

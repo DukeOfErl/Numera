@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import os
 from collections import deque
-from dataclasses import dataclass, field
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
+from dataclasses import dataclass, field
 
 from langchain.agents import create_agent
 from langchain.agents.middleware import (
@@ -24,8 +24,9 @@ from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededE
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from .config import Config, NotConfigured, format_usd
+from . import run_ledger
 from .citations import citations
+from .config import Config, NotConfigured, format_usd
 from .events import (
     Answer,
     AnswerEntries,
@@ -277,14 +278,18 @@ class AskAgent:
         with self._saver() as saver:
             return len(_persisted(saver, session_id).get("messages") or [])
 
-    def run_spend(self, session_id: str) -> int:
-        """What this session has spent so far, across all its questions.
+    def run_spend(self) -> int:
+        """What this run has spent so far, across every session in it.
 
-        Same reasoning as conversation_length: a driver deciding whether to offer
-        another question needs this without building a model.
+        No session identifier: the run budget bounds a run, and a run is not a
+        session. Keyed on the configured run label, so an evaluation driver opening
+        a session per question is still bounded by one figure.
+
+        Same reasoning as conversation_length for reading it directly: a driver
+        deciding whether to offer another question needs this without building a
+        model.
         """
-        with self._saver() as saver:
-            return _persisted(saver, session_id).get("run_spend") or 0
+        return run_ledger.read(self._checkpoint_path, self._config.run_label)
 
     def ask(self, session_id: str, question: str) -> Iterator[Event]:
         """Answer a question, emitting events as the work happens.
@@ -328,7 +333,10 @@ class AskAgent:
             # the gate must be constructed with them.
             persisted = _persisted(saver, session_id)
             messages = persisted.get("messages") or []
-            run_spend = persisted.get("run_spend") or 0
+            # From the run's ledger, not this session's checkpoint: the budget
+            # bounds the run, and a driver opening a session per question would
+            # otherwise start every question at zero.
+            run_spend = run_ledger.read(self._checkpoint_path, self._config.run_label)
             # The ceiling a session was created with is the one it keeps. A session
             # resumed by a process with a different environment must not be handed a
             # larger budget part-way through; reconfiguring bounds new sessions.
@@ -399,8 +407,13 @@ class AskAgent:
                 prices=self._config.prices_for(self._config.model),
                 run_spend=run_spend,
             )
+
+            def record_spend(micro: int) -> None:
+                run_ledger.add(self._checkpoint_path, self._config.run_label, micro)
+
             gate = SpendGate(
                 ledger=ledger,
+                persist=record_spend,
                 ceiling=ceiling,
                 run_budget=self._config.run_budget,
                 warning_threshold=self._config.warning_threshold,

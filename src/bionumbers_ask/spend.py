@@ -164,11 +164,15 @@ class SpendGateState(AgentState):
     """The spend fields added to the agent's persisted state.
 
     Private, and tracked rather than untracked, so they are written into the
-    checkpoint: spend that lived only in memory would restart at zero when a
-    session resumed in another process, silently doubling what it may cost.
+    checkpoint: a ceiling that lived only in memory would be renegotiated whenever
+    a session resumed in another process.
+
+    Only the ceiling. Run spend is deliberately not here: a checkpoint is per
+    session and a run is not, so keeping the run total here made a driver that
+    opens a session per question start each one at zero. It lives in `run_ledger`,
+    keyed by the run's label.
     """
 
-    run_spend: NotRequired[Annotated[int, PrivateStateAttr]]
     spend_ceiling: NotRequired[Annotated[int, PrivateStateAttr]]
 
 
@@ -195,8 +199,13 @@ class SpendGate(AgentMiddleware):
         question_id: str,
         emit: Callable[[Any], None],
         trace: QuestionTrace,
+        persist: Callable[[int], None] | None = None,
     ) -> None:
         super().__init__()
+        # Called with each charge as it is made, so a question that ends by raising
+        # has still recorded what it spent. Optional: the gate is testable without
+        # anywhere to persist to.
+        self._persist = persist
         self._ledger = ledger
         self._ceiling = ceiling
         self._run_budget = run_budget
@@ -230,6 +239,8 @@ class SpendGate(AgentMiddleware):
 
         response = handler(request)
         charge = self._ledger.add_response(getattr(response, "result", []) or [])
+        if self._persist is not None:
+            self._persist(charge.micro)
         # Tokens are recorded even when None: an absent field cannot be told apart
         # from a provider that reported nothing, and that distinction is the point.
         self._trace.record(
@@ -256,12 +267,13 @@ class SpendGate(AgentMiddleware):
         return response
 
     def after_model(self, state: Any, runtime: Any) -> dict[str, Any] | None:
-        """Persist the run total and the ceiling in force with the checkpoint.
+        """Persist the ceiling in force with the checkpoint.
 
-        Written after each model call rather than at the end of the question, so a
+        The run total does not go here -- see `SpendGateState`. It is written by
+        `persist` as each charge is made, which is also after each model call, so a
         question that ends by raising still leaves its spend recorded.
         """
-        return {"run_spend": self._ledger.run, "spend_ceiling": self._ceiling}
+        return {"spend_ceiling": self._ceiling}
 
 
 # Grounded in measurements against the 14,294-entry corpus on 2026-08-19: a capped

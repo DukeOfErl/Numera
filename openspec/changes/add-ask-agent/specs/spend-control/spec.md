@@ -116,6 +116,12 @@ The per-question ceiling bounds one question; without a run budget, a run of fif
 bounded only by their number. The run budget is the figure that determines what an evaluation can
 cost, which is where an unbounded agent does the most damage.
 
+A run is not a session. Run spend SHALL be accumulated against the run, and SHALL be reachable from
+any session belonging to it, so a driver that opens a session per question is bounded by one figure
+rather than by none. Spend accumulated by one run SHALL NOT be charged to another sharing the same
+storage. It SHALL be recorded as each charge is made rather than when a question ends, so a question
+that ends by raising has still been counted -- otherwise a crash loop is free.
+
 #### Scenario: A run stays within budget
 - **WHEN** questions complete and accumulated run spend remains below the budget
 - **THEN** the run proceeds to the next question
@@ -124,6 +130,14 @@ cost, which is where an unbounded agent does the most damage.
 - **WHEN** accumulated run spend reaches the run budget
 - **THEN** no further question is begun
 - **AND** the run stops with its progress preserved
+
+#### Scenario: A budget spent in one session stops the next
+- **WHEN** a run's budget is reached and a question is asked in a different session of the same run
+- **THEN** that question is refused before any model call
+
+#### Scenario: Two runs share one store
+- **WHEN** two runs record spend against the same storage
+- **THEN** each run's total counts only its own questions
 
 #### Scenario: Budget is reconfigured
 - **WHEN** the run budget is set to a different amount
@@ -149,16 +163,20 @@ distinguish it from a finished run presents a tripped circuit breaker as a poor 
 - **WHEN** every intended question has been attempted within budget
 - **THEN** the report states that the run completed
 
-### Requirement: Spend state persists with the session
+### Requirement: Spend state persists across processes
 
-Accumulated spend and the ceiling in force SHALL be part of the persisted session state.
+Accumulated run spend and the per-question ceiling in force SHALL both be persisted, and SHALL
+survive the process that recorded them.
 
-Spend that lives only in memory restarts at zero when a session resumes in another process, which
-silently doubles what a session may cost.
+Spend that lives only in memory restarts at zero when work resumes in another process, which
+silently doubles what it may cost. The two are persisted against different things on purpose: the
+ceiling belongs to the session, because the ceiling a session was created with is the one it keeps,
+while spend belongs to the run, because that is what the budget bounds.
 
 #### Scenario: A session resumes
 - **WHEN** a suspended session is resumed, in the same process or another
 - **THEN** accumulated spend continues from its persisted value rather than restarting at zero
+- **AND** the ceiling in force is the one the session was created with
 
 #### Scenario: Spend across a session's questions
 - **WHEN** several questions are asked in one session
