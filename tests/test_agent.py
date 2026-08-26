@@ -169,7 +169,10 @@ def test_the_prompt_states_the_rules_the_evaluation_will_score():
     # What is checkable here is that it was told.
     lowered = SYSTEM_PROMPT.lower()
     assert "cite every quantity" in lowered
-    assert "does not cover" in lowered
+    # The weaker claim on purpose: "could not find" is what a handful of searches
+    # establishes, and "does not contain" is not.
+    assert "could not find it" in lowered
+    assert "not that the corpus does not contain it" in lowered
     assert "computed" in lowered
     assert "follow-up" in lowered
 

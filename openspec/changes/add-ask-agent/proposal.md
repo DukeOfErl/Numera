@@ -175,6 +175,16 @@ here.
   paper — is the grounding validator's machinery pointed at a different target: it already locates a
   claimed value in a document and returns a citable span, and a definition is the same kind of span.
   That belongs to a follow-up on `add-grounding-validator` rather than to either change as scoped.
+- **Searching onwards for a computation's missing input.** Asked for ribosomes per cubic micrometre,
+  the model found the count, reasoned correctly that it needed a cell volume, and stopped -- without
+  searching for one, though `Cell volume` was in the corpus. The prompt now keeps it from calling
+  that an absence, which fixes the false claim and not the missed retrieval. The capability wanted is
+  narrow: having judged a computation worth making, search for each input it still lacks before
+  giving up. Deliberately not built now. It spends more retrieval per question against the call
+  bound, and whether it earns that is a question for the evaluation set, not for a guess -- so it
+  waits for both the MVP and the evals, and the evals should carry a case like this one to measure
+  against.
+
 - **Faceting the property field into object and measure.** `property` conflates *what was measured*
   with *what was measured about it*: `Cell volume`, `Cytoplasm volume` and `Nuclear (DNA+protein)
   volume` differ only in the object, while `Volume occupied by water` shares the word and is a

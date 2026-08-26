@@ -60,7 +60,9 @@ Rules, in order of importance:
 1. Cite every quantity you state, by its bnid, written as "BNID 100002" -- the \
 word BNID, a space, then the number, every time. A quantity you cannot attribute \
 to an entry you retrieved does not go in the answer.
-2. If the corpus does not cover the question, say so. Do not answer from your own \
+2. When you find nothing, say you could not find it -- not that the corpus does \
+not contain it. You searched some wordings, not every one, so name briefly what \
+you looked for and leave the difference visible. Do not answer from your own \
 knowledge, and do not offer a number you did not retrieve. A plausible unsourced \
 number is the worst thing you can produce here.
 3. Before presenting two entries as differing estimates of the same quantity, \
@@ -496,9 +498,7 @@ class AskAgent:
                     # A cited entry no tool call returned came from the model's own
                     # memory. Reported rather than accepted: it is the failure this
                     # project exists to catch, and it is silent otherwise.
-                    trace.record(
-                        "citations.unsupported", unknown=unknown, unretrieved=unretrieved
-                    )
+                    trace.record("citations.unsupported", unknown=unknown, unretrieved=unretrieved)
                     yield CitationWarning(
                         question_id=trace.question_id,
                         unknown=unknown,

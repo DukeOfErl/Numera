@@ -223,3 +223,27 @@ def test_a_computation_needing_an_absent_input_is_not_presented(live_agent):
         answer.text,
     )
     assert fabricated is None, f"produced a mass the corpus does not hold: {fabricated}"
+
+
+def test_a_retrieval_miss_is_not_reported_as_an_absence(live_agent):
+    """Asked for ribosome density, the model refused on the grounds that the corpus
+    held no cell volume -- while `Cell volume` sat in it, unsearched. The refusal
+    was right and its reason was false, which is worse than a plain refusal: it
+    tells the reader the corpus lacks something it holds.
+
+    Retrieval misses cannot be eliminated. Reporting one as an absence can.
+    """
+    events = list(
+        live_agent.ask("miss", "How many ribosomes are there per cubic micrometre in E. coli?")
+    )
+    answer = next(e for e in events if isinstance(e, Answer))
+
+    overclaimed = re.search(
+        r"(?:corpus|database|it)\s+(?:does\s+not|doesn't|has\s+no|contains\s+no|lacks)\b"
+        r"|no\s+(?:such\s+)?entr(?:y|ies)\s+exists?\b",
+        answer.text,
+        re.IGNORECASE,
+    )
+    assert overclaimed is None, (
+        f"asserted an absence it did not establish: {overclaimed.group(0)!r}"
+    )

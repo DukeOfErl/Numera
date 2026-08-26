@@ -134,13 +134,22 @@ corpus does not hold, displayed with nothing to say it had been changed.
 
 ### Requirement: Answers come only from the corpus
 
-The system SHALL answer from retrieved entries alone. WHERE the corpus does not cover a question,
-it SHALL say so plainly rather than answering from the model's own knowledge, and SHALL NOT present
-general knowledge as a corpus-supported result.
+The system SHALL answer from retrieved entries alone, and SHALL NOT present general knowledge as a
+corpus-supported result.
 
-#### Scenario: Corpus does not cover the question
-- **WHEN** searching and vocabulary discovery establish that the corpus holds nothing relevant
-- **THEN** the answer states that the corpus does not cover it
+WHERE nothing relevant is found, the answer SHALL report that it could not be found rather than that
+the corpus does not hold it, and SHALL say briefly what was searched. The two are different claims
+and only the weaker one is ever established: searching is a handful of wordings against a corpus that
+words the same quantity many ways, so a failed search is evidence about the search. A retrieval miss
+stated as an absence is a false negative delivered with more confidence than any part of the system
+has earned -- and it has already happened, a question about ribosome density being refused as having
+no volume entry while `Cell volume` sat in the corpus unsearched. Retrieval misses cannot be
+eliminated; reporting them as absences can be.
+
+#### Scenario: Nothing relevant is found
+- **WHEN** searching and vocabulary discovery surface nothing relevant
+- **THEN** the answer states that it could not find the quantity, not that the corpus lacks it
+- **AND** names briefly what was searched
 - **AND** states no quantity
 
 #### Scenario: Corpus covers the question partially
