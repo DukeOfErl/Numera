@@ -12,7 +12,7 @@ import io
 import pytest
 
 from bionumbers_ask import entries_table
-from bionumbers_ask.citations import MIN_DIGITS, citations, format_citation
+from bionumbers_ask.citations import citations, format_citation
 from bionumbers_ask.cli import render, run
 from bionumbers_ask.events import AnswerEntries, CitationWarning
 
@@ -57,13 +57,22 @@ def test_a_number_too_short_does_not_stop_the_rest_of_the_text_parsing():
     assert citations("see BNID 104 678, then BNID 100003") == (100003,)
 
 
-def test_the_shortest_acceptable_identifier_is_pinned():
-    """The boundary is the whole point of the constant, and nothing held it: the
-    corpus runs 100001-117360, so the floor is conservative on purpose, but a
-    silent drift to five would start dropping real identifiers."""
-    shortest = "1" * MIN_DIGITS
-    assert citations(f"BNID {shortest}") == (int(shortest),)
-    assert citations(f"BNID {'1' * (MIN_DIGITS - 1)}") == ()
+def test_a_spaced_group_of_digits_does_not_contribute_an_identifier():
+    """What MIN_DIGITS is for, stated as the requirement rather than as the number.
+
+    A reference written "BNID 104 678" was contributing an entry 104 and an entry
+    678, forty times over the corpus. The length floor is how that is suppressed,
+    but the floor itself is a tuning constant, not a contract: no spec sets it, and
+    the corpus runs 100001-117360, so a four-digit identifier cannot exist. An
+    earlier version of this test asserted the exact boundary, which pinned the
+    implementation's choice as though it were required -- and asserted that a
+    four-digit citation is accepted, which is not behaviour worth guaranteeing.
+
+    So mutation testing's survivor here (`<` widened to `<=`) is knowingly left
+    alive. Killing it would mean testing the tuning rather than the requirement.
+    """
+    assert citations("see BNID 104 678") == ()
+    assert citations("see BNID 104 678, then BNID 100003") == (100003,)
 
 
 def test_a_bare_number_is_not_a_citation():

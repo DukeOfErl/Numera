@@ -83,6 +83,28 @@ naturally types.
 - **THEN** all of them are returned
 - **AND** each row carries its own organism string so the caller can tell them apart
 
+### Requirement: A keyword search reaches an entry's own keywords
+
+Search SHALL accept a keyword term and match it against both an entry's curated keywords and its
+property, matching either. Matching SHALL ignore case on both sides.
+
+Curated keywords carry wordings the property does not — `radius` against a property called
+`Cell diameter` — and are the corpus's own record of what an entry is about. A keyword search that
+reached only the property would duplicate property search and find nothing new; one that reached only
+the keywords would miss the entries whose property already says it.
+
+#### Scenario: A term appearing only in an entry's keywords
+- **WHEN** a keyword search uses a term stored in an entry's keywords and absent from its property
+- **THEN** that entry is returned
+
+#### Scenario: A term appearing only in a property
+- **WHEN** a keyword search uses a term present in an entry's property and absent from its keywords
+- **THEN** that entry is returned
+
+#### Scenario: A term whose case does not match what is stored
+- **WHEN** a keyword search uses a term differing only in case from what the corpus stores
+- **THEN** the same entries are returned
+
 ### Requirement: The corpus vocabulary is discoverable
 
 The system SHALL provide a way to list the organism and property values present in the corpus,
@@ -93,9 +115,19 @@ Without this, an agent searching for `E. coli` against a corpus that stores
 `Bacteria Escherichia coli` receives zero results and has no way to tell an absent topic from a
 wrong guess.
 
+Values SHALL be returned commonest first. The order carries meaning here: it tells the agent which
+wording the corpus actually uses, which is the question being asked whenever this is reached for.
+Alphabetical order would put a wording used once above one used two thousand times.
+
 #### Scenario: Listing organism values matching a partial term
 - **WHEN** the agent asks for organism values matching `yeast`
 - **THEN** the distinct stored values containing that term are returned with their entry counts
+- **AND** the value with the most entries comes first
+
+#### Scenario: Listing property values
+- **WHEN** the agent asks for property values matching a partial term
+- **THEN** those are listed on the same terms as organisms
+- **AND** properties are the harder half to guess, so this is not an organism-only facility
 
 #### Scenario: Distinguishing an absent topic from a failed guess
 - **WHEN** a search returns nothing
