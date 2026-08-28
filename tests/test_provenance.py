@@ -223,3 +223,83 @@ def test_two_manifests_of_one_source_differ_only_in_when_they_ran(tmp_path, samp
     assert differing == {"ingested_at"}, (
         f"a manifest field varies between identical runs: {differing - {'ingested_at'}}"
     )
+
+
+def test_the_report_counts_are_asserted_against_real_values(sample_html, tmp_path):
+    """The headline counts must be the counts, not merely present.
+
+    Found by mutation testing: `sum(2 for ...)` on the two predicate counts and on
+    `records_with_no_scalar` all survived the suite, because every existing
+    assertion used a fixture where those counts are zero — and twice zero is zero.
+    These are the numbers the report presents as facts about the corpus.
+    """
+    result = ingest(sample_html, tmp_path / "corpus.jsonl")
+    report = result.report
+    records = [
+        json.loads(line)
+        for line in (tmp_path / "corpus.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+
+    assert report.range_fused_count == sum(1 for r in records if r["range_fused"])
+    assert report.range_qualified_count == sum(1 for r in records if r["range_qualified"])
+    assert report.records_with_no_scalar == sum(
+        1 for r in records if r["value"] is None and r["range_low"] is None
+    )
+    # and they are non-zero here, so a doubled or inverted count would show
+    assert report.records_with_no_scalar > 0
+    assert report.link_records > 0
+
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["range_fused_count"] == report.range_fused_count
+    assert manifest["range_qualified_count"] == report.range_qualified_count
+
+
+def test_no_scalar_means_neither_a_value_nor_a_range():
+    """`and`, not `or`: a record with a range but no value still has a scalar."""
+    from bionumbers_ingest.model import BioNumberRecord
+    from bionumbers_ingest.validation import report_for
+
+    records = [
+        BioNumberRecord(bnid=1, value=1.5),  # value only
+        BioNumberRecord(bnid=2, range_low=1.0, range_high=2.0),  # range only
+        BioNumberRecord(bnid=3),  # neither
+    ]
+    assert report_for(records, rows_read=3, rows_skipped_non_data=0).records_with_no_scalar == 1
+
+
+@pytest.mark.parametrize("field", ["source_modified", "ingested_at"])
+def test_manifest_timestamps_carry_their_timezone(tmp_path, sample_html, field):
+    """A naive timestamp is not provenance.
+
+    Two readers in different zones would record incomparable dates for the same
+    file, which defeats the point of recording a date at all. Mutation testing
+    showed `tz=UTC` could be dropped from either call with nothing failing.
+    """
+    from datetime import datetime
+
+    result = ingest(sample_html, tmp_path / "corpus.jsonl")
+    value = json.loads(result.manifest_path.read_text(encoding="utf-8"))[field]
+    assert datetime.fromisoformat(value).tzinfo is not None, f"{field} is naive: {value}"
+    assert value.endswith("+00:00"), f"{field} is not UTC: {value}"
+
+
+def test_the_predicate_counts_count_records_not_something_doubled():
+    """Asserted against a record set where both predicates are non-zero.
+
+    The fixture has no fused or qualified record, so `sum(2 for ...)` survived a
+    test that compared the count against the corpus: twice zero is zero. A count
+    is only asserted by a case where it is not zero.
+    """
+    from bionumbers_ingest.model import BioNumberRecord
+    from bionumbers_ingest.validation import report_for
+
+    records = [
+        BioNumberRecord(bnid=1, range_fused=True),
+        BioNumberRecord(bnid=2, range_fused=True, range_qualified=True),
+        BioNumberRecord(bnid=3, range_qualified=True),
+        BioNumberRecord(bnid=4),
+    ]
+    report = report_for(records, rows_read=4, rows_skipped_non_data=0)
+    assert report.range_fused_count == 2
+    assert report.range_qualified_count == 2
+    assert report.records_written == 4
