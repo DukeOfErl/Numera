@@ -73,6 +73,26 @@ batches several into one hop; `question_ceiling` and `run_budget` bound spend;
 `CONVERSATION_BOUND` bounds a session's tokens. Each is configured where it binds
 and reported when it is reached (ADR-0180).
 
+## Specs and the code that is meant to satisfy them
+
+`openspec validate --strict` checks that a spec is well formed. It does not check
+that anything implements it, and the difference has already cost this project
+once: `grounded-answering` required bounding "the number of tool calls made in
+answering a single question" while the code bounded *model* calls, and the two
+only came apart when a model batched several tool calls into one hop.
+
+`tests/test_spec_conformance.py` maps each requirement to the tests that assert
+it, and fails when a requirement is neither mapped nor explicitly recorded as a
+gap. **Add the mapping entry in the same change that adds the requirement**, the
+way ADRs are written with the decision rather than collected at the end.
+
+Be clear about what it proves. It catches a requirement nothing claims, and a
+claim naming a test that no longer exists. It does not catch a test that claims a
+requirement and checks the wrong thing -- which is exactly what happened above.
+What it buys is that the requirement's words sit next to the name of the test
+asserting them, where a reader comparing the two can see the mismatch. A review
+aid, not a proof.
+
 ## Running the tests
 
 `pytest` is offline by default and runs on the six-entry fixture: `addopts = "-m 'not network and not corpus'"` deselects both markers, so a green run may never have executed the tests that hit a real service or the ones that check a marker can fire against a real corpus. Run those explicitly with `pytest -m network` and `BIONUMBERS_ASK_CORPUS=... pytest -m corpus`.

@@ -220,6 +220,13 @@ practice this note exists to stop repeating.
 - [x] 10.6c ADR-0170: the corpus stays outside every repository, and the three consequences that follow
       -- the six-entry fixture, the entry-text-free trail, the defects file kept beside the corpus (owed by group 1)
 - [x] 10.7 Add the agent's entries under `## [Unreleased]` in the existing `CHANGELOG.md`
+- [ ] 10.9 Finish the requirement-to-test mapping in `tests/test_spec_conformance.py`. 10 of 49
+      requirements name the tests that assert them; 39 are recorded as gaps -- 10 of those are
+      group 9's and cannot be mapped until the harness exists, and 29 are tested by something whose
+      name nobody has written down. The check already refuses a requirement that is neither mapped
+      nor listed, so the list can only shrink deliberately. Work through it a capability at a time;
+      the reward is not the number but the reading: putting a requirement's words beside the test
+      that claims them is where a mismatch like 8.9's becomes visible.
 - [x] 10.8 Update the Architecture section of `CLAUDE.md` to describe the module layout and name the patterns used
 
 

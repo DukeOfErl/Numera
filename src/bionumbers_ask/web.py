@@ -353,7 +353,7 @@ def _draw_entry(row: entries_table.Row) -> None:
         st.caption("Keywords: " + as_text(", ".join(keywords)))
     reference = row.reference or "(no reference recorded)"
     pubmed = f" · PubMed {row.reference_pubmed_id}" if row.reference_pubmed_id else ""
-    st.caption(f"{as_text(reference)}{pubmed}")
+    st.caption(as_text(f"{reference}{pubmed}"))
 
 
 def shown_keywords(row: entries_table.Row) -> list[str]:
@@ -414,16 +414,18 @@ def _draw_table(table: Table) -> None:
     missing = len(every_cited) - len(cited)
     if missing:
         st.warning(
-            f"{missing} more cited "
-            f"{'entry is' if missing == 1 else 'entries are'} not shown here — "
-            "every one is in the side panel.",
+            as_text(
+                f"{missing} more cited "
+                f"{'entry is' if missing == 1 else 'entries are'} not shown here — "
+                "every one is in the side panel."
+            ),
             icon=":material/warning:",
         )
     # Between the two tables: a reader meets the marks in the cited rows, reads
     # what they mean, and carries that into the rows below. Before both it is
     # explaining marks nobody has seen yet; after both it is too late.
     for line in _legend(shown):
-        st.caption(line)
+        st.caption(as_text(line))
     if rest:
         st.markdown(f"**{entries_table.UNCITED_BANNER.capitalize()}**")
         _dataframe(rest)
@@ -507,15 +509,24 @@ def run_is_over(transcript: Iterable[tuple[str, list[Item]]]) -> bool:
     )
 
 
-def run_status(transcript: Iterable[tuple[str, list[Item]]]) -> tuple[int, int] | None:
-    """What the run has spent and what it may spend, or None before the first answer.
+def run_status(
+    transcript: Iterable[tuple[str, list[Item]]],
+    fallback: tuple[int, int] | None = None,
+) -> tuple[int, int] | None:
+    """What the run has spent and what it may spend.
 
-    Read from the ending events rather than from configuration, because a session
-    resumed in a process configured differently spends against the budget it was
-    created with -- reading the environment here would report a cap this run is
-    not subject to.
+    Read from the ending events where there is one, rather than from configuration,
+    because a session resumed in a process configured differently spends against
+    the budget it was created with -- reading the environment would report a cap
+    this run is not subject to.
+
+    `fallback` covers the interval before the first answer, where no ending exists
+    to read. It is the run's own recorded spend against the configured budget,
+    which is the same pair the first ending will carry. Without it the panel gained
+    a section the moment a question completed, and a layout that grows under the
+    reader is a worse surprise than a bar reading zero.
     """
-    latest = None
+    latest = fallback
     for _, items in transcript:
         for item in items:
             if item.kind is Kind.ENDING and item.run_budget:

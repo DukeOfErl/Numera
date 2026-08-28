@@ -23,7 +23,7 @@ except (CorpusUnavailable, NotConfigured) as exc:
     # Both are misconfiguration a person can fix, so the message is the point:
     # Streamlit's exception panel would bury it under a stack the reader did not
     # cause, and NotConfigured's message is a set of instructions.
-    st.error(str(exc))
+    st.error(web.as_text(str(exc)))
     st.stop()
 
 session = web.session_id(st.session_state, st.query_params)
@@ -32,7 +32,7 @@ session = web.session_id(st.session_state, st.query_params)
 web.draw_prototype_banner()
 
 st.title("BioNumbers ask")
-st.caption(f"{len(repo)} entries · session {session}")
+st.caption(web.as_text(f"{len(repo)} entries · session {session}"))
 # The identifier is in the URL, so this page can be reloaded, bookmarked or
 # reopened after a restart and still be the same conversation.
 
@@ -41,7 +41,12 @@ st.caption(f"{len(repo)} entries · session {session}")
 # a run budget pushed past the scroll is not a standing figure.
 with st.sidebar:
     st.caption(web.PROTOTYPE_SHORT)
-    spent_and_cap = web.run_status(web.transcript(st.session_state))
+    # Always drawn, including before the first question, when it reads zero. The
+    # panel must not gain a section the moment a question completes: a layout that
+    # grows under the reader is a worse surprise than a bar showing nothing spent.
+    spent_and_cap = web.run_status(
+        web.transcript(st.session_state), (agent.run_spend(), agent.run_budget)
+    )
     if spent_and_cap:
         spent, cap = spent_and_cap
         st.header("Run budget")

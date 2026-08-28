@@ -389,6 +389,12 @@ class AskAgent:
             persisted = _persisted(saver, session_id)
             return _conversation_size(persisted, persisted.get("messages") or [])
 
+    @property
+    def run_budget(self) -> int:
+        """What this run may spend, so a driver can show the limit before the first
+        question rather than only once spending has started."""
+        return self._config.run_budget
+
     def run_spend(self) -> int:
         """What this run has spent so far, across every session in it.
 
