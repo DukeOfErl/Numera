@@ -55,35 +55,19 @@ Download the prepared file: **&lt;CORPUS-DOWNLOAD-LINK&gt;** (JSONL, ~20 MB, 14,
 
 #### Getting the source export yourself
 
-The button on <https://bionumbers.hms.harvard.edu/resources.aspx> is an ASP.NET postback, not a
-link, so **there is no one-click URL to give you** — the file is served only in response to a POST
-carrying the `__VIEWSTATE` and `__EVENTVALIDATION` tokens from a freshly loaded page. This does the
-same thing in one command:
+Go to <https://bionumbers.hms.harvard.edu/resources.aspx> and click **Download the BioNumbers
+database**. That gives you `BioNumbers.xls`, the export this project was built against.
 
-```bash
-curl -sS -c /tmp/bn.jar https://bionumbers.hms.harvard.edu/resources.aspx -o /tmp/bn.html && \
-python3 -c "
-import re, html, urllib.parse, sys
-s = open('/tmp/bn.html', encoding='utf-8', errors='replace').read()
-f = {m.group(1): html.unescape(m.group(2)) for m in
-     re.finditer(r'<input[^>]*name=\"(__[A-Z]+)\"[^>]*value=\"([^\"]*)\"', s)}
-f['__EVENTTARGET'] = 'ctl00\$cphBody\$linkproperty'; f['__EVENTARGUMENT'] = ''
-sys.stdout.write(urllib.parse.urlencode(f))" > /tmp/bn.post && \
-curl -sS -b /tmp/bn.jar -X POST --data @/tmp/bn.post \
-  -H 'Referer: https://bionumbers.hms.harvard.edu/resources.aspx' \
-  -o BioNumbers.xls https://bionumbers.hms.harvard.edu/resources.aspx
-```
+It is a button rather than a link, so there is no address to paste — the page has to be open for the
+download to work.
 
-Verified on 2026-08-28: 27,286,533 bytes, SHA-256 `b185032ac36bfa250435ef0980180e1b5bc4341ae9e06c5f83aa764a84fd36ef`.
-Check what you get before trusting it — the tokens are per-session and the site may change:
+Checked on 2026-08-28: 27,286,533 bytes, SHA-256
+`b185032ac36bfa250435ef0980180e1b5bc4341ae9e06c5f83aa764a84fd36ef`. Worth confirming, since the
+database is updated and the file you get may not be the one these figures describe:
 
 ```bash
 sha256sum BioNumbers.xls
 ```
-
-Despite the `.xls` extension the file is an HTML `<table>`, which is why it needs converting rather
-than opening. Turning it into the JSONL this agent reads is the job of a separate ingestion project,
-not part of this one.
 
 It is provided ready to use because what BioNumbers distributes is not directly readable here: the
 export is a 27 MB HTML `<table>` carrying an `.xls` extension, and converting it into the record
