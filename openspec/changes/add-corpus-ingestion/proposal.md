@@ -52,7 +52,7 @@ corpus silently missing entries cannot be.
   because that list is a reporting vocabulary: eight names today, five of them `range_`-prefixed, and
   only two meaning fusion — `range_plus_minus` and `range_mean_sd_embedded` are *successful* parses.
   On the existing corpus a non-empty test selects 5,148 records and a `range_` prefix 5,494, against
-  the ~1,222 meant. Marking thousands of correct entries would teach a reader to ignore the marking.
+  the 1,445 meant. Marking thousands of correct entries would teach a reader to ignore the marking.
   `parse_flags` and `range_fused` are both present on every record, empty and `false` when clean.
 - Every ingest is stamped. The export carries no temporal information whatsoever — none of its 14
   columns is a date, and every date-shaped string in it belongs to a citation — so once a download's
@@ -75,21 +75,25 @@ Not in scope: downloading the export (the URL and the citation go in the README,
 the reader's); any database or index built from the corpus; changing anything the ask agent reads
 the corpus *with*.
 
-Deferred: **correcting** a fused range. The exposure has been measured over a full corpus, twice,
-and the two measurements disagree in an instructive way. Counting more than two numbers in the range
-cell **as stored** gives 1,716 of the 6,147 entries carrying a parsed range. Counting them where the
-flag actually runs — after the external-link URL has been removed and excluding the plus-or-minus
-branch, which returns before bounds are taken as a minimum and maximum — gives **1,222** (19.9% of
-ranged entries, 5.5% of the corpus). The 494 difference is not a disagreement about the criterion: 474
-of those cells carry a link whose filename supplies the extra digits (`%20` in an escaped filename
-reads as the number 20), and 167 are plus-or-minus cells the flag never reaches. 1,222 is the figure
-this change's flag will report; 1,716 is what the same criterion gives when applied to stored text
-rather than to the parse.
+Deferred: **correcting** a fused range. The exposure is measured, and the measurement was wrong twice
+before it was right, which is worth recording because both errors inflated it.
 
-Of those 1,222: 448 span less than tenfold and are often several defensible measurements of one
-quantity, 264 span ten- to hundredfold, 122 span hundred- to thousandfold, 41 exceed a thousandfold
-with 8 of those exceeding a millionfold, and 347 cannot be judged by ratio at all because a bound is
-zero or negative. So the flag marks a population at risk, not a defect count — and the tail is where
+Counting more than two numbers in the range cell **as stored** gave 1,716 of the entries carrying a
+parsed range: an external-link filename's escape sequences supply extra digits (`%20` reads as the
+number 20). Counting where the flag actually runs, after the URL is removed, gave **1,222** — and that
+figure was still wrong, because the number extractor read `2×10^5` as three numbers and `150,000` as
+two. With scientific notation and thousands separators read as one number each, the flag reports
+**833** (13.6% of the 6,146 ranged entries, 5.8% of the corpus). So 389 of the 1,222 — nearly a third
+— were notation, not fused quantities.
+
+The predicate `range_fused`, which is what a consumer reads, covers **1,445** records (23.5% of ranged
+entries, 10.1% of the corpus): the 833 above plus the cells with a second quantity named between the
+two bounds.
+
+Of the 833: 346 span less than tenfold and are often several defensible measurements of one quantity,
+242 span ten- to hundredfold, 98 span hundred- to thousandfold, 97 exceed a thousandfold, and 50
+cannot be judged by ratio at all because a bound is zero or negative. So the flag marks a population
+at risk, not a defect count — and the tail is where
 the near-certain damage lives.
 
 Two candidate responses exist and neither is chosen here: change the parse so fused ranges are never

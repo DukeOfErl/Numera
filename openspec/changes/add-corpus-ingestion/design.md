@@ -154,17 +154,20 @@ flag it.
 Bounds are the lowest and highest number in the range cell. Where a cell names a second quantity,
 one of the two bounds comes from that other quantity, and the result is a range that reads as a
 single measurement while spanning two. This is confirmed behaviour, not a hypothesis, and the
-population is measured: over a full corpus, 1,222 of the 6,147 entries carrying a parsed range come
-from a cell holding more than two numbers, with 163 of those spanning more than a hundredfold and 347
+population is measured: over a full corpus, 833 of the 6,146 entries carrying a parsed range come from
+a cell holding more than two numbers, with 195 of those spanning more than a hundredfold and 50
 unjudgeable by ratio because a bound is zero or negative. That is an upper bound on damage — several
 measurements of one quantity are a legitimate reason for a wide range — which is exactly why the
 decision is to *count* the class rather than guess at a rule for it.
 
-Where the count is taken matters, and cost a reconciliation already: the same criterion applied to
-the stored range text rather than to the parse gives 1,716, because an external-link filename's
-escape sequences supply extra digits and because the plus-or-minus branch returns before bounds are
-taken as a minimum and maximum. The flag is computed where the minimum-and-maximum actually happens,
-so its count is the smaller one. See `proposal.md` — Deferred, for the breakdown.
+**How the number is counted has been wrong twice, both times upward.** Applying the criterion to the
+stored range text rather than to the parse gives 1,716, because an external-link filename's escape
+sequences supply extra digits. Removing the URL first gives 1,222 — and that was still wrong, because
+the number extractor read `2×10^5` as three numbers and `150,000` as two, so notation counted as fused
+quantities. Reading a caret exponent, a `×10^` mantissa and a thousands separator as part of one
+number gives 833. The lesson is that a flag over a tokenizer is only as good as the tokenizer: the
+heuristic was never the dominant error, the lexer was, and no amount of narrowing the heuristic would
+have found that.
 
 So: `range_multi_number` (more than two numbers were read from the cell) and
 `range_prose_between_bounds` (text stands between the two numbers that became the bounds). Bounds
@@ -178,7 +181,7 @@ made the two names the contract and let the consumer test `parse_flags` for them
 refuted it with counts. `parse_flags` is a reporting vocabulary of eight names, five `range_`-prefixed
 and only two about fusion: `range_plus_minus` and `range_mean_sd_embedded` mark *successful* parses,
 `range_is_link` and `no_scalar` mark rows with no scalar at all. A non-empty test selects 5,148
-records on the existing corpus and a prefix test 5,494, against ~1,222 — so either rule would mark
+records on the existing corpus and a prefix test 5,494, against 1,445 — so either rule would mark
 thousands of correctly-parsed entries in a user-visible marking and teach the reader to ignore it.
 Any name-matching rule also contradicts declaring the names internal: a consumer cannot evaluate
 "names a range concern" without the taxonomy. And the vocabulary a consumer can *observe* is not the

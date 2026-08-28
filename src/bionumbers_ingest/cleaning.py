@@ -67,8 +67,46 @@ def _strip_html_tags(text: str) -> tuple[str, bool]:
 _WS_RE = re.compile(r"\s+")
 _MICRO_SIGN = "µ"  # µ MICRO SIGN
 _GREEK_MU = "μ"  # μ GREEK SMALL LETTER MU
-# signed mantissa with an optional signed exponent; sign disambiguated in _extract_numbers
-_NUM_RE = re.compile(r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
+# One number, in every notation this source writes them.
+#
+# The naive `[-+]?\d+(\.\d+)?([eE][-+]?\d+)?` reads `2×10^5` as three numbers and
+# `150,000` as two, and every spurious number inflates both fused-range flags:
+# more than two numbers in a cell, and "prose" standing between the bounds. So a
+# caret exponent, a `×10^` mantissa and a thousands separator are all part of the
+# number rather than delimiters between numbers.
+_MINUS = r"[-+\u2212\u2013]"  # ASCII, unicode minus, en dash — all signs inside an exponent
+_MULT = r"[\u00d7x\u0445*]"  # ×, Latin x, Cyrillic х, asterisk
+_DIGITS = r"\d+(?:,\d{3})*(?:\.\d+)?"  # 3-digit groups only, so `1,2` stays two numbers
+_CARET = rf"\s*\^\s*{_MINUS}?\d+"
+_NUM_RE = re.compile(
+    rf"""
+    (?:{_MINUS}|\+)?{_DIGITS}\s*{_MULT}\s*10{_CARET}   # 2×10^5, 1.4×10^-6
+  | 10{_CARET}                                          # 10^11, 10^-8
+  | (?:{_MINUS}|\+)?{_DIGITS}(?:[eE][-+]?\d+)?(?:{_CARET})?  # 1.5e-3, 150,000, 4^2
+    """,
+    re.VERBOSE,
+)
+
+
+def _token_to_float(tok: str) -> float | None:
+    """Parse one `_NUM_RE` match. ``None`` when it is not a number after all."""
+    t = re.sub(r"\s+", "", tok).replace(",", "")
+    t = t.replace("\u2212", "-").replace("\u2013", "-")
+    t = re.sub(_MULT, "*", t)
+    mantissa, _, exponent = t.partition("^")
+    if exponent:
+        base, _, mul = mantissa.rpartition("*")
+        try:
+            value = float(mul) ** float(exponent)
+            return float(base) * value if base else value
+        except (ValueError, OverflowError):
+            return None
+    try:
+        return float(mantissa)
+    except ValueError:
+        return None
+
+
 _URL_RE = re.compile(r"https?://\S+")
 _PM_RE = re.compile(r"±|\+/-|\+-")  # plus/minus: ±X means value ± X
 _NUM = r"\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
@@ -146,6 +184,10 @@ def _numbers_with_spans(text: str) -> tuple[str, list[tuple[float, int, int]]]:
     ``-90 to -60`` yields two negatives. Exponents are captured whole, so the
     sign in ``1e-3`` is never mistaken for a separator.
     """
+    # A dash directly after a caret is that exponent's sign, not a separator, so
+    # it has to be settled before the blanket dash-to-separator rule below turns
+    # `10^–11` into `10^;11` and leaves the exponent stranded as its own number.
+    text = re.sub(r"\^\s*[-+\u2212\u2013\u2014]", "^-", text)
     # unicode minus -> ASCII minus (a sign); en/em dashes -> ';' (a separator
     # that, unlike a space, hides the preceding digit from the sign test)
     text = text.replace("−", "-").replace("–", ";").replace("—", ";")
@@ -154,13 +196,20 @@ def _numbers_with_spans(text: str) -> tuple[str, list[tuple[float, int, int]]]:
     found: list[tuple[float, int, int]] = []
     for m in _NUM_RE.finditer(text):
         tok = m.group()
+        # A caret whose base is not a digit is a unit exponent (`μm^3`), not a
+        # measurement: the exponent alone would otherwise become a bound.
+        if tok.lstrip("+-").startswith("^") or (m.start() > 0 and text[m.start() - 1] == "^"):
+            continue
         if tok[0] in "+-":
             j = m.start() - 1
             while j >= 0 and text[j] == " ":
                 j -= 1
             if j >= 0 and text[j].isdigit():  # sign is really a separator
                 tok = tok[1:]
-        found.append((float(tok), m.start(), m.end()))
+        value = _token_to_float(tok)
+        if value is None:
+            continue
+        found.append((value, m.start(), m.end()))
     return text, found
 
 

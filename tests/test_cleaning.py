@@ -93,6 +93,44 @@ def test_multi_measurement_cell_not_collapsed():
     assert "range_mean_sd_embedded" not in r.parse_flags
 
 
+# --- one number, in every notation the source writes them --------------------
+
+
+@pytest.mark.parametrize(
+    "range_text,low,high",
+    [
+        ("'150,000-250,000", 150_000, 250_000),  # thousands separators, not four numbers
+        ("'1,234,567 to 2,000,000", 1_234_567, 2_000_000),
+        ("'2\u00d710^5 to 4\u00d710^5", 2e5, 4e5),  # × mantissa form
+        ("'10^-8 to 10^-6", 1e-8, 1e-6),  # bare power of ten
+        ("'10^\u201311 to 10^\u20139", 1e-11, 1e-9),  # en dash as the exponent's sign
+        ("'1.4\u00d710^-6 to 3\u00d710^-6", 1.4e-6, 3e-6),
+    ],
+)
+def test_scientific_and_grouped_numbers_are_one_number_each(range_text, low, high):
+    r = clean_row({"bion_id": "1", "Range": range_text})
+    assert r.range_low == pytest.approx(low)
+    assert r.range_high == pytest.approx(high)
+    # and therefore not mistaken for a cell holding more than two numbers
+    assert "range_multi_number" not in r.parse_flags
+    assert r.range_fused is False
+
+
+def test_a_unit_exponent_does_not_become_a_bound():
+    # `μm^3` trails the range; the 3 is the unit's exponent, not a measurement.
+    r = clean_row({"bion_id": "1", "Range": "'1-2 " + GREEK_MU + "m^3"})
+    assert r.range_low == pytest.approx(1.0)
+    assert r.range_high == pytest.approx(2.0)
+    assert r.range_fused is False
+
+
+def test_a_comma_that_is_not_a_thousands_separator_still_separates():
+    # only 3-digit groups are a separator, so a list stays a list
+    r = clean_row({"bion_id": "1", "Range": "'1,2"})
+    assert r.range_low == pytest.approx(1.0)
+    assert r.range_high == pytest.approx(2.0)
+
+
 # --- the fused-range predicate ----------------------------------------------
 
 
