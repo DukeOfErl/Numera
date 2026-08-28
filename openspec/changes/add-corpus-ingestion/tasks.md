@@ -4,6 +4,13 @@ and `add-ask-agent` holds `0100`–`0190`. Five are planned here — `0200`, `02
 (The `CLAUDE.md` on this branch still records the older allocation; it is off `dev` and predates the
 reallocation. Correcting it is task 10.4.)
 
+The corpus contract is group **5**, not group 8, because every trap the consumer's loader punishes
+is a *serialization* decision made in 4.1 — an absent scalar emitted as `""` rather than `null` blanks
+out every range-only entry at the consumer, and keywords emitted as a string become one entry per
+character. Verifying after provenance, reporting and the command would leave five groups between
+causing such a bug and observing it, and none of those groups touches the contract: they add keys the
+loader ignores. Groups 6 to 8 are provenance, reporting and the command, in that order.
+
 Source material for the port: `~/Bionumbers-first/src/bionumbers/` and its `tests/`. Read that
 repository's `README.md` first — it documents the data quirks each rule exists for. Its `pyarrow`
 dependency and parquet output are dropped here.
@@ -49,43 +56,44 @@ dependency and parquet output are dropped here.
 - [ ] 4.3 Test the failure path: a run that raises partway leaves no file at the output path
 - [ ] 4.4 Record **ADR-0220**: JSONL only — why the parquet output and `pyarrow` go, and that a second serialization path is a place the contract can drift unnoticed
 
-## 5. Provenance
+## 5. The corpus contract
 
-- [ ] 5.1 Compute the source file's SHA-256 and size while reading it, without a second pass over 27 MB
-- [ ] 5.2 Stamp each record with the first 12 characters of that digest as the join key to its manifest
-- [ ] 5.3 Write the manifest beside the corpus — full digest, source size, source modification time named as such rather than as a fetch time, ingest date, ingester version, the run's counts, and the row limit if one applied — renamed into place after the corpus, so a corpus with no manifest is a run that did not finish
-- [ ] 5.4 Test that two corpora from different sources carry different digests, that each record's stamp matches its own manifest, and that a limited run records its limit
-- [ ] 5.5 Record **ADR-0240**: stamp every ingest with source identity and dates — that the export carries no temporal information at all, that the loss is unrecoverable afterwards, why the fetch time can only ever be a proxy, and why the stamp is on the record as well as in the manifest
+- [ ] 5.1 Write the contract test: the required keys and their accepted JSON types as one literal list in one place, with a comment naming its source (`bionumbers_ask.corpus.Entry`, on `feat/ask-agent`) and pointing at that module's docstring, which carries the reciprocal obligation to message this branch before the field set or the coercions change; asserted over every line of a real ingest of the fixture
+- [ ] 5.2 Test the traps the consumer's loader documents — an absent scalar emitted as null and never as an empty string, keywords as an array and never a joined string, the identifier as a number — since each fails silently or corpus-wide rather than locally
+- [ ] 5.3 Test that a corpus survives one unusable row: no line is emitted for it, and the remaining lines still form a loadable corpus
+- [ ] 5.4 Add the round-trip test guarded on importing the consumer's loader, so it skips on this branch and becomes live the moment this lands on `dev` beside the agent
+- [ ] 5.5 Verify once, by hand, against the real loader: extract it into the scratch directory with `git show feat/ask-agent:src/bionumbers_ask/corpus.py` — touching neither that branch nor the other checkout — load a produced corpus with it, and record the result below. Never commit the extracted copy
+- [ ] 5.6 Record **ADR-0210**: verifying a contract whose owner is on another branch — the three layers, why the vendored-copy alternative was rejected, and what the merge makes live
+- [ ] 5.7 Load a corpus built from the full locally-fetched export with that extracted loader — at real scale, not fixture scale — and record the entry count it returns. Drive the reader, cleaner and writer directly; the command does not exist yet and is not needed for this. Fixture scale cannot expose a trap that only some real row triggers, and this is the last cheap moment to find one
 
-## 6. Integrity reporting
+## 6. Provenance
 
-- [ ] 6.1 Port the validation report: records, rows skipped as non-data, duplicate identifiers, link-carrying records, records with no scalar, and a count per parse flag — plus the `range_fused` count stated separately, so the predicate's population is read off the run rather than inferred from the flags behind it
-- [ ] 6.2 Test that records written plus rows skipped equals rows read, and that a clean run states its zeroes rather than omitting them
-- [ ] 6.3 Test that duplicate identifiers are reported and both records kept
-- [ ] 6.4 Test that flags appear on the emitted record as well as in the report, and that `range_fused` appears on every record and in the report's counts
+- [ ] 6.1 Compute the source file's SHA-256 and size while reading it, without a second pass over 27 MB
+- [ ] 6.2 Stamp each record with the first 12 characters of that digest as the join key to its manifest
+- [ ] 6.3 Write the manifest beside the corpus — full digest, source size, source modification time named as such rather than as a fetch time, ingest date, ingester version, the run's counts, and the row limit if one applied — renamed into place after the corpus, so a corpus with no manifest is a run that did not finish
+- [ ] 6.4 Test that two corpora from different sources carry different digests, that each record's stamp matches its own manifest, and that a limited run records its limit
+- [ ] 6.5 Record **ADR-0240**: stamp every ingest with source identity and dates — that the export carries no temporal information at all, that the loss is unrecoverable afterwards, why the fetch time can only ever be a proxy, and why the stamp is on the record as well as in the manifest
 
-## 7. The command
+## 7. Integrity reporting
 
-- [ ] 7.1 Implement `bionumbers-ingest <file>`, with an output path option, defaulting inside the ignored `data/` directory
-- [ ] 7.2 Make the whole file the default and the row limit an explicit request, inverting the source repository's 200-row default, and have the report state when a limit was applied
-- [ ] 7.3 Fail on a missing or unreadable source with a message naming the path, a non-zero exit, and no output file
-- [ ] 7.4 Test the command end to end over the fixture: corpus, manifest and report, with the expected line count
+- [ ] 7.1 Port the validation report: records, rows skipped as non-data, duplicate identifiers, link-carrying records, records with no scalar, and a count per parse flag — plus the `range_fused` count stated separately, so the predicate's population is read off the run rather than inferred from the flags behind it
+- [ ] 7.2 Test that records written plus rows skipped equals rows read, and that a clean run states its zeroes rather than omitting them
+- [ ] 7.3 Test that duplicate identifiers are reported and both records kept
+- [ ] 7.4 Test that flags appear on the emitted record as well as in the report, and that `range_fused` appears on every record and in the report's counts
 
-## 8. The corpus contract
+## 8. The command
 
-- [ ] 8.1 Write the contract test: the required keys and their accepted JSON types as one literal list in one place, with a comment naming its source (`bionumbers_ask.corpus.Entry`, on `feat/ask-agent`) and pointing at that module's docstring, which carries the reciprocal obligation to message this branch before the field set or the coercions change; asserted over every line of a real ingest of the fixture
-- [ ] 8.2 Test the traps the consumer's loader documents — an absent scalar emitted as null and never as an empty string, keywords as an array and never a joined string, the identifier as a number — since each fails silently or corpus-wide rather than locally
-- [ ] 8.3 Test that a corpus survives one unusable row: no line is emitted for it, and the remaining lines still form a loadable corpus
-- [ ] 8.4 Add the round-trip test guarded on importing the consumer's loader, so it skips on this branch and becomes live the moment this lands on `dev` beside the agent
-- [ ] 8.5 Verify once, by hand, against the real loader: extract it into the scratch directory with `git show feat/ask-agent:src/bionumbers_ask/corpus.py` — touching neither that branch nor the other checkout — load a produced corpus with it, and record the result below. Never commit the extracted copy
-- [ ] 8.6 Record **ADR-0210**: verifying a contract whose owner is on another branch — the three layers, why the vendored-copy alternative was rejected, and what the merge makes live
+- [ ] 8.1 Implement `bionumbers-ingest <file>`, with an output path option, defaulting inside the ignored `data/` directory
+- [ ] 8.2 Make the whole file the default and the row limit an explicit request, inverting the source repository's 200-row default, and have the report state when a limit was applied
+- [ ] 8.3 Fail on a missing or unreadable source with a message naming the path, a non-zero exit, and no output file
+- [ ] 8.4 Test the command end to end over the fixture: corpus, manifest and report, with the expected line count
 
 ## 9. Testing the tests, and the full run
 
 - [ ] 9.1 Fault-seed the cleaning module per `CLAUDE.md`: copy the source to a scratch directory, seed one realistic defect there, assert the module under test resolved inside the copy, abort any injection whose search string does not match exactly once, and check that exactly the right test fails. Seed at least an `and`/`or` swap in the sign-versus-separator test, a dropped `lstrip` of the text marker, and the wrong bound returned from the plus-or-minus branch
 - [ ] 9.2 Run the `mutation-test-module` skill over the cleaning module and the writer, and record what survived and what was fixed
 - [ ] 9.3 Run the command over a locally-fetched full export and record here: rows read, records written, rows skipped, duplicate identifiers, the count per flag including the two new ones (see task 3.9), and the `range_fused` count. Check every zero among the flag counts against the source before accepting it — `injected_html_removed` reporting zero is what hid a 71% contamination, and a flag whose condition is unreachable is indistinguishable from a clean corpus. Expect this flag near 10,206. Sanity-check that last figure against the flags that raise it — a `range_fused` population anywhere near the 5,148 or 5,494 that the rejected rules would have selected means the predicate has been widened by mistake
-- [ ] 9.4 Load that full corpus with the extracted loader from 8.5 — at real scale, not fixture scale — and record the entry count it returns
+- [ ] 9.4 Re-run the round-trip of 5.5 against the corpus the *command* produced in 9.3, and record the entry count. 5.7 already proved the loader accepts a full-scale corpus built by calling the pipeline directly; this confirms the command's own output path did not diverge from it
 
 ## 10. Documentation
 

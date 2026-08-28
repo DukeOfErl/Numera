@@ -80,7 +80,7 @@ and the two measurements disagree in an instructive way. Counting more than two 
 cell **as stored** gives 1,716 of the 6,147 entries carrying a parsed range. Counting them where the
 flag actually runs — after the external-link URL has been removed and excluding the plus-or-minus
 branch, which returns before bounds are taken as a minimum and maximum — gives **1,222** (19.9% of
-ranged entries, 8.5% of the corpus). The 494 difference is not a disagreement about the criterion: 474
+ranged entries, 5.5% of the corpus). The 494 difference is not a disagreement about the criterion: 474
 of those cells carry a link whose filename supplies the extra digits (`%20` in an escaped filename
 reads as the number 20), and 167 are plus-or-minus cells the flag never reaches. 1,222 is the figure
 this change's flag will report; 1,716 is what the same criterion gives when applied to stored text
