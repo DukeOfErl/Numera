@@ -180,6 +180,9 @@ what it says — nothing here has been measured against expected answers.
 
 ## Where to read next
 
+- `docs/diagrams/architecture.md` — the agent's graph (generated from the compiled
+  object), one question as a sequence, and which modules may depend on which
+
 - `openspec/changes/add-ask-agent/proposal.md` — why an agent rather than a search box, what was
   deferred and why
 - `openspec/changes/add-ask-agent/design.md` — the middleware stack and the shape of the tools

@@ -27,6 +27,52 @@ list that defers all of them to a documentation group produces retroactive ADRs,
 options that were rejected -- the part worth recording -- are gone, and what survives is a
 description of the code.
 
+## Architecture
+
+Diagrams — including the agent's graph generated from the compiled object — are in
+`docs/diagrams/architecture.md`. Regenerate that graph whenever middleware changes.
+
+**Ports and adapters.** `agent.py` emits events (`events.py`) and accepts a
+question; it never touches an interface and never blocks for input. `cli.py` and
+`web.py` are adapters over it, and the evaluation harness will be a third. The
+agent takes no parameter naming its caller, so it cannot behave one way for a
+person and another for a harness (ADR-0110).
+
+**The dependency direction is the one rule with teeth.** Adapters may reach into
+the core; the core may not reach back. Nothing in Python enforces this — an
+`import streamlit` in the tool layer would run perfectly — so
+`tests/test_driver_independence.py` asserts it over the source. `entries_table.py`
+and `messages.py` are shared *by* the drivers and count as presentation, which is
+why a rule both the table and the model need (the implausible-span test) lives on
+`Entry` rather than in the table.
+
+| Module | Holds |
+|---|---|
+| `agent.py` | The graph, the system prompt, the middleware list, the event stream |
+| `events.py` | The port: everything the agent emits, and the one command it takes |
+| `tools.py` | The corpus tools the model calls, and `ToolBudget` (ADR-0260) |
+| `spend.py` | `SpendGate` (a `wrap_model_call` middleware), the ledger, projection |
+| `run_ledger.py` | Run spend, in sqlite beside the checkpoints, written as deltas |
+| `corpus.py` | `Entry`, the loader, and the judgements that belong to a value |
+| `repository.py` | Indexes, search, vocabulary, the alias index (ADR-0130) |
+| `units.py` | Three-valued dimensional compatibility (ADR-0160) |
+| `citations.py` | Parsing and formatting `BNID nnnnnn` |
+| `entries_table.py` | Rows, marks and legends — shared by both drivers |
+| `messages.py` | Wording both drivers use, and `STOP_THE_RUN` |
+| `cli.py` / `web.py` | The two adapters |
+| `trace.py` | The structured trail, one question id throughout |
+
+**Patterns, named where they are used.** Ports and adapters (above). Repository
+(`repository.py`). Middleware, LangChain's own rather than hand-rolled — the spend
+gate is a `wrap_model_call`, and retry, tool-error and call-limit middleware are
+all stock. The event stream is a generator, so a driver decides when to consume.
+
+**Limits, and which is which.** `RUN_CALL_LIMIT` bounds model calls;
+`TOOL_CALL_LIMIT` bounds retrievals and is enforced in the tools because a model
+batches several into one hop; `question_ceiling` and `run_budget` bound spend;
+`CONVERSATION_BOUND` bounds a session's tokens. Each is configured where it binds
+and reported when it is reached (ADR-0180).
+
 ## Running the tests
 
 `pytest` is offline by default and runs on the six-entry fixture: `addopts = "-m 'not network and not corpus'"` deselects both markers, so a green run may never have executed the tests that hit a real service or the ones that check a marker can fire against a real corpus. Run those explicitly with `pytest -m network` and `BIONUMBERS_ASK_CORPUS=... pytest -m corpus`.

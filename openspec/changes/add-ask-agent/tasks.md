@@ -165,6 +165,16 @@
 - [ ] 9.9 Produce the report from the results file, stating coverage when partial, breaking figures down per model, and distinguishing a run stopped on budget from a completed one
 - [ ] 9.10 Report cost and tool calls per question and in aggregate, and separate spend in this session from total spend across a resumed run
 - [ ] 9.11 Assemble a first question set from the corpus and record a baseline on the development model
+- [ ] 9.10a Measure the two retrieval bounds rather than defending them. `TOOL_CALL_LIMIT` (20) and
+  `RUN_CALL_LIMIT` (12) were both chosen from a handful of observations -- answers that satisfied
+  their question used about five retrievals, one runaway used twenty-nine -- and neither has been
+  reached in live use since. Report, per question, retrievals and model calls used, and how often
+  each ending carries `at_tool_bound` or `at_retrieval_bound`. What the run should settle: whether
+  either bound ever binds; whether the questions that reach one are the hard questions or the badly
+  worded ones; and whether an answer produced at a bound scores worse than one produced with room to
+  spare. A bound that never fires costs nothing and proves nothing, and a bound that fires on good
+  questions is cutting answers short -- the distribution tells them apart and no amount of argument
+  does. See ADR-0260, which records both numbers as chosen rather than derived.
 - [ ] 9.11a Record what fraction of the corpus is clean, beside the answer baseline, so a citation
   rate is read against the base rate rather than as a failure: measurement method recorded, scalar
   value recorded, unit classified, range not fused. Report the four separately and the conjunction,
@@ -194,8 +204,10 @@ practice this note exists to stop repeating.
 
 - [x] 10.1a Write a reviewer-facing `README.md` covering the ask agent only: what it does, the corpus and
       why it is not committed, how to run each driver, configuration, and what is not built yet
-- [ ] 10.1 Write `README.md`: what the agent does, how to supply a corpus, how to run each driver, how to configure the model and limits, and how to run an evaluation
-- [ ] 10.2 Add a diagram of the agent, its middleware, and the drivers to `docs/diagrams/`, following the principles already in `docs/diagrams/DIAGRAMS.md`
+- [ ] 10.1 Extend `README.md` with how to run an evaluation. **Deferred with group 9**, which builds
+      the harness; everything else this task asked for is covered by 10.1a, and documenting a way to
+      run something that does not exist is the one part that cannot be written honestly yet
+- [x] 10.2 Add a diagram of the agent, its middleware, and the drivers to `docs/diagrams/`, following the principles already in `docs/diagrams/DIAGRAMS.md`
 - [x] 10.2a ADR-0100: the web driver decides in items and draws from them, since Streamlit
       composes successive writes to one screen location into the last of them (written with 8.1)
 - [x] 10.3 ADR-0110: the agent is separated from its drivers by an event port
@@ -207,8 +219,8 @@ practice this note exists to stop repeating.
       classification permanently unavailable (owed by 6.2)
 - [x] 10.6c ADR-0170: the corpus stays outside every repository, and the three consequences that follow
       -- the six-entry fixture, the entry-text-free trail, the defects file kept beside the corpus (owed by group 1)
-- [ ] 10.7 Add the agent's entries under `## [Unreleased]` in the existing `CHANGELOG.md`
-- [ ] 10.8 Update the Architecture section of `CLAUDE.md` to describe the module layout and name the patterns used
+- [x] 10.7 Add the agent's entries under `## [Unreleased]` in the existing `CHANGELOG.md`
+- [x] 10.8 Update the Architecture section of `CLAUDE.md` to describe the module layout and name the patterns used
 
 
 ## 11. Limits, said where they bind

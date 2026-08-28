@@ -36,8 +36,20 @@ st.caption(f"{len(repo)} entries · session {session}")
 # The identifier is in the URL, so this page can be reloaded, bookmarked or
 # reopened after a restart and still be the same conversation.
 
+# Both pinned to the top of the panel, before anything whose length depends on an
+# answer. The entries below are unbounded -- one question can fill the panel -- and
+# a run budget pushed past the scroll is not a standing figure.
 with st.sidebar:
     st.caption(web.PROTOTYPE_SHORT)
+    spent_and_cap = web.run_status(web.transcript(st.session_state))
+    if spent_and_cap:
+        spent, cap = spent_and_cap
+        st.header("Run budget")
+        st.progress(min(1.0, spent / cap) if cap else 0.0)
+        # Escaped: two dollar signs in one caption are read as opening and closing
+        # inline mathematics, so "$1.20 of $1.20" typeset the middle as an equation
+        # and ate both currency signs. Same fault as the ending line's, same fix.
+        st.caption(web.as_text(f"{format_usd(spent)} of {format_usd(cap)}"))
     st.divider()
 
 for asked, drawn in web.transcript(st.session_state):
@@ -74,17 +86,3 @@ elif question := st.chat_input("Ask a question", submit_mode="disable"):
 # conversation so it reflects the question just asked.
 web.draw_full_entries(web.latest_table(web.transcript(st.session_state)))
 
-# What the run has spent against what it may spend. Shown standing rather than
-# only at the limit, because unlike the per-question ceiling this one is not
-# refreshed by asking again: it climbs until the run stops, and the moment worth
-# knowing it is before that, not at it.
-spent_and_cap = web.run_status(web.transcript(st.session_state))
-if spent_and_cap:
-    spent, cap = spent_and_cap
-    with st.sidebar:
-        st.header("Run budget")
-        st.progress(min(1.0, spent / cap) if cap else 0.0)
-        # Escaped: two dollar signs in one caption are read as opening and closing
-        # inline mathematics, so "$1.20 of $1.20" typeset the middle as an equation
-        # and ate both currency signs. Same fault as the ending line's, same fix.
-        st.caption(web.as_text(f"{format_usd(spent)} of {format_usd(cap)}"))
