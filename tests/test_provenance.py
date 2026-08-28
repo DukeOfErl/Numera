@@ -202,3 +202,24 @@ def test_a_limited_run_fingerprints_the_whole_file_anyway(tmp_path, sample_html,
         m = json.loads(result.manifest_path.read_text(encoding="utf-8"))
         assert m["source_sha256"] == hashlib.sha256(sample_html.read_bytes()).hexdigest()
         assert m["source_size_bytes"] == sample_html.stat().st_size
+
+
+def test_the_same_source_produces_a_byte_identical_corpus(tmp_path, sample_html):
+    # Two people building from the same download must get the same file, or
+    # comparing their corpora proves nothing and a difference cannot be
+    # attributed. Verified over the real export across three PYTHONHASHSEED
+    # values as well, since set iteration order is the usual way this breaks.
+    first = tmp_path / "first.jsonl"
+    second = tmp_path / "second.jsonl"
+    ingest(sample_html, first)
+    ingest(sample_html, second)
+    assert first.read_bytes() == second.read_bytes()
+
+
+def test_two_manifests_of_one_source_differ_only_in_when_they_ran(tmp_path, sample_html):
+    a = json.loads(ingest(sample_html, tmp_path / "a.jsonl").manifest_path.read_text())
+    b = json.loads(ingest(sample_html, tmp_path / "b.jsonl").manifest_path.read_text())
+    differing = {k for k in a if a[k] != b.get(k)}
+    assert differing == {"ingested_at"}, (
+        f"a manifest field varies between identical runs: {differing - {'ingested_at'}}"
+    )

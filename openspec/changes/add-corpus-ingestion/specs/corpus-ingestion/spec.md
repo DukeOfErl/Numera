@@ -62,6 +62,22 @@ SHALL NOT require any change in the consumer for a corpus to load. A consumer th
 - **WHEN** a line carries fields outside the required set
 - **THEN** the loader accepts the line and ignores them
 
+### Requirement: The same source produces the same corpus
+
+Because every reader fetches the export and builds the corpus themselves, two readers comparing their
+corpora is the only way either can tell whether they hold the same data. That comparison is worthless
+unless the same source produces the same bytes.
+
+The system SHALL produce a byte-identical corpus from a given source file, independent of when it runs
+or of any run-to-run variation in the interpreter. Two manifests of one source SHALL differ only in
+the ingest date, which is a fact about the run rather than about the data.
+
+#### Scenario: Two builds of one export
+
+- **WHEN** two runs ingest the same source file
+- **THEN** the two corpus files are byte-identical
+- **AND** their manifests differ only in the ingest date
+
 ### Requirement: The command refuses to write where git would track the corpus
 
 The default output path is relative, so a run started from the wrong directory writes the corpus into
