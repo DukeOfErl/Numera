@@ -8,7 +8,12 @@ This project follows the user-level documentation-upkeep conventions with one su
 
 ## Parallel branches and ADR numbers
 
-Two branches that each number ADRs from the current highest id will both claim the same numbers, and the second to merge conflicts. Before parallel work starts, give each branch a disjoint block and record the allocation in that change's `tasks.md`. Currently allocated: `add-grounding-validator` holds `0040`–`0090`, `add-ask-agent` holds `0100`–`0150`.
+Two branches that each number ADRs from the current highest id will both claim the same numbers, and the second to merge conflicts. Before parallel work starts, give each branch a disjoint block and record the allocation in that change's `tasks.md`. Currently allocated: `add-grounding-validator` holds `0040`–`0090`, `add-ask-agent` holds
+`0100`–`0190`. The next change starts at `0200`.
+
+**Write each ADR with the change that makes the decision, never as a batch at the end.** A task
+list that defers all of them to a documentation group produces retroactive ADRs, and by then the
+options that were rejected -- the part worth recording -- are gone.
 
 ## Testing the tests
 

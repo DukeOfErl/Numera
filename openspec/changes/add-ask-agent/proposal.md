@@ -243,6 +243,16 @@ here.
   and the premise of this project is that data manipulation by the model is not trusted. The open
   question is whether to mark such numbers or to stop producing them; marking is the smaller step
   and comes first. **This is the next change after the MVP merges**, not an open-ended deferral.
+
+  *How it would be shown, checked against Streamlit 1.61.1.* Streaming and marking do not conflict:
+  a placeholder can stream the answer and then be overwritten with the same text marked up
+  (`slot = st.empty(); text = slot.write_stream(...); slot.markdown(marked(text))`), which replaces
+  the element in place rather than appending a second copy, and the marked version is what
+  `AppTest` sees. The rendering is not the hard part. Deciding what counts as a number is: a naive
+  numeric match over a real answer marked the citation's own identifier, and Streamlit's colour
+  syntax nests badly inside the brackets a citation is written in. Both are reasons the marking must
+  come from the middleware, which knows which spans are citations, rather than from a regex in a
+  driver.
 - **Role guidelines as swappable prompt files.** The behavioural rules -- cite, refuse, hedge,
   report disagreement -- are currently one system prompt with no way to vary them. A live answer
   closed with "the most commonly cited value is around 1.0-1.1 um" where two of the four cited
@@ -324,6 +334,70 @@ here.
   number 100x too large that reads as a plausible length. Whether such entries should be excluded
   from search, flagged in the table, or left alone with the record as a lookout list is not decided
   here.
+
+  *The cause, found while porting the ingester (2026-08-26), and it is systematic.* The range parser
+  extracts every number in the `Range` cell and returns `min` and `max` of them. Any number in the
+  cell becomes a bound, including one belonging to a different quantity -- for `115577` the cell's
+  `72` is a generation time in minutes, which is how the width of E. coli came to be stored as
+  `0.5-72.0 um`. So this is a class of defect, not an entry.
+
+  Measured over the corpus: of the 6,147 entries carrying a parsed range, **1,222** -- 20%, or 8.5%
+  of the corpus -- come from a cell holding more than two numbers where the parse actually reads
+  them, which is the population where the mechanism can fire.
+
+  That is an upper bound on the damage rather than a defect count: 448 of them span less than 10x,
+  and many are genuinely several measurements of one quantity, where `min`/`max` is defensible. The
+  tail is not: **163 span more than 100x**, eight of those by more than a millionfold -- among them
+  `114599`, where "95-100 chromosomes: 1.4E10 nucleotide pairs" is stored as the range
+  `2.6-14000000000.0`. A further 347 cannot be judged by ratio because the low bound is zero or
+  negative. `115577` sits in the
+  100-1000x band; it was never a one-off.
+
+  *Two figures, and which is which.* The same criterion applied to `range_raw` as stored gives
+  **1,716**, and that is the number to quote for nothing. `range_raw` holds the source cell for
+  audit and therefore retains the Table-link URL -- deliberately, and documented at the field in
+  `add-corpus-ingestion` -- so an escaped filename's `%20` extracts as the number 20 and 474 entries
+  cross the threshold on URL digits alone -- and a further 167 take the plus-or-minus branch, which
+  returns before any min/max is taken and so cannot fuse anything. 1,222 is what the flag reports;
+  1,716 is what the criterion gives when applied to stored text rather than to the parse.
+  Independently reproduced on both branches, 2026-08-26.
+
+  *What this changes here.* Nothing in this change, deliberately -- the agent reports what the corpus
+  stores, and inventing a repair at query time would be the unsourced correction this project exists
+  to avoid. But the entries table presents a range as a measurement, and for these entries it is not
+  one. Two candidate responses, neither chosen: fix the parse at ingestion so the corpus stops
+  carrying fused ranges, or flag the affected entries as unusable and have the agent decline to cite
+  them. The fix belongs to `add-corpus-ingestion`; what this change owes is a decision on how to
+  present an entry once ingestion can mark it.
+
+  *The marking, agreed with that change (2026-08-27).* What this change consumes is a **predicate
+  carried as a field**, `range_fused` -- a boolean on every record, true when the stored bounds may
+  fuse numbers from more than one quantity. Read directly and forwarded as-is: no name matching, no
+  prefix rule, nothing to interpret.
+
+  A field rather than a rule over the ingester's flag vocabulary, because that vocabulary cannot
+  carry the predicate. It holds eight names, of which two mean fusion: `range_plus_minus` and
+  `range_mean_sd_embedded` mark *successful* parses, and `range_is_link` and `no_scalar` mark rows
+  with no scalar at all. Reading "any flag" selects 5,148 entries and reading the `range_` prefix
+  selects 5,494, against the ~1,222 that are actually at risk -- so either rule would mark thousands
+  of correctly parsed entries as untrustworthy, which teaches a reader to ignore the marking
+  altogether. The names stay internal to the ingester and free to change; the field must keep
+  answering the same question when they do. Which conditions raise it, and
+  what they are called, are internal to the ingester and free to be renamed, split or dropped --
+  that part of its work is the most provisional, and naming its strings in a spec delta or a
+  user-visible footnote here would cement exactly the wrong half of it.
+
+  Bounds keep the values they have now; nothing is corrected. So the decision this change owes is
+  how the entries table and the answer present an entry the ingester has marked -- decline to cite
+  it, show it with the range struck, or show the range marked -- and it can be taken before any of
+  the conditions are settled.
+
+  *Decided for the table (8.6).* Shown, never hidden and never repaired, marked the way an entry
+  with no recorded measurement method already is, with a footnote saying the stored range may fuse
+  numbers from more than one quantity. Citing it is not prevented: a citation claims provenance --
+  this figure came from this entry -- and that stays true of a marked entry. The predicate is also
+  sent to the model on a retrieved entry, because the prose is what people read, and a model that
+  does not know will state a fused range as a measurement while only the table contradicts it.
 - **Fusing the citation marker to the identifier.** The model is asked to write
   `BNID 100002`, and it treats `BNID` as the word "ID" -- a label it then pluralises
   over a list, "BNIDs 100002 and 100003". Reading a run of identifiers after one marker

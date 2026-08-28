@@ -55,6 +55,7 @@
 - [x] 5.7 Implement the run budget across questions, stopping the run when it is reached
 - [x] 5.8 Implement the pre-flight projection that flags an expensive question before work begins, and test that it never affects where work stops
 - [x] 5.9 Report spend and the model with every answer
+- [x] 5.11 Stress the limits against the real provider, at the smallest limits that mean anything: count requests at the provider boundary so a refusal is proven to be a request that never left rather than an ending reason; hold the overshoot past a ceiling to one request, measured from the recorded charges; and price one response with no fallback table configured, since the provider's reported cost and the table's figure are numerically identical and every other test would survive the field being renamed. About $0.01 a run, bounded twice -- by each configuration's own run budget and by a module cap read from the run ledger
 
 ## 6. Answering behaviour
 
@@ -89,12 +90,19 @@
 
 ## 8. Web interface
 
-- [ ] 8.1 Implement the web driver, holding the session identifier in framework session state across re-runs
-- [ ] 8.2 Hold the corpus index and alias index in a resource cache that survives re-runs, and verify they are built once rather than per interaction
-- [ ] 8.3 Render retrieval progress from events while a question is being answered
-- [ ] 8.4 Verify that a follow-up question is answered correctly after the application has been restarted mid-session
-- [ ] 8.5 Verify that the agent code is unchanged from the terminal driver's version
-- [ ] 8.6 Render the entries table after each answer, the first ten to twenty entries with a way to reach the rest, and make a row open the full entry. Distinguish the entries the answer cited by colour rather than by the terminal's dashed banner, and carry the no-recorded-method marking through
+- [x] 8.1 Implement the web driver, holding the session identifier in framework session state across re-runs
+- [x] 8.2 Hold the corpus index and alias index in a resource cache that survives re-runs, and verify they are built once rather than per interaction
+- [x] 8.3 Render retrieval progress from events while a question is being answered -- and every warning with it, which the page had been dropping silently
+- [x] 8.4 Verify that a follow-up question is answered correctly after the application has been restarted mid-session (needed the identifier published to the URL: session state dies with the server, the checkpoint it points at does not)
+- [x] 8.5 Verify that the agent code is unchanged from the terminal driver's version -- asserted over the source as an import direction, so it stays answered rather than being answered once
+- [x] 8.6 Render the entries table after each answer, the first ten to twenty entries with a way to reach the rest, and make a row open the full entry. Separate the cited entries from the uncited ones as the terminal already does -- the separation is the requirement, its visual form (colour, a divider, a heading) is decided when the table is built -- and carry the no-recorded-method marking through
+- [ ] 8.7 Mark an entry the ingester reports as `range_fused`, beside the existing no-recorded-method
+      marking, and send the same boolean to the model on a retrieved entry -- the prose is what people
+      read, and a model that does not know will state a fused range as a measurement while only the
+      table contradicts it. Shown, never hidden and never repaired, and still citable: a citation
+      claims provenance, which stays true of a marked entry.
+      **Blocked on `add-corpus-ingestion`**, which is unimplemented; no corpus emits the field yet, so
+      building it now would be dead code with no data to test it against.
 
 ## 9. Evaluation
 
@@ -112,16 +120,67 @@
 - [ ] 9.9 Produce the report from the results file, stating coverage when partial, breaking figures down per model, and distinguishing a run stopped on budget from a completed one
 - [ ] 9.10 Report cost and tool calls per question and in aggregate, and separate spend in this session from total spend across a resumed run
 - [ ] 9.11 Assemble a first question set from the corpus and record a baseline on the development model
+- [ ] 9.11a Record what fraction of the corpus is clean, beside the answer baseline, so a citation
+  rate is read against the base rate rather than as a failure: measurement method recorded, scalar
+  value recorded, unit classified, range not fused. Report the four separately and the conjunction,
+  and report it twice — once counting an unclassified unit as dirty and once as unknown — because
+  that condition measures our dimension table's coverage, not the corpus's quality, and it is the
+  largest single filter (19.4% against 34.6% at the time of writing, of 14,294 entries). Extend the
+  `corpus`-marked reporting test rather than writing a script, so the figures are re-derived by a
+  command that already exists. `range_fused` is not emitted by any corpus yet, so compute it the way
+  the ingester does and replace that with the flag once task 8.7 unblocks.
 
 ## 10. Documentation
 
-ADR numbers for this change are allocated `0100`–`0150`; `add-grounding-validator` holds `0040`–`0090`.
+ADR numbers for this change are allocated `0100`–`0190`; `add-grounding-validator` holds
+`0040`–`0090`. The block was widened from `0150` once the ADRs owed by groups 1–7 were counted;
+`0180` is spent on group 11; `0190` is held for group 9. **ADRs are written with the decision, not collected here at
+the end** -- the four below were already retroactive when they were written, which is the
+practice this note exists to stop repeating.
 
+- [x] 10.1a Write a reviewer-facing `README.md` covering the ask agent only: what it does, the corpus and
+      why it is not committed, how to run each driver, configuration, and what is not built yet
 - [ ] 10.1 Write `README.md`: what the agent does, how to supply a corpus, how to run each driver, how to configure the model and limits, and how to run an evaluation
 - [ ] 10.2 Add a diagram of the agent, its middleware, and the drivers to `docs/diagrams/`, following the principles already in `docs/diagrams/DIAGRAMS.md`
-- [ ] 10.3 Record an ADR for separating the agent from its drivers (ports and adapters), and what it buys
-- [ ] 10.4 Record an ADR for enforcing spend in middleware rather than in the prompt, and why it is an interim mechanism
-- [ ] 10.5 Record an ADR for the deterministic alias index in place of long-term agent memory
-- [ ] 10.6 Record an ADR for bounding conversation by refusal rather than condensing it, and what would change that
+- [x] 10.2a ADR-0100: the web driver decides in items and draws from them, since Streamlit
+      composes successive writes to one screen location into the last of them (written with 8.1)
+- [x] 10.3 ADR-0110: the agent is separated from its drivers by an event port
+- [x] 10.4 ADR-0120: spend is enforced in middleware, not asked for in the prompt -- an interim guard, not a billing control
+- [x] 10.5 ADR-0130: a deterministic alias index, not long-term agent memory
+- [x] 10.6 ADR-0140: conversation is bounded by refusal, not by condensing
+- [x] 10.6a ADR-0150: retrieval is two-tier -- capped summaries with an honest total, then bodies (owed by group 3)
+- [x] 10.6b ADR-0160: unit compatibility is three-valued, because 2,305 distinct unit strings make complete
+      classification permanently unavailable (owed by 6.2)
+- [x] 10.6c ADR-0170: the corpus stays outside every repository, and the three consequences that follow
+      -- the six-entry fixture, the entry-text-free trail, the defects file kept beside the corpus (owed by group 1)
 - [ ] 10.7 Add the agent's entries under `## [Unreleased]` in the existing `CHANGELOG.md`
 - [ ] 10.8 Update the Architecture section of `CLAUDE.md` to describe the module layout and name the patterns used
+
+
+## 11. Limits, said where they bind
+
+Taken **after group 8 and before group 9**, because the evaluation harness records what a question
+consumed and against which limit, and would otherwise record the shape being replaced here. All
+three follow from [ADR-0180](../../../docs/decisions/0180-limits-named-where-they-bind.md), written
+with the decision rather than after it.
+
+- [x] 11.1 Configure the per-question spend **ceiling** and derive the warning from it at 80 per cent,
+      instead of configuring the warning and deriving the ceiling at 120 per cent -- the configured
+      number should be the one that stops work, and this is what `CONVERSATION_BOUND` /
+      `CONVERSATION_WARN_AT` already do
+- [x] 11.2 Reject `BIONUMBERS_ASK_WARN_USD` with a message naming its replacement, rather than
+      accepting it under the new meaning: carried over unchanged it would silently tighten the hard
+      limit to 80 per cent of what it used to permit
+- [x] 11.3 Bound the conversation by its token count rather than its message count, read from the
+      provider's reported `prompt_tokens`, which is the size of what was actually sent. Sixty messages
+      is between a few thousand tokens and over a hundred thousand: measured over the corpus, one
+      retrieved entry's payload spans 16 to 8,023 characters, p50 557 and p99 2,353
+- [x] 11.4 Report an answered question that reached its spend ceiling as distinct from one that
+      finished with room to spare, the way `at_retrieval_bound` already does for model calls -- the
+      gate checks before each call and cannot check after, so an overshoot of up to one call is
+      inherent and currently invisible
+- [x] 11.5a Check every marker can fire against a real corpus, as a `corpus`-marked test rather
+      than a remembered practice -- a flag whose condition cannot hold passes every test, draws
+      nothing, and reports a zero that reads as a fact about the world
+- [x] 11.5 Update `README.md`'s configuration table, and the `openspec/specs/spend-control` deltas,
+      for the renamed key and the three reporting states
