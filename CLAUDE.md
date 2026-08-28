@@ -18,7 +18,9 @@ Two branches that each number ADRs from the current highest id will both claim t
 | `add-ask-agent` | `0100`–`0190` |
 | `add-corpus-ingestion` | `0200`–`0250` |
 
-`0000`–`0030` exist as files; everything above is reserved, not yet written. `add-ask-agent` was originally given `0100`–`0150` and has since planned `0160` and `0170`, which is why its block is wider here than in its own `tasks.md` — that note and `add-grounding-validator`'s both still say `0150` and should be corrected when each next merges.
+**This table is the authority, not a scan of `docs/decisions/`.** A scan cannot see uncommitted ADRs on another branch: `git ls-tree` reads committed trees, and each branch is checked out in its own worktree, so a number can be spent and still invisible from here. At the time of writing `add-ask-agent` has written `0100`–`0180` — uncommitted — leaving `0190` as the last number in its block. Never conclude a number is free because no file for it turns up.
+
+**Allocate by creating the file.** Copy the template to the number you are claiming and commit that stub early, rather than writing the ADR at the end of the change. A ceiling only holds if claiming the number and writing the file are the same step; a block widened in a note that only your own branch reads is how the last drift happened. Reconcile each change's `tasks.md` against this table when it merges.
 
 ## Running the tests
 
