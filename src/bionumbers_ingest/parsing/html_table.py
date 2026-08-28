@@ -60,8 +60,7 @@ class _TableParser(HTMLParser):
         self._row: list[str] | None = None
         self._in_cell = False
         self._buf: list[str] = []
-        self.saw_table = False
-        self.saw_table_end = False
+        self._open_tables = 0
 
     @property
     def incomplete(self) -> bool:
@@ -83,15 +82,19 @@ class _TableParser(HTMLParser):
         missing entries nobody can enumerate. So completeness is asserted against
         the closing tag rather than against the parser's open state.
 
+        Counted rather than latched, because a latch cannot tell a closed table
+        from a second one opened after it: `<table>…</table><table>…` cut short
+        would read as complete. Nesting is handled by the same count.
+
         ``incomplete`` stays in the disjunction rather than being replaced by it:
         a fragment with no ``<table>`` wrapper at all has no closing tag to miss,
         and an open row is the only evidence of truncation it can offer.
         """
-        return (self.saw_table and not self.saw_table_end) or self.incomplete
+        return self._open_tables > 0 or self.incomplete
 
     def handle_starttag(self, tag: str, attrs: object) -> None:
         if tag == "table" and not self._in_cell:
-            self.saw_table = True
+            self._open_tables += 1
         if tag == "tr":
             self._row = []
         elif tag == "td" and self._row is not None:
@@ -105,8 +108,8 @@ class _TableParser(HTMLParser):
             self._buf.append(self.get_starttag_text() or "")
 
     def handle_endtag(self, tag: str) -> None:
-        if tag == "table" and not self._in_cell:
-            self.saw_table_end = True
+        if tag == "table" and not self._in_cell and self._open_tables:
+            self._open_tables -= 1
         if tag == "td" and self._in_cell:
             assert self._row is not None
             self._row.append("".join(self._buf))

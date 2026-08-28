@@ -136,6 +136,24 @@ def test_a_table_cut_between_two_rows_is_an_error_too(tmp_path):
         list(iter_rows(cut))
 
 
+def test_a_second_table_left_open_is_truncation_too(tmp_path):
+    # A latch on "a closing tag was seen" cannot tell a closed table from another
+    # one opened after it, and would call this file complete.
+    #
+    # A knowingly-accepted seeded survivor lives here: resetting the count to zero
+    # on a close, instead of decrementing it, passes every test. The two differ
+    # only for a table nested directly inside another, and a table inside a `<td>`
+    # is ignored by the counter on purpose — so nothing this reader can be handed
+    # tells them apart, and a test that did would be pinning an unreachable path.
+    cut = tmp_path / "two-tables.html"
+    cut.write_text(
+        "<table><tr><td>a</td><td>b</td></tr></table><table><tr><td>1</td><td>2</td></tr>",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="truncated"):
+        list(iter_rows(cut))
+
+
 def test_a_limited_read_is_not_mistaken_for_a_truncated_file(sample_html):
     # `--limit` stops the read deliberately, long before the closing tag. The
     # completeness check must not fire on it, or the flag could never be used.
