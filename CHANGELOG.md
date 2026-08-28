@@ -66,6 +66,11 @@ any release; `1.0.0` when it stabilizes.
 - **`range_qualified`** on every record: the source did not state a closed
   interval. `<0.001` stored as the interval 0.001–0.001 asserts an exact equality
   where the source said *less than*. 2,233 records.
+- **A resolver** that reports whether a corpus is present, or whether an export
+  beside it could produce one, so a driver can offer to build it rather than
+  failing with "no corpus at that path" while the export sits in the same
+  directory. Reporting is separate from building, so the caller can say what is
+  about to happen before a 27 MB read. A corpus that exists is never rebuilt.
 - **The ingest operation refuses to run where git would track its output**, naming
   the repository, rather than writing unlicensed data onto a committable path. In
   the operation rather than the command, so every caller inherits it ([ADR-0250]).

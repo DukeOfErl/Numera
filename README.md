@@ -55,10 +55,12 @@ To cite BioNumbers itself:
 
 ### Obtaining a runnable corpus
 
-Build it yourself from the published export, in two steps. Nothing is redistributed: the data's
-licensing is unresolved, so this repository ships an *ingester* rather than a corpus
-([ADR-0200](docs/decisions/0200-ship-an-ingester-not-a-prepared-corpus.md)). The cost is real and
-falls on you — the agent does not run until you have done the fetch.
+**Download the export and start the app.** Nothing is redistributed: the data's licensing is
+unresolved, so this repository ships an *ingester* rather than a corpus
+([ADR-0200](docs/decisions/0200-ship-an-ingester-not-a-prepared-corpus.md)). The download is the one
+step that cannot be automated, and it falls on you — the agent does not run until you have done it.
+The build does not: the app does that itself the first time it finds an export beside a corpus that
+is not there yet.
 
 #### 1. Get the source export
 
@@ -81,10 +83,29 @@ are the reason that code exists: a 27 MB HTML `<table>` carrying an `.xls` exten
 over 14 columns of which 14,294 are data, with ranges written a dozen ways, two Unicode micrometres,
 and markup injected into the cells.
 
-#### 2. Build the corpus
+#### 2. Let the app build it
+
+Point `BIONUMBERS_ASK_CORPUS` at where you want the corpus and start either driver. Finding no
+corpus there and `BioNumbers.xls` beside it, the app says what it is about to do and builds one —
+about a minute for 27 MB, once.
 
 ```bash
-uv sync --extra ingest
+uv sync --extra ask --extra ingest
+export BIONUMBERS_ASK_CORPUS=~/bionumbers/bionumbers.jsonl   # BioNumbers.xls sits in that directory
+uv run bionumbers-ask
+```
+
+The `ingest` extra is what makes the build possible. Without it the agent still runs on a corpus you
+already have, and if it finds an export it cannot use it says so and names it, rather than reporting
+only that no corpus exists.
+
+**A corpus that is already there is never rebuilt** — not when it is older than the export, not when
+its manifest names a different file. One you produced deliberately is not replaced without being
+asked.
+
+To build it yourself instead, or to build one with different options:
+
+```bash
 uv run bionumbers-ingest path/to/BioNumbers.xls
 ```
 
@@ -93,8 +114,10 @@ report of what it could not interpret. Use `-o` for another path, and `--limit N
 first N rows — **not** the default, because a sampled corpus looks complete and is not.
 
 Two guards back the never-committed rule rather than relying on memory. `data/` is git-ignored, and
-**the command refuses to run at all if git would track its output** — corpus, manifest or the
-`.partial` files it writes through — naming the repository and exiting non-zero.
+**the ingest refuses to run at all if git would track its output** — corpus, manifest or the
+`.partial` files it writes through — naming the repository and stopping. That refusal lives in the
+operation rather than the command, so the automatic build is refused on exactly the same terms
+([ADR-0250](docs/decisions/0250-guards-belong-to-the-operation.md)).
 
 The same export always produces a byte-identical corpus, so two people can compare their builds and
 learn something from a difference.
@@ -133,7 +156,7 @@ second, so a corpus with no manifest is a run that did not finish.
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv sync --extra ask                            # add --extra ingest to build a corpus
+uv sync --extra ask --extra ingest             # the ingest extra builds a corpus if one is needed
 export OPENROUTER_API_KEY=...                  # the model is reached through OpenRouter
 export BIONUMBERS_ASK_CORPUS=/path/to/bionumbers.jsonl
 ```

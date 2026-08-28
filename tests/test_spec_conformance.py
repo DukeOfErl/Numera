@@ -55,6 +55,17 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_agent.py::test_retrieval_stops_at_its_own_bound_not_at_the_model_call_limit",
         "test_agent.py::test_a_declined_call_is_still_reported_as_something_that_happened",
     ),
+    "A build is announced before it begins, not after it ends": (
+        "test_corpus_autobuild.py::test_the_build_is_announced_before_it_happens",
+        "test_corpus_autobuild.py::test_an_existing_corpus_is_used_and_never_rebuilt",
+    ),
+    "A corpus that cannot be built is explained, not raised": (
+        "test_corpus_autobuild.py::test_a_refused_destination_reaches_the_reader_as_a_message",
+        "test_corpus_autobuild.py::test_without_the_ingester_the_error_still_names_the_export",
+        "test_corpus_autobuild.py::test_nothing_to_build_from_leaves_the_ordinary_error",
+        "test_corpus_autobuild.py::test_the_terminal_shows_the_refusal_rather_than_a_traceback",
+        "test_corpus_autobuild.py::test_the_page_shows_the_refusal_rather_than_a_traceback",
+    ),
     "A refusal follows a search": (
         "test_agent.py::test_an_answer_with_no_retrieval_behind_it_is_reported",
         "test_agent.py::test_an_answer_claiming_searches_it_never_made_is_reported_as_such",
@@ -251,6 +262,25 @@ COVERED.update(
         "Padding rows are not records": (
             "test_cleaning.py::test_padding_rows_are_not_data_rows",
             "test_parsing.py::test_padding_row_is_yielded_not_dropped",
+        ),
+    }
+)
+
+# add-corpus-autobuild's.
+COVERED.update(
+    {
+        "An export beside a missing corpus can produce one": (
+            "test_resolve.py::test_an_export_beside_a_missing_corpus_is_found",
+            "test_resolve.py::test_the_configured_path_may_be_the_export_itself",
+            "test_resolve.py::test_a_corpus_that_is_there_needs_no_build",
+            "test_resolve.py::test_nothing_to_build_from_is_reported_as_nothing",
+        ),
+        "A corpus that exists is never rebuilt": (
+            "test_resolve.py::test_a_corpus_is_never_rebuilt_however_stale",
+            "test_resolve.py::test_an_export_whose_corpus_already_exists_is_not_rebuilt",
+        ),
+        "A build through the resolver is refused on the same terms as the command": (
+            "test_resolve.py::test_a_build_is_refused_where_git_would_track_the_corpus",
         ),
     }
 )

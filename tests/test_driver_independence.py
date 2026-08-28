@@ -24,7 +24,10 @@ PACKAGE = Path(__file__).resolve().parents[1] / "src" / "bionumbers_ask"
 # a table both drivers present -- and belong on the presentation side of the line
 # even though neither draws anything itself.
 DRIVERS = {"cli", "web"}
-PRESENTATION = DRIVERS | {"messages", "entries_table"}
+# `autobuild` joins them: it decides whether to build a corpus, which is a driver's
+# policy and not the agent's, and it is the one module allowed to import the
+# ingester. Putting it on this side is what keeps that dependency out of the core.
+PRESENTATION = DRIVERS | {"messages", "entries_table", "autobuild"}
 
 AGENT_CORE = sorted(
     path.stem

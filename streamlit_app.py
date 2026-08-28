@@ -9,16 +9,27 @@ BIONUMBERS_ASK_CORPUS, BIONUMBERS_ASK_CHECKPOINTS, BIONUMBERS_ASK_TRACE -- since
 a Streamlit script is given no arguments of its own.
 """
 
+import os
+
 import streamlit as st
 
-from bionumbers_ask import web
+from bionumbers_ask import autobuild, web
 from bionumbers_ask.config import NotConfigured, format_usd
 from bionumbers_ask.corpus import CorpusUnavailable
 
 st.set_page_config(page_title="BioNumbers ask", page_icon=":material/biotech:")
 
 try:
-    repo, agent = web.resources()
+    # Resolved here rather than inside `resources`, which is cached: Streamlit
+    # replays elements drawn inside a cached function on every hit, so a build
+    # notice written in there would be redrawn for ever. Announced before the
+    # build starts, because a minute of blank page is indistinguishable from a
+    # hang.
+    corpus = autobuild.corpus_path(
+        os.environ.get("BIONUMBERS_ASK_CORPUS", ""),
+        lambda text: st.info(web.as_text(text), icon=":material/build:"),
+    )
+    repo, agent = web.resources(corpus)
 except (CorpusUnavailable, NotConfigured) as exc:
     # Both are misconfiguration a person can fix, so the message is the point:
     # Streamlit's exception panel would bury it under a stack the reader did not

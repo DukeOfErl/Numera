@@ -93,6 +93,7 @@ format, and nothing between them knows either.
 | `io.py` | JSONL out, renamed into place on success |
 | `ingest.py` | wires the pipeline together |
 | `guard.py` | the refusal to write where git would track the output |
+| `resolve.py` | find a corpus, or the export that would produce one |
 | `cli.py` | the command |
 
 Five things about it that reading one module will not tell you:

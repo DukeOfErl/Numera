@@ -87,3 +87,35 @@ def test_the_destination_directory_is_created(tmp_path):
     out = tmp_path / "nested" / "deeper" / "corpus.jsonl"
     write_corpus([BioNumberRecord(bnid=1)], out)
     assert out.exists()
+
+
+def test_two_writes_of_one_corpus_do_not_share_a_scratch_file(tmp_path):
+    """Two builds of the same corpus must not truncate one fixed `.partial`.
+
+    The README tells a reader to start either driver, so a terminal session and a
+    Streamlit server both finding no corpus is a documented arrangement. Sharing
+    the scratch file, interleaved at buffer boundaries, yields whole-but-duplicated
+    JSONL lines that the consumer's loader accepts without complaint — a corpus
+    silently wrong, and permanent, because one that exists is never rebuilt.
+    """
+    from bionumbers_ingest.io import partial_path_for
+
+    target = tmp_path / "bionumbers.jsonl"
+    assert partial_path_for(target) != partial_path_for(target)
+
+
+def test_a_scratch_file_still_ends_in_the_suffix_the_ignore_rules_name(tmp_path):
+    """`*.partial` has to keep covering it, or a kill leaves a committable file."""
+    from bionumbers_ingest.io import PARTIAL_SUFFIX, partial_path_for
+
+    assert partial_path_for(tmp_path / "bionumbers.jsonl").name.endswith(PARTIAL_SUFFIX)
+
+
+def test_the_writer_uses_the_scratch_path_it_is_handed(tmp_path):
+    """The guard is asked about that path, so the writer must not invent another."""
+    from bionumbers_ingest.io import write_corpus
+
+    seen = tmp_path / "chosen.partial"
+    target = tmp_path / "corpus.jsonl"
+    write_corpus([], target, partial=seen)
+    assert target.is_file() and not seen.exists()

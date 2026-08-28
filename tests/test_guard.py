@@ -8,6 +8,7 @@ caller, and the exact bypass a second caller would have taken. ADR-0200.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 
 import pytest
@@ -72,6 +73,41 @@ def test_every_file_a_run_can_create_is_checked(tmp_path):
         "bionumbers.jsonl.partial",
         "bionumbers.jsonl.manifest.json.partial",
     }
+
+
+def test_the_actual_scratch_paths_are_checked_not_only_representative_ones(tmp_path):
+    """The scratch names carry a unique component, so they are passed in.
+
+    Asking git about `<name>.partial` while the writer creates
+    `<name>.1234-ab12cd34.partial` is asking about a file that never exists — and
+    an ignore rule naming the representative exactly would not cover the real one.
+    """
+    real = tmp_path / "bionumbers.jsonl.99-deadbeef.partial"
+    assert real in paths_a_run_can_create(tmp_path / "bionumbers.jsonl", (real,))
+
+
+def test_a_run_is_refused_when_only_its_real_scratch_path_would_be_tracked(tmp_path, sample_html):
+    """Everything but the unique scratch names is ignored, so only they can refuse.
+
+    Ignoring just the corpus and the manifest would leave the *representative*
+    `<name>.partial` trackable too, and the refusal would prove nothing about
+    whether the path the writer actually creates was ever checked. Both generic
+    forms are ignored here, so a refusal can only have come from a real one.
+    """
+    ignore = (
+        "bionumbers.jsonl\n"
+        "bionumbers.jsonl.manifest.json\n"
+        "bionumbers.jsonl.partial\n"
+        "bionumbers.jsonl.manifest.json.partial\n"
+    )
+    repo = _repo(tmp_path, "scratch-only", ignore=ignore)
+    shutil.copy(sample_html, repo / "export.html")
+
+    with pytest.raises(OutputWouldBeCommitted) as refusal:
+        ingest(repo / "export.html", repo / "bionumbers.jsonl")
+
+    assert ".partial" in refusal.value.path.name
+    assert not (repo / "bionumbers.jsonl").exists()
 
 
 def test_a_path_outside_any_repository_names_no_repository(tmp_path):

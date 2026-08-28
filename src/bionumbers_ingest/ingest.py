@@ -22,7 +22,7 @@ from pathlib import Path
 from bionumbers_ingest import provenance
 from bionumbers_ingest.cleaning import clean_row, is_data_row
 from bionumbers_ingest.guard import refuse_if_committable
-from bionumbers_ingest.io import write_corpus
+from bionumbers_ingest.io import partial_path_for, write_corpus
 from bionumbers_ingest.model import EXPECTED_HEADERS, BioNumberRecord
 from bionumbers_ingest.parsing import iter_rows
 from bionumbers_ingest.validation import RunReport, report_for
@@ -84,7 +84,11 @@ def ingest(
     # Before the 27 MB read, not after: refusing at the end would have spent the
     # work and, worse, this is where the refusal has to be for every caller to
     # get it. It lived in `cli.py` until a second caller was proposed.
-    refuse_if_committable(corpus_path)
+    # The scratch paths are generated here, once, so the guard is asked about the
+    # files that will actually exist and the writers use those same names.
+    corpus_scratch = partial_path_for(corpus_path)
+    manifest_scratch = partial_path_for(provenance.manifest_path_for(corpus_path))
+    refuse_if_committable(corpus_path, (corpus_scratch, manifest_scratch))
 
     records, rows_read, skipped, digest = build_records(source, limit=limit)
     # A limited run stops before the end of the file, so finish the fingerprint
@@ -95,7 +99,7 @@ def ingest(
         record.source_digest = stamp
 
     report = report_for(records, rows_read, skipped, row_limit=limit)
-    write_corpus(records, corpus_path)
+    write_corpus(records, corpus_path, partial=corpus_scratch)
 
     manifest = provenance.Manifest(
         source_path=str(source),
@@ -119,5 +123,5 @@ def ingest(
             ),
         },
     )
-    manifest_path = provenance.write_manifest(manifest, corpus_path)
+    manifest_path = provenance.write_manifest(manifest, corpus_path, partial=manifest_scratch)
     return IngestResult(corpus_path, manifest_path, report, stamp)

@@ -53,7 +53,7 @@ def app(monkeypatch, repo, agent) -> AppTest:
     is cached for the life of the process: a second test would be served the
     first one's agent.
     """
-    monkeypatch.setattr(web, "resources", lambda: (repo, agent))
+    monkeypatch.setattr(web, "resources", lambda corpus=None: (repo, agent))
     return AppTest.from_file(APP, default_timeout=TIMEOUT)
 
 
@@ -227,7 +227,7 @@ def test_session_state_holds_the_identifier_and_what_was_drawn_and_nothing_else(
 def test_a_missing_corpus_is_explained_rather_than_raised(monkeypatch):
     from bionumbers_ask.corpus import CorpusUnavailable
 
-    def unavailable():
+    def unavailable(corpus=None):
         raise CorpusUnavailable("no corpus was supplied")
 
     monkeypatch.setattr(web, "resources", unavailable)
@@ -462,7 +462,7 @@ def test_a_follow_up_continues_the_conversation_after_a_restart(
     # The server restarts: a new agent over the same store, and a page that knows
     # only what the URL carried.
     restarted = AskAgent(repo, config, store, model=scripted(says("second answer")))
-    monkeypatch.setattr(web, "resources", lambda: (repo, restarted))
+    monkeypatch.setattr(web, "resources", lambda corpus=None: (repo, restarted))
     after = AppTest.from_file(APP, default_timeout=TIMEOUT)
     after.query_params = {web.QUERY_KEY: session}
     after.run()
