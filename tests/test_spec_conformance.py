@@ -108,6 +108,153 @@ TESTED_BUT_UNNAMED = (
     "Spend is always reported",
 )
 
+# add-corpus-ingestion's. The ingester's requirements, mapped the same way — added
+# with the merge that made them visible here, which is the rule this file states.
+COVERED.update(
+    {
+        "Ingest the published export into a JSONL corpus": (
+            "test_command.py::test_the_command_writes_a_corpus_a_manifest_and_a_report",
+            "test_parsing.py::test_headers_and_row_count",
+        ),
+        "The output satisfies the ask agent's corpus contract": (
+            "test_corpus_contract.py::test_every_line_carries_every_required_key_with_an_accepted_type",
+            "test_corpus_contract.py::test_round_trip_through_the_real_loader",
+        ),
+        "The same source produces the same corpus": (
+            "test_provenance.py::test_the_same_source_produces_a_byte_identical_corpus",
+        ),
+        "The command refuses to write where git would track the corpus": (
+            "test_command.py::test_it_refuses_to_write_a_corpus_where_git_would_track_it",
+            "test_command.py::test_the_guard_covers_the_manifest_as_well_as_the_corpus",
+            "test_command.py::test_the_guard_covers_the_partial_files_a_run_writes_through",
+            "test_guard.py::test_the_library_call_refuses_where_git_would_track_the_output",
+            "test_guard.py::test_it_refuses_before_reading_the_source",
+            "test_guard.py::test_every_file_a_run_can_create_is_checked",
+        ),
+        "Each key carries the value of its own column": (
+            "test_cleaning.py::test_each_column_reaches_its_own_field",
+            "test_cleaning.py::test_the_numeric_columns_reach_their_own_fields",
+            "test_cleaning.py::test_the_keyword_column_reaches_the_keyword_field",
+        ),
+        "Every line stands on its own": (
+            "test_io.py::test_one_json_object_per_line",
+            "test_corpus_contract.py::test_one_unusable_line_costs_the_whole_corpus",
+        ),
+        "A run that does not finish leaves no corpus behind": (
+            "test_io.py::test_a_run_that_raises_partway_leaves_no_file",
+            "test_io.py::test_a_failed_run_leaves_a_previous_corpus_untouched",
+        ),
+        "The whole export is processed by default": (
+            "test_command.py::test_the_whole_file_is_the_default_and_a_limit_must_be_asked_for",
+            "test_command.py::test_a_limit_below_one_is_rejected_rather_than_writing_one_row",
+        ),
+        "The corpus cannot be committed by accident": (
+            "test_command.py::test_it_writes_where_git_ignores_the_path",
+            "test_command.py::test_it_writes_outside_any_repository",
+        ),
+        "Every input row is accounted for": (
+            "test_provenance.py::test_records_written_plus_skipped_equals_rows_read",
+            "test_provenance.py::test_accounting_that_does_not_add_up_is_reported_as_a_warning",
+        ),
+        "A run reports what it could not interpret": (
+            "test_command.py::test_the_report_counts_each_flag_that_was_raised",
+            "test_provenance.py::test_the_report_counts_are_asserted_against_real_values",
+        ),
+        "Duplicate identifiers are reported, not resolved": (
+            "test_command.py::test_duplicate_identifiers_are_reported_and_both_records_kept",
+        ),
+        "Every corpus records which file it came from and when": (
+            "test_provenance.py::test_the_manifest_sits_beside_the_corpus_and_records_the_run",
+            "test_provenance.py::test_a_records_stamp_matches_its_own_manifest",
+            "test_provenance.py::test_the_recorded_time_is_the_sources_mtime_not_the_run_time",
+        ),
+        "A sampled run's fingerprint still describes the whole file": (
+            "test_provenance.py::test_a_limited_run_fingerprints_the_whole_file_anyway",
+            "test_provenance.py::test_a_limited_run_says_so_in_its_manifest",
+        ),
+        "A source that cannot be read whole is an error": (
+            "test_parsing.py::test_a_truncated_table_is_an_error_not_a_short_corpus",
+            "test_parsing.py::test_a_table_cut_between_two_rows_is_an_error_too",
+            "test_parsing.py::test_a_row_with_the_wrong_cell_count_is_an_error",
+            "test_parsing.py::test_a_renamed_column_is_an_error_rather_than_an_empty_corpus",
+        ),
+        "A flag that cannot fire is worse than no flag": (
+            "test_command.py::test_the_report_states_its_zeroes_rather_than_omitting_them",
+            "test_command.py::test_a_run_that_raised_no_flags_says_so_rather_than_printing_nothing",
+        ),
+        "Parse flags travel with the record": (
+            "test_io.py::test_the_predicate_and_the_flags_are_on_every_line",
+            "test_corpus_contract.py::test_the_predicate_and_the_flags_are_present_on_every_line",
+        ),
+        "The fused-range predicate is a field, not a naming convention": (
+            "test_cleaning.py::test_range_fused_is_false_for_flags_that_do_not_concern_fusion",
+            "test_cleaning.py::test_hedging_is_a_separate_predicate_from_fusion",
+            "test_corpus_contract.py::test_the_hedge_kind_is_a_field_not_a_flag_name",
+            "test_corpus_contract.py::test_the_two_hedge_kinds_partition_the_qualified_field",
+        ),
+        "A range is normalized to a low and a high bound": (
+            "test_cleaning.py::test_signed_range_parsing",
+            "test_cleaning.py::test_scientific_and_grouped_numbers_are_one_number_each",
+        ),
+        "A unit's exponent is not a measurement": (
+            "test_cleaning.py::test_a_unit_exponent_does_not_become_a_bound",
+            "test_cleaning.py::test_a_unit_exponent_between_the_bounds_does_not_stop_the_scan",
+        ),
+        "A sign is told apart from a separator": (
+            "test_cleaning.py::test_a_hyphen_after_a_unit_is_a_separator_not_a_sign",
+            "test_cleaning.py::test_a_multi_word_unit_before_a_hyphen_is_still_a_separator",
+            "test_cleaning.py::test_a_micrometre_is_a_unit_the_sign_test_can_step_over",
+            "test_cleaning.py::test_the_unit_walk_stops_at_a_conjunction",
+            "test_cleaning.py::test_the_unit_walk_does_not_cross_prose_to_find_a_digit",
+            "test_cleaning.py::test_an_en_dash_between_two_numbers_is_a_separator_not_a_sign",
+        ),
+        "Plus-or-minus is uncertainty, not a bound": (
+            "test_cleaning.py::test_plus_minus_is_uncertainty_around_value",
+            "test_cleaning.py::test_the_plus_minus_deviation_is_the_number_after_the_sign",
+            "test_cleaning.py::test_more_than_one_plus_minus_is_more_than_one_measurement",
+            "test_cleaning.py::test_a_percentage_deviation_is_a_fraction_of_the_value_not_a_quantity",
+        ),
+        "A value cell that is not a number does not become one": (
+            "test_cleaning.py::test_a_value_that_is_not_a_bare_number_is_flagged",
+            "test_cleaning.py::test_an_unparseable_value_is_flagged",
+            "test_cleaning.py::test_a_non_finite_value_is_not_a_measurement",
+        ),
+        "A range that may fuse two quantities is flagged": (
+            "test_cleaning.py::test_more_than_two_numbers_is_flagged_and_bounds_unchanged",
+            "test_cleaning.py::test_prose_between_the_bounds_is_flagged",
+            "test_cleaning.py::test_a_repeated_unit_alone_does_not_make_two_quantities_one_range",
+            "test_cleaning.py::test_a_shared_exponent_is_flagged_and_the_bounds_left_alone",
+        ),
+        "A range the source did not state as an interval says so": (
+            "test_cleaning.py::test_a_hedged_range_is_flagged_and_marked_not_exact",
+            "test_cleaning.py::test_a_plainly_stated_range_is_not_marked_hedged",
+            "test_cleaning.py::test_a_hedged_value_reaches_the_contract_not_just_the_flags",
+        ),
+        "A row whose range is only a link is kept": (
+            "test_cleaning.py::test_a_link_and_nothing_else_is_kept_with_no_bounds",
+            "test_cleaning.py::test_a_link_beside_a_range_keeps_both_and_no_url_digit_becomes_a_bound",
+        ),
+        "Units and text are normalized across the source's encodings": (
+            "test_cleaning.py::test_the_micro_sign_is_folded_into_the_greek_mu",
+            "test_cleaning.py::test_an_entity_encoded_micrometre_normalises_the_same_way",
+        ),
+        "Injected markup is stripped and reported": (
+            "test_cleaning.py::test_injected_markup_is_removed_and_flagged_in_either_form",
+            "test_cleaning.py::test_no_emitted_field_ever_contains_a_tag",
+            "test_cleaning.py::test_multiply_escaped_markup_does_not_survive_one_pass",
+        ),
+        "An angle bracket is not evidence of markup": (
+            "test_cleaning.py::test_angle_bracket_content_is_not_treated_as_markup",
+            "test_cleaning.py::test_a_less_than_clause_in_the_range_column_keeps_its_numbers",
+            "test_cleaning.py::test_real_html_elements_are_still_stripped",
+        ),
+        "Padding rows are not records": (
+            "test_cleaning.py::test_padding_rows_are_not_data_rows",
+            "test_parsing.py::test_padding_row_is_yielded_not_dropped",
+        ),
+    }
+)
+
 # Group 9's. Not mappable until the evaluation harness exists, so a different kind
 # of gap from the one above and kept apart from it -- otherwise finishing 10.9
 # would look impossible rather than merely unfinished.

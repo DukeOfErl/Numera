@@ -1,4 +1,12 @@
-# BioNumbers ask
+# BioNumbers
+
+Tools for working with the [BioNumbers](https://bionumbers.hms.harvard.edu/) database of quantitative
+biology: **`bionumbers_ingest`** (extra `ingest`) turns the published export into a JSONL corpus with
+provenance, and **`bionumbers_ask`** (extra `ask`) answers questions against that corpus with
+citations. A third package, `bionumbers` (`validator`), checks that an answer is grounded in the
+corpus and arrives on its own branch.
+
+## The ask agent
 
 **How long is an E. coli cell? How many ribosomes does it carry?** Quantitative biology runs on
 numbers like these, and the usual way to get one out of a language model is to ask and hope. A
@@ -47,20 +55,12 @@ To cite BioNumbers itself:
 
 ### Obtaining a runnable corpus
 
-<!-- TEMPORARY. Delete the prepared-file line and the note under it once both
-     `add-ask-agent` and `add-corpus-ingestion` are merged to `dev`, and promote
-     "Getting the source export yourself" to open this section. From then on the
-     supported route is: download the raw export, run `bionumbers-ingest` on it.
-     This offer exists only because the ingester was unbuilt when a reviewer needed
-     a runnable corpus, and it points at a file nobody has agreed to host. -->
+Build it yourself from the published export, in two steps. Nothing is redistributed: the data's
+licensing is unresolved, so this repository ships an *ingester* rather than a corpus
+([ADR-0200](docs/decisions/0200-ship-an-ingester-not-a-prepared-corpus.md)). The cost is real and
+falls on you — the agent does not run until you have done the fetch.
 
-Download the prepared file: **&lt;CORPUS-DOWNLOAD-LINK&gt;** (JSONL, ~20 MB, 14,294 entries).
-
-> **The link above is a placeholder and must be filled in before this README is given to anyone.**
-> Without it this section describes a file the reader has no way to obtain, and every instruction
-> below it is unrunnable.
-
-#### Getting the source export yourself
+#### 1. Get the source export
 
 Go to <https://bionumbers.hms.harvard.edu/resources.aspx> and click **Download the BioNumbers
 database**. That gives you `BioNumbers.xls`, the export this project was built against.
@@ -76,21 +76,64 @@ database is updated and the file you get may not be the one these figures descri
 sha256sum BioNumbers.xls
 ```
 
-It is provided ready to use because what BioNumbers distributes is not directly readable here: the
-export is a 27 MB HTML `<table>` carrying an `.xls` extension, and converting it into the record
-shape this agent reads — normalising ranges written a dozen ways, reconciling two Unicode
-micrometres, stripping injected markup — is done by a separate ingestion project that is not part of
-this repository.
+Do not convert, rename or pre-process it. The ingester reads it exactly as published, and its quirks
+are the reason that code exists: a 27 MB HTML `<table>` carrying an `.xls` extension, 14,297 rows
+over 14 columns of which 14,294 are data, with ranges written a dozen ways, two Unicode micrometres,
+and markup injected into the cells.
+
+#### 2. Build the corpus
+
+```bash
+uv sync --extra ingest
+uv run bionumbers-ingest path/to/BioNumbers.xls
+```
+
+That writes `data/processed/bionumbers.jsonl` (git-ignored) plus a manifest beside it, and prints a
+report of what it could not interpret. Use `-o` for another path, and `--limit N` to process only the
+first N rows — **not** the default, because a sampled corpus looks complete and is not.
+
+Two guards back the never-committed rule rather than relying on memory. `data/` is git-ignored, and
+**the command refuses to run at all if git would track its output** — corpus, manifest or the
+`.partial` files it writes through — naming the repository and exiting non-zero.
+
+The same export always produces a byte-identical corpus, so two people can compare their builds and
+learn something from a difference.
 
 A six-entry sample lives at `tests/fixtures/corpus_sample.jsonl`. It is enough to run the whole test
 suite, and too small to ask real questions of.
+
+#### What a corpus line carries, and what the agent reads
+
+One JSON object per line, one line per data row. Twelve keys are the contract the loader enforces;
+the rest it ignores. Absent numbers are `null` and never `""`, and `keywords` is always an array.
+
+Nothing is dropped and nothing is silently corrected. A cell the ingester cannot read cleanly still
+becomes a record, with a flag naming what went wrong
+([ADR-0230](docs/decisions/0230-flag-and-count-never-correct.md)). `parse_flags` is the ingester's own
+vocabulary and its names may change; **four boolean fields are the stable contract**, and a consumer
+reads those rather than matching on flag names:
+
+- **`range_fused`** — the stored bounds may come from two different quantities, because bounds are the
+  lowest and highest number in the cell. 1,418 records.
+- **`range_qualified`** — the source did not state a closed interval: `<0.001` becomes 0.001 to 0.001,
+  asserting an exact equality where the source said *less than*. 2,233 records.
+- **`range_one_sided`** and **`range_approximate`** — which kind of hedge, because the two need
+  different words in front of a reader. 594 and 1,639 records; together they partition
+  `range_qualified` by construction.
+
+Each record also carries `source_digest`, twelve characters of the export's SHA-256, and the manifest
+beside the corpus records the full checksum, size, modification time, run date, ingester version and
+every count from the report. The export carries no date or version anywhere, so without the manifest
+two corpus files cannot be told apart or dated
+([ADR-0240](docs/decisions/0240-stamp-every-ingest.md)). The corpus is written first and the manifest
+second, so a corpus with no manifest is a run that did not finish.
 
 ## Setup
 
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv sync --extra ask
+uv sync --extra ask                            # add --extra ingest to build a corpus
 export OPENROUTER_API_KEY=...                  # the model is reached through OpenRouter
 export BIONUMBERS_ASK_CORPUS=/path/to/bionumbers.jsonl
 ```
@@ -210,3 +253,5 @@ what it says — nothing here has been measured against expected answers.
   deferred and why
 - `openspec/changes/add-ask-agent/design.md` — the middleware stack and the shape of the tools
 - `src/bionumbers_ask/events.py` — the port: everything the agent emits and the one command it takes
+- `openspec/changes/add-corpus-ingestion/proposal.md` — why an ingester rather than a prepared
+  corpus, and what the export's quirks cost

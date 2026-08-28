@@ -132,6 +132,28 @@ The third is the one to learn from. The first attempt asserted the exact boundar
 constant chosen empirically as though it were required — and in doing so guaranteed that a four-digit
 citation is accepted, which nothing wants. Chasing the mutation score would have kept that test.
 
+## A class of gap only this tool finds: the unasserted mapping
+
+A contract test that checks *which keys exist and what types they hold* is not checking that each key
+carries the value of its own column — and when the contract permits `null`, the two are miles apart.
+
+Worked example from `add-corpus-ingestion`. The record has twelve contract keys, ten of which accept
+`null`. Mutation testing blanked eight pass-through fields — `property`, `organism`, `reference`,
+`reference_pubmed_id`, `primary_source`, `primary_source_pubmed_id`, `measurement_method`,
+`entered_by` — and **all 205 tests still passed**, including the contract test built specifically to
+guard those keys. A corpus with every text field empty satisfies "the keys are present with an
+accepted type" completely: it loads without error and answers questions with no organism and no
+citation.
+
+Neither of the other instruments could reach it. Coverage was full — the lines ran. Fault seeding
+perturbs code a test already reaches, and no test reached the mapping. Only rewriting the assignment
+and finding that nothing objected exposed it.
+
+**So: whenever a record is built by assigning many fields from a source, expect this gap and look for
+it.** The fix is a test per field asserting the value arrives, driven from a row where every column
+holds a distinguishable value — and the spec requirement that says the mapping is required, not just
+the key set.
+
 ## Two rules for the harness itself
 
 - **Never truncate silently.** A `tail -N` on the survivor list caps the count without saying so, and

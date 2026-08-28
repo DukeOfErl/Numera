@@ -11,6 +11,7 @@ dependencies = []
 # tables instead of the same line.
 #   uv sync --extra validator
 #   uv sync --extra ask
+#   uv sync --extra ingest
 [project.optional-dependencies]
 validator = [
     "anthropic>=0.40",
@@ -27,13 +28,17 @@ ask = [
     "langchain-openai",
     "streamlit",
 ]
+ingest = [
+    "pydantic>=2.6",
+]
 
-# Both entry points are declared here so neither branch has to edit this table.
-# Console scripts are metadata resolved when invoked, so the one whose module is
-# absent on a given branch is simply never run there.
+# All three entry points are declared here so no branch has to edit this table.
+# Console scripts are metadata resolved when invoked, so the ones whose modules
+# are absent on a given branch are simply never run there.
 [project.scripts]
 bionumbers = "bionumbers.cli:main"
 bionumbers-ask = "bionumbers_ask.cli:main"
+bionumbers-ingest = "bionumbers_ingest.cli:main"
 
 [dependency-groups]
 dev = [
@@ -89,4 +94,4 @@ select = ["E", "F", "I", "UP", "B"]
 # Without this ruff reads the packages as third-party and removes the blank line
 # separating them from real third-party imports, making every test file worse.
 [tool.ruff.lint.isort]
-known-first-party = ["bionumbers", "bionumbers_ask", "agent_doubles"]
+known-first-party = ["bionumbers", "bionumbers_ask", "bionumbers_ingest", "agent_doubles"]

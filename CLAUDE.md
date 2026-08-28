@@ -16,7 +16,7 @@ Two branches that each number ADRs from the current highest id will both claim t
 |---|---|
 | `add-grounding-validator` | `0040`–`0090` |
 | `add-ask-agent` | `0100`–`0190`, `0260`–`0290` |
-| `add-corpus-ingestion` | `0200`–`0250` |
+| `add-corpus-ingestion` | `0200`–`0250` — `0200`–`0240` written, `0250` free |
 
 **This table is the authority, not a scan of `docs/decisions/`.** A scan cannot see uncommitted ADRs on another branch: `git ls-tree` reads committed trees, and each branch is checked out in its own worktree, so a number can be spent and still invisible from here. `add-ask-agent` has written `0100`–`0190` and holds a second range, `0260`–`0290`, because its first block ran out while the change was still open. A block is extended rather than renumbered: the ADRs already written are referenced from code comments and commit messages, and renumbering would break every one of those references to buy contiguity that nothing needs. Its first block was also uncommitted for two sessions, which is how a scan came to report those numbers as free. Never conclude a number is free because no file for it turns up.
 
@@ -28,6 +28,10 @@ options that were rejected -- the part worth recording -- are gone, and what sur
 description of the code.
 
 ## Architecture
+
+Three work packages, three packages under `src/`, one dependency extra each, so no two branches edit
+the same source tree: `bionumbers_ingest` (`ingest`), `bionumbers_ask` (`ask`), `bionumbers`
+(`validator`). The ingester and the ask agent are both here; the validator is not yet.
 
 Diagrams — including the agent's graph generated from the compiled object — are in
 `docs/diagrams/architecture.md`. Regenerate that graph whenever middleware changes.
@@ -72,6 +76,45 @@ all stock. The event stream is a generator, so a driver decides when to consume.
 batches several into one hop; `question_ceiling` and `run_budget` bound spend;
 `CONVERSATION_BOUND` bounds a session's tokens. Each is configured where it binds
 and reported when it is reached (ADR-0180).
+
+### `bionumbers_ingest` — the corpus pipeline
+
+A **pipeline**, and the shape is load-bearing: the two ends are the only modules that know a file
+format, and nothing between them knows either.
+
+| Module | Role |
+|---|---|
+| `parsing/html_table.py` | source format in — streams `<tr>` rows, preserving raw inner HTML |
+| `cleaning.py` | one raw row → one record; the only place that unescapes or strips |
+| `model.py` | the record, plus `EXPECTED_HEADERS` |
+| `validation.py` | the run report |
+| `provenance.py` | source fingerprint and manifest |
+| `io.py` | JSONL out, renamed into place on success |
+| `ingest.py` | wires the pipeline together |
+| `guard.py` | the refusal to write where git would track the output |
+| `cli.py` | the command |
+
+Five things about it that reading one module will not tell you:
+
+- **The reader preserves raw HTML deliberately.** The export's injected markup arrives
+  HTML-escaped, so a reader that unescaped would hand cleaning a live tag and destroy the evidence of
+  which form the source used. Unescaping happens once, in `cleaning`, before markup is stripped.
+- **An angle bracket is not evidence of markup.** The export contains exactly one HTML element and
+  uses `<` as a less-than sign in prose. A tag is recognised only by a real HTML element name.
+- **Records are buffered, not streamed, between cleaning and the writer**, because each carries a
+  digest of the whole source, which is unknown until the last byte. Roughly 70 MB; ADR-0240.
+- **Four booleans are the contract with `bionumbers_ask`**, not the flag names: `range_fused`,
+  `range_qualified`, `range_one_sided` and `range_approximate`. `parse_flags` is cleaning's own
+  vocabulary and may change — the last two became fields because the consumer was reading them out of
+  that list by name, where a rename would have turned them silently false. ADR-0230.
+- **The git-tracking refusal is in `guard.py`, called by `ingest()`, not by the command.** It lived
+  in `cli.py` and so protected one caller; the operation invoked as a library wrote 20 MB onto a
+  committable path in silence. A guard in a driver is a guard for one driver.
+- **`cleaning.py` has been the densest source of defects in the project**, and every one of them
+  produced a plausible number rather than an error. Seven review passes, fault seeding and mutation
+  testing each found more; treat a change there as needing all three, and **measure both directions**
+  — a fix that stops over-flagging usually starts under-flagging, and only the second is dangerous.
+
 
 ## Specs and the code that is meant to satisfy them
 

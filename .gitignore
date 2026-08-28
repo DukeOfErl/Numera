@@ -24,6 +24,20 @@ bionumbers*.jsonl
 /raw/
 *.jsonl.gz
 
+# The corpus and the export it came from. The published BioNumbers data has
+# unresolved licensing (ADR-0170 on feat/ask-agent), so neither the 27 MB source
+# nor any corpus built from it may enter this repository. The ingester exists so
+# a reader fetches the export themselves and builds the corpus locally.
+data/
+# Belt and braces for a corpus written outside data/, and matching the entries on
+# the sibling branches so all three checkouts refuse the same filenames.
+bionumbers*.jsonl
+*.corpus.jsonl
+*.jsonl.manifest.json
+# Each of those is written through a `.partial` first. A kill that skips the
+# cleanup leaves one behind, and a suffix rule above does not match it.
+*.partial
+
 # Secrets — see CLAUDE.md, "Never commit secrets"
 .env
 .env.*
