@@ -6,7 +6,8 @@ plausible number arrives with no way to tell whether it was recalled, interpolat
 
 This agent answers only from a corpus you supply, and cites the entry behind every number it
 reports. Where the corpus does not cover a question, it says so rather than answering from the
-model's own knowledge.
+model's own knowledge. It is for people who need a figure they can defend — students,
+researchers, anyone writing an estimate they will later have to justify.
 
 Three commitments shape the design:
 
@@ -153,6 +154,29 @@ One part of the plan is not built yet and is visible as unticked tasks in
 expected entries, scoring refusals on unanswerable questions — has not been started. The web
 interface is complete: a session, streamed retrieval progress, the cited and uncited tables, and the
 full entries in the side panel.
+
+## For the course review
+
+Sprint 3 asks for an agent with a clear purpose, real tools, a usable interface, error handling and
+documentation. Those are covered above. What follows is where the project went past the brief, and
+where it deliberately has not gone yet.
+
+| Beyond the brief | Where |
+|---|---|
+| Provenance as a hard requirement, not a prompt instruction — citations are checked against what was actually retrieved, and unsupported ones flagged | `citations.py`, `entries_table.py` |
+| Agentic retrieval over a 14,294-entry corpus: capped summaries with an honest total, then full entries on demand | ADR-0150, `tools.py` |
+| Spend enforced in middleware — a per-question ceiling and a run budget that stop the next call rather than reporting after the fact | ADR-0120, ADR-0180, `spend.py` |
+| The agent separated from its drivers, so a terminal, a web page and an evaluation harness run the identical agent with no mode flag | ADR-0110, `test_driver_independence.py` |
+| Fault injection at the seams that fail silently — a spend ledger that cannot write, a marker whose condition can never fire | `test_spend.py`, `test_markers_against_corpus.py` |
+| Decisions recorded as ADRs, and behaviour specified in OpenSpec rather than prose | `docs/decisions/`, `openspec/` |
+
+Of the optional tasks: token usage and cost are displayed per question and per run; short- and
+long-term memory are LangGraph checkpoints resumable across processes; the model is configurable and
+reached through OpenRouter; and retrieval is agentic rather than a single similarity lookup.
+
+**Not done, and the honest gap:** there is no evaluation report. The question set and scoring are
+specified (`tasks.md`, group 9) and unbuilt, which is exactly why the prototype warning above says
+what it says — nothing here has been measured against expected answers.
 
 ## Where to read next
 

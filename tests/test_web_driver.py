@@ -838,3 +838,30 @@ def test_the_page_and_the_readme_both_say_it_is_not_trustworthy_yet():
     # Both point past this project's own copy. "Check the cited entry" would read as
     # this page's rendering of it, which is the one thing checking cannot verify.
     assert "original source" in readme and "original source" in web.PROTOTYPE_NOTE
+
+
+def test_a_failure_while_drawing_does_not_lose_the_question(repo, config, tmp_path):
+    """The agent persists each turn as it goes. If drawing raises and the page has
+    not recorded the question, the model remembers a turn the screen never shows,
+    and the next answer rests on context a reader cannot see.
+
+    Injected at the drawing seam, because nothing else can produce it: the agent
+    raises no exception here and the suite stays green whether or not the question
+    survives.
+    """
+    agent = agent_with(repo, config, tmp_path, scripted(says("an answer")))
+    transcript: list[tuple[str, list[web.Item]]] = []
+    items: list[web.Item] = []
+    transcript.append(("a question", items))
+
+    def exploding(item):
+        raise RuntimeError("a rendering fault")
+
+    with pytest.raises(RuntimeError, match="a rendering fault"):
+        for item in web.items_for(agent.ask("s", "a question"), repo):
+            items.append(item)
+            exploding(item)
+
+    assert agent.conversation_length("s") == 2, "the agent kept the turn"
+    assert transcript[0][0] == "a question", "and so did the page"
+    assert items, "with whatever had been drawn before the fault"

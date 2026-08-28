@@ -500,16 +500,26 @@ def _retrieval_box(expanded: bool, state: str = "running"):
     return st.status("Searching the corpus…", expanded=expanded, state=state)
 
 
-def answer(events: Iterable[Event], repo: CorpusRepository | None = None) -> list[Item]:
-    """Draw a question's items as they arrive, and return them for the transcript.
+def answer(
+    events: Iterable[Event],
+    repo: CorpusRepository | None = None,
+    into: list[Item] | None = None,
+) -> list[Item]:
+    """Draw a question's items as they arrive, recording each into `into` as it goes.
 
     Each progress line is its own element rather than one line rewritten in
     place. Streamlit composes successive writes to one screen location into the
     last of them, so a rewritten line would leave no trace of the sequence -- for
     a reader scrolling back or for a test (ADR-0100).
+
+    `into` is the transcript's own list, filled in place, so a failure while
+    drawing cannot lose the question. Returning the items and letting the caller
+    append them meant a raising `draw` skipped the append entirely, while the agent
+    had already persisted the turn -- the page forgot a question the model
+    remembered, and the next answer was built on context nothing on screen showed.
     """
     box = _retrieval_box(expanded=True)
-    drawn: list[Item] = []
+    drawn: list[Item] = [] if into is None else into
     for item in items_for(events, repo):
         with box if item.kind is Kind.PROGRESS else nullcontext():
             draw(item)

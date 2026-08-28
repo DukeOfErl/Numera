@@ -62,9 +62,13 @@ if web.run_is_over(web.transcript(st.session_state)):
 elif question := st.chat_input("Ask a question", submit_mode="disable"):
     with st.chat_message("user"):
         st.markdown(web.as_text(question))
-    with st.chat_message("assistant"):
-        items = web.answer(agent.ask(session, question), repo)
+    # Recorded before it is drawn, and filled in place. The agent persists the turn
+    # as it goes, so a failure while drawing must not be able to lose the question
+    # from the page -- that leaves the model remembering what the screen does not.
+    items: list[web.Item] = []
     web.transcript(st.session_state).append((question, items))
+    with st.chat_message("assistant"):
+        web.answer(agent.ask(session, question), repo, items)
 
 # The side panel carries the newest answer's entries, whole and openable -- the
 # main column's table is the first few rows of the same set. Written after the
