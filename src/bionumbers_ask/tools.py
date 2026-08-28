@@ -125,11 +125,21 @@ def build_tools(repo: CorpusRepository, trace: QuestionTrace, emit: Emit) -> lis
         measurement without contradicting a line it was given.
         """
         out = []
-        if e.range_qualified:
+        if e.range_approximate:
             out.append(
-                "the source stated a bound or an approximation, not an exact value -- "
-                "do not report this number as a measured quantity; say that the source "
-                "gives a bound"
+                "the source gave this as an approximation, not an exact value -- report "
+                "it as approximate; do not state it as a measured quantity"
+            )
+        elif e.range_one_sided:
+            out.append(
+                "the source stated a bound (a less-than or greater-than), not a value -- "
+                "say that the source gives a bound; do not report this number as a "
+                "measured quantity"
+            )
+        elif e.range_qualified:
+            out.append(
+                "the source did not state this as an exact value -- do not report this "
+                "number as a measured quantity"
             )
         if e.range_fused:
             out.append(

@@ -290,3 +290,32 @@ determined by the count that enforces it, so a call retried after a provider fai
 - **WHEN** answering is halted by the spend ceiling (see `spend-control`)
 - **THEN** the answer states that it may be incomplete
 - **AND** what had been established so far is still presented with citations
+
+
+### Requirement: A refusal follows a search
+
+The system SHALL NOT report that the corpus does not cover a question without having searched it,
+and SHALL NOT describe retrieval that did not happen.
+
+"Not in the corpus" and "not looked for" are different statements, and a reader cannot tell them
+apart from the answer. A refusal reached without retrieval rests on the model's prior about what the
+corpus contains, which is the thing this project exists not to rely on -- and its error is invisible,
+because an entry that was never sought looks exactly like one that is absent.
+
+Prose claiming a search that no tool call made SHALL be treated as a defect rather than a wording
+choice. The number of tool calls is recorded on the ending event, so the claim is checkable against
+the harness's own count without judging the answer's content.
+
+#### Scenario: A question the corpus cannot answer
+- **WHEN** the agent is asked something outside the corpus
+- **THEN** at least one retrieval is attempted before any refusal is returned
+- **AND** the refusal states that nothing was found, not that nothing exists
+
+#### Scenario: An answer describes searches that were not made
+- **WHEN** an answer claims to have searched and the question made no tool calls
+- **THEN** this is reported as a defect in the same way an unsupported citation is
+
+#### Scenario: Retrieval is impossible
+- **WHEN** no retrieval can be attempted, because a limit was already reached
+- **THEN** the ending says so as its reason
+- **AND** the answer does not describe searching that did not occur

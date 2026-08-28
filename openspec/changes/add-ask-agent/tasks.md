@@ -125,6 +125,30 @@
       test both sides of it. And check the mark can fire -- `tests/test_markers_against_corpus.py`
       exists because a marker whose condition never holds passes every test and draws nothing.
 
+- [ ] 8.9 Bound tool calls per question, as model calls are already bounded. Observed live: one
+      question made **29 tool calls across 17 searches**, spent **$0.27**, and took the run from
+      $0.91 to $1.18 of its $1.20 budget -- a single question consuming a fifth of a run. The model
+      call limit did not bind it: a model may batch several tool calls into one hop, so 12 model
+      calls bought 29 retrievals. The spend ceiling is the only thing that stopped it, which makes
+      cost the sole brake on a search loop and reports the symptom rather than the cause.
+      **This is a conformance gap, not a new requirement.** `grounded-answering`, *Retrieval effort is
+      bounded and reported*, already says the system SHALL bound "the number of tool calls made in
+      answering a single question". The code bounds model calls and `at_retrieval_bound` reports
+      those, so the spec and the implementation have been describing different quantities. Bound and
+      report the one the spec names, keeping the model-call limit as well.
+- [ ] 8.10 Refuse only after searching, and never claim searches that did not happen. Observed live:
+      an unanswerable question ended `answered · 0 tool calls` with prose reading "based on my
+      searches through the available data" and "I would need to search the corpus". No search ran.
+      Two separate defects, and the second is the serious one:
+  - A refusal with no retrieval is not grounded in the corpus. It is the model's prior about what
+    the corpus contains, which is exactly what this project exists not to rely on -- and a false
+    negative is invisible, because the reader cannot tell "not in the corpus" from "not looked for".
+  - The prose asserted a process that did not occur. `tool_calls` on the ending contradicted it, so
+    the harness had the truth and the answer the reader sees did not.
+      Fix the first (require at least one search before a no-answer ending) and detect the second:
+      the ending already carries `tool_calls`, so an answer claiming to have searched when the count
+      is zero is checkable without a judge. Consider whether this is a `CitationWarning` sibling.
+
 ## 9. Evaluation
 
 - [ ] 9.1 Read up before building: LangGraph persistence and store semantics, and the LangSmith evaluation documentation — both post-date the design and may replace parts of what follows

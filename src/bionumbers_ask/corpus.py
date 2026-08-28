@@ -51,6 +51,14 @@ class Entry:
     # is what catches a corpus where they never arrive.
     range_qualified: bool = False
     range_fused: bool = False
+    # Which kind of hedge, so the value can say it in the source's own terms. "~20"
+    # is an approximation and "<8" is a bound, and calling the first one "bounded"
+    # describes it wrongly while claiming to correct a description. The ingester
+    # reports the two behind `range_qualified` as `range_approximate` (1,639) and
+    # `range_one_sided` (594); measured over this corpus they partition it exactly,
+    # with no overlap and none missing.
+    range_approximate: bool = False
+    range_one_sided: bool = False
 
     @property
     def value_display(self) -> str:
@@ -70,7 +78,7 @@ class Entry:
                 # corpus kept, so this says a bound was stated without inventing
                 # which direction it pointed.
                 if self.range_qualified:
-                    return f"{self.range_low} (bounded, not exact)"
+                    return f"{self.range_low} ({self.hedge})"
                 return str(self.range_low)
             return f"{self.range_low}–{self.range_high}"
         if self.range_low is not None:
@@ -78,6 +86,19 @@ class Entry:
         if self.range_high is not None:
             return f"at most {self.range_high}"
         return "(no scalar value)"
+
+    @property
+    def hedge(self) -> str:
+        """How the source hedged this value, in as few words as the column allows.
+
+        Falls back to the general wording when the kind is not reported, because
+        saying less is not the same as saying something untrue.
+        """
+        if self.range_approximate:
+            return "approximate"
+        if self.range_one_sided:
+            return "a bound, not exact"
+        return "bounded, not exact"
 
     @property
     def spans_implausibly(self) -> bool:
@@ -154,6 +175,10 @@ def _entry(raw: dict) -> Entry:
         keywords=_keywords(raw.get("keywords")),
         range_qualified=bool(raw.get("range_qualified")),
         range_fused=bool(raw.get("range_fused")),
+        # Read from the flag list, which is where the ingester reports the kind.
+        # Absent, the value still says it was hedged -- less precisely, never wrongly.
+        range_approximate="range_approximate" in (raw.get("parse_flags") or ()),
+        range_one_sided="range_one_sided" in (raw.get("parse_flags") or ()),
     )
 
 

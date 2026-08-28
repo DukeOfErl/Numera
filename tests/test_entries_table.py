@@ -729,6 +729,8 @@ def an_entry(**kwargs):
         range_low=8.0, range_high=8.0, reference="r", reference_pubmed_id=None,
         measurement_method="m", comments="", keywords=(),
     )
+    base.update(kwargs)
+    return Entry(**base)
     return Entry(**{**base, **kwargs})
 
 
@@ -793,3 +795,19 @@ def test_a_legend_is_absent_when_no_shown_row_carries_its_mark(repo):
         entries_table.IMPLAUSIBLE_LEGEND,
     ):
         assert legend not in rendered
+
+
+def test_the_value_says_which_kind_of_hedge_the_source_used():
+    """"~20" is an approximation and "<8" is a bound. Calling the first "bounded"
+    describes it wrongly while claiming to correct a description, which is a worse
+    failure than the bare "20.0" it replaced -- it looks like a considered caveat."""
+    approx = an_entry(range_low=20.0, range_high=20.0, range_qualified=True,
+                      range_approximate=True)
+    bound = an_entry(range_qualified=True, range_one_sided=True)
+    unspecified = an_entry(range_qualified=True)
+
+    assert approx.value_display == "20.0 (approximate)"
+    assert bound.value_display == "8.0 (a bound, not exact)"
+    assert unspecified.value_display == "8.0 (bounded, not exact)", (
+        "with no kind reported it says less, never something untrue"
+    )

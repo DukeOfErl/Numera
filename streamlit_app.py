@@ -84,4 +84,7 @@ if spent_and_cap:
     with st.sidebar:
         st.header("Run budget")
         st.progress(min(1.0, spent / cap) if cap else 0.0)
-        st.caption(f"{format_usd(spent)} of {format_usd(cap)}")
+        # Escaped: two dollar signs in one caption are read as opening and closing
+        # inline mathematics, so "$1.20 of $1.20" typeset the middle as an equation
+        # and ate both currency signs. Same fault as the ending line's, same fix.
+        st.caption(web.as_text(f"{format_usd(spent)} of {format_usd(cap)}"))
