@@ -373,7 +373,7 @@ def test_a_retried_call_is_counted_once(repo, config, tmp_path, monkeypatch):
 def test_a_question_that_never_reaches_the_model_claims_no_bound(repo, config, tmp_path):
     """No bound was applied, so reporting one -- even as zero of twelve -- would
     describe a limit the question never met."""
-    spent = Config(model="fake/model", warning_threshold=usd("0.50"), run_budget=usd("0.00"))
+    spent = Config(model="fake/model", question_ceiling=usd("0.60"), run_budget=usd("0.00"))
     agent = AskAgent(repo, spent, str(tmp_path / "c.sqlite"), model=scripted(says("x")))
     end = list(agent.ask("s", "q"))[-1]
     assert end.reason is EndReason.RUN_BUDGET
@@ -454,17 +454,18 @@ def test_the_user_is_warned_before_the_conversation_bound_bites(
 ):
     from bionumbers_ask.events import ConversationWarning
 
-    # Bound 5 warns at 3.75 messages. After two turns a session holds four, which
-    # is past the warning point and short of the bound -- the window in which the
-    # user can still finish what they were doing.
-    monkeypatch.setattr("bionumbers_ask.agent.CONVERSATION_BOUND", 5)
+    # The double reports a 14-token prompt, the shape a real response carries. A
+    # bound of 18 warns at 13.5, so one completed turn lands past the warning and
+    # short of the bound -- the window in which the user can still finish what
+    # they were doing. The first question has made no request yet, so there is
+    # nothing reported to warn about.
+    monkeypatch.setattr("bionumbers_ask.agent.CONVERSATION_BOUND", 18)
     agent = agent_with(repo, config, tmp_path, scripted(says("a"), says("b"), says("c")))
     assert not any(isinstance(e, ConversationWarning) for e in agent.ask("s", "first"))
-    assert not any(isinstance(e, ConversationWarning) for e in agent.ask("s", "second"))
 
-    warned = [e for e in agent.ask("s", "third") if isinstance(e, ConversationWarning)]
+    warned = [e for e in agent.ask("s", "second") if isinstance(e, ConversationWarning)]
     assert warned, "the session filled up with no warning"
-    assert warned[0].bound == 5 and warned[0].messages == 4
+    assert warned[0].bound == 18 and warned[0].tokens == 14
 
 
 def test_conversation_length_needs_no_model_and_no_api_key(repo, config, tmp_path, monkeypatch):
@@ -607,14 +608,14 @@ def test_every_non_raising_path_ends_with_a_question_ended(repo, config, tmp_pat
 
     def at_spend_ceiling():
         tight = Config(
-            model=config.model, warning_threshold=usd("0.000100"), run_budget=usd("1.20")
+            model=config.model, question_ceiling=usd("0.000120"), run_budget=usd("1.20")
         )
         model = scripted(costing(tool_call("search_entries", property="Cell"), 0.000_200))
         return AskAgent(repo, tight, str(tmp_path / "sc.sqlite"), model=model), "s"
 
     def at_run_budget():
         budgeted = Config(
-            model=config.model, warning_threshold=usd("0.50"), run_budget=usd("0.000050")
+            model=config.model, question_ceiling=usd("0.60"), run_budget=usd("0.000050")
         )
         model = scripted(costing(says("an answer"), 0.000_110))
         agent = AskAgent(repo, budgeted, str(tmp_path / "rb.sqlite"), model=model)
@@ -757,3 +758,49 @@ def test_an_answer_citing_a_mass_and_a_count_is_shown_the_mismatch(repo, config,
     table = render_event(entries, repo=repo)
     assert "2 kinds of quantity" in table
     assert "dimensionless, mass" in table
+
+
+def test_the_bound_is_the_conversation_size_not_the_number_of_turns(
+    repo, config, tmp_path, monkeypatch
+):
+    """A message is a poor proxy: a retrieved entry's payload runs from 16
+    characters to 8,023 across the corpus, so the same turn count can be a few
+    thousand tokens or a hundred thousand."""
+    from bionumbers_ask.agent import _conversation_size
+
+    reported = _conversation_size({"prompt_tokens": 9_000}, ["ignored", "messages"])
+    assert reported == 9_000, "the provider's own figure was not preferred"
+
+
+def test_a_conversation_nobody_has_measured_is_counted_rather_than_called_empty(
+    repo, config, tmp_path
+):
+    """A provider reporting no usage would otherwise leave the bound at zero for
+    ever -- a limit that can never be reached, which is the failure this project
+    has already met from the other side."""
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    from bionumbers_ask.agent import _conversation_size
+
+    messages = [HumanMessage(content="how wide is a cell?" * 200), AIMessage(content="a" * 4000)]
+    counted = _conversation_size({}, messages)
+
+    assert counted > 0, "an unmeasured conversation was treated as empty"
+    assert _conversation_size({}, []) == 0
+
+
+def test_the_conversation_bound_stops_a_session_that_is_too_large(
+    repo, config, tmp_path, monkeypatch
+):
+    from bionumbers_ask.events import ConversationWarning
+
+    monkeypatch.setattr("bionumbers_ask.agent.CONVERSATION_BOUND", 10)
+    agent = agent_with(repo, config, tmp_path, scripted(says("a"), says("b")))
+    list(agent.ask("s", "first"))
+
+    events = list(agent.ask("s", "second"))
+    end = events[-1]
+
+    assert end.reason is EndReason.CONVERSATION_BOUND
+    assert end.incomplete is True
+    assert not any(isinstance(e, ConversationWarning) for e in events), "warned as it refused"

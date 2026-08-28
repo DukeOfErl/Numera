@@ -71,24 +71,53 @@ dispatch path is a limit. Only the second is a control.
 - **THEN** final spend for the question may exceed the ceiling by at most that one request
 - **AND** the reported figure is the actual spend, not the ceiling
 
-### Requirement: A warning threshold and a hard ceiling, both configurable
+### Requirement: A configurable ceiling, with the warning derived from it
 
-The system SHALL carry a configurable warning threshold, defaulting to USD 0.50, and SHALL derive
-the hard ceiling as the warning threshold plus 20 per cent. The warning threshold SHALL be
+The system SHALL carry a configurable per-question **ceiling**, defaulting to USD 0.60, and SHALL
+derive the warning threshold as 80 per cent of it. The configured number SHALL be the one that stops
+work, so that a reader of the configuration can see the limit that binds. The ceiling SHALL be
 changeable without code changes.
 
+A retired setting that named the warning instead SHALL be refused with its replacement named, rather
+than read under the new meaning: the same number carried over would silently tighten the hard limit
+to 80 per cent of what it used to permit, and a spend limit that quietly tightens is worse than one
+that will not start.
+
 #### Scenario: Spend passes the warning threshold
-- **WHEN** accumulated spend passes the warning threshold
+- **WHEN** accumulated spend passes 80 per cent of the ceiling
 - **THEN** the user is told the question has become expensive and what has been spent
 - **AND** work continues
 
 #### Scenario: Spend reaches the hard ceiling
-- **WHEN** accumulated spend reaches the warning threshold plus 20 per cent
+- **WHEN** accumulated spend reaches the ceiling
 - **THEN** the question ends
 
-#### Scenario: Threshold is reconfigured
-- **WHEN** the warning threshold is set to a different amount
-- **THEN** the hard ceiling is recomputed as that amount plus 20 per cent
+#### Scenario: The ceiling is reconfigured
+- **WHEN** the ceiling is set to a different amount
+- **THEN** the warning threshold is recomputed as 80 per cent of that amount
+
+#### Scenario: The retired setting is supplied
+- **WHEN** the environment carries the setting that used to name the warning threshold
+- **THEN** the run refuses to start and the message names the setting to use instead
+
+### Requirement: An answer that ran to its ceiling says so
+
+The gate decides before dispatching and cannot decide after, since a request's cost is unknown until
+it returns. A question may therefore answer with spend at or past its ceiling, having simply not
+needed another request. That is a different thing from a question that finished with room to spare,
+and the system SHALL distinguish them.
+
+WHEN a question ends, the system SHALL report the ceiling it ran against, and SHALL mark an answer
+whose spend reached that ceiling. The mark SHALL appear only where the ceiling was reached, and not
+on an ending that already names the ceiling as its reason.
+
+#### Scenario: An answer produced with room to spare
+- **WHEN** a question answers having spent less than its ceiling
+- **THEN** the ending says nothing about the ceiling
+
+#### Scenario: An answer produced at the ceiling
+- **WHEN** a question answers having spent at or past its ceiling
+- **THEN** the ending reports that it ran to the ceiling, and names the figure
 
 ### Requirement: A question ended on the ceiling reports what it established
 

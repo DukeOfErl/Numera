@@ -4,6 +4,13 @@ The corpus is an external input with unresolved licensing and must not be
 committed, so it is supplied at run time and no copy is bundled. Only the fields
 this project actually uses are modelled; anything else in the file is ignored,
 so a corpus with extra columns still loads.
+
+`Entry`'s field set and the coercions below are a contract with the
+`add-corpus-ingestion` change, whose ingester produces the file this reads. Its
+contract test restates these twelve keys as a literal list, so a change here is
+invisible to it until the two branches merge. **Changing a field name, adding a
+required field, or altering how `_number` or `_keywords` coerce a value needs a
+message to that branch**, not just a passing suite here.
 """
 
 from __future__ import annotations

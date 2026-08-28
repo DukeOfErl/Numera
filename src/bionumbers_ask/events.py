@@ -64,7 +64,7 @@ class ConversationWarning:
     """
 
     question_id: str
-    messages: int
+    tokens: int
     bound: int
 
 
@@ -157,6 +157,23 @@ class QuestionEnded:
     # otherwise indistinguishable. Zero means no model call completed.
     model_calls: int = 0
     call_limit: int = 0
+    # What the question spent against, so an answer can say it ran to its limit.
+    # The gate checks before each model call and cannot check after -- a call's
+    # cost is unknown until it returns -- so a question can answer with spend at
+    # or past the ceiling, having simply not needed another call. That is a
+    # different thing from one that finished with room to spare, and without this
+    # the two are indistinguishable. ADR-0180.
+    spend_ceiling: int = 0
+
+    @property
+    def at_spend_ceiling(self) -> bool:
+        """Whether the question ran to its spend limit, however it ended.
+
+        Exact rather than within a margin, for the same reason as the retrieval
+        bound: what can be stated without judgement is that there was no room for
+        another call.
+        """
+        return bool(self.spend_ceiling) and self.spend >= self.spend_ceiling
 
     @property
     def at_retrieval_bound(self) -> bool:

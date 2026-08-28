@@ -21,6 +21,7 @@ from agent_doubles import (
     tool_call,
 )
 from bionumbers_ask.agent import RUN_CALL_LIMIT, AskAgent
+from bionumbers_ask import messages
 from bionumbers_ask.config import FALLBACK_PRICES, Config, ModelPrices, usd
 from bionumbers_ask.events import (
     Answer,
@@ -38,8 +39,8 @@ from bionumbers_ask.spend import (
 
 # 100 micro-dollars, so the derived ceiling is 120. Costs in these tests are chosen
 # relative to those two figures.
-THRESHOLD = usd("0.000100")
 CEILING = 120
+THRESHOLD = CEILING * 8 // 10  # 96; the warning is derived from the stop now
 
 
 @pytest.fixture
@@ -47,7 +48,7 @@ def tight(config) -> Config:
     """The same configuration with a threshold small enough to reach in a test."""
     return Config(
         model=config.model,
-        warning_threshold=THRESHOLD,
+        question_ceiling=CEILING,
         run_budget=usd("1.20"),
         prices=config.prices,
     )
@@ -254,7 +255,7 @@ def test_a_second_question_gets_a_fresh_ceiling_while_run_spend_accumulates(repo
 
 
 def test_the_run_budget_refuses_the_next_question_before_dispatching(repo, config, tmp_path):
-    budgeted = Config(model=config.model, warning_threshold=usd("0.50"), run_budget=usd("0.000200"))
+    budgeted = Config(model=config.model, question_ceiling=usd("0.60"), run_budget=usd("0.000200"))
     model = scripted(costing(says("about 1 micrometre (BNID 100002)"), 0.000_110))
     agent = agent_with(repo, budgeted, tmp_path, model)
 
@@ -274,7 +275,7 @@ def test_the_run_budget_can_end_a_question_part_way(repo, config, tmp_path):
     Its threshold is set well above what this question spends, so an ending of
     SPEND_CEILING here would mean the wrong limit was reported.
     """
-    budgeted = Config(model=config.model, warning_threshold=usd("0.50"), run_budget=usd("0.000150"))
+    budgeted = Config(model=config.model, question_ceiling=usd("0.60"), run_budget=usd("0.000150"))
     model = scripted(costing(tool_call("search_entries", property="Cell"), 0.000_110))
     end = ended(list(agent_with(repo, budgeted, tmp_path, model).ask("s", "q")))
 
@@ -292,7 +293,7 @@ def test_the_ceiling_a_session_was_created_with_is_the_one_it_keeps(repo, tight,
     cheap = scripted(costing(says("about 1 micrometre (BNID 100002)"), 0.000_010))
     assert ended(list(AskAgent(repo, tight, path, model=cheap).ask("s", "q1"))).spend == 10
 
-    generous = Config(model=tight.model, warning_threshold=usd("0.010"), run_budget=usd("1.20"))
+    generous = Config(model=tight.model, question_ceiling=usd("0.010"), run_budget=usd("1.20"))
     expensive = scripted(costing(tool_call("search_entries", property="Cell"), 0.000_200))
     end = ended(list(AskAgent(repo, generous, path, model=expensive).ask("s", "q2")))
 
@@ -343,19 +344,19 @@ def test_a_model_reporting_no_cost_ends_the_question_naming_the_model(repo, conf
 
 def test_the_projection_flags_a_capable_model_but_not_a_cheap_one():
     """It is an upper bound, so it should be quiet on the development model."""
-    threshold = usd("0.50")
     cheap = Config(
         model="anthropic/claude-haiku-4.5",
-        warning_threshold=threshold,
+        question_ceiling=usd("0.60"),
         run_budget=usd("1.20"),
         prices=dict(FALLBACK_PRICES),
     )
     capable = Config(
         model="anthropic/claude-opus-4.7",
-        warning_threshold=threshold,
+        question_ceiling=usd("0.60"),
         run_budget=usd("1.20"),
         prices=dict(FALLBACK_PRICES),
     )
+    threshold = cheap.warning_threshold
     assert project_question_cost(cheap, "How wide is an E. coli cell?", RUN_CALL_LIMIT) < threshold
     assert (
         project_question_cost(capable, "How wide is an E. coli cell?", RUN_CALL_LIMIT) > threshold
@@ -406,7 +407,7 @@ def test_a_run_budget_reached_in_one_session_stops_another(repo, tmp_path):
     # where this run does not read it and the budget would appear to hold.
     tiny = Config(
         model="fake/model",
-        warning_threshold=usd("0.50"),
+        question_ceiling=usd("0.60"),
         run_budget=usd("0.000100"),
         run_label="eval-1",
     )
@@ -434,7 +435,7 @@ def test_spend_is_recorded_as_each_charge_is_made(repo, tmp_path):
     spend counted, or a crash loop is free."""
     from bionumbers_ask import run_ledger
 
-    config = Config(model="fake/model", warning_threshold=usd("0.50"), run_budget=usd("1.20"))
+    config = Config(model="fake/model", question_ceiling=usd("0.60"), run_budget=usd("1.20"))
     db = str(tmp_path / "c.sqlite")
     model = scripted(
         costing(tool_call("search_entries", property="Cell"), 0.000_110),
@@ -472,7 +473,7 @@ def test_raising_the_budget_lets_a_stopped_run_continue(repo, tmp_path):
     path = str(tmp_path / "raise.sqlite")
     tiny = Config(
         model="fake/model",
-        warning_threshold=usd("0.50"),
+        question_ceiling=usd("0.60"),
         run_budget=usd("0.000100"),
         run_label="raise-me",
     )
@@ -490,3 +491,83 @@ def test_raising_the_budget_lets_a_stopped_run_continue(repo, tmp_path):
     assert end.reason is EndReason.ANSWERED, "raising the budget did not release the run"
     # The spend already made is kept, not forgiven: it counts against the new budget.
     assert end.run_spend == 120
+
+
+def test_the_run_budget_refusal_does_not_report_spend_as_a_fraction_of_the_budget(
+    repo, tmp_path
+):
+    """The gate fires at or past the budget, so the figure usually exceeds it.
+
+    "spent $0.07 of its $0.000100 budget" reads as a fraction of a larger whole,
+    which is the one thing it never is.
+    """
+    from bionumbers_ask.config import Config, usd
+    from bionumbers_ask.events import Answer
+
+    from agent_doubles import costing, says, scripted
+    from conftest import agent_with
+
+    spent = Config(model="fake/model", question_ceiling=usd("0.60"),
+                   run_budget=usd("0.000050"))
+    agent = agent_with(repo, spent, tmp_path, scripted(costing(says("an answer"), 0.000_110)))
+
+    list(agent.ask("s", "first"))
+    refusal = next(e for e in agent.ask("s", "second") if isinstance(e, Answer))
+
+    assert "against a" in refusal.text
+    assert "of its" not in refusal.text
+    assert "$0.000110" in refusal.text and "$0.000050" in refusal.text
+
+
+# -- 11.4: an answer that ran to its ceiling says so -----------------------
+
+
+def ending(**kwargs) -> QuestionEnded:
+    defaults = dict(question_id="q", reason=EndReason.ANSWERED, spend=110, run_spend=220,
+                    model="fake/model", tool_calls=3, spend_ceiling=120)
+    return QuestionEnded(**{**defaults, **kwargs})
+
+
+def test_an_answer_with_room_to_spare_says_nothing_about_the_ceiling():
+    assert not ending(spend=60).at_spend_ceiling
+    assert "ceiling" not in messages.ending_text(ending(spend=60))
+
+
+def test_an_answer_that_reached_the_ceiling_says_so(caplog):
+    """The gate checks before each call, so a question can answer at or past its
+    limit having simply not needed another. That is not the same as finishing
+    with room to spare, and the two were indistinguishable."""
+    end = ending(spend=125)
+
+    assert end.at_spend_ceiling
+    assert "at the $0.000120 ceiling" in messages.ending_text(end)
+
+
+def test_spend_landing_exactly_on_the_ceiling_counts_as_reaching_it():
+    """The gate declines at `>=`, so equality is the case it actually stops on.
+
+    A seeded `>` here passed the whole suite: every other test spends past the
+    ceiling rather than onto it, and the one value the gate is defined by was
+    the one no test used.
+    """
+    assert ending(spend=120, spend_ceiling=120).at_spend_ceiling
+    assert not ending(spend=119, spend_ceiling=120).at_spend_ceiling
+
+
+def test_a_question_stopped_at_the_ceiling_does_not_say_it_twice():
+    """Its reason already names the ceiling."""
+    end = ending(reason=EndReason.SPEND_CEILING, spend=125, incomplete=True)
+    text = messages.ending_text(end)
+    assert text.count("ceiling") == 1, text
+
+
+def test_an_ending_carrying_no_ceiling_claims_nothing():
+    assert not ending(spend_ceiling=0, spend=10_000).at_spend_ceiling
+
+
+def test_a_real_question_carries_the_ceiling_it_ran_against(repo, tight, tmp_path):
+    model = scripted(costing(says("about 1 micrometre (BNID 100002)"), 0.000_010))
+    end = ended(list(AskAgent(repo, tight, str(tmp_path / "c.sqlite"), model=model).ask("s", "q")))
+
+    assert end.spend_ceiling == CEILING, "the ending could not report a bound it never carried"
+    assert not end.at_spend_ceiling

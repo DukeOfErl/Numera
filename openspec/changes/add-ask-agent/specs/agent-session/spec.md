@@ -195,6 +195,14 @@ The system SHALL bound how much accumulated conversation is carried into a reque
 the user as that bound is approached, and SHALL refuse further questions in the session once it is
 reached rather than silently discarding context.
 
+The bound SHALL be measured in the units of the hazard it guards against -- the size of the
+conversation, not the number of turns in it. A turn count is a poor proxy: one retrieved entry's
+payload spans 16 to 8,023 characters across the reference corpus, so the same number of turns is
+anywhere from a few thousand tokens to well over a hundred thousand, and a bound set on turns fires
+far too early in a cheap session and too late in an expensive one. Where the provider reports the
+size of what it received, that figure SHALL be preferred; where it does not, the size SHALL be
+counted rather than assumed to be zero, so the bound cannot become one that is never reached.
+
 Retrieved entries are large and a session accumulates them without limit, so an unbounded session
 eventually fails on context length partway through a question. Condensing the conversation
 automatically is the better long-term answer but a worse first one: a summariser that quietly drops
@@ -210,6 +218,10 @@ Deferred section.
 - **WHEN** accumulated conversation has reached the bound and a further question is asked
 - **THEN** the question is refused with an explanation
 - **AND** the user is directed to start a new session
+
+#### Scenario: A conversation whose size nobody has reported
+- **WHEN** no measurement of the conversation's size is available from the provider
+- **THEN** its size is counted locally rather than treated as zero
 
 #### Scenario: Context is never silently dropped
 - **WHEN** a question is answered

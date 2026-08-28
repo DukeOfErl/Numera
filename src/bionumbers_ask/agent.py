@@ -23,6 +23,7 @@ from langchain.agents.middleware import (
 )
 from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from . import run_ledger
@@ -78,14 +79,40 @@ Cite entries in full each time, including in follow-up answers. Someone reading 
 one answer on its own must still be able to trace every number.
 """
 
-# How many messages a session may accumulate before it stops taking questions.
-# Retrieved entries are large, so an unbounded session eventually fails on context
-# length partway through a question. A number to tune against real sessions; the
-# design records condensing instead as deferred.
-CONVERSATION_BOUND = 60
+# How large a session's conversation may grow, in tokens, before it stops taking
+# questions. Tokens rather than messages because context length is the hazard and
+# a message is a poor proxy for it: a retrieved entry's payload runs from 16
+# characters to 8,023 across the corpus, so sixty messages is anywhere from a few
+# thousand tokens to well over a hundred thousand. ADR-0180.
+#
+# 120,000 against the development model's 200,000-token window, leaving room for
+# a question's own retrievals -- a capped search is about 2,100 tokens and a full
+# entry about 180 -- and for the answer. A number to tune against real sessions;
+# the design records condensing instead as deferred.
+CONVERSATION_BOUND = 120_000
 # How close to the bound before the user is told. A session that went from
 # working to refusing with no notice gives no chance to finish a line of enquiry.
 CONVERSATION_WARN_AT = 0.75
+
+
+def _conversation_size(persisted: dict, messages: list) -> int:
+    """How large this conversation is, in tokens.
+
+    The provider's own figure where there is one: `prompt_tokens` is exactly the
+    size of what was sent, needs no tokeniser here, and cannot drift from what the
+    model actually received. It is retrospective -- it describes the last request
+    rather than the next -- so the bound arrives one call late, which is the same
+    one-call overshoot the spend ceiling has and is accepted for the same reason.
+
+    Counted locally when there is none. A session's first question has made no
+    request yet, and a provider that reports no usage would otherwise leave this
+    at zero for ever: a bound that can never be reached, which is the failure
+    mode this project has already met once from the other side.
+    """
+    reported = persisted.get("prompt_tokens") or 0
+    if reported:
+        return int(reported)
+    return count_tokens_approximately(messages) if messages else 0
 
 
 def _text_of(message: object) -> str:
@@ -381,7 +408,7 @@ class AskAgent:
                 yield Answer(
                     question_id=trace.question_id,
                     text=(
-                        f"This run has spent {format_usd(run_spend)} of its "
+                        f"This run has spent {format_usd(run_spend)} against a "
                         f"{format_usd(self._config.run_budget)} budget, so no further "
                         "question can be started. Raise the budget or start a new run."
                     ),
@@ -397,8 +424,9 @@ class AskAgent:
                 )
                 return
 
-            if len(messages) >= CONVERSATION_BOUND:
-                trace.record("conversation.bound_reached", messages=len(messages))
+            conversation_tokens = _conversation_size(persisted, messages)
+            if conversation_tokens >= CONVERSATION_BOUND:
+                trace.record("conversation.bound_reached", tokens=conversation_tokens)
                 yield Answer(
                     question_id=trace.question_id,
                     text=(
@@ -417,10 +445,10 @@ class AskAgent:
                 )
                 return
 
-            if len(messages) >= CONVERSATION_BOUND * CONVERSATION_WARN_AT:
+            if conversation_tokens >= CONVERSATION_BOUND * CONVERSATION_WARN_AT:
                 yield ConversationWarning(
                     question_id=trace.question_id,
-                    messages=len(messages),
+                    tokens=conversation_tokens,
                     bound=CONVERSATION_BOUND,
                 )
 
@@ -567,6 +595,7 @@ class AskAgent:
                             tool_calls=tool_calls,
                             model_calls=model_calls,
                             call_limit=RUN_CALL_LIMIT,
+                            spend_ceiling=ceiling,
                             incomplete=True,
                         )
                         return
@@ -585,6 +614,7 @@ class AskAgent:
                             tool_calls=tool_calls,
                             model_calls=model_calls,
                             call_limit=RUN_CALL_LIMIT,
+                            spend_ceiling=ceiling,
                             incomplete=True,
                         )
                         return
@@ -594,6 +624,7 @@ class AskAgent:
                             tool_calls=tool_calls,
                             model_calls=model_calls,
                             call_limit=RUN_CALL_LIMIT,
+                            spend_ceiling=ceiling,
                         )
                         # Same reasoning as the spend limit above, and it was missing
                         # here: a question stopped at the bound may already have
@@ -620,6 +651,7 @@ class AskAgent:
                             tool_calls=tool_calls,
                             model_calls=model_calls,
                             call_limit=RUN_CALL_LIMIT,
+                            spend_ceiling=ceiling,
                             incomplete=True,
                         )
                         return
@@ -649,6 +681,7 @@ class AskAgent:
                             tool_calls=tool_calls,
                             model_calls=model_calls,
                             call_limit=RUN_CALL_LIMIT,
+                            spend_ceiling=ceiling,
                             incomplete=True,
                         )
                         return
@@ -693,6 +726,7 @@ class AskAgent:
                 tool_calls=tool_calls,
                 model_calls=model_calls,
                 call_limit=RUN_CALL_LIMIT,
+                spend_ceiling=ceiling,
                 incomplete=True,
             )
             return
@@ -704,6 +738,7 @@ class AskAgent:
             tool_calls=tool_calls,
             model_calls=model_calls,
             call_limit=RUN_CALL_LIMIT,
+            spend_ceiling=ceiling,
         )
         yield Answer(question_id=trace.question_id, text=answer_text)
         yield from evidence()
@@ -716,4 +751,5 @@ class AskAgent:
             tool_calls=tool_calls,
             model_calls=model_calls,
             call_limit=RUN_CALL_LIMIT,
+            spend_ceiling=ceiling,
         )

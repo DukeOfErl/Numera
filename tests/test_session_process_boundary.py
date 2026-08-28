@@ -99,7 +99,7 @@ db, thread_id, corpus, question, run_label = sys.argv[1:6]
 
 config = Config(
     model="fake/model",
-    warning_threshold=usd("0.50"),
+    question_ceiling=usd("0.60"),
     run_budget=usd("1.20"),
     run_label=run_label,
 )

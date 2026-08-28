@@ -25,7 +25,7 @@ def _fast_retries(monkeypatch):
 
 @pytest.fixture
 def config() -> Config:
-    return Config(model="fake/model", warning_threshold=usd("0.50"), run_budget=usd("1.20"))
+    return Config(model="fake/model", question_ceiling=usd("0.60"), run_budget=usd("1.20"))
 
 
 @pytest.fixture

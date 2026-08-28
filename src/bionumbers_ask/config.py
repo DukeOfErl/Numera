@@ -79,7 +79,12 @@ class ModelPrices:
 @dataclass(frozen=True)
 class Config:
     model: str
-    warning_threshold: int
+    # The hard per-question limit. Configured directly, because the number a
+    # person sets should be the number that stops work -- it used to be the
+    # warning, with the ceiling derived 20 per cent above it and never named, and
+    # a reader of this file concluded there was no per-question stop at all.
+    # ADR-0180; the same shape as CONVERSATION_BOUND / CONVERSATION_WARN_AT.
+    question_ceiling: int
     run_budget: int
     prices: dict[str, ModelPrices] = field(default_factory=dict)
     # What this run is, carried on every record. Without it an evaluation's spend
@@ -90,18 +95,30 @@ class Config:
     run_label: str = "dev"
 
     @property
-    def question_ceiling(self) -> int:
-        """The hard per-question limit: the warning threshold plus 20 per cent."""
-        return self.warning_threshold * 12 // 10
+    def warning_threshold(self) -> int:
+        """Notice, at four fifths of the stop. Derived, so it cannot exceed it."""
+        return self.question_ceiling * WARN_AT_NUMERATOR // WARN_AT_DENOMINATOR
 
     def prices_for(self, model: str) -> ModelPrices | None:
         return self.prices.get(model)
 
     @classmethod
     def from_env(cls) -> Config:
+        # Refused rather than reinterpreted. Read as a ceiling, a value that used
+        # to permit spending up to 20 per cent above it would now stop 20 per cent
+        # below -- a spend limit that silently tightens, which is worse than one
+        # that will not start.
+        if "BIONUMBERS_ASK_WARN_USD" in os.environ:
+            raise NotConfigured(
+                "BIONUMBERS_ASK_WARN_USD no longer exists. Set "
+                "BIONUMBERS_ASK_QUESTION_CEILING_USD instead: it is the hard "
+                "per-question limit, and the warning is derived at 80 per cent of it."
+            )
         return cls(
             model=os.environ.get("BIONUMBERS_ASK_MODEL", DEFAULT_MODEL),
-            warning_threshold=usd(os.environ.get("BIONUMBERS_ASK_WARN_USD", "0.50")),
+            question_ceiling=usd(
+                os.environ.get("BIONUMBERS_ASK_QUESTION_CEILING_USD", "0.60")
+            ),
             run_budget=usd(os.environ.get("BIONUMBERS_ASK_RUN_BUDGET_USD", "1.20")),
             prices=dict(FALLBACK_PRICES),
             run_label=os.environ.get("BIONUMBERS_ASK_RUN", "").strip() or "dev",
@@ -112,6 +129,12 @@ class Config:
 # Claude Opus 4.7. The exact OpenRouter slug is confirmed in task 1.7 rather than
 # assumed here.
 DEFAULT_MODEL = "anthropic/claude-haiku-4.5"
+
+# Where notice is given, as a fraction of the stop. Integer arithmetic throughout,
+# because money here is integer micro-dollars and a float ratio would reintroduce
+# rounding at the one place the ledger is careful to avoid it.
+WARN_AT_NUMERATOR = 8
+WARN_AT_DENOMINATOR = 10
 
 # Prices read from OpenRouter's models endpoint on 2026-08-18, in micro-dollars per
 # million tokens. Only reached if a provider stops reporting cost -- OpenRouter's

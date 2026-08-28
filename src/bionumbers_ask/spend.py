@@ -174,6 +174,10 @@ class SpendGateState(AgentState):
     """
 
     spend_ceiling: NotRequired[Annotated[int, PrivateStateAttr]]
+    # The size of the last request the provider actually received, which is the
+    # conversation's own size in the only units that matter to a context window.
+    # Kept here for the same reason as the ceiling: it has to survive the process.
+    prompt_tokens: NotRequired[Annotated[int, PrivateStateAttr]]
 
 
 class SpendGate(AgentMiddleware):
@@ -214,6 +218,9 @@ class SpendGate(AgentMiddleware):
         self._emit = emit
         self._trace = trace
         self._warned = False
+        # The last prompt size the provider reported. Zero until a request has
+        # been made and priced, which is why the caller falls back to counting.
+        self.prompt_tokens = 0
 
     def _tripped(self) -> SpendLimitReached | None:
         # Run budget first: it is the broader stop, so when both are reached the
@@ -239,6 +246,8 @@ class SpendGate(AgentMiddleware):
 
         response = handler(request)
         charge = self._ledger.add_response(getattr(response, "result", []) or [])
+        if charge.prompt_tokens:
+            self.prompt_tokens = charge.prompt_tokens
         if self._persist is not None:
             self._persist(charge.micro)
         # Tokens are recorded even when None: an absent field cannot be told apart
@@ -273,7 +282,7 @@ class SpendGate(AgentMiddleware):
         `persist` as each charge is made, which is also after each model call, so a
         question that ends by raising still leaves its spend recorded.
         """
-        return {"spend_ceiling": self._ceiling}
+        return {"spend_ceiling": self._ceiling, "prompt_tokens": self.prompt_tokens}
 
 
 # Grounded in measurements against the 14,294-entry corpus on 2026-08-19: a capped
