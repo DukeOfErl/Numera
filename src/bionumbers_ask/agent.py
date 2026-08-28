@@ -43,6 +43,7 @@ from .events import (
 )
 from .repository import CorpusRepository
 from .spend import (
+    LedgerUnavailable,
     SpendGate,
     SpendLedger,
     SpendLimitReached,
@@ -486,7 +487,15 @@ class AskAgent:
             )
 
             def record_spend(micro: int) -> None:
-                run_ledger.add(self._checkpoint_path, self._config.run_label, micro)
+                try:
+                    run_ledger.add(self._checkpoint_path, self._config.run_label, micro)
+                except Exception as exc:
+                    # A locked or unwritable store is ours to fix, and unrecorded
+                    # spend is worse than a failed question: the run budget would
+                    # go on enforcing a limit against a total that stopped moving.
+                    raise LedgerUnavailable(
+                        f"could not record spend in {self._checkpoint_path}: {exc}"
+                    ) from exc
 
             gate = SpendGate(
                 ledger=ledger,
@@ -681,7 +690,7 @@ class AskAgent:
                         # and reporting it as the provider's fault sends whoever
                         # sees it to look in the wrong place -- or to blame a
                         # service that did nothing wrong.
-                        ours = isinstance(exc, OUR_DEFECT)
+                        ours = isinstance(exc, (*OUR_DEFECT, LedgerUnavailable))
                         trace.record(
                             "internal.failed" if ours else "provider.failed",
                             error=type(exc).__name__,

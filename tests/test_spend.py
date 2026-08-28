@@ -623,3 +623,87 @@ def test_every_ending_carries_the_run_budget_it_was_measured_against(repo, tight
     model = scripted(costing(says("x (BNID 100002)"), 0.000_001))
     end = ended(list(agent_with(repo, tight, tmp_path, model).ask("s", "q")))
     assert end.run_budget == tight.run_budget
+
+
+# -- faults at the seams we own ------------------------------------------
+#
+# Injected rather than waited for. Every fault below returns no exception from the
+# model and leaves the suite green if it is not injected on purpose: the ledger
+# write is the only place spend becomes durable, and nothing upstream of it can
+# tell that it silently did nothing.
+
+
+def failing_ledger(monkeypatch, exc):
+    from bionumbers_ask import run_ledger
+
+    def broken(*_args, **_kwargs):
+        raise exc
+
+    monkeypatch.setattr(run_ledger, "add", broken)
+
+
+def test_an_unwritable_ledger_is_ours_and_is_not_blamed_on_the_provider(
+    repo, tight, tmp_path, monkeypatch
+):
+    """The store is a local sqlite file. Two drivers on one checkpoint path is an
+    ordinary setup -- a web server and a terminal session -- and "database is
+    locked" arriving as `provider_failure` sends whoever debugs it to a service
+    that did nothing wrong. The classification is an allowlist of exception types,
+    so anything not on it was the provider by default; a sqlite error is not on it.
+    """
+    failing_ledger(monkeypatch, RuntimeError("database is locked"))
+    model = scripted(costing(says("about 1 micrometre (BNID 100002)"), 0.000_010))
+    end = ended(list(agent_with(repo, tight, tmp_path, model).ask("s", "q")))
+
+    assert end.reason is EndReason.INTERNAL_ERROR, "a local storage fault, blamed on the provider"
+    assert end.incomplete is True
+
+
+def test_spend_that_could_not_be_recorded_stops_the_question(
+    repo, tight, tmp_path, monkeypatch
+):
+    """Fatal by design, and the alternative is worse than a failed question.
+
+    The charge is made against the live ledger *before* it is persisted, so the
+    ending reports spend that the durable total never received. Carrying on would
+    leave every later question reading a stale figure while real money was spent --
+    a run budget enforcing a limit against a total that had stopped moving.
+    """
+    from bionumbers_ask import run_ledger
+
+    store = str(tmp_path / "ask.sqlite")
+    model = scripted(costing(says("first (BNID 100002)"), 0.000_010))
+    list(agent_with(repo, tight, tmp_path, model, store).ask("s", "q1"))
+    recorded_before = run_ledger.read(store, tight.run_label)
+    assert recorded_before > 0, "nothing was recorded even on the good path"
+
+    failing_ledger(monkeypatch, RuntimeError("disk I/O error"))
+    model = scripted(costing(says("second (BNID 100002)"), 0.000_010))
+    end = ended(list(agent_with(repo, tight, tmp_path, model, store).ask("s", "q2")))
+
+    monkeypatch.undo()
+    assert end.spend > 0, "the ending reported spend"
+    assert run_ledger.read(store, tight.run_label) == recorded_before, (
+        "and the durable total did not move -- which is why the question must stop"
+    )
+
+
+def test_a_ledger_that_writes_nothing_at_all_is_caught_by_the_run_total(
+    repo, tight, tmp_path, monkeypatch
+):
+    """The silent version, and the one no exception announces. A write that returns
+    cleanly having stored nothing leaves every event, every log line and every
+    ending unchanged -- only the total gives it away."""
+    from bionumbers_ask import run_ledger
+
+    store = str(tmp_path / "ask.sqlite")
+    monkeypatch.setattr(run_ledger, "add", lambda *a, **k: None)
+    model = scripted(costing(says("x (BNID 100002)"), 0.000_010))
+    end = ended(list(agent_with(repo, tight, tmp_path, model, store).ask("s", "q")))
+    monkeypatch.undo()
+
+    assert end.reason is EndReason.ANSWERED, "nothing raised; the question looks fine"
+    assert end.spend > 0
+    assert run_ledger.read(store, tight.run_label) == 0, (
+        "the fault this test exists for: spent, reported, and not recorded"
+    )

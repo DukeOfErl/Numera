@@ -34,6 +34,21 @@ class Unpriceable(Exception):
     """
 
 
+class LedgerUnavailable(RuntimeError):
+    """The run ledger could not be written, so spend is no longer being recorded.
+
+    Ours, not the provider's: the store is a local sqlite file, and a locked or
+    unwritable one arriving as "provider_failure" sends whoever debugs it to a
+    service that did nothing wrong. Raised as its own type because that is the only
+    thing that tells the two apart at the point they are classified.
+
+    Fatal to the question by design. The charge has already been made against the
+    live ledger and reported on the ending, but the durable total has not moved, so
+    the next question would read a stale figure and the run budget would enforce a
+    limit against spend it cannot see.
+    """
+
+
 class SpendLimitReached(Exception):
     """A limit was reached, checked before this request was dispatched.
 
