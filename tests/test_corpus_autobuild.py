@@ -211,3 +211,81 @@ def test_several_exports_are_reported_by_neither(tmp_path):
     corpus = tmp_path / "bionumbers.jsonl"
     assert resolve.plan(corpus).export_path is None
     assert autobuild._export_beside(str(corpus)) is None
+
+
+def test_without_the_ingester_a_corpus_that_is_there_is_simply_used(tmp_path, monkeypatch):
+    """The case the guarded-out branch got wrong: a corpus present, an export beside
+    it, and no ingestion extra. It refused to start, said there was no corpus when
+    there was, and told the reader to install something they did not need.
+
+    Not an edge case. Export and corpus in one directory is the arrangement the
+    README describes, and the ask-only install is the one it offers -- so a reviewer
+    handed a corpus by a colleague walks straight into it.
+
+    The deeper fault was order, not a missing line: this branch is a hand copy of
+    the resolver's decision procedure, and it had copied the matching rule while
+    dropping the check that comes before it.
+    """
+    corpus = tmp_path / "bionumbers.jsonl"
+    shutil.copy(FIXTURE, corpus)
+    (tmp_path / "BioNumbers.xls").write_text("export")
+
+    real_import = __import__
+
+    def no_ingester(name, *args, **kwargs):
+        if name.startswith("bionumbers_ingest"):
+            raise ImportError("ask extra only")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", no_ingester)
+    said = []
+    assert autobuild.corpus_path(str(corpus), said.append) == str(corpus)
+    assert not said
+
+
+def test_the_guarded_branch_agrees_with_the_resolver_wherever_no_build_happens(
+    tmp_path, monkeypatch
+):
+    """The copy and the original must choose the same path, not merely match on the
+    export's name. The drift that mattered was in the decision order, so an
+    agreement test comparing only constants passed while the branch was wrong.
+
+    Checked wherever a build is not what happens, which is every arrangement the
+    guarded branch can be in: it cannot build, so those are the only cases where
+    the two are answering the same question.
+    """
+    from bionumbers_ingest import resolve
+
+    real_import = __import__
+
+    def no_ingester(name, *args, **kwargs):
+        if name.startswith("bionumbers_ingest"):
+            raise ImportError("ask extra only")
+        return real_import(name, *args, **kwargs)
+
+    arrangements = [(True, True), (True, False), (False, False)]
+    for index, (has_corpus, has_export) in enumerate(arrangements):
+        case = tmp_path / f"case{index}"
+        case.mkdir()
+        corpus = case / "bionumbers.jsonl"
+        if has_corpus:
+            shutil.copy(FIXTURE, corpus)
+        if has_export:
+            (case / "BioNumbers.xls").write_text("export")
+
+        with_resolver = autobuild.corpus_path(str(corpus), lambda _t: None)
+
+        monkeypatch.setattr("builtins.__import__", no_ingester)
+        try:
+            without = autobuild.corpus_path(str(corpus), lambda _t: None)
+        except CorpusUnavailable:  # pragma: no cover - only where an export exists
+            without = None
+        finally:
+            monkeypatch.undo()
+
+        assert without == with_resolver, (
+            f"corpus={has_corpus} export={has_export}: the guarded branch loads "
+            f"{without!r} where the resolver loads {with_resolver!r}"
+        )
+        # And the resolver's own view agrees about whether anything was there.
+        assert resolve.plan(corpus).is_ready is has_corpus

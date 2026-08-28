@@ -33,9 +33,15 @@ EXPORT_NAME = "BioNumbers.xls"
 def _export_beside(configured: str) -> Path | None:
     """The export a build would read, found without the ingester.
 
-    Only reached when the import failed, and only to make the message concrete.
-    Deliberately the same rule the resolver uses -- one file of that name, matched
-    case-insensitively, and nothing reported where several sit together.
+    Only reached when the import failed, and only after establishing there is no
+    corpus. It exists so the degraded message can name a file it has confirmed is
+    there, which is what a reader in that position most needs to know -- they have
+    the export already and only lack the component that converts it.
+
+    Deliberately the same rule the resolver uses: one file of that name, matched
+    case-insensitively, and nothing reported where several sit together. The
+    agreement is asserted by a test rather than left to memory, because it is a
+    hand copy of a rule this project does not own.
     """
     path = Path(configured)
     if path.suffix.lower() == ".xls":
@@ -94,6 +100,15 @@ def corpus_path(configured: str, announce: Callable[[str], None]) -> str:
         from bionumbers_ingest.guard import OutputWouldBeCommitted
         from bionumbers_ingest.resolve import build, plan
     except ImportError:
+        # A corpus already there is the answer, whatever else is beside it. Checked
+        # first because that is the order `plan` checks in, and the whole of this
+        # branch is a hand copy of `plan` for the case where `plan` cannot be
+        # imported. Omitting this line refused to start with a perfectly good
+        # corpus present -- and told the reader there was none, and to install an
+        # extra they did not need. Worse than an edge case, because export and
+        # corpus in one directory is the arrangement the README now describes.
+        if Path(configured).is_file():
+            return configured
         export = _export_beside(configured)
         if export is not None:
             raise CorpusUnavailable(unavailable_but_buildable(export)) from None
