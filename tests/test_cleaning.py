@@ -933,3 +933,95 @@ def test_a_full_stop_after_a_deviation_does_not_discard_both_bounds():
     # number and the stop kept it.
     r = clean_row({"bion_id": "1", "Range": "'7.4±0.3."})
     assert (r.range_low, r.range_high) == pytest.approx((7.1, 7.7))
+
+
+@pytest.mark.parametrize(
+    ("range_text", "units"),
+    [
+        ("'10 µm - 15", "μm"),
+        ("'2 hours - 5", "hours"),
+        ("'70% - 90", "%"),
+        ("'≈29 % to 36", "%"),
+        ("'0.02%–0.03", "%"),
+    ],
+)
+def test_a_unit_written_once_is_still_a_unit_when_the_cell_ends_there(range_text, units):
+    # Nothing follows the high bound, so there is nothing to repeat and the
+    # repetition test cannot decide. The row's own Units column can.
+    r = clean_row({"bion_id": "1", "Range": range_text, "Units": units})
+    assert r.range_fused is False
+
+
+@pytest.mark.parametrize(
+    ("range_text", "units"),
+    [
+        ("'Length ~1500 Diameter 500", "nm"),  # one word beside the bound, not the unit
+        ("'Catalogued ~950,000 Predicted ~7,770,000", "species"),
+        ("'300 by 700", "nm"),
+        ("'2.33 and 29.7", "mRNA molecules/hour"),
+        ("'at 18°C 580: at 11°C 1,100", "unitless"),  # a condition, not the unit
+        ("'in nerve and muscle 0.1 in red blood cell 10^-8", "seconds"),
+    ],
+)
+def test_a_word_beside_the_bound_that_is_not_the_declared_unit_stays_flagged(range_text, units):
+    # These are the same shape as the ranges above -- one word between two bounds,
+    # nothing after the second -- and they name two different things. Only the
+    # Units column separates the two populations, and it must be matched exactly:
+    # `at 18°C 580: at 11°C 1,100` would pass a containment test on `unitless`
+    # only by accident, and `°C` there is the condition, not the measurement.
+    r = clean_row({"bion_id": "1", "Range": range_text, "Units": units})
+    assert r.range_fused is True
+
+
+def test_without_a_declared_unit_the_flag_stays_on():
+    # The discriminator is the Units column; with no column there is no evidence,
+    # and this predicate errs towards saying so.
+    r = clean_row({"bion_id": "1", "Range": "'10 µm - 15"})
+    assert r.range_fused is True
+
+
+def test_a_bare_connector_between_two_bounds_is_a_range():
+    # `34,000 to170,000` reads as prose only because the missing space kept "to"
+    # from being normalised to a separator. A connector names no second quantity.
+    r = clean_row({"bion_id": "1", "Range": "'34,000 to170,000", "Units": "Years"})
+    assert r.range_fused is False
+    assert (r.range_low, r.range_high) == (34000.0, 170000.0)
+
+
+def test_a_deviation_keeps_the_raw_cell_and_any_link_beside_it():
+    # Both plus-or-minus paths return early, and neither the raw cell nor the
+    # link was asserted on either of them -- so dropping one would have been
+    # invisible on the 1,037 records of the export that take these branches.
+    around = clean_row(
+        {"bion_id": "1", "Value": "5", "Range": "'±1.2 Table link - http://example.org/t.pdf"}
+    )
+    assert around.range_raw == "±1.2 Table link - http://example.org/t.pdf"
+    assert around.table_link == "http://example.org/t.pdf"
+    assert (around.range_low, around.range_high) == pytest.approx((3.8, 6.2))
+
+    embedded = clean_row(
+        {"bion_id": "1", "Range": "'7.4±0.3 Table link - http://example.org/t.pdf"}
+    )
+    assert embedded.range_raw == "7.4±0.3 Table link - http://example.org/t.pdf"
+    assert embedded.table_link == "http://example.org/t.pdf"
+    assert (embedded.range_low, embedded.range_high) == pytest.approx((7.1, 7.7))
+
+
+def test_a_zero_low_bound_makes_a_shared_exponent_readings_identical():
+    # `0 - 1.3×10^6` is the same range under either reading, so there is nothing
+    # to report. Marking a record that is already correct teaches a reader to
+    # ignore the marking.
+    r = clean_row({"bion_id": "1", "Range": "'0 - 1.3x10^6"})
+    assert "range_shared_exponent" not in r.parse_flags
+    assert r.range_fused is False
+    assert (r.range_low, r.range_high) == (0.0, 1_300_000.0)
+
+
+def test_an_en_dash_between_two_numbers_is_a_separator_not_a_sign():
+    # An en dash is both a range separator and a minus sign in the wild, and the
+    # two readings cannot both be honoured. The export settles it: it writes no
+    # en-dash-signed number at all, and writes plenty of en-dash ranges. So the
+    # separator reading wins, and a leading en dash before a lone number is
+    # knowingly read as unsigned -- a seeded survivor this docstring accepts.
+    r = clean_row({"bion_id": "1", "Range": "'2.5–3.5"})
+    assert (r.range_low, r.range_high) == (2.5, 3.5)

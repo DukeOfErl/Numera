@@ -326,7 +326,9 @@ def _extract_numbers(text: str) -> list[float]:
     return [value for value, _, _ in _numbers_with_spans(text)[1]]
 
 
-def _prose_stands_between_bounds(text: str, found: list[tuple[float, int, int]]) -> bool:
+def _prose_stands_between_bounds(
+    text: str, found: list[tuple[float, int, int]], units: str | None = None
+) -> bool:
     """Does anything but a separator stand between the two numbers used as bounds?
 
     A second quantity named mid-cell ("7.4 one face 5.9 other face") is the case
@@ -349,7 +351,7 @@ def _prose_stands_between_bounds(text: str, found: list[tuple[float, int, int]])
     span = text[a[2] : b[1]]
     if _SEPARATORS_ONLY_RE.match(span):
         return False
-    return not _is_the_unit_repeated(span, text[b[2] :])
+    return not _is_the_unit_repeated(span, text[b[2] :], units)
 
 
 def _unit_after(text: str) -> list[str]:
@@ -358,7 +360,7 @@ def _unit_after(text: str) -> list[str]:
     return token.group(1).split() if token else []
 
 
-def _is_the_unit_repeated(span: str, after_high: str) -> bool:
+def _is_the_unit_repeated(span: str, after_high: str, units: str | None = None) -> bool:
     """Is the text between the bounds just the unit, written on both of them?
 
     `10 mM to 20 mM` states one range twice-annotated, not two quantities, and
@@ -377,6 +379,12 @@ def _is_the_unit_repeated(span: str, after_high: str) -> bool:
     enough either: it would read `436 metabolites 720` as a range on the strength
     of one noun.
 
+    **Unless the cell ends at the high bound**, in which case there is nothing to
+    repeat and the row's own Units column decides. `10 µm - 15` writes its unit
+    once, and only the declared unit says that "µm" is a unit rather than the
+    second quantity `Length ~1500 Diameter 500` writes in the same shape. Both are
+    one word next to a bound; nothing inside the cell tells them apart.
+
     Between them they keep the 87% of this flag that are genuine second
     quantities, while releasing the ordinary ranges that only looked like them.
     """
@@ -386,7 +394,11 @@ def _is_the_unit_repeated(span: str, after_high: str) -> bool:
         return False
     unit = [w for w in token.group(1).split() if w.lower() not in _RANGE_CONNECTORS]
     if not unit:
-        return False  # nothing but a connector: no unit was written on the low bound
+        # Nothing but a connector: `34,000 to170,000` is a range with no unit
+        # anywhere, and reads as one only because the missing space kept "to"
+        # from being normalised to a separator. A connector cannot name a second
+        # quantity, so this is a range as long as the cell ends here.
+        return not after_high.strip()
     rest = body[token.end() :]
     if token.group(1).endswith("^"):
         # `µm^3` splits as the token "µm^" and a leftover exponent, because a
@@ -395,11 +407,32 @@ def _is_the_unit_repeated(span: str, after_high: str) -> bool:
         rest = rest.lstrip("0123456789-")
     if not _SPAN_FILLER_RE.match(rest):
         return False
+    if not after_high.strip():
+        return _matches_the_declared_unit(unit, units)
     # A prefix comparison on the far side, not equality: `_UNIT_TOKEN_RE` runs
     # greedily over whatever follows the high bound, so `5 nm to 10 nm diameter`
     # offers "nm" against "nm diameter", and any trailing word would defeat the
     # test — leaving an ordinary range behind the fused predicate.
     return _unit_after(after_high)[: len(unit)] == unit
+
+
+def _matches_the_declared_unit(unit: list[str], units: str | None) -> bool:
+    """Is the word beside the low bound this row's unit, or a second quantity?
+
+    Equality against the Units column, not containment. Measured over the export,
+    that separates the two populations exactly: `10 µm - 15` (units `μm`),
+    `2 hours - 5` (`hours`) and `70% - 90` (`%`) match, while `Length ~1500
+    Diameter 500` (`nm`), `Catalogued ~950,000 Predicted ~7,770,000` (`species`)
+    and `at 18°C 580: at 11°C 1,100` (`unitless`) do not. Containment would admit
+    the last of those, whose `°C` is a condition the measurement was taken at.
+
+    A multi-word unit is not accepted here. `in nerve and muscle 0.1 in red blood
+    cell 10^-8` offers four words that no Units column will match, and the shape
+    is too weak to spend a guess on.
+    """
+    if not units or len(unit) != 1:
+        return False
+    return _normalize_units(unit[0]).casefold() == units.casefold()
 
 
 def _shared_exponent_is_ambiguous(text: str, found: list[tuple[float, int, int]]) -> bool:
@@ -498,9 +531,14 @@ def _parse_value(raw: str, flags: list[str]) -> float | None:
 
 
 def _parse_range(
-    raw: str, value: float | None, flags: list[str]
+    raw: str, value: float | None, flags: list[str], units: str | None = None
 ) -> tuple[str | None, float | None, float | None, str | None]:
     """Return (range_raw, range_low, range_high, table_link).
+
+    ``units`` is the row's own Units column, already normalised. It is the only
+    thing in the row that can say whether a word next to a bound is this
+    measurement's unit or the name of a second quantity -- see
+    :func:`_is_the_unit_repeated`.
 
     ``range_raw`` is the source cell with the apostrophe removed, captured
     *before* the link URL is taken out — see the field's own docstring on
@@ -578,7 +616,7 @@ def _parse_range(
         # it — the bounds below are unchanged.
         if len(found) > 2:
             flags.append("range_multi_number")
-        if _prose_stands_between_bounds(normalised, found):
+        if _prose_stands_between_bounds(normalised, found, units):
             flags.append("range_prose_between_bounds")
         if _shared_exponent_is_ambiguous(normalised, found):
             flags.append("range_shared_exponent")
@@ -627,7 +665,10 @@ def clean_row(raw: dict[str, str]) -> BioNumberRecord:
     bnid = int(bnid_text)
 
     value = _parse_value(raw.get("Value", ""), flags)
-    range_raw, range_low, range_high, table_link = _parse_range(raw.get("Range", ""), value, flags)
+    units = _normalize_units(_text_or_none(raw.get("Units")))
+    range_raw, range_low, range_high, table_link = _parse_range(
+        raw.get("Range", ""), value, flags, units
+    )
 
     if value is None and range_low is None and range_high is None:
         flags.append("no_scalar")
@@ -641,7 +682,7 @@ def clean_row(raw: dict[str, str]) -> BioNumberRecord:
         range_low=range_low,
         range_high=range_high,
         table_link=table_link,
-        units=_normalize_units(_text_or_none(raw.get("Units"))),
+        units=units,
         reference=_text_or_none(raw.get("Reference")),
         reference_pubmed_id=_text_or_none(raw.get("Reference PubMed ID")),
         primary_source=_text_or_none(raw.get("Primary Source")),
