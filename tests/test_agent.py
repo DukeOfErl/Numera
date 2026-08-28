@@ -607,9 +607,7 @@ def test_every_non_raising_path_ends_with_a_question_ended(repo, config, tmp_pat
         return agent, "s"
 
     def at_spend_ceiling():
-        tight = Config(
-            model=config.model, question_ceiling=usd("0.000120"), run_budget=usd("1.20")
-        )
+        tight = Config(model=config.model, question_ceiling=usd("0.000120"), run_budget=usd("1.20"))
         model = scripted(costing(tool_call("search_entries", property="Cell"), 0.000_200))
         return AskAgent(repo, tight, str(tmp_path / "sc.sqlite"), model=model), "s"
 
@@ -815,12 +813,25 @@ def hedged_repo():
     from bionumbers_ask.corpus import Entry
     from bionumbers_ask.repository import CorpusRepository
 
-    return CorpusRepository((
-        Entry(bnid=1, property="Minimal inhibitory concentration", organism="E. coli",
-              units="mg/L", value=None, range_low=8.0, range_high=8.0, reference="r",
-              reference_pubmed_id=None, measurement_method="", comments="",
-              keywords=(), range_qualified=True),
-    ))
+    return CorpusRepository(
+        (
+            Entry(
+                bnid=1,
+                property="Minimal inhibitory concentration",
+                organism="E. coli",
+                units="mg/L",
+                value=None,
+                range_low=8.0,
+                range_high=8.0,
+                reference="r",
+                reference_pubmed_id=None,
+                measurement_method="",
+                comments="",
+                keywords=(),
+                range_qualified=True,
+            ),
+        )
+    )
 
 
 @pytest.fixture
@@ -829,12 +840,25 @@ def fused_repo():
     from bionumbers_ask.corpus import Entry
     from bionumbers_ask.repository import CorpusRepository
 
-    return CorpusRepository((
-        Entry(bnid=2, property="Cell width", organism="E. coli", units="um",
-              value=None, range_low=0.5, range_high=72.0, reference="r",
-              reference_pubmed_id=None, measurement_method="", comments="",
-              keywords=(), range_fused=True),
-    ))
+    return CorpusRepository(
+        (
+            Entry(
+                bnid=2,
+                property="Cell width",
+                organism="E. coli",
+                units="um",
+                value=None,
+                range_low=0.5,
+                range_high=72.0,
+                reference="r",
+                reference_pubmed_id=None,
+                measurement_method="",
+                comments="",
+                keywords=(),
+                range_fused=True,
+            ),
+        )
+    )
 
 
 def entry_text(repo, bnid: int) -> str:
@@ -904,9 +928,7 @@ def test_retrieval_stops_at_its_own_bound_not_at_the_model_call_limit(repo, conf
     finally:
         agent_module.TOOL_CALL_LIMIT = original
 
-    declined = [
-        e for e in events if isinstance(e, Retrieval) and e.detail.get("declined")
-    ]
+    declined = [e for e in events if isinstance(e, Retrieval) and e.detail.get("declined")]
     assert declined, "every call ran; the bound did nothing"
     end = events[-1]
     assert end.at_tool_bound, "the ending must say retrieval ran out, not merely end"
@@ -933,7 +955,7 @@ def test_a_declined_call_is_still_reported_as_something_that_happened(repo, conf
 
 
 def test_an_answer_with_no_retrieval_behind_it_is_reported(repo, config, tmp_path):
-    """"Not in the corpus" and "not looked for" are different statements, and a
+    """ "Not in the corpus" and "not looked for" are different statements, and a
     reader cannot tell them apart from the answer."""
     from bionumbers_ask.events import UngroundedRefusal
 
@@ -945,16 +967,12 @@ def test_an_answer_with_no_retrieval_behind_it_is_reported(repo, config, tmp_pat
     assert events[-1].tool_calls == 0, "the count is the evidence"
 
 
-def test_an_answer_claiming_searches_it_never_made_is_reported_as_such(
-    repo, config, tmp_path
-):
+def test_an_answer_claiming_searches_it_never_made_is_reported_as_such(repo, config, tmp_path):
     """Observed live: zero tool calls, prose reading "based on my searches through
     the available data". The harness had the truth and the answer did not."""
     from bionumbers_ask.events import UngroundedRefusal
 
-    model = scripted(
-        says("Based on my searches through the available data, this is not covered.")
-    )
+    model = scripted(says("Based on my searches through the available data, this is not covered."))
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
     assert next(e for e in events if isinstance(e, UngroundedRefusal)).claimed_searching
 

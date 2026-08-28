@@ -239,8 +239,7 @@ def test_an_empty_spec_adds_no_handler_and_writes_no_file(tmp_path, monkeypatch)
     empty, which reads as a trail that recorded nothing."""
     import logging
 
-    from bionumbers_ask.trace import to_file
-    from bionumbers_ask.trace import LOGGER_NAME
+    from bionumbers_ask.trace import LOGGER_NAME, to_file
 
     logger = logging.getLogger(LOGGER_NAME)
     monkeypatch.setattr(logger, "handlers", [])

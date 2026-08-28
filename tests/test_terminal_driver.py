@@ -10,7 +10,9 @@ from __future__ import annotations
 import io
 
 import pytest
+from conftest import agent_with
 
+from agent_doubles import costing, says, scripted, tool_call
 from bionumbers_ask.cli import render, run
 from bionumbers_ask.config import Config, usd
 from bionumbers_ask.events import (
@@ -24,14 +26,15 @@ from bionumbers_ask.events import (
     SpendWarning,
 )
 
-from agent_doubles import costing, says, scripted, tool_call
-from conftest import agent_with
-
 
 def ended(reason, **kwargs):
     defaults = dict(
-        question_id="q", reason=reason, spend=110, run_spend=220,
-        model="fake/model", tool_calls=3,
+        question_id="q",
+        reason=reason,
+        spend=110,
+        run_spend=220,
+        model="fake/model",
+        tool_calls=3,
     )
     return QuestionEnded(**{**defaults, **kwargs})
 
@@ -40,15 +43,21 @@ def ended(reason, **kwargs):
 
 
 def test_a_retrieval_shows_the_tool_and_what_it_was_asked():
-    line = render(Retrieval(question_id="q", tool="search_entries",
-                            detail={"property": "Cell volume", "matched": 12}))
+    line = render(
+        Retrieval(
+            question_id="q",
+            tool="search_entries",
+            detail={"property": "Cell volume", "matched": 12},
+        )
+    )
     assert "search_entries" in line
     assert "'Cell volume'" in line and "matched=12" in line
 
 
 def test_a_retrieval_omits_absent_detail_rather_than_showing_none():
-    line = render(Retrieval(question_id="q", tool="get_entry",
-                            detail={"bnid": 100002, "organism": None}))
+    line = render(
+        Retrieval(question_id="q", tool="get_entry", detail={"bnid": 100002, "organism": None})
+    )
     assert "bnid=100002" in line
     assert "None" not in line
 
@@ -96,8 +105,9 @@ def test_the_start_event_needs_no_line():
 
 def test_a_question_renders_retrieval_then_answer_then_the_ending(repo, config, tmp_path):
     out = io.StringIO()
-    model = scripted(tool_call("search_entries", property="Cell"),
-                     says("about 1 micrometre (BNID 100002)"))
+    model = scripted(
+        tool_call("search_entries", property="Cell"), says("about 1 micrometre (BNID 100002)")
+    )
     assert run(agent_with(repo, config, tmp_path, model), "s", ["how wide?"], out) == 0
 
     text = out.getvalue()
@@ -131,8 +141,7 @@ class Counting:
 
 def test_the_run_stops_when_the_budget_is_spent(repo, config, tmp_path):
     """Continuing would put the same refusal on every remaining question."""
-    budgeted = Config(model=config.model, question_ceiling=usd("0.60"),
-                      run_budget=usd("0.000050"))
+    budgeted = Config(model=config.model, question_ceiling=usd("0.60"), run_budget=usd("0.000050"))
     out = io.StringIO()
     model = scripted(costing(says("an answer"), 0.000_110))
     agent = Counting(agent_with(repo, budgeted, tmp_path, model))
@@ -215,23 +224,30 @@ def test_no_corpus_at_all_says_one_must_be_supplied(monkeypatch):
 def test_one_shot_mode_runs_a_single_question_and_exits(tmp_path, monkeypatch, capsys):
     """Without a key this ends as not_configured -- which is still one question,
     rendered and ended, rather than a traceback or a prompt."""
-    from bionumbers_ask.cli import main
     from conftest import FIXTURE
+
+    from bionumbers_ask.cli import main
 
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     with pytest.raises(SystemExit) as exit_info:
-        main([
-            "--corpus", FIXTURE,
-            "--checkpoints", str(tmp_path / "sessions" / "ask.sqlite"),
-            "--ask", "How wide is an E. coli cell?",
-        ])
+        main(
+            [
+                "--corpus",
+                FIXTURE,
+                "--checkpoints",
+                str(tmp_path / "sessions" / "ask.sqlite"),
+                "--ask",
+                "How wide is an E. coli cell?",
+            ]
+        )
     assert exit_info.value.code == 1
     assert "not_configured" in capsys.readouterr().out
 
 
 def test_the_checkpoint_directory_is_created_rather_than_assumed(tmp_path, monkeypatch):
-    from bionumbers_ask.cli import main
     from conftest import FIXTURE
+
+    from bionumbers_ask.cli import main
 
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     store = tmp_path / "made" / "up" / "ask.sqlite"
@@ -283,16 +299,23 @@ def test_ending_the_input_stops_cleanly_rather_than_raising(monkeypatch, interru
     assert list(_questions_from_terminal(io.StringIO())) == []
 
 
-def test_the_interactive_entry_point_announces_the_session_and_exits(
-    tmp_path, monkeypatch, capsys
-):
-    from bionumbers_ask.cli import main
+def test_the_interactive_entry_point_announces_the_session_and_exits(tmp_path, monkeypatch, capsys):
     from conftest import FIXTURE
+
+    from bionumbers_ask.cli import main
 
     feed(monkeypatch)  # no input at all: straight to end of input
     with pytest.raises(SystemExit) as exit_info:
-        main(["--corpus", FIXTURE, "--checkpoints", str(tmp_path / "i.sqlite"),
-              "--session", "chosen-session"])
+        main(
+            [
+                "--corpus",
+                FIXTURE,
+                "--checkpoints",
+                str(tmp_path / "i.sqlite"),
+                "--session",
+                "chosen-session",
+            ]
+        )
 
     assert exit_info.value.code == 0
     out = capsys.readouterr().out

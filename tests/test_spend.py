@@ -20,8 +20,8 @@ from agent_doubles import (
     scripted,
     tool_call,
 )
-from bionumbers_ask.agent import RUN_CALL_LIMIT, AskAgent
 from bionumbers_ask import messages
+from bionumbers_ask.agent import RUN_CALL_LIMIT, AskAgent
 from bionumbers_ask.config import FALLBACK_PRICES, Config, ModelPrices, usd
 from bionumbers_ask.events import (
     Answer,
@@ -493,22 +493,19 @@ def test_raising_the_budget_lets_a_stopped_run_continue(repo, tmp_path):
     assert end.run_spend == 120
 
 
-def test_the_run_budget_refusal_does_not_report_spend_as_a_fraction_of_the_budget(
-    repo, tmp_path
-):
+def test_the_run_budget_refusal_does_not_report_spend_as_a_fraction_of_the_budget(repo, tmp_path):
     """The gate fires at or past the budget, so the figure usually exceeds it.
 
     "spent $0.07 of its $0.000100 budget" reads as a fraction of a larger whole,
     which is the one thing it never is.
     """
+    from conftest import agent_with
+
+    from agent_doubles import costing, says, scripted
     from bionumbers_ask.config import Config, usd
     from bionumbers_ask.events import Answer
 
-    from agent_doubles import costing, says, scripted
-    from conftest import agent_with
-
-    spent = Config(model="fake/model", question_ceiling=usd("0.60"),
-                   run_budget=usd("0.000050"))
+    spent = Config(model="fake/model", question_ceiling=usd("0.60"), run_budget=usd("0.000050"))
     agent = agent_with(repo, spent, tmp_path, scripted(costing(says("an answer"), 0.000_110)))
 
     list(agent.ask("s", "first"))
@@ -523,8 +520,15 @@ def test_the_run_budget_refusal_does_not_report_spend_as_a_fraction_of_the_budge
 
 
 def ending(**kwargs) -> QuestionEnded:
-    defaults = dict(question_id="q", reason=EndReason.ANSWERED, spend=110, run_spend=220,
-                    model="fake/model", tool_calls=3, spend_ceiling=120)
+    defaults = dict(
+        question_id="q",
+        reason=EndReason.ANSWERED,
+        spend=110,
+        run_spend=220,
+        model="fake/model",
+        tool_calls=3,
+        spend_ceiling=120,
+    )
     return QuestionEnded(**{**defaults, **kwargs})
 
 
@@ -576,9 +580,7 @@ def test_a_real_question_carries_the_ceiling_it_ran_against(repo, tight, tmp_pat
 # -- a resumed session's warning ------------------------------------------
 
 
-def test_a_resumed_session_warns_against_its_own_ceiling_not_the_environment(
-    repo, tight, tmp_path
-):
+def test_a_resumed_session_warns_against_its_own_ceiling_not_the_environment(repo, tight, tmp_path):
     """The ceiling persists with the session (ADR-0180) and the warning is derived
     from it, so deriving the warning from configuration instead lets the two drift.
 
@@ -659,9 +661,7 @@ def test_an_unwritable_ledger_is_ours_and_is_not_blamed_on_the_provider(
     assert end.incomplete is True
 
 
-def test_spend_that_could_not_be_recorded_stops_the_question(
-    repo, tight, tmp_path, monkeypatch
-):
+def test_spend_that_could_not_be_recorded_stops_the_question(repo, tight, tmp_path, monkeypatch):
     """Fatal by design, and the alternative is worse than a failed question.
 
     The charge is made against the live ledger *before* it is persisted, so the

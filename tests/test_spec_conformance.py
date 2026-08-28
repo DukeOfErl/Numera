@@ -49,12 +49,8 @@ COVERED: dict[str, tuple[str, ...]] = {
     "Session state survives a process boundary": (
         "test_session_process_boundary.py::test_a_session_continues_in_a_process_that_did_not_create_it",
     ),
-    "Sessions are isolated from one another": (
-        "test_agent.py::test_two_sessions_share_nothing",
-    ),
-    "The corpus is read-only": (
-        "test_repository.py::test_entries_cannot_be_mutated",
-    ),
+    "Sessions are isolated from one another": ("test_agent.py::test_two_sessions_share_nothing",),
+    "The corpus is read-only": ("test_repository.py::test_entries_cannot_be_mutated",),
     "Retrieval effort is bounded and reported": (
         "test_agent.py::test_retrieval_stops_at_its_own_bound_not_at_the_model_call_limit",
         "test_agent.py::test_a_declined_call_is_still_reported_as_something_that_happened",
@@ -77,50 +73,60 @@ COVERED: dict[str, tuple[str, ...]] = {
     ),
 }
 
-# Requirements with no test named yet. Listed rather than omitted: the point of
-# this file is that a gap is written down, not that there are none. Completing the
+# Requirements with no test named yet. Listed rather than omitted: the point of this
+# file is that a gap is written down, not that there are none. Completing the
 # mapping is task 10.9.
-UNMAPPED_REASON = "not yet mapped -- task 10.9"
+TESTED_BUT_UNNAMED = (
+    "Events carry enough detail to show progress and to explain an ending",
+    "A transient failure does not end a question",
+    "The deterministic layer is logged under a per-question identifier",
+    "Follow-up questions inherit the conversation",
+    "Citations in a follow-up stand on their own",
+    "Search returns compact rows, bounded in number",
+    "A stored value is presented as what it measures",
+    "A search records which entries it returned",
+    "Organism and property matching is tolerant, not exact",
+    "A keyword search reaches an entry's own keywords",
+    "The corpus vocabulary is discoverable",
+    "Common naming variants resolve without a round trip",
+    "Full entries are retrieved individually and expose their cross-references",
+    "Every quantitative claim cites its entries",
+    "Citations use one stated format",
+    "Every answer is accompanied by the entries behind it",
+    "Answers come only from the corpus",
+    "Disagreement is reported with its conditions",
+    "Computed values are shown with their inputs",
+    "Spend is taken from what the provider reports",
+    "A pre-request gate stops work before the ceiling is crossed",
+    "A configurable ceiling, with the warning derived from it",
+    "An answer that ran to its ceiling says so",
+    "A question ended on the ceiling reports what it established",
+    "A run of questions carries its own budget",
+    "A run stopped on budget is distinguishable from a completed run",
+    "Spend state persists across processes",
+    "An expensive question is flagged before work begins",
+    "Spend is always reported",
+)
+
+# Group 9's. Not mappable until the evaluation harness exists, so a different kind
+# of gap from the one above and kept apart from it -- otherwise finishing 10.9
+# would look impossible rather than merely unfinished.
+AWAITING_THE_HARNESS = (
+    "The question set is explicit and versioned with its answers",
+    "Scoring is based on cited entries, not answer text",
+    "Unsupported questions are part of the set",
+    "Run-to-run variation is measured, not averaged away",
+    "Results are recorded as each question completes",
+    "An interrupted run resumes without repeating work",
+    "A report can be produced from a partial results file",
+    "Recorded results are usable by external evaluation tools",
+    "Every result records the model that produced it",
+    "Cost and effort are reported",
+)
+
 UNMAPPED: dict[str, str] = {
-    'Events carry enough detail to show progress and to explain an ending': "tested, but no test named yet -- task 10.9",
-    'A transient failure does not end a question': "tested, but no test named yet -- task 10.9",
-    'The deterministic layer is logged under a per-question identifier': "tested, but no test named yet -- task 10.9",
-    'Follow-up questions inherit the conversation': "tested, but no test named yet -- task 10.9",
-    'Citations in a follow-up stand on their own': "tested, but no test named yet -- task 10.9",
-    'The question set is explicit and versioned with its answers': "group 9 is unbuilt; the harness these describe does not exist yet",
-    'Scoring is based on cited entries, not answer text': "group 9 is unbuilt; the harness these describe does not exist yet",
-    'Unsupported questions are part of the set': "group 9 is unbuilt; the harness these describe does not exist yet",
-    'Run-to-run variation is measured, not averaged away': "group 9 is unbuilt; the harness these describe does not exist yet",
-    'Results are recorded as each question completes': "group 9 is unbuilt; the harness these describe does not exist yet",
-    'An interrupted run resumes without repeating work': "group 9 is unbuilt; the harness these describe does not exist yet",
-    'A report can be produced from a partial results file': "group 9 is unbuilt; the harness these describe does not exist yet",
-    'Recorded results are usable by external evaluation tools': "group 9 is unbuilt; the harness these describe does not exist yet",
-    'Every result records the model that produced it': "group 9 is unbuilt; the harness these describe does not exist yet",
-    'Cost and effort are reported': "group 9 is unbuilt; the harness these describe does not exist yet",
-    'Search returns compact rows, bounded in number': "tested, but no test named yet -- task 10.9",
-    'A stored value is presented as what it measures': "tested, but no test named yet -- task 10.9",
-    'A search records which entries it returned': "tested, but no test named yet -- task 10.9",
-    'Organism and property matching is tolerant, not exact': "tested, but no test named yet -- task 10.9",
-    "A keyword search reaches an entry's own keywords": "tested, but no test named yet -- task 10.9",
-    'The corpus vocabulary is discoverable': "tested, but no test named yet -- task 10.9",
-    'Common naming variants resolve without a round trip': "tested, but no test named yet -- task 10.9",
-    'Full entries are retrieved individually and expose their cross-references': "tested, but no test named yet -- task 10.9",
-    'Every quantitative claim cites its entries': "tested, but no test named yet -- task 10.9",
-    'Citations use one stated format': "tested, but no test named yet -- task 10.9",
-    'Every answer is accompanied by the entries behind it': "tested, but no test named yet -- task 10.9",
-    'Answers come only from the corpus': "tested, but no test named yet -- task 10.9",
-    'Disagreement is reported with its conditions': "tested, but no test named yet -- task 10.9",
-    'Computed values are shown with their inputs': "tested, but no test named yet -- task 10.9",
-    'Spend is taken from what the provider reports': "tested, but no test named yet -- task 10.9",
-    'A pre-request gate stops work before the ceiling is crossed': "tested, but no test named yet -- task 10.9",
-    'A configurable ceiling, with the warning derived from it': "tested, but no test named yet -- task 10.9",
-    'An answer that ran to its ceiling says so': "tested, but no test named yet -- task 10.9",
-    'A question ended on the ceiling reports what it established': "tested, but no test named yet -- task 10.9",
-    'A run of questions carries its own budget': "tested, but no test named yet -- task 10.9",
-    'A run stopped on budget is distinguishable from a completed run': "tested, but no test named yet -- task 10.9",
-    'Spend state persists across processes': "tested, but no test named yet -- task 10.9",
-    'An expensive question is flagged before work begins': "tested, but no test named yet -- task 10.9",
-    'Spend is always reported': "tested, but no test named yet -- task 10.9",
+    **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
+    **dict.fromkeys(AWAITING_THE_HARNESS, "group 9 is unbuilt; the harness does not exist"),
 }
 
 
@@ -137,11 +143,7 @@ def test_specs_were_found():
 
 
 def test_every_requirement_is_either_covered_or_recorded_as_a_gap():
-    missing = [
-        name
-        for name in requirement_names()
-        if name not in COVERED and name not in UNMAPPED
-    ]
+    missing = [name for name in requirement_names() if name not in COVERED and name not in UNMAPPED]
     assert not missing, (
         "these requirements are neither claimed by a test nor recorded as unmapped:\n  "
         + "\n  ".join(missing)
@@ -164,9 +166,7 @@ def test_every_claimed_test_exists():
     by something that is no longer there -- silently, since nothing reads this map
     at run time."""
     existing = collect_test_names()
-    dangling = sorted(
-        {name for names in COVERED.values() for name in names} - existing
-    )
+    dangling = sorted({name for names in COVERED.values() for name in names} - existing)
     assert not dangling, (
         "these tests are claimed to cover a requirement and do not exist:\n  "
         + "\n  ".join(dangling)

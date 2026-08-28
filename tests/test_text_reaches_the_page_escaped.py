@@ -66,9 +66,7 @@ def is_escaped(arg: ast.expr) -> bool:
     if isinstance(arg, ast.Constant):
         return True
     # A constant-only f-string carries nothing from outside either.
-    if isinstance(arg, ast.JoinedStr) and all(
-        isinstance(v, ast.Constant) for v in arg.values
-    ):
+    if isinstance(arg, ast.JoinedStr) and all(isinstance(v, ast.Constant) for v in arg.values):
         return True
     # A module-level constant of this project's own words.
     if isinstance(arg, ast.Name) and arg.id.isupper():
@@ -90,7 +88,8 @@ def is_escaped(arg: ast.expr) -> bool:
     # f"...{as_text(x)}..." -- every interpolation escaped.
     if isinstance(arg, ast.JoinedStr):
         return all(
-            isinstance(v, ast.Constant) or (isinstance(v, ast.FormattedValue) and is_escaped(v.value))
+            isinstance(v, ast.Constant)
+            or (isinstance(v, ast.FormattedValue) and is_escaped(v.value))
             for v in arg.values
         )
     return False

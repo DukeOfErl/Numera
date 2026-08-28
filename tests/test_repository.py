@@ -200,9 +200,9 @@ def test_records_for_one_question_share_an_identifier(repo):
     trace = start_question()
     repo.search(property="Cell", trace=trace)
     repo.get(100001, trace=trace)
-    lines = [l for l in buf.getvalue().splitlines() if l]
+    lines = [line for line in buf.getvalue().splitlines() if line]
     assert len(lines) == 2
-    assert all(trace.question_id in l for l in lines)
+    assert all(trace.question_id in line for line in lines)
 
 
 def test_two_questions_are_distinguishable_in_the_trail(repo):

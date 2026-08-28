@@ -10,14 +10,13 @@ from __future__ import annotations
 import io
 
 import pytest
+from conftest import agent_with
 
+from agent_doubles import says, scripted, tool_call
 from bionumbers_ask import entries_table
 from bionumbers_ask.citations import citations, format_citation
 from bionumbers_ask.cli import render, run
 from bionumbers_ask.events import AnswerEntries, CitationWarning
-
-from agent_doubles import says, scripted, tool_call
-from conftest import agent_with
 
 FIRST, SECOND = 100001, 100002
 
@@ -163,8 +162,13 @@ def test_every_row_occupies_the_same_number_of_lines(repo):
 
 def test_a_long_cell_is_truncated_rather_than_wrapped_further(repo):
     long_row = entries_table.Row(
-        bnid=1, property="x " * 80, organism="o", value="1",
-        units="μm", reference="r", cited=True,
+        bnid=1,
+        property="x " * 80,
+        organism="o",
+        value="1",
+        units="μm",
+        reference="r",
+        cited=True,
     )
     lines = entries_table.render((long_row,)).splitlines()[2:]
     assert len(lines) == entries_table.LINES_PER_ROW
@@ -256,8 +260,11 @@ def test_the_identifiers_are_not_printed_on_the_progress_line(repo, config, tmp_
     """Fifty of them would bury what the search was actually for."""
     from bionumbers_ask.events import Retrieval
 
-    event = Retrieval(question_id="q", tool="search_entries",
-                      detail={"property": "Cell", "returned": 2, "bnids": (FIRST, SECOND)})
+    event = Retrieval(
+        question_id="q",
+        tool="search_entries",
+        detail={"property": "Cell", "returned": 2, "bnids": (FIRST, SECOND)},
+    )
     line = render(event)
     assert "Cell" in line and "returned=2" in line
     assert str(FIRST) not in line
@@ -370,9 +377,7 @@ def test_two_searches_are_summed_and_counted(repo, config, tmp_path):
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
     entries = next(e for e in events if isinstance(e, AnswerEntries))
 
-    per_search = [
-        e.detail["matched"] for e in events if getattr(e, "tool", "") == "search_entries"
-    ]
+    per_search = [e.detail["matched"] for e in events if getattr(e, "tool", "") == "search_entries"]
     assert len(per_search) == 2
     assert entries.searches == 2
     assert entries.matched == sum(per_search)
@@ -399,9 +404,18 @@ def _repo_of(*specs):
     return CorpusRepository(
         tuple(
             Entry(
-                bnid=bnid, property=prop, organism=organism, units="μm", value=1.0,
-                range_low=None, range_high=None, reference="r", reference_pubmed_id=None,
-                measurement_method=method, comments="", keywords=(),
+                bnid=bnid,
+                property=prop,
+                organism=organism,
+                units="μm",
+                value=1.0,
+                range_low=None,
+                range_high=None,
+                reference="r",
+                reference_pubmed_id=None,
+                measurement_method=method,
+                comments="",
+                keywords=(),
             )
             for bnid, prop, organism, method in specs
         )
@@ -554,9 +568,7 @@ def test_a_table_where_nothing_was_cited_says_so_before_the_rows(repo):
 
 
 def test_no_banner_and_no_notice_when_every_shown_entry_is_cited(repo):
-    all_cited = entries_table.render(
-        entries_table.rows_for(repo, (FIRST, SECOND), (FIRST, SECOND))
-    )
+    all_cited = entries_table.render(entries_table.rows_for(repo, (FIRST, SECOND), (FIRST, SECOND)))
     assert entries_table.UNCITED_BANNER not in all_cited
     assert entries_table.NOTHING_CITED not in all_cited
 
@@ -725,9 +737,18 @@ def an_entry(**kwargs):
     from bionumbers_ask.corpus import Entry
 
     base = dict(
-        bnid=1, property="p", organism="o", units="mg/L", value=None,
-        range_low=8.0, range_high=8.0, reference="r", reference_pubmed_id=None,
-        measurement_method="m", comments="", keywords=(),
+        bnid=1,
+        property="p",
+        organism="o",
+        units="mg/L",
+        value=None,
+        range_low=8.0,
+        range_high=8.0,
+        reference="r",
+        reference_pubmed_id=None,
+        measurement_method="m",
+        comments="",
+        keywords=(),
     )
     base.update(kwargs)
     return Entry(**base)
@@ -769,15 +790,28 @@ def test_each_flag_draws_its_own_mark_and_its_own_legend(repo):
     flag without the other, and "the source stated a bound" is not "these bounds may
     be different quantities" -- BNID 100420 carries both and is wrong in two ways."""
     row = entries_table.Row(
-        bnid=1, property="p", organism="o", value="8.0", units="mg/L",
-        reference="r", cited=True, qualified=True,
+        bnid=1,
+        property="p",
+        organism="o",
+        value="8.0",
+        units="mg/L",
+        reference="r",
+        cited=True,
+        qualified=True,
     )
     assert entries_table.QUALIFIED in row.markers()
     assert entries_table.FUSED not in row.markers()
 
     both = entries_table.Row(
-        bnid=1, property="p", organism="o", value="1–2", units="u",
-        reference="r", cited=True, qualified=True, fused=True,
+        bnid=1,
+        property="p",
+        organism="o",
+        value="1–2",
+        units="u",
+        reference="r",
+        cited=True,
+        qualified=True,
+        fused=True,
     )
     rendered = entries_table.render((both,))
     assert entries_table.QUALIFIED_LEGEND in rendered
@@ -786,7 +820,13 @@ def test_each_flag_draws_its_own_mark_and_its_own_legend(repo):
 
 def test_a_legend_is_absent_when_no_shown_row_carries_its_mark(repo):
     plain = entries_table.Row(
-        bnid=1, property="p", organism="o", value="1", units="u", reference="r", cited=True,
+        bnid=1,
+        property="p",
+        organism="o",
+        value="1",
+        units="u",
+        reference="r",
+        cited=True,
     )
     rendered = entries_table.render((plain,))
     for legend in (
@@ -798,11 +838,10 @@ def test_a_legend_is_absent_when_no_shown_row_carries_its_mark(repo):
 
 
 def test_the_value_says_which_kind_of_hedge_the_source_used():
-    """"~20" is an approximation and "<8" is a bound. Calling the first "bounded"
+    """ "~20" is an approximation and "<8" is a bound. Calling the first "bounded"
     describes it wrongly while claiming to correct a description, which is a worse
     failure than the bare "20.0" it replaced -- it looks like a considered caveat."""
-    approx = an_entry(range_low=20.0, range_high=20.0, range_qualified=True,
-                      range_approximate=True)
+    approx = an_entry(range_low=20.0, range_high=20.0, range_qualified=True, range_approximate=True)
     bound = an_entry(range_qualified=True, range_one_sided=True)
     unspecified = an_entry(range_qualified=True)
 

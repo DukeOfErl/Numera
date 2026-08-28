@@ -48,9 +48,7 @@ pytestmark = [
 # see what a mark on a row actually asserts, and so adding a marker without a
 # line here is a visible omission rather than a silent one.
 MARKERS: dict[str, Callable[[Entry], bool]] = {
-    f"{NO_METHOD} no measurement method recorded": (
-        lambda e: not e.measurement_method.strip()
-    ),
+    f"{NO_METHOD} no measurement method recorded": (lambda e: not e.measurement_method.strip()),
     f"{NO_SCALAR} no scalar value recorded": (
         lambda e: e.value is None and e.range_low is None and e.range_high is None
     ),

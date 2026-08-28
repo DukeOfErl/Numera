@@ -16,13 +16,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from conftest import FIXTURE, agent_with
 from streamlit.testing.v1 import AppTest
 
+from agent_doubles import batched_tool_calls, costing, says, scripted, tool_call
 from bionumbers_ask import entries_table, messages, web
-from bionumbers_ask.corpus import load
-from bionumbers_ask.repository import CorpusRepository
 from bionumbers_ask.agent import AskAgent
 from bionumbers_ask.cli import render
+from bionumbers_ask.corpus import load
 from bionumbers_ask.events import (
     Answer,
     AnswerEntries,
@@ -35,9 +36,7 @@ from bionumbers_ask.events import (
     Retrieval,
     SpendWarning,
 )
-
-from agent_doubles import batched_tool_calls, costing, says, scripted, tool_call
-from conftest import FIXTURE, agent_with
+from bionumbers_ask.repository import CorpusRepository
 
 APP = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 
@@ -73,8 +72,14 @@ def test_an_answer_becomes_an_answer_item():
 
 def test_the_ending_reports_why_it_ended_what_it_cost_and_which_model():
     item = web.item_for(
-        QuestionEnded(question_id="q", reason=EndReason.ANSWERED, spend=110,
-                      run_spend=220, model="fake/model", tool_calls=3)
+        QuestionEnded(
+            question_id="q",
+            reason=EndReason.ANSWERED,
+            spend=110,
+            run_spend=220,
+            model="fake/model",
+            tool_calls=3,
+        )
     )
     assert item.kind is web.Kind.ENDING
     assert "answered" in item.text
@@ -84,8 +89,15 @@ def test_the_ending_reports_why_it_ended_what_it_cost_and_which_model():
 
 def test_an_unfinished_question_says_so_rather_than_reading_as_an_answer():
     item = web.item_for(
-        QuestionEnded(question_id="q", reason=EndReason.SPEND_CEILING, spend=110,
-                      run_spend=220, model="fake/model", tool_calls=3, incomplete=True)
+        QuestionEnded(
+            question_id="q",
+            reason=EndReason.SPEND_CEILING,
+            spend=110,
+            run_spend=220,
+            model="fake/model",
+            tool_calls=3,
+            incomplete=True,
+        )
     )
     assert "incomplete" in item.text
 
@@ -102,9 +114,7 @@ def test_the_stream_is_drained_in_order_and_only_once(repo, config, tmp_path):
 
     items = web.items_for(agent.ask("s", "how wide?"))
 
-    assert [item.kind for item in items] == [
-        web.Kind.PROGRESS, web.Kind.ANSWER, web.Kind.ENDING
-    ]
+    assert [item.kind for item in items] == [web.Kind.PROGRESS, web.Kind.ANSWER, web.Kind.ENDING]
 
 
 # -- the session identifier ------------------------------------------------
@@ -144,11 +154,10 @@ def test_the_identifier_is_generated_rather_than_read_from_an_empty_state():
 # -- a question, and the one after it --------------------------------------
 
 
-def test_a_question_is_put_to_the_agent_and_its_answer_drawn(
-    monkeypatch, repo, config, tmp_path
-):
-    model = scripted(tool_call("search_entries", property="Cell"),
-                     says("about 1 micrometre (BNID 100002)"))
+def test_a_question_is_put_to_the_agent_and_its_answer_drawn(monkeypatch, repo, config, tmp_path):
+    model = scripted(
+        tool_call("search_entries", property="Cell"), says("about 1 micrometre (BNID 100002)")
+    )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
     assert "about 1 micrometre (BNID 100002)" in [m.value for m in at.markdown]
@@ -323,8 +332,11 @@ def test_the_page_is_served_the_index_that_was_built(counted):
 
 def test_a_retrieval_becomes_a_progress_item_naming_the_tool_and_its_argument():
     item = web.item_for(
-        Retrieval(question_id="q", tool="search_entries",
-                  detail={"property": "Cell volume", "matched": 12})
+        Retrieval(
+            question_id="q",
+            tool="search_entries",
+            detail={"property": "Cell volume", "matched": 12},
+        )
     )
     assert item.kind is web.Kind.PROGRESS
     assert "search_entries" in item.text
@@ -334,19 +346,22 @@ def test_a_retrieval_becomes_a_progress_item_naming_the_tool_and_its_argument():
 def test_the_identifiers_a_search_returned_stay_off_the_progress_line():
     """Fifty identifiers would bury what the search was actually for."""
     item = web.item_for(
-        Retrieval(question_id="q", tool="search_entries",
-                  detail={"property": "Cell", "bnids": [100001, 100002]})
+        Retrieval(
+            question_id="q",
+            tool="search_entries",
+            detail={"property": "Cell", "bnids": [100001, 100002]},
+        )
     )
     assert "bnids" not in item.text and "100001" not in item.text
 
 
-def test_progress_reaches_the_page_in_order_before_the_answer(
-    monkeypatch, repo, config, tmp_path
-):
+def test_progress_reaches_the_page_in_order_before_the_answer(monkeypatch, repo, config, tmp_path):
     """The point of the whole exercise: the page is not blank while work happens."""
     model = scripted(
-        batched_tool_calls(("search_entries", {"property": "Cell"}),
-                           ("list_values", {"field": "organism", "term": "coli"})),
+        batched_tool_calls(
+            ("search_entries", {"property": "Cell"}),
+            ("list_values", {"field": "organism", "term": "coli"}),
+        ),
         says("about 1 micrometre (BNID 100002)"),
     )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
@@ -504,9 +519,7 @@ def test_a_row_without_a_recorded_method_is_marked(repo):
     assert web._row_label(row).startswith(entries_table.NO_METHOD)
 
 
-def test_every_retrieved_entry_is_reachable_even_past_the_cap(
-    monkeypatch, repo, config, tmp_path
-):
+def test_every_retrieved_entry_is_reachable_even_past_the_cap(monkeypatch, repo, config, tmp_path):
     """Beyond the cap they are listed rather than dropped: nothing retrieved is hidden."""
     monkeypatch.setattr(web, "CITED_ROWS", 2)
     monkeypatch.setattr(web, "UNCITED_ROWS", 1)
@@ -515,11 +528,8 @@ def test_every_retrieved_entry_is_reachable_even_past_the_cap(
     assert len(table.rows) == len(every) > 2, "rows were dropped rather than carried"
 
 
-def test_the_table_reaches_the_main_column_as_a_table(
-    monkeypatch, repo, config, tmp_path
-):
-    model = scripted(tool_call("get_entry", bnid=100002),
-                     says("about 1 micrometre (BNID 100002)"))
+def test_the_table_reaches_the_main_column_as_a_table(monkeypatch, repo, config, tmp_path):
+    model = scripted(tool_call("get_entry", bnid=100002), says("about 1 micrometre (BNID 100002)"))
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
     assert at.dataframe, "no table was drawn"
@@ -530,8 +540,7 @@ def test_the_openable_entries_are_in_the_side_panel_not_the_main_column(
     monkeypatch, repo, config, tmp_path
 ):
     """The main column is for reading the answer against; the panel is for digging."""
-    model = scripted(tool_call("get_entry", bnid=100002),
-                     says("about 1 micrometre (BNID 100002)"))
+    model = scripted(tool_call("get_entry", bnid=100002), says("about 1 micrometre (BNID 100002)"))
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
     labels = [e.label for e in at.sidebar.expander]
@@ -539,12 +548,9 @@ def test_the_openable_entries_are_in_the_side_panel_not_the_main_column(
     assert any("Full entries" in h.value for h in at.sidebar.header)
 
 
-def test_an_opened_row_shows_the_entry_the_model_never_saw(
-    monkeypatch, repo, config, tmp_path
-):
+def test_an_opened_row_shows_the_entry_the_model_never_saw(monkeypatch, repo, config, tmp_path):
     """The reference is looked up for display and never travels through the agent."""
-    model = scripted(tool_call("get_entry", bnid=100002),
-                     says("about 1 micrometre (BNID 100002)"))
+    model = scripted(tool_call("get_entry", bnid=100002), says("about 1 micrometre (BNID 100002)"))
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
     drawn = " ".join(c.value for c in at.caption) + " ".join(m.value for m in at.markdown)
@@ -571,9 +577,14 @@ def test_an_entry_with_no_scalar_is_marked_and_its_value_left_blank():
     passes without running.
     """
     row = entries_table.Row(
-        bnid=106614, property="Length, diameter, volume", organism="Bacteria Escherichia coli",
-        value="(no scalar value)", units="N/A", reference="Prats R. J Bacteriol. 1989",
-        cited=False, has_scalar=False,
+        bnid=106614,
+        property="Length, diameter, volume",
+        organism="Bacteria Escherichia coli",
+        value="(no scalar value)",
+        units="N/A",
+        reference="Prats R. J Bacteriol. 1989",
+        cited=False,
+        has_scalar=False,
     )
     cell = web._frame((row,))[0]
 
@@ -606,8 +617,9 @@ def test_the_side_panel_is_there_before_any_question(monkeypatch, repo, config, 
 
 def test_the_legend_sits_between_the_two_tables(monkeypatch, repo, config, tmp_path):
     """Before both it explains marks nobody has met; after both it is too late."""
-    model = scripted(tool_call("search_entries", property="Cell"),
-                     says("about 1 micrometre (BNID 100002)"))
+    model = scripted(
+        tool_call("search_entries", property="Cell"), says("about 1 micrometre (BNID 100002)")
+    )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
     headings = [m.value for m in at.markdown]
@@ -634,11 +646,18 @@ def test_an_identifier_is_a_string_so_it_keeps_matching_the_prose(repo):
 
 def many(cited_count: int, uncited_count: int) -> tuple[entries_table.Row, ...]:
     """Rows enough to exercise both caps, cited first as `rows_for` orders them."""
+
     def row(i: int, cited: bool) -> entries_table.Row:
         return entries_table.Row(
-            bnid=100000 + i, property=f"Property {i}", organism="Bacteria Escherichia coli",
-            value="1.0", units="um", reference="A reference", cited=cited,
+            bnid=100000 + i,
+            property=f"Property {i}",
+            organism="Bacteria Escherichia coli",
+            value="1.0",
+            units="um",
+            reference="A reference",
+            cited=cited,
         )
+
     return tuple(row(i, True) for i in range(cited_count)) + tuple(
         row(100 + i, False) for i in range(uncited_count)
     )
@@ -647,20 +666,20 @@ def many(cited_count: int, uncited_count: int) -> tuple[entries_table.Row, ...]:
 def test_every_cited_entry_is_shown_when_they_fit(repo):
     """Nine cited entries against a single eight-row cap dropped one of them."""
     rows = many(cited_count=9, uncited_count=5)
-    cited = tuple(r for r in rows if r.cited)[:web.CITED_ROWS]
+    cited = tuple(r for r in rows if r.cited)[: web.CITED_ROWS]
     assert len(cited) == 9, "a cited entry the answer rests on was left out of the table"
 
 
 def test_the_uncited_section_survives_an_answer_that_cited_many(repo):
     """The single cap spent all its rows on cited entries and the section vanished."""
     rows = many(cited_count=9, uncited_count=5)
-    rest = tuple(r for r in rows if not r.cited)[:web.UNCITED_ROWS]
+    rest = tuple(r for r in rows if not r.cited)[: web.UNCITED_ROWS]
     assert len(rest) == web.UNCITED_ROWS == 4
 
 
 def test_fewer_uncited_entries_than_the_cap_shows_what_there_is(repo):
     rows = many(cited_count=1, uncited_count=2)
-    assert len(tuple(r for r in rows if not r.cited)[:web.UNCITED_ROWS]) == 2
+    assert len(tuple(r for r in rows if not r.cited)[: web.UNCITED_ROWS]) == 2
 
 
 def test_cited_entries_beyond_the_cap_are_announced_not_dropped_silently(
@@ -679,9 +698,7 @@ def test_cited_entries_beyond_the_cap_are_announced_not_dropped_silently(
     assert any("more cited" in w and "side panel" in w for w in warnings), warnings
 
 
-def test_nothing_is_announced_when_every_cited_entry_is_shown(
-    monkeypatch, repo, config, tmp_path
-):
+def test_nothing_is_announced_when_every_cited_entry_is_shown(monkeypatch, repo, config, tmp_path):
     model = scripted(tool_call("get_entry", bnid=100002), says("about 1 um (BNID 100002)"))
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
@@ -706,12 +723,12 @@ def test_the_uncited_heading_says_what_the_rows_are_not_only_what_they_are_not()
     assert "not cited" in entries_table.UNCITED_BANNER
 
 
-def test_how_much_went_unlooked_at_is_body_text_not_a_footnote(
-    monkeypatch, repo, config, tmp_path
-):
+def test_how_much_went_unlooked_at_is_body_text_not_a_footnote(monkeypatch, repo, config, tmp_path):
     """It is one of the few things a reader can judge an answer's worth by."""
-    model = scripted(tool_call("search_entries", property="Cell", limit=1),
-                     says("about 1 micrometre (BNID 100002)"))
+    model = scripted(
+        tool_call("search_entries", property="Cell", limit=1),
+        says("about 1 micrometre (BNID 100002)"),
+    )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
     body = [m.value for m in at.markdown]
@@ -735,9 +752,7 @@ def test_a_citation_with_nothing_retrieved_still_draws_its_row(repo):
     assert [row.bnid for row in item.table.rows] == [100001]
     assert not item.table.rows[0].retrieved
     # The same fact reaches the terminal, and has all along.
-    assert entries_table.NOT_RETRIEVED in render(
-        entries(cited=(100001,), retrieved=()), repo
-    )
+    assert entries_table.NOT_RETRIEVED in render(entries(cited=(100001,), retrieved=()), repo)
 
 
 def test_the_summary_is_not_drawn_when_it_would_undercount_what_is_shown(repo):
@@ -770,8 +785,13 @@ def test_the_side_panel_holds_the_newest_question_or_nothing(repo):
 
 def ending(reason, **kwargs):
     return QuestionEnded(
-        question_id="q", reason=reason, spend=10, run_spend=10,
-        model="m", tool_calls=0, **kwargs,
+        question_id="q",
+        reason=reason,
+        spend=10,
+        run_spend=10,
+        model="m",
+        tool_calls=0,
+        **kwargs,
     )
 
 
@@ -803,10 +823,17 @@ def test_the_run_budget_shown_is_the_one_the_run_was_measured_against():
 def test_keywords_that_are_all_stripped_markup_draw_no_keyword_line(repo):
     """`_without_markup` empties them, and testing the stored tuple rather than the
     stripped one rendered a bare 'Keywords: '. Most of the corpus is affected."""
+
     def row(keywords):
         return entries_table.Row(
-            bnid=1, property="p", organism="o", value="1", units="μm",
-            reference="r", cited=True, keywords=keywords,
+            bnid=1,
+            property="p",
+            organism="o",
+            value="1",
+            units="μm",
+            reference="r",
+            cited=True,
+            keywords=keywords,
         )
 
     assert row(("",)).keywords, "truthy as stored, which is what the old guard read"
@@ -814,9 +841,7 @@ def test_keywords_that_are_all_stripped_markup_draw_no_keyword_line(repo):
     assert web.shown_keywords(row(("cell", ""))) == ["cell"]
 
 
-def test_the_prototype_caveat_is_on_the_page_and_stays_there(
-    monkeypatch, repo, config, tmp_path
-):
+def test_the_prototype_caveat_is_on_the_page_and_stays_there(monkeypatch, repo, config, tmp_path):
     """Not decoration. The page shows entries, identifiers and dimension checks --
     every signal a reader uses to decide a number is solid -- so the one thing it
     must also say is that this has not been evaluated. In the side panel as well as

@@ -71,9 +71,7 @@ def test_no_agent_module_reaches_for_the_web_framework(module):
 
 def test_only_the_web_driver_knows_the_web_framework():
     users = {
-        module.stem
-        for module in PACKAGE.glob("*.py")
-        if "streamlit" in imports_of(module.stem)
+        module.stem for module in PACKAGE.glob("*.py") if "streamlit" in imports_of(module.stem)
     }
     assert users == {"web"}
 
