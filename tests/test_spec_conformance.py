@@ -255,6 +255,25 @@ COVERED.update(
     }
 )
 
+# add-corpus-autobuild's.
+COVERED.update(
+    {
+        "An export beside a missing corpus can produce one": (
+            "test_resolve.py::test_an_export_beside_a_missing_corpus_is_found",
+            "test_resolve.py::test_the_configured_path_may_be_the_export_itself",
+            "test_resolve.py::test_a_corpus_that_is_there_needs_no_build",
+            "test_resolve.py::test_nothing_to_build_from_is_reported_as_nothing",
+        ),
+        "A corpus that exists is never rebuilt": (
+            "test_resolve.py::test_a_corpus_is_never_rebuilt_however_stale",
+            "test_resolve.py::test_an_export_whose_corpus_already_exists_is_not_rebuilt",
+        ),
+        "A build through the resolver is refused on the same terms as the command": (
+            "test_resolve.py::test_a_build_is_refused_where_git_would_track_the_corpus",
+        ),
+    }
+)
+
 # Group 9's. Not mappable until the evaluation harness exists, so a different kind
 # of gap from the one above and kept apart from it -- otherwise finishing 10.9
 # would look impossible rather than merely unfinished.
