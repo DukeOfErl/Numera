@@ -13,6 +13,7 @@ the failure this project cannot afford.
 from __future__ import annotations
 
 import os
+import secrets
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -20,10 +21,38 @@ from bionumbers_ingest.model import BioNumberRecord
 
 #: Suffix of the file written while a run is in progress, beside the destination
 #: so the rename into place is atomic rather than a copy across filesystems.
+#: Last, so that a `*.partial` ignore rule covers the unique names below.
 PARTIAL_SUFFIX = ".partial"
 
 
-def write_corpus(records: Iterable[BioNumberRecord], path: str | Path) -> int:
+def partial_path_for(path: Path) -> Path:
+    """A scratch path for ``path``, unique to this write.
+
+    **Two builds of the same corpus must not share a scratch file.** The README
+    tells a reader to start either driver, so a terminal session and a Streamlit
+    server both finding no corpus is a documented arrangement rather than an
+    exotic one — and both would then truncate and write one fixed `.partial`.
+    Interleaved at buffer boundaries that yields whole-but-duplicated JSONL lines,
+    which the consumer's loader accepts without complaint.
+
+    A silently wrong corpus, and — because a corpus that exists is never rebuilt —
+    a permanent one. The never-rebuild rule is right and is what makes this worth
+    more than its odds: it turns a transient race into an artefact nobody
+    reconsiders.
+
+    Uniqueness rather than a lock, because both writers then finish and the last
+    rename wins, which costs a duplicated minute and nothing else. A lock would
+    make the second launch fail instead, and would leave a stale file blocking
+    every later build after a kill. The same export produces a byte-identical
+    corpus, so the two racers are writing the same bytes anyway.
+    """
+    unique = f"{os.getpid()}-{secrets.token_hex(4)}"
+    return path.with_name(f"{path.name}.{unique}{PARTIAL_SUFFIX}")
+
+
+def write_corpus(
+    records: Iterable[BioNumberRecord], path: str | Path, partial: Path | None = None
+) -> int:
     """Write ``records`` as JSONL to ``path`` and return how many were written.
 
     Writes to ``<path>.partial`` and renames it into place after the last record.
@@ -38,7 +67,9 @@ def write_corpus(records: Iterable[BioNumberRecord], path: str | Path) -> int:
     Both come free from ``model_dump_json``; both are pinned by the contract tests.
     """
     path = Path(path)
-    partial = path.with_name(path.name + PARTIAL_SUFFIX)
+    # The caller may hand in the scratch path so the git guard can be asked about
+    # the file that will actually exist, rather than about a representative name.
+    partial = partial or partial_path_for(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
     written = 0
