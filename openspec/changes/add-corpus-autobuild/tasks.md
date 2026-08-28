@@ -1,7 +1,7 @@
 # Tasks
 
-ADR block for this change: `0250` (the last number of `add-corpus-ingestion`'s block, unspent), then
-`0300`–`0340` if more are needed. Reconcile against the table in `CLAUDE.md`.
+ADR block for this change: `0300`–`0340`. `0250` went to ADR-0250 on `add-corpus-ingestion`, which
+spent its block; the table in `CLAUDE.md` is the authority and has been reconciled.
 
 ## 1. The resolver
 
