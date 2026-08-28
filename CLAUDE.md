@@ -8,12 +8,28 @@ This project follows the user-level documentation-upkeep conventions with one su
 
 ## Parallel branches and ADR numbers
 
-Two branches that each number ADRs from the current highest id will both claim the same numbers, and the second to merge conflicts. Before parallel work starts, give each branch a disjoint block and record the allocation in that change's `tasks.md`. Currently allocated: `add-grounding-validator` holds `0040`–`0090`, `add-ask-agent` holds
-`0100`–`0190`. The next change starts at `0200`.
+Two branches that each number ADRs from the current highest id will both claim the same numbers, and the second to merge conflicts. Before parallel work starts, give each branch a disjoint block.
+
+**This file is the allocation's source of truth.** Recording it only in each change's `tasks.md` is what let the blocks drift: no branch can see another's copy, so a change that outgrows its block updates its own note and nothing else, and the next branch allocates against a stale ceiling. Keep the block in the change's `tasks.md` too — that is where someone implementing reads it — but reconcile against this table, and widen a block here first.
+
+| Change | Block |
+|---|---|
+| `add-grounding-validator` | `0040`–`0090` |
+| `add-ask-agent` | `0100`–`0190` |
+| `add-corpus-ingestion` | `0200`–`0250` |
+
+**This table is the authority, not a scan of `docs/decisions/`.** A scan cannot see uncommitted ADRs on another branch: `git ls-tree` reads committed trees, and each branch is checked out in its own worktree, so a number can be spent and still invisible from here. `add-ask-agent` has written `0100`–`0180`, leaving `0190` as the last number in its block; they were uncommitted for two sessions, which is how a scan came to report them as free. Never conclude a number is free because no file for it turns up.
+
+**Allocate by creating the file.** Copy the template to the number you are claiming and commit that stub early, rather than writing the ADR at the end of the change. A ceiling only holds if claiming the number and writing the file are the same step; a block widened in a note that only your own branch reads is how the last drift happened. Reconcile each change's `tasks.md` against this table when it merges.
 
 **Write each ADR with the change that makes the decision, never as a batch at the end.** A task
 list that defers all of them to a documentation group produces retroactive ADRs, and by then the
-options that were rejected -- the part worth recording -- are gone.
+options that were rejected -- the part worth recording -- are gone, and what survives is a
+description of the code.
+
+## Running the tests
+
+`pytest` is offline by default and runs on the six-entry fixture: `addopts = "-m 'not network and not corpus'"` deselects both markers, so a green run may never have executed the tests that hit a real service or the ones that check a marker can fire against a real corpus. Run those explicitly with `pytest -m network` and `BIONUMBERS_ASK_CORPUS=... pytest -m corpus`.
 
 ## Testing the tests
 
