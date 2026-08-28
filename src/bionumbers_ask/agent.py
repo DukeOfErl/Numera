@@ -40,6 +40,7 @@ from .events import (
     QuestionEnded,
     QuestionStarted,
     Retrieval,
+    UngroundedRefusal,
 )
 from .repository import CorpusRepository
 from .spend import (
@@ -50,7 +51,7 @@ from .spend import (
     Unpriceable,
     project_question_cost,
 )
-from .tools import build_tools
+from .tools import ToolBudget, build_tools
 from .trace import start_question
 
 SYSTEM_PROMPT = """\
@@ -62,8 +63,11 @@ Rules, in order of importance:
 1. Cite every quantity you state, by its bnid, written as "BNID 100002" -- the \
 word BNID, a space, then the number, every time. A quantity you cannot attribute \
 to an entry you retrieved does not go in the answer.
-2. When you find nothing, say you could not find it -- not that the corpus does \
-not contain it. You searched some wordings, not every one, so name briefly what \
+2. Search before you answer, always, even when you are confident the corpus does \
+not cover the question. An answer given without retrieving anything reports what \
+you expected to find, not what is there, and "I did not find it" is only true if \
+you looked. When you find nothing, say you could not find it -- not that the \
+corpus does not contain it. You searched some wordings, not every one, so name briefly what \
 you looked for and leave the difference visible. Do not answer from your own \
 knowledge, and do not offer a number you did not retrieve. A plausible unsourced \
 number is the worst thing you can produce here.
@@ -209,7 +213,40 @@ def _origin(exc: BaseException) -> str:
     return where
 
 
+# Phrases that assert retrieval happened. Matched literally and kept short, because
+# this is checked only where the tool count is already zero: the count is the
+# evidence and this only distinguishes an answer that overclaimed from one that
+# merely guessed. A missed phrase understates; it cannot produce a false report.
+_SEARCH_CLAIMS = (
+    "my search",
+    "my searches",
+    "i searched",
+    "i have searched",
+    "searching the corpus",
+    "searches through",
+    "based on my search",
+    "after searching",
+)
+
+
+def _claims_searching(text: str) -> bool:
+    """Whether an answer says it searched. Only meaningful where nothing was."""
+    lowered = text.lower()
+    return any(claim in lowered for claim in _SEARCH_CLAIMS)
+
+
 RUN_CALL_LIMIT = 12
+# Retrievals one question may make. Separate from RUN_CALL_LIMIT and not implied by
+# it: a model batches tool calls into a single hop, so twelve model calls bought
+# twenty-nine retrievals across seventeen searches in one observed question, which
+# spent $0.27 and a fifth of the run budget with the spend ceiling as its only
+# brake. `grounded-answering` has required this bound all along; the code was
+# bounding model calls and reporting those, so spec and implementation had been
+# describing different quantities.
+#
+# Twenty. Answers that satisfied their question used about five; the runaway used
+# twenty-nine. A number to tune against real questions rather than a derived one.
+TOOL_CALL_LIMIT = 20
 MODEL_RETRIES = 2
 TOOL_RETRIES = 2
 RETRY_INITIAL_DELAY = 1.0
@@ -379,7 +416,8 @@ class AskAgent:
         # Retrievals and spend warnings both arrive from inside the agent loop, so
         # they queue here and are drained at each step of the stream.
         pending: deque[Event] = deque()
-        tools = build_tools(self._repo, trace, pending.append)
+        budget = ToolBudget(TOOL_CALL_LIMIT)
+        tools = build_tools(self._repo, trace, pending.append, budget)
         try:
             model = self._model or default_model(self._config)
         except NotConfigured as exc:
@@ -557,9 +595,19 @@ class AskAgent:
                         unretrieved=unretrieved,
                     )
                 if not (retrieved.bnids or retrieved.searches or cited):
-                    # Nothing retrieved, nothing searched, nothing cited: there is no
-                    # evidence to present, and an empty table with no counts beside it
-                    # would describe a question that never looked.
+                    # Nothing retrieved, nothing searched, nothing cited. The table
+                    # is right to stay empty -- there is no evidence to show -- but
+                    # the answer is not therefore fine: it describes the corpus
+                    # without having read it. Reported for the same reason an
+                    # unsupported citation is, and detectable the same way, from the
+                    # harness's own count rather than by judging the prose.
+                    trace.record(
+                        "answer.ungrounded", claimed_searching=_claims_searching(answer_text)
+                    )
+                    yield UngroundedRefusal(
+                        question_id=trace.question_id,
+                        claimed_searching=_claims_searching(answer_text),
+                    )
                     return
                 yield AnswerEntries(
                     question_id=trace.question_id,
@@ -619,6 +667,7 @@ class AskAgent:
                             tool_calls=tool_calls,
                             model_calls=model_calls,
                             call_limit=RUN_CALL_LIMIT,
+                            tool_call_limit=TOOL_CALL_LIMIT,
                             spend_ceiling=ceiling,
                             run_budget=self._config.run_budget,
                             incomplete=True,
@@ -639,6 +688,7 @@ class AskAgent:
                             tool_calls=tool_calls,
                             model_calls=model_calls,
                             call_limit=RUN_CALL_LIMIT,
+                            tool_call_limit=TOOL_CALL_LIMIT,
                             spend_ceiling=ceiling,
                             run_budget=self._config.run_budget,
                             incomplete=True,
@@ -650,6 +700,7 @@ class AskAgent:
                             tool_calls=tool_calls,
                             model_calls=model_calls,
                             call_limit=RUN_CALL_LIMIT,
+                            tool_call_limit=TOOL_CALL_LIMIT,
                             spend_ceiling=ceiling,
                             run_budget=self._config.run_budget,
                         )
@@ -678,6 +729,7 @@ class AskAgent:
                             tool_calls=tool_calls,
                             model_calls=model_calls,
                             call_limit=RUN_CALL_LIMIT,
+                            tool_call_limit=TOOL_CALL_LIMIT,
                             spend_ceiling=ceiling,
                             run_budget=self._config.run_budget,
                             incomplete=True,
@@ -709,6 +761,7 @@ class AskAgent:
                             tool_calls=tool_calls,
                             model_calls=model_calls,
                             call_limit=RUN_CALL_LIMIT,
+                            tool_call_limit=TOOL_CALL_LIMIT,
                             spend_ceiling=ceiling,
                             run_budget=self._config.run_budget,
                             incomplete=True,
@@ -755,6 +808,7 @@ class AskAgent:
                 tool_calls=tool_calls,
                 model_calls=model_calls,
                 call_limit=RUN_CALL_LIMIT,
+                tool_call_limit=TOOL_CALL_LIMIT,
                 spend_ceiling=ceiling,
                 run_budget=self._config.run_budget,
                 incomplete=True,
@@ -768,6 +822,7 @@ class AskAgent:
             tool_calls=tool_calls,
             model_calls=model_calls,
             call_limit=RUN_CALL_LIMIT,
+            tool_call_limit=TOOL_CALL_LIMIT,
             spend_ceiling=ceiling,
             run_budget=self._config.run_budget,
         )
@@ -782,6 +837,7 @@ class AskAgent:
             tool_calls=tool_calls,
             model_calls=model_calls,
             call_limit=RUN_CALL_LIMIT,
+            tool_call_limit=TOOL_CALL_LIMIT,
             spend_ceiling=ceiling,
             run_budget=self._config.run_budget,
         )

@@ -24,6 +24,7 @@ from .events import (
     QuestionEnded,
     Retrieval,
     SpendWarning,
+    UngroundedRefusal,
 )
 
 # Endings after which asking again cannot produce a different answer. What these
@@ -56,6 +57,16 @@ def warning_text(event: Event) -> str | None:
         return (
             f"this question could cost up to {format_usd(event.projected)}, "
             f"above the {format_usd(event.threshold)} threshold (an estimate)"
+        )
+    if isinstance(event, UngroundedRefusal):
+        if event.claimed_searching:
+            return (
+                "this answer describes searching that did not happen: no retrieval "
+                "was made, so it says nothing about what the corpus holds"
+            )
+        return (
+            "nothing was retrieved for this question, so this answer is not grounded "
+            "in the corpus -- it says only what the model expected to find"
         )
     if isinstance(event, CitationWarning):
         parts = []
@@ -123,6 +134,8 @@ def ending_text(event: QuestionEnded) -> str:
     line = " · ".join(parts[:1] + [" ".join(parts[1:3])] + parts[3:])
     if event.at_retrieval_bound:
         line += f" · {event.model_calls} of {event.call_limit} model calls"
+    if event.at_tool_bound:
+        line += f" · {event.tool_calls} of {event.tool_call_limit} retrievals"
     # Only where the question answered: an ending that already names the ceiling
     # as its reason does not need telling twice.
     if event.at_spend_ceiling and not event.incomplete:

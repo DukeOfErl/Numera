@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from conftest import agent_with, run
 
-from agent_doubles import costing, says, scripted, tool_call
+from agent_doubles import batched_tool_calls, costing, says, scripted, tool_call
 from bionumbers_ask.agent import CONVERSATION_BOUND, SYSTEM_PROMPT, AskAgent
 from bionumbers_ask.config import Config, usd
 from bionumbers_ask.events import (
@@ -874,3 +874,97 @@ def test_the_model_is_told_separately_about_a_fused_range(fused_repo):
 
 def test_an_entry_the_source_stated_plainly_carries_no_caution(repo):
     assert "caution:" not in entry_text(repo, 100002)
+
+
+# -- 8.9 and 8.10: bounded retrieval, and refusing only after looking ------
+
+
+def test_retrieval_stops_at_its_own_bound_not_at_the_model_call_limit(repo, config, tmp_path):
+    """The two are different quantities and neither bounds the other. A model
+    batches tool calls into one hop, so twelve model calls bought twenty-nine
+    retrievals in one observed question -- $0.27, a fifth of the run budget, with
+    the spend ceiling as the only brake."""
+    monkeypatch_limit = 3
+    from bionumbers_ask import agent as agent_module
+
+    original = agent_module.TOOL_CALL_LIMIT
+    agent_module.TOOL_CALL_LIMIT = monkeypatch_limit
+    try:
+        model = scripted(
+            batched_tool_calls(
+                ("search_entries", {"property": "Cell"}),
+                ("search_entries", {"property": "Volume"}),
+                ("search_entries", {"property": "Mass"}),
+                ("search_entries", {"property": "Length"}),
+                ("search_entries", {"property": "Width"}),
+            ),
+            says("about 1 micrometre (BNID 100002)"),
+        )
+        events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
+    finally:
+        agent_module.TOOL_CALL_LIMIT = original
+
+    declined = [
+        e for e in events if isinstance(e, Retrieval) and e.detail.get("declined")
+    ]
+    assert declined, "every call ran; the bound did nothing"
+    end = events[-1]
+    assert end.at_tool_bound, "the ending must say retrieval ran out, not merely end"
+    assert end.reason is EndReason.ANSWERED, (
+        "exhaustion is returned to the model, not raised: what was found so far is "
+        "still worth presenting with its citations"
+    )
+
+
+def test_a_declined_call_is_still_reported_as_something_that_happened(repo, config, tmp_path):
+    """A call the model made and was refused is part of what happened to the
+    question, so it belongs in the progress a reader sees and in the count."""
+    from bionumbers_ask.tools import ToolBudget, build_tools
+    from bionumbers_ask.trace import QuestionTrace
+
+    seen = []
+    tools = build_tools(repo, QuestionTrace("q", "run"), seen.append, ToolBudget(1))
+    search = next(t for t in tools if t.name == "search_entries")
+    assert "Cell" in search.invoke({"property": "Cell"})
+    second = search.invoke({"property": "Cell"})
+    assert "No retrieval calls remain" in second
+    assert "Answer now from the entries you have already retrieved" in second
+    assert seen[-1].detail.get("declined")
+
+
+def test_an_answer_with_no_retrieval_behind_it_is_reported(repo, config, tmp_path):
+    """"Not in the corpus" and "not looked for" are different statements, and a
+    reader cannot tell them apart from the answer."""
+    from bionumbers_ask.events import UngroundedRefusal
+
+    model = scripted(says("I could not find anything about that in the corpus."))
+    events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
+
+    refusal = next(e for e in events if isinstance(e, UngroundedRefusal))
+    assert not refusal.claimed_searching
+    assert events[-1].tool_calls == 0, "the count is the evidence"
+
+
+def test_an_answer_claiming_searches_it_never_made_is_reported_as_such(
+    repo, config, tmp_path
+):
+    """Observed live: zero tool calls, prose reading "based on my searches through
+    the available data". The harness had the truth and the answer did not."""
+    from bionumbers_ask.events import UngroundedRefusal
+
+    model = scripted(
+        says("Based on my searches through the available data, this is not covered.")
+    )
+    events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
+    assert next(e for e in events if isinstance(e, UngroundedRefusal)).claimed_searching
+
+
+def test_an_answer_that_searched_is_not_reported(repo, config, tmp_path):
+    from bionumbers_ask.events import UngroundedRefusal
+
+    model = scripted(
+        tool_call("search_entries", property="nothing at all"),
+        says("I could not find it."),
+    )
+    events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
+    assert not any(isinstance(e, UngroundedRefusal) for e in events)

@@ -19,8 +19,70 @@ from .units import dimensions_of
 Emit = Callable[[Retrieval], None]
 
 
-def build_tools(repo: CorpusRepository, trace: QuestionTrace, emit: Emit) -> list[StructuredTool]:
-    """Bind the repository to a question's trace and event sink."""
+class ToolBudget:
+    """How many retrievals one question may make.
+
+    Enforced here rather than by the model-call limit, which does not bound it: a
+    model batches several tool calls into one hop, so twelve model calls bought
+    twenty-nine retrievals across seventeen searches in one observed question --
+    $0.27, a fifth of the run budget, with cost the only thing that stopped it.
+
+    Exhaustion is returned to the model as a tool result rather than raised. The
+    model then answers with what it has and says it is incomplete, which is worth
+    more to a reader than a question killed mid-search: what was established so far
+    is still presented with its citations (`grounded-answering`).
+    """
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+        self.used = 0
+
+    def spend(self) -> bool:
+        """Take one call, or report that there is none left."""
+        if self.used >= self.limit:
+            return False
+        self.used += 1
+        return True
+
+    @property
+    def exhausted(self) -> bool:
+        return self.used >= self.limit
+
+
+EXHAUSTED = (
+    "No retrieval calls remain for this question. Answer now from the entries you "
+    "have already retrieved, cite them, and say plainly that the answer may be "
+    "incomplete because the search was cut short. Do not state any quantity you "
+    "have not already retrieved."
+)
+
+
+def build_tools(
+    repo: CorpusRepository,
+    trace: QuestionTrace,
+    emit: Emit,
+    budget: ToolBudget | None = None,
+) -> list[StructuredTool]:
+    """Bind the repository to a question's trace, event sink and retrieval budget."""
+
+    def afford(tool: str, detail: dict) -> bool:
+        """Whether this call may run, recording the refusal where it does not.
+
+        Emitted as a Retrieval so a declined call still appears in the progress
+        the reader sees and in the tool count: a call the model made and was
+        refused is part of what happened to the question.
+        """
+        if budget is None or budget.spend():
+            return True
+        trace.record("tools.budget_exhausted", tool=tool, limit=budget.limit)
+        emit(
+            Retrieval(
+                question_id=trace.question_id,
+                tool=tool,
+                detail={**detail, "declined": "no retrieval calls left"},
+            )
+        )
+        return False
 
     def search_entries(
         property: str | None = None,
@@ -28,6 +90,10 @@ def build_tools(repo: CorpusRepository, trace: QuestionTrace, emit: Emit) -> lis
         keyword: str | None = None,
         limit: int = DEFAULT_LIMIT,
     ) -> str:
+        if not afford(
+            "search_entries", {"property": property, "organism": organism, "keyword": keyword}
+        ):
+            return EXHAUSTED
         result = repo.search(
             property=property, organism=organism, keyword=keyword, limit=limit, trace=trace
         )
@@ -78,6 +144,8 @@ def build_tools(repo: CorpusRepository, trace: QuestionTrace, emit: Emit) -> lis
         return "\n".join(out)
 
     def get_entry(bnid: int) -> str:
+        if not afford("get_entry", {"bnid": bnid}):
+            return EXHAUSTED
         found = repo.get(bnid, trace=trace)
         emit(
             Retrieval(
@@ -154,6 +222,8 @@ def build_tools(repo: CorpusRepository, trace: QuestionTrace, emit: Emit) -> lis
         return out
 
     def list_values(field: str, contains: str = "") -> str:
+        if not afford("list_values", {"field": field, "contains": contains}):
+            return EXHAUSTED
         try:
             values = repo.vocabulary(field, contains, limit=20, trace=trace)
         except ValueError as exc:

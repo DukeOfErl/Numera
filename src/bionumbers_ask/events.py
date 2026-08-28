@@ -141,6 +141,27 @@ class Answer:
 
 
 @dataclass(frozen=True)
+class UngroundedRefusal:
+    """An answer reached without retrieving anything.
+
+    "Not in the corpus" and "not looked for" are different statements and a reader
+    cannot tell them apart from the answer. An answer with no retrieval behind it
+    rests on the model's prior about what the corpus contains -- the one thing this
+    project exists not to rely on -- and its error is invisible, because an entry
+    never sought looks exactly like one that is absent.
+
+    `claimed_searching` where the prose also described searches that did not
+    happen. Observed live: an unanswerable question ended with zero tool calls and
+    prose reading "based on my searches through the available data". That is
+    checkable against the harness's own count without judging the answer, which is
+    why it is reported here rather than left to an evaluator.
+    """
+
+    question_id: str
+    claimed_searching: bool = False
+
+
+@dataclass(frozen=True)
 class QuestionEnded:
     """Carries why it ended and what it consumed, so a limit is explicable."""
 
@@ -157,6 +178,11 @@ class QuestionEnded:
     # otherwise indistinguishable. Zero means no model call completed.
     model_calls: int = 0
     call_limit: int = 0
+    # Retrievals used against the bound on them. Reported separately from the model
+    # calls above because they are not the same quantity and one does not bound the
+    # other: a model batches several tool calls into one hop, so a question can sit
+    # far inside its model-call limit while making thirty retrievals.
+    tool_call_limit: int = 0
     # What the question spent against, so an answer can say it ran to its limit.
     # The gate checks before each model call and cannot check after -- a call's
     # cost is unknown until it returns -- so a question can answer with spend at
@@ -179,6 +205,16 @@ class QuestionEnded:
         another call.
         """
         return bool(self.spend_ceiling) and self.spend >= self.spend_ceiling
+
+    @property
+    def at_tool_bound(self) -> bool:
+        """Whether the question used every retrieval it was allowed.
+
+        Exact rather than within a margin, for the same reason as the other two:
+        what can be stated without judgement is that there was no room to search
+        again.
+        """
+        return bool(self.tool_call_limit) and self.tool_calls >= self.tool_call_limit
 
     @property
     def at_retrieval_bound(self) -> bool:

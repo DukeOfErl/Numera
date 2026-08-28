@@ -125,7 +125,7 @@
       test both sides of it. And check the mark can fire -- `tests/test_markers_against_corpus.py`
       exists because a marker whose condition never holds passes every test and draws nothing.
 
-- [ ] 8.9 Bound tool calls per question, as model calls are already bounded. Observed live: one
+- [x] 8.9 Bound tool calls per question, as model calls are already bounded. Observed live: one
       question made **29 tool calls across 17 searches**, spent **$0.27**, and took the run from
       $0.91 to $1.18 of its $1.20 budget -- a single question consuming a fifth of a run. The model
       call limit did not bind it: a model may batch several tool calls into one hop, so 12 model
@@ -136,7 +136,7 @@
       answering a single question". The code bounds model calls and `at_retrieval_bound` reports
       those, so the spec and the implementation have been describing different quantities. Bound and
       report the one the spec names, keeping the model-call limit as well.
-- [ ] 8.10 Refuse only after searching, and never claim searches that did not happen. Observed live:
+- [x] 8.10 Refuse only after searching, and never claim searches that did not happen. Observed live:
       an unanswerable question ended `answered · 0 tool calls` with prose reading "based on my
       searches through the available data" and "I would need to search the corpus". No search ran.
       Two separate defects, and the second is the serious one:
