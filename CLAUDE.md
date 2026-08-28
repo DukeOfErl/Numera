@@ -16,7 +16,7 @@ Two branches that each number ADRs from the current highest id will both claim t
 |---|---|
 | `add-grounding-validator` | `0040`–`0090` |
 | `add-ask-agent` | `0100`–`0190` |
-| `add-corpus-ingestion` | `0200`–`0250` |
+| `add-corpus-ingestion` | `0200`–`0250` — `0200`, `0210`, `0220`, `0230`, `0240` written |
 
 **This table is the authority, not a scan of `docs/decisions/`.** A scan cannot see uncommitted ADRs on another branch: `git ls-tree` reads committed trees, and each branch is checked out in its own worktree, so a number can be spent and still invisible from here. At the time of writing `add-ask-agent` has written `0100`–`0180` — uncommitted — leaving `0190` as the last number in its block. Never conclude a number is free because no file for it turns up.
 
@@ -25,6 +25,40 @@ Two branches that each number ADRs from the current highest id will both claim t
 ## Running the tests
 
 `pytest` is offline by default: `addopts = "-m 'not network'"` deselects the `network` marker, so a green run may never have executed the tests that hit a real service. Run those explicitly with `pytest -m network`.
+
+## Architecture
+
+Three work packages, three packages under `src/`, one dependency extra each, so no two branches edit
+the same source tree: `bionumbers_ingest` (`ingest`), `bionumbers_ask` (`ask`), `bionumbers`
+(`validator`). Only the ingester exists on this branch.
+
+`bionumbers_ingest` is a **pipeline**, and the shape is load-bearing: the two ends are the only
+modules that know a file format, and nothing between them knows either.
+
+| Module | Role |
+|---|---|
+| `parsing/html_table.py` | source format in — streams `<tr>` rows, preserving raw inner HTML |
+| `cleaning.py` | one raw row → one record; the only place that unescapes or strips |
+| `model.py` | the record, plus `EXPECTED_HEADERS` |
+| `validation.py` | the run report |
+| `provenance.py` | source fingerprint and manifest |
+| `io.py` | JSONL out, renamed into place on success |
+| `ingest.py` | wires the pipeline together |
+| `cli.py` | the command |
+
+Diagram: [`docs/diagrams/architecture.md`](docs/diagrams/architecture.md).
+
+Four things about it that reading one module will not tell you:
+
+- **The reader preserves raw HTML deliberately.** The export's injected markup arrives
+  HTML-escaped, so a reader that unescaped would hand cleaning a live tag and destroy the evidence of
+  which form the source used. Unescaping happens once, in `cleaning`, before markup is stripped.
+- **An angle bracket is not evidence of markup.** The export contains exactly one HTML element and
+  uses `<` as a less-than sign in prose. A tag is recognised only by a real HTML element name.
+- **Records are buffered, not streamed, between cleaning and the writer**, because each carries a
+  digest of the whole source, which is unknown until the last byte. Roughly 70 MB; ADR-0240.
+- **Two booleans are the contract with `add-ask-agent`**, not the flag names: `range_fused` and
+  `range_qualified`. `parse_flags` is cleaning's own vocabulary and may change. ADR-0230.
 
 ## Testing the tests
 
