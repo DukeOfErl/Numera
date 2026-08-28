@@ -17,9 +17,9 @@ dependency and parquet output are dropped here.
 
 ## 2. Reading the source format
 
-- [ ] 2.1 Port the streaming HTML-table reader: first `<tr>` is the header row, every later one a record, cell content preserved as raw inner HTML so that cleaning can detect injected markup rather than have it dropped before anything can flag it
-- [ ] 2.2 Port `tests/fixtures/sample_table.html` and the reader's tests: header names, row count, raw markup surviving the read, the text-marker apostrophe surviving the read, and the row limit
-- [ ] 2.3 Verify against a locally-fetched export that the 14 header names and the row count match what the proposal states, and that memory stays flat across the file
+- [x] 2.1 Port the streaming HTML-table reader: first `<tr>` is the header row, every later one a record, cell content preserved as raw inner HTML so that cleaning can detect injected markup rather than have it dropped before anything can flag it
+- [x] 2.2 Port `tests/fixtures/sample_table.html` and the reader's tests: header names, row count, raw markup surviving the read, the text-marker apostrophe surviving the read, and the row limit
+- [x] 2.3 Verify against a locally-fetched export that the 14 header names and the row count match what the proposal states, and that memory stays flat across the file
 
 ## 3. Cleaning one row into one record
 
