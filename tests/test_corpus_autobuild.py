@@ -181,3 +181,33 @@ def test_the_page_shows_the_refusal_rather_than_a_traceback(outside_any_repo, mo
         e.value for e in at.error
     ]
     assert not at.exception, "the page raised instead of explaining"
+
+
+def test_the_duplicated_export_rule_still_agrees_with_the_resolver():
+    """`autobuild` restates the export's name and matching rule because the
+    guarded-out branch runs when the ingester cannot be imported, so its constant
+    is not reachable there. Duplication that cannot be removed can at least be
+    stopped from drifting: if the resolver changes what it looks for, the message
+    shown to someone without the extra would name a file that is no longer the one
+    a build would use."""
+    from bionumbers_ingest import resolve
+
+    assert autobuild.EXPORT_NAME.lower() == resolve.EXPORT_NAME.lower()
+
+
+def test_several_exports_are_reported_by_neither(tmp_path):
+    """Both sides decline to choose. A directory holding two exports is ambiguous,
+    and picking one silently is how the wrong corpus gets built."""
+    from bionumbers_ingest import resolve
+
+    for name in ("BioNumbers.xls", "bionumbers.xls"):
+        try:
+            (tmp_path / name).write_text("export")
+        except OSError:  # pragma: no cover - case-insensitive filesystem
+            pytest.skip("filesystem cannot hold both spellings")
+    if len(list(tmp_path.iterdir())) < 2:  # pragma: no cover
+        pytest.skip("filesystem folded the two names together")
+
+    corpus = tmp_path / "bionumbers.jsonl"
+    assert resolve.plan(corpus).export_path is None
+    assert autobuild._export_beside(str(corpus)) is None
