@@ -28,12 +28,11 @@ except (CorpusUnavailable, NotConfigured) as exc:
 
 session = web.session_id(st.session_state, st.query_params)
 
+# Pinned to the viewport, before anything that could scroll it away.
+web.draw_prototype_banner()
+
 st.title("BioNumbers ask")
 st.caption(f"{len(repo)} entries · session {session}")
-# Below the title, where it is read once, and again in the side panel, which stays
-# on screen after a long conversation has pushed this out of view. A caveat that
-# scrolls away is a caveat only the first question gets.
-st.warning(web.PROTOTYPE_NOTE, icon=":material/science:")
 # The identifier is in the URL, so this page can be reloaded, bookmarked or
 # reopened after a restart and still be the same conversation.
 

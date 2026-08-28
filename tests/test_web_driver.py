@@ -824,7 +824,17 @@ def test_the_prototype_caveat_is_on_the_page_and_stays_there(
     the first question sees is not a caveat.
     """
     at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
-    assert any(web.PROTOTYPE_NOTE in w.value for w in at.warning), "missing under the title"
+    banner = [m.value for m in at.markdown if '<div class="bn-caveat"' in m.value]
+    assert banner, "the pinned banner was not drawn"
+    # The words survive the markdown-to-HTML rendering: `**` inside a raw HTML
+    # element renders as two asterisks, so the emphasis has to be translated.
+    assert "not scientifically trustworthy" in banner[0]
+    assert "original source" in banner[0]
+    assert "**" not in banner[0], "markdown emphasis left unrendered inside raw HTML"
+    assert "position: fixed" in "".join(m.value for m in at.markdown), (
+        "drawn as an ordinary element it scrolls away with the first answer, and the "
+        "reader who has seen several answers is the one who most needs it"
+    )
     assert any(web.PROTOTYPE_SHORT in c.value for c in at.sidebar.caption), "missing in the panel"
 
 

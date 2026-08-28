@@ -53,6 +53,30 @@ PROTOTYPE_NOTE = (
 )
 PROTOTYPE_SHORT = "Prototype — verify numbers against the original source."
 
+# Pinned to the viewport rather than written into the page. Drawn as an ordinary
+# element it sat above the conversation and scrolled away with the first answer --
+# so the reader who has read several answers, and is therefore most likely to have
+# started trusting them, is the one who can no longer see it.
+#
+# Fixed under Streamlit's own header, with the main container padded so nothing
+# hides behind it. The two test ids are Streamlit's stable ones (verified against
+# 1.61.1); if a future version renames them the banner degrades to sitting at the
+# top of the page, which is where it was before -- it cannot vanish.
+PROTOTYPE_BANNER_CSS = """
+<style>
+[data-testid="stMainBlockContainer"] { padding-top: 4.5rem; }
+.bn-caveat {
+  position: fixed; top: 3.5rem; left: 0; right: 0; z-index: 999;
+  padding: 0.45rem 1rem; text-align: center; font-size: 0.85rem; line-height: 1.3;
+  background: #7a4a00; color: #ffe9c2;
+  border-bottom: 1px solid rgba(255, 233, 194, 0.35);
+}
+@media (prefers-color-scheme: light) {
+  .bn-caveat { background: #ffecb3; color: #4a3000; }
+}
+</style>
+"""
+
 SESSION_KEY = "bionumbers_ask.session"
 TRANSCRIPT_KEY = "bionumbers_ask.transcript"
 
@@ -453,6 +477,21 @@ def latest_table(transcript: Iterable[tuple[str, list[Item]]]) -> Table | None:
                 return item.table
         return None
     return None
+
+
+def draw_prototype_banner() -> None:
+    """The caveat, pinned so it is still there after the tenth answer.
+
+    Deliberately not a dismissible one. The page shows identifiers, dimension
+    checks and marked entries -- every signal a reader uses to judge a number
+    solid -- so the statement that none of it has been evaluated has to outlast
+    the reader's growing confidence in it.
+    """
+    st.markdown(PROTOTYPE_BANNER_CSS, unsafe_allow_html=True)
+    # The note is written as markdown, and this element is raw HTML, where `**`
+    # renders as two asterisks. One source of words, two renderings of it.
+    emphasised = PROTOTYPE_NOTE.replace("**", "<strong>", 1).replace("**", "</strong>", 1)
+    st.markdown(f'<div class="bn-caveat">{emphasised}</div>', unsafe_allow_html=True)
 
 
 def run_is_over(transcript: Iterable[tuple[str, list[Item]]]) -> bool:
