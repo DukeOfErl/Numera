@@ -289,3 +289,113 @@ def test_the_guarded_branch_agrees_with_the_resolver_wherever_no_build_happens(
         )
         # And the resolver's own view agrees about whether anything was there.
         assert resolve.plan(corpus).is_ready is has_corpus
+
+
+# -- what the review found, each pinned where the old tests could not see it
+
+
+def test_a_configured_export_resolves_to_the_corpus_beside_it_either_way(tmp_path, monkeypatch):
+    """`BIONUMBERS_ASK_CORPUS` pointing at the .xls means "here is the export", not
+    "here is the corpus". The resolver knows that; the hand copy did not, and
+    returned the export -- so `load` was handed 27 MB of HTML and died on line 1.
+
+    Same class as the corpus-present bug, in the other spelling, and invisible to
+    the agreement test because every arrangement it built used a .jsonl path.
+    """
+    export = tmp_path / "BioNumbers.xls"
+    export.write_text("<table>not a corpus</table>")
+    beside = tmp_path / "BioNumbers.jsonl"
+    shutil.copy(FIXTURE, beside)
+
+    with_resolver = autobuild.corpus_path(str(export), lambda _t: None)
+
+    real_import = __import__
+
+    def no_ingester(name, *args, **kwargs):
+        if name.startswith("bionumbers_ingest"):
+            raise ImportError("ask extra only")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", no_ingester)
+    without = autobuild.corpus_path(str(export), lambda _t: None)
+
+    assert with_resolver == str(beside)
+    assert without == with_resolver, "the copy handed back the export itself"
+
+
+def test_an_unset_corpus_path_is_left_to_say_so(tmp_path, monkeypatch):
+    """Both drivers pass "" when the variable is unset, and `Path("")` is
+    `Path(".")` -- so an export in the working directory made the current directory
+    the corpus, announced a build into `.`, and raised out of the writer. The
+    unset case has a good message already; it just has to be allowed to happen."""
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "BioNumbers.xls").write_text("<table></table>")
+    said = []
+    assert autobuild.corpus_path("", said.append) == ""
+    assert not said, "a build was announced for a path nobody configured"
+
+
+def test_a_build_that_fails_for_any_other_reason_is_still_a_sentence(tmp_path, monkeypatch):
+    """A truncated download is the likeliest real failure, since fetching the
+    export is the one manual step. Only the git refusal had its own type, so
+    everything else reached the terminal as a stack and the page as Streamlit's
+    exception panel."""
+    (tmp_path / "BioNumbers.xls").write_text("<table>truncated")
+    corpus = tmp_path / "bionumbers.jsonl"
+
+    def truncated(plan):
+        raise ValueError("the table is never closed and ends mid-row")
+
+    monkeypatch.setattr("bionumbers_ingest.resolve.build", truncated)
+    with pytest.raises(CorpusUnavailable) as raised:
+        autobuild.corpus_path(str(corpus), lambda _t: None)
+    said = str(raised.value)
+    assert "ends mid-row" in said, "the actual cause is dropped"
+    assert "download it again" in said, "and nothing tells the reader what to do"
+
+
+def test_nothing_to_build_names_the_corpus_not_the_export(tmp_path):
+    """With the export configured and neither file present, the error named the
+    export as the missing corpus -- sending the reader to look at a file that is
+    not the one missing."""
+    export = tmp_path / "BioNumbers.xls"
+    assert autobuild.corpus_path(str(export), lambda _t: None) == str(
+        tmp_path / "BioNumbers.jsonl"
+    )
+
+
+def test_the_build_notice_is_not_drawn_from_inside_the_cache():
+    """Streamlit records elements drawn inside a cached function and replays them
+    on every hit, so an `st.info` written inside `resources` would redraw "building
+    a corpus" at the top of the page for the life of the server -- true once, false
+    every rerun after. The page resolves the path before calling the cached
+    function, so the notice belongs to the script run that caused it."""
+    import ast
+    import inspect
+
+    from bionumbers_ask import web
+
+    # The code, not the prose. A plain substring search matched this function's own
+    # comment explaining why `st.info` must not be here -- a source-scanning test
+    # reads docstrings too, and one that passes on an explanation of the bug is
+    # worse than none.
+    tree = ast.parse(inspect.getsource(web.resources.__wrapped__).strip())
+    drawn = {
+        node.func.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    }
+    assert "info" not in drawn, "the build notice is drawn inside a cached function"
+    called = {
+        node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+    }
+    assert "corpus_path" not in called, "the build was moved back inside the cache"
+
+    app = Path(__file__).resolve().parents[1] / "streamlit_app.py"
+    body = app.read_text()
+    assert "autobuild.corpus_path(" in body, "the page no longer resolves the path itself"
+    assert body.index("autobuild.corpus_path(") < body.index("web.resources("), (
+        "the corpus must be resolved before the cached function is called"
+    )

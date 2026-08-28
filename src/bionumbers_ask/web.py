@@ -30,7 +30,7 @@ from typing import Any
 
 import streamlit as st
 
-from . import autobuild, entries_table, messages, trace
+from . import entries_table, messages, trace
 from .agent import AskAgent
 from .citations import format_citation
 from .config import Config
@@ -242,7 +242,7 @@ def transcript(state: MutableMapping[str, Any]) -> list[tuple[str, list[Item]]]:
 
 
 @st.cache_resource(show_spinner="Loading the corpus…")
-def resources() -> tuple[CorpusRepository, AskAgent]:
+def resources(corpus: str | None = None) -> tuple[CorpusRepository, AskAgent]:
     """The corpus index and the agent, built once for the life of the server.
 
     Cached because the indexes are built over the whole corpus and Streamlit
@@ -251,13 +251,13 @@ def resources() -> tuple[CorpusRepository, AskAgent]:
     script has no argv to read it from.
     """
     trace.to_file(os.environ.get("BIONUMBERS_ASK_TRACE", trace.DEFAULT_FILE))
-    # Announced before the build starts, not after it finishes: this page would
-    # otherwise show a spinner and nothing else for a minute on first launch, which
-    # is indistinguishable from a hang.
-    corpus = autobuild.corpus_path(
-        os.environ.get("BIONUMBERS_ASK_CORPUS", ""),
-        lambda text: st.info(as_text(text), icon=":material/build:"),
-    )
+    # The corpus path is resolved by the caller, outside this function. Anything
+    # drawn inside a cached function is recorded and replayed on every cache hit,
+    # so an `st.info` announcing a build would be redrawn at the top of the page
+    # for the life of the server -- a notice that was true once and false for every
+    # rerun after it.
+    if corpus is None:
+        corpus = os.environ.get("BIONUMBERS_ASK_CORPUS", "")
     repo = CorpusRepository(load(corpus))
     checkpoints = os.environ.get("BIONUMBERS_ASK_CHECKPOINTS", DEFAULT_CHECKPOINTS)
     # The store is created on demand by the checkpointer, but its directory is not.

@@ -57,6 +57,37 @@ def _export_beside(configured: str) -> Path | None:
     return matches[0] if len(matches) == 1 else None
 
 
+def _corpus_for(configured: str) -> Path:
+    """Where the corpus is, for a configured path that may be the export itself.
+
+    `plan` resolves a configured `.xls` to the `.jsonl` beside it, because the
+    export is not a corpus and the corpus should not land in whatever directory
+    the caller was started from. This branch has to make the same move, and the
+    first version of it did not: it returned any existing file, so pointing at the
+    export handed 27 MB of HTML to a JSONL parser.
+    """
+    path = Path(configured)
+    return path.with_suffix(".jsonl") if path.suffix.lower() == ".xls" else path
+
+
+def _without_the_ingester(configured: str) -> str:
+    """The same decisions `plan` makes, for when `plan` cannot be imported.
+
+    A hand copy, and therefore the thing most likely to drift. It has drifted twice
+    -- once dropping the corpus-present check, once ignoring that a configured
+    `.xls` names the export rather than the corpus -- and both times the copy had
+    the matching rule right and the decision order wrong. The order is the part to
+    read against `plan`, not the constants.
+    """
+    corpus = _corpus_for(configured)
+    if corpus.is_file():
+        return str(corpus)
+    export = _export_beside(configured)
+    if export is not None:
+        raise CorpusUnavailable(unavailable_but_buildable(export))
+    return configured
+
+
 def unavailable_but_buildable(export: Path) -> str:
     """What to say when an export is there and the ingester is not installed.
 
@@ -66,9 +97,10 @@ def unavailable_but_buildable(export: Path) -> str:
     """
     return (
         f"No corpus at the configured path, but {export} is beside it. "
-        "Install the ingestion extra to have it built automatically "
-        "(`uv sync --extra ask --extra ingest`), or run `bionumbers-ingest "
-        f"{export}` yourself and point BIONUMBERS_ASK_CORPUS at the result."
+        "Install the ingestion extra -- `uv sync --extra ask --extra ingest` -- and "
+        "it will be built on the next start, or run `bionumbers-ingest "
+        f"{export}` yourself once that extra is installed and point "
+        "BIONUMBERS_ASK_CORPUS at the result."
     )
 
 
@@ -96,6 +128,12 @@ def corpus_path(configured: str, announce: Callable[[str], None]) -> str:
     see from the answer side. Staleness, if it is ever detected, should be reported
     rather than acted on.
     """
+    if not configured:
+        # No path at all. `load` says so better than anything here could, and
+        # `Path("")` is `Path(".")` -- which would make the current directory the
+        # corpus and any export in it a thing to build.
+        return configured
+
     try:
         from bionumbers_ingest.guard import OutputWouldBeCommitted
         from bionumbers_ingest.resolve import build, plan
@@ -107,24 +145,23 @@ def corpus_path(configured: str, announce: Callable[[str], None]) -> str:
         # corpus present -- and told the reader there was none, and to install an
         # extra they did not need. Worse than an edge case, because export and
         # corpus in one directory is the arrangement the README now describes.
-        if Path(configured).is_file():
-            return configured
-        export = _export_beside(configured)
-        if export is not None:
-            raise CorpusUnavailable(unavailable_but_buildable(export)) from None
-        return configured
+        return _without_the_ingester(configured)
 
     found = plan(configured)
     if found.is_ready:
         return str(found.corpus_path)
     if not found.needs_build:
-        # Nothing to build from. The caller's own "no corpus there" stands, which
-        # says more about the actual mistake than anything this module could add.
-        return configured
+        # Nothing to build from, so the caller's own "no corpus there" stands --
+        # but about the corpus's path rather than the configured one, which for a
+        # configured `.xls` are different files. Naming the export as the missing
+        # corpus sends the reader to look at a file that is present.
+        return str(found.corpus_path)
 
     announce(building_text(found.export_path, found.corpus_path))
     try:
         return str(build(found))
+    except CorpusUnavailable:
+        raise
     except OutputWouldBeCommitted as exc:
         # Translated here rather than in each driver. Both already render
         # `CorpusUnavailable` as a message, and this is the same kind of thing: a
@@ -135,4 +172,15 @@ def corpus_path(configured: str, announce: Callable[[str], None]) -> str:
             f"Refusing to build the corpus at {exc.path}: git would track it in "
             f"{exc.repo}, and the BioNumbers data must not enter a repository. "
             "Point BIONUMBERS_ASK_CORPUS somewhere outside the checkout."
+        ) from exc
+    except Exception as exc:
+        # Every other way a build can fail, and there are many: a truncated
+        # download, an unreadable file, a full disk. Broad on purpose -- whatever
+        # went wrong, the outcome for the reader is that there is no corpus, and
+        # that is a condition both drivers already render as a sentence. Letting
+        # it through instead put a stack trace in the terminal and Streamlit's
+        # exception panel on the page, for what is usually a bad download.
+        raise CorpusUnavailable(
+            f"Could not build a corpus from {found.export_path}: {exc}. "
+            "If the export was interrupted, download it again."
         ) from exc
