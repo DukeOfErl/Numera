@@ -208,6 +208,45 @@ fusion of two quantities.
 - **WHEN** any record is emitted
 - **THEN** no field of it, and no element of its keyword list, contains a `<` followed by a tag name
 
+### Requirement: An angle bracket is not evidence of markup
+
+Angle brackets in this source are mostly **not** markup. The export contains exactly one HTML
+element — the injected `<IMG SRC="/WF_SQL_XSRF.html">`, 20,411 times — while 85 other
+angle-bracket tokens across 49 records are content: variable notation (`<D>`, `<Csat>`, `<Chla>`,
+`<Raf/cell>`) and the less-than sign in prose.
+
+A pattern that treats any `<`…`>` as a tag therefore deletes scientific content, and does so
+invisibly: it consumes everything from a `<` to the next `>`, which in this source removes whole
+clauses — a p-value, a rate comparison, a DOI fragment — from `Comments`, one of the twelve keys the
+consumer sends to a model. It also corrupted a `Range` cell, changing the fused-range count by one
+and costing a reconciliation.
+
+The system SHALL therefore recognise a tag only by a real HTML element name, SHALL leave every other
+angle-bracket token in place as text, and SHALL NOT raise the markup flag for one — otherwise the
+flag conflates markup removal with the source writing a variable in brackets, and its count stops
+meaning anything.
+
+#### Scenario: Variable notation survives
+
+- **WHEN** a cell reads `the ratio &lt;Csat&gt; over &lt;Vcell&gt;`
+- **THEN** both bracketed names survive in the emitted text
+- **AND** the record is not flagged as having had markup removed
+
+#### Scenario: A less-than sign in prose does not consume the clause
+
+- **WHEN** a cell reads `significant (p&lt;0.05) in body height and weight`
+- **THEN** the emitted text still contains the value and the words after it
+
+#### Scenario: A less-than clause in a range cell keeps its numbers
+
+- **WHEN** a range cell reads `'0.1&lt;Csat&lt;1`
+- **THEN** the bounds are `0.1` and `1`
+
+#### Scenario: A real element is still stripped
+
+- **WHEN** a cell contains an escaped `<br>` or `<sub>` element
+- **THEN** it is removed and the row is flagged as having had markup removed
+
 ### Requirement: Padding rows are not records
 
 The export ends with HTML padding rows whose identifier cell is a non-breaking space and whose other
