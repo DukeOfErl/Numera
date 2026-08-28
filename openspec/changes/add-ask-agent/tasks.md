@@ -103,6 +103,17 @@
       claims provenance, which stays true of a marked entry.
       **Blocked on `add-corpus-ingestion`**, which is unimplemented; no corpus emits the field yet, so
       building it now would be dead code with no data to test it against.
+- [ ] 8.8 Mark a range whose bounds span implausibly far apart, and say in the legend what the mark
+      means. Not blocked and not the ingester's to fix: `range_fused` claims only that two bounds may
+      come from different quantities, so a range parsed exactly as written stays unmarked however wide
+      it is. 47 entries span more than a millionfold; `range_fused` marks 42, and the remaining five
+      are genuine two-number cells -- `0.25-2.5e30`, `1-2×10^9`, `10^-5 to 10^-12` -- one of which
+      renders as `0.25–2.5e+30 cells` with nothing beside it. Plausibility is a presentation
+      judgement and the ingester deliberately does not judge ranges (its ADR-0230), so the span ratio
+      and the threshold belong here.
+      Own the threshold explicitly: it is a number this project chose, so record why in the ADR and
+      test both sides of it. And check the mark can fire -- `tests/test_markers_against_corpus.py`
+      exists because a marker whose condition never holds passes every test and draws nothing.
 
 ## 9. Evaluation
 

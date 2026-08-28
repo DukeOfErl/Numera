@@ -812,3 +812,29 @@ def test_keywords_that_are_all_stripped_markup_draw_no_keyword_line(repo):
     assert row(("",)).keywords, "truthy as stored, which is what the old guard read"
     assert web.shown_keywords(row(("",))) == [], "and empty once drawn"
     assert web.shown_keywords(row(("cell", ""))) == ["cell"]
+
+
+def test_the_prototype_caveat_is_on_the_page_and_stays_there(
+    monkeypatch, repo, config, tmp_path
+):
+    """Not decoration. The page shows entries, identifiers and dimension checks --
+    every signal a reader uses to decide a number is solid -- so the one thing it
+    must also say is that this has not been evaluated. In the side panel as well as
+    under the title: a long conversation scrolls the title away, and a caveat only
+    the first question sees is not a caveat.
+    """
+    at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
+    assert any(web.PROTOTYPE_NOTE in w.value for w in at.warning), "missing under the title"
+    assert any(web.PROTOTYPE_SHORT in c.value for c in at.sidebar.caption), "missing in the panel"
+
+
+def test_the_page_and_the_readme_both_say_it_is_not_trustworthy_yet():
+    """Two statements of one fact drift, and the README is what a reviewer reads
+    first. Checks the claim survives in both, not that the wording matches."""
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()
+    assert "prototype, not an instrument" in readme.lower()
+    assert "not scientifically trustworthy" in readme
+    assert "not scientifically trustworthy" in web.PROTOTYPE_NOTE
+    # Both point past this project's own copy. "Check the cited entry" would read as
+    # this page's rendering of it, which is the one thing checking cannot verify.
+    assert "original source" in readme and "original source" in web.PROTOTYPE_NOTE

@@ -1,8 +1,30 @@
 # BioNumbers ask
 
-An agent that answers natural-language questions about biological quantities using only a supplied
-corpus, citing an entry for every number it reports. Where the corpus does not cover a question, it
-says so rather than answering from the model's own knowledge.
+**How long is an E. coli cell? How many ribosomes does it carry?** Quantitative biology runs on
+numbers like these, and the usual way to get one out of a language model is to ask and hope. A
+plausible number arrives with no way to tell whether it was recalled, interpolated, or invented.
+
+This agent answers only from a corpus you supply, and cites the entry behind every number it
+reports. Where the corpus does not cover a question, it says so rather than answering from the
+model's own knowledge.
+
+Three commitments shape the design:
+
+- **Provenance.** Every figure carries the identifier of the entry it came from, and the entries
+  themselves are shown beside the answer — cited ones first, then others the search found and the
+  answer passed over. A number the answer used but the corpus never returned is flagged as
+  unsupported rather than quietly printed.
+- **Precision.** Units are compared by dimension, so a length is never silently reconciled with a
+  volume, and an unrecognised unit is reported as *unknown* rather than assumed compatible. Entries
+  with no measurement method recorded, or no scalar value, are marked — half the corpus has no
+  method, and an answer should not hide that.
+- **Reliability.** Spend is capped per question and per run, conversations are bounded by their
+  token count, and every question ends with a stated reason and what it consumed. No tool can
+  create, modify or delete an entry.
+
+> **A prototype, not an instrument.** More careful than a general-purpose model, but unevaluated
+> and not scientifically trustworthy: verify every number against the original source before
+> relying on it.
 
 The agent is separated from the interfaces that drive it (ports and adapters): it emits events and
 accepts questions, and a terminal, a web page and — later — an evaluation harness are three adapters

@@ -41,6 +41,18 @@ from .repository import CorpusRepository
 # Namespaced, because session state is one flat dictionary shared with every
 # widget key on the page: an unprefixed "session_id" is one careless `key=` away
 # from being overwritten by a text input.
+# One line on screen, which is the constraint: a banner that wraps becomes a block a
+# reader learns to skip. Specific on both counts a vaguer line would lose --
+# *not trustworthy* rather than merely unpolished, and *the original source* rather
+# than "the cited entry", which reads as this page's own rendering of it and is the
+# one thing checking it cannot verify. The README makes the same claim; if one
+# changes, change both.
+PROTOTYPE_NOTE = (
+    "**Prototype — not scientifically trustworthy.** "
+    "Verify every number against the original source."
+)
+PROTOTYPE_SHORT = "Prototype — verify numbers against the original source."
+
 SESSION_KEY = "bionumbers_ask.session"
 TRANSCRIPT_KEY = "bionumbers_ask.transcript"
 

@@ -30,8 +30,16 @@ session = web.session_id(st.session_state, st.query_params)
 
 st.title("BioNumbers ask")
 st.caption(f"{len(repo)} entries · session {session}")
+# Below the title, where it is read once, and again in the side panel, which stays
+# on screen after a long conversation has pushed this out of view. A caveat that
+# scrolls away is a caveat only the first question gets.
+st.warning(web.PROTOTYPE_NOTE, icon=":material/science:")
 # The identifier is in the URL, so this page can be reloaded, bookmarked or
 # reopened after a restart and still be the same conversation.
+
+with st.sidebar:
+    st.caption(web.PROTOTYPE_SHORT)
+    st.divider()
 
 for asked, drawn in web.transcript(st.session_state):
     with st.chat_message("user"):
