@@ -62,6 +62,28 @@ SHALL NOT require any change in the consumer for a corpus to load. A consumer th
 - **WHEN** a line carries fields outside the required set
 - **THEN** the loader accepts the line and ignores them
 
+### Requirement: The command refuses to write where git would track the corpus
+
+The default output path is relative, so a run started from the wrong directory writes the corpus into
+whichever repository the caller is standing in. Three checkouts of this project share one origin and
+one of them tracks the default branch, so that is a direct route from a mistyped `cd` to 19.5 MB of
+unlicensed data in a public history — the one mistake this capability can make that cannot be undone.
+
+A `.gitignore` entry guards only the repositories someone remembered to edit. The system SHALL
+therefore ask git whether it would track the output file, and SHALL refuse to run when it would,
+naming the repository and exiting non-zero without writing anything. Where git reports the path as
+ignored, or there is no repository, or git cannot be consulted, the run SHALL proceed.
+
+#### Scenario: The output would be tracked
+
+- **WHEN** the output path lies in a repository that does not ignore it
+- **THEN** the command refuses, names that repository, and writes nothing
+
+#### Scenario: The output is ignored, or outside a repository
+
+- **WHEN** the output path is git-ignored, or lies outside any repository
+- **THEN** the command runs normally
+
 ### Requirement: Every line stands on its own
 
 The ask agent's loader rejects an entire corpus on its first unusable line, so a single malformed

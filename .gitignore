@@ -19,6 +19,11 @@ htmlcov/
 # nor any corpus built from it may enter this repository. The ingester exists so
 # a reader fetches the export themselves and builds the corpus locally.
 data/
+# Belt and braces for a corpus written outside data/, and matching the entries on
+# the sibling branches so all three checkouts refuse the same filenames.
+bionumbers*.jsonl
+*.corpus.jsonl
+*.jsonl.manifest.json
 
 # Secrets — see CLAUDE.md, "Never commit secrets"
 .env

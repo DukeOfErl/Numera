@@ -168,3 +168,41 @@ def test_the_link_count_and_the_link_flag_agree(tmp_path, sample_html, capsys):
     manifest = json.loads((tmp_path / "c.jsonl.manifest.json").read_text())
     flagged = manifest["flag_counts"].get("range_is_link", 0)
     assert f"records carrying a link:{flagged:>6}" in printed
+
+
+def test_it_refuses_to_write_a_corpus_where_git_would_track_it(tmp_path, sample_html, capsys):
+    # A .gitignore protects only the repositories someone remembered to edit. The
+    # default output path is relative, so a run started from the wrong checkout
+    # writes 19.5 MB of unlicensed data into whichever repo the caller is in —
+    # and three checkouts here share one origin, one of them on main.
+    import subprocess
+
+    repo = tmp_path / "somerepo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    out = repo / "data" / "corpus.jsonl"
+
+    assert main([str(sample_html), "-o", str(out)]) == 3
+    err = capsys.readouterr().err
+    assert "refusing to write" in err
+    assert "unresolved licensing" in err
+    assert not out.exists()
+
+
+def test_it_writes_where_git_ignores_the_path(tmp_path, sample_html):
+    import subprocess
+
+    repo = tmp_path / "ignoring"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    (repo / ".gitignore").write_text("data/\n", encoding="utf-8")
+    out = repo / "data" / "corpus.jsonl"
+
+    assert main([str(sample_html), "-o", str(out)]) == 0
+    assert out.exists()
+
+
+def test_it_writes_outside_any_repository(tmp_path, sample_html):
+    out = tmp_path / "plain" / "corpus.jsonl"
+    assert main([str(sample_html), "-o", str(out)]) == 0
+    assert out.exists()
