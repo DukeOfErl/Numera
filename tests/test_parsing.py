@@ -91,3 +91,17 @@ def test_a_row_with_the_wrong_cell_count_is_an_error(tmp_path):
     )
     with pytest.raises(ValueError, match="2 cells.*3 columns"):
         list(iter_rows(bad))
+
+
+def test_a_row_with_too_MANY_cells_is_also_an_error(tmp_path):
+    # The long direction, which a `<` comparison would let through: an extra cell
+    # is dropped by zip rather than reported, so the record looks complete while
+    # a column has silently shifted. Found by fault seeding — the short-row test
+    # above passes even when the guard only catches short rows.
+    bad = tmp_path / "long_row.html"
+    bad.write_text(
+        "<table><tr><td>a</td><td>b</td></tr><tr><td>1</td><td>2</td><td>3</td></tr></table>",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="3 cells.*2 columns"):
+        list(iter_rows(bad))
