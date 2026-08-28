@@ -108,3 +108,30 @@ def test_version_and_help_exit_cleanly(argv):
     with pytest.raises(SystemExit) as exc:
         main(argv)
     assert exc.value.code == 0
+
+
+def test_the_report_counts_each_flag_that_was_raised(tmp_path, sample_html, capsys):
+    # "parse flags:" appearing says nothing; the counts under it are the report.
+    assert main([str(sample_html), "-o", str(tmp_path / "c.jsonl")]) == 0
+    printed = capsys.readouterr().out
+    assert "injected_html_removed: 2" in printed
+    assert "range_is_link: 1" in printed
+    manifest = json.loads((tmp_path / "c.jsonl.manifest.json").read_text())
+    assert manifest["flag_counts"]["injected_html_removed"] == 2
+    assert manifest["flag_counts"]["range_is_link"] == 1
+
+
+def test_a_run_that_raised_no_flags_says_so_rather_than_printing_nothing(tmp_path, capsys):
+    clean = tmp_path / "clean.html"
+    header = "".join(
+        f"<td>{h}</td>"
+        for h in (
+            "bion_id,Properties,Organism,Value,Range,Units,Reference,"
+            "Reference PubMed ID,Primary Source,Primary Source PubMed ID,"
+            "Measurement Method,Comments,Entered By,Keywords"
+        ).split(",")
+    )
+    row = "<td>900001</td>" + "<td>x</td>" * 2 + "<td>1.5</td>" + "<td></td>" * 10
+    clean.write_text(f"<table><tr>{header}</tr><tr>{row}</tr></table>", encoding="utf-8")
+    assert main([str(clean), "-o", str(tmp_path / "c.jsonl")]) == 0
+    assert "(none raised)" in capsys.readouterr().out

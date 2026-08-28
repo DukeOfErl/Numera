@@ -59,13 +59,12 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     source = Path(args.source)
-    if not source.is_file():
-        print(f"bionumbers-ingest: no such file: {source}", file=sys.stderr)
-        return 2
-
     try:
         result = ingest(source, args.output, limit=args.limit)
     except OSError as exc:
+        # Covers a missing file as well as an unreadable one. An explicit
+        # is_file() check ahead of this was removed: fault seeding showed the two
+        # paths were indistinguishable, so it was one branch earning nothing.
         print(f"bionumbers-ingest: cannot read {source}: {exc}", file=sys.stderr)
         return 2
     except ValueError as exc:

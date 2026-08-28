@@ -148,3 +148,40 @@ def test_the_manifest_promises_nothing_it_does_not_record(tmp_path, sample_html)
     m = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     unpopulated = [k for k, v in m.items() if v is None and k != "row_limit"]
     assert unpopulated == [], f"manifest keys declared but never filled: {unpopulated}"
+
+
+def test_the_recorded_time_is_the_sources_mtime_not_the_run_time(tmp_path, sample_html):
+    # Named source_modified, so it must BE that. Reporting `now` instead would
+    # pass every other test while making two corpora from the same file look
+    # like they came from different ones.
+    import os
+    import time
+
+    src = tmp_path / "dated.html"
+    src.write_bytes(sample_html.read_bytes())
+    long_ago = time.time() - 90 * 24 * 3600
+    os.utime(src, (long_ago, long_ago))
+
+    result = ingest(src, tmp_path / "corpus.jsonl")
+    m = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert m["source_modified"] < m["ingested_at"]
+    assert m["source_modified"].startswith(
+        __import__("datetime")
+        .datetime.fromtimestamp(long_ago, tz=__import__("datetime").UTC)
+        .isoformat()[:10]
+    )
+
+
+def test_records_written_plus_skipped_equals_rows_read(sample_html, tmp_path):
+    result = ingest(sample_html, tmp_path / "corpus.jsonl")
+    r = result.report
+    assert r.records_written + r.rows_skipped_non_data == r.rows_read
+    assert r.rows_accounted_for is True
+
+
+def test_accounting_that_does_not_add_up_is_reported_as_a_warning():
+    from bionumbers_ingest.validation import RunReport
+
+    off = RunReport(rows_read=10, rows_skipped_non_data=1, records_written=8)
+    assert off.rows_accounted_for is False
+    assert "WARNING" in off.format()
