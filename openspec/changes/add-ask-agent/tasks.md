@@ -185,7 +185,8 @@
 
 ADR numbers for this change are allocated `0100`–`0190` by the table in `CLAUDE.md`, which is the
 authority; this note is a convenience for whoever is implementing and must be reconciled against it.
-`0100`–`0180` are written, so `0190` is the only number left and it is held for group 9. Widen in
+`0100`–`0190` are written, and the block was extended in `CLAUDE.md` with `0260`–`0290` when it
+ran out mid-change; `0260` and `0270` are spent on tasks 8.9 and 8.10, so group 9 starts at `0280`. Widen in
 `CLAUDE.md` first if group 9 owes more than one -- widening here and nowhere else is what let this
 block drift past `0150` unnoticed. **ADRs are written with the decision, not collected here at
 the end** -- the four below were already retroactive when they were written, which is the
