@@ -1,12 +1,4 @@
-# BioNumbers
-
-Tools for working with the [BioNumbers](https://bionumbers.hms.harvard.edu/) database of quantitative
-biology: **`bionumbers_ingest`** (extra `ingest`) turns the published export into a JSONL corpus with
-provenance, and **`bionumbers_ask`** (extra `ask`) answers questions against that corpus with
-citations. A third package, `bionumbers` (`validator`), checks that an answer is grounded in the
-corpus and arrives on its own branch.
-
-## The ask agent
+# SciNumbers ask
 
 **How long is an E. coli cell? How many ribosomes does it carry?** Quantitative biology runs on
 numbers like these, and the usual way to get one out of a language model is to ask and hope. A
@@ -14,19 +6,16 @@ plausible number arrives with no way to tell whether it was recalled, interpolat
 
 This agent answers only from a corpus you supply, and cites the entry behind every number it
 reports. Where the corpus does not cover a question, it says so rather than answering from the
-model's own knowledge. It is for people who need a figure they can defend — students,
-researchers, anyone writing an estimate they will later have to justify.
+model's own knowledge. It is for people who need a figure they can defend.
 
 Three commitments shape the design:
 
-- **Provenance.** Every figure carries the identifier of the entry it came from, and the entries
-  themselves are shown beside the answer — cited ones first, then others the search found and the
-  answer passed over. A number the answer used but the corpus never returned is flagged as
+- **Provenance.** Every figure carries the identifier of the entry it came from, and those entries
+  are shown beside the answer. A number the answer used but the corpus never returned is flagged as
   unsupported rather than quietly printed.
 - **Precision.** Units are compared by dimension, so a length is never silently reconciled with a
-  volume, and an unrecognised unit is reported as *unknown* rather than assumed compatible. Entries
-  with no measurement method recorded, or no scalar value, are marked — half the corpus has no
-  method, and an answer should not hide that.
+  volume. Entries with no measurement method, no scalar value, or a value the source only bounded
+  or approximated are marked — half the corpus has no method, and an answer should not hide that.
 - **Reliability.** Spend is capped per question and per run, conversations are bounded by their
   token count, and every question ends with a stated reason and what it consumed. No tool can
   create, modify or delete an entry.
@@ -35,172 +24,72 @@ Three commitments shape the design:
 > and not scientifically trustworthy: verify every number against the original source before
 > relying on it.
 
+## How it works
+
+The agent is a LangGraph loop with the corpus behind three tools. Its graph, generated from the
+compiled object rather than drawn:
+
+```mermaid
+graph TD;
+	__start__([__start__]):::first
+	model(model)
+	tools(tools)
+	limit_before(ModelCallLimitMiddleware.before_model)
+	limit_after(ModelCallLimitMiddleware.after_model)
+	spend_after(SpendGate.after_model)
+	__end__([__end__]):::last
+	limit_after -.-> limit_before;
+	limit_after -.-> __end__;
+	limit_after -.-> tools;
+	limit_before -.-> __end__;
+	limit_before -.-> model;
+	spend_after --> limit_after;
+	__start__ --> limit_before;
+	model --> spend_after;
+	tools -.-> limit_before;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+```
+
+Most of the behaviour is invisible here: only `before_model`/`after_model` hooks become nodes, so
+the retry, tool-error and spend middleware are wrappers around `model` and `tools` rather than
+boxes. **[`docs/diagrams/architecture.md`](docs/diagrams/architecture.md)** has the middleware table
+that lists them in nesting order, a sequence diagram of what happens during one question, and the
+module dependency graph.
+
 The agent is separated from the interfaces that drive it (ports and adapters): it emits events and
-accepts questions, and a terminal, a web page and — later — an evaluation harness are three adapters
-over the one agent, with no mode flag inside it.
-
-## The corpus
-
-**The corpus is not bundled with the code and is not in version control.** Its licensing is
-unresolved, so the data is deliberately kept out of the repository (see `.gitignore`).
-
-The agent answers from a JSONL corpus supplied at run time. It was built and tested against
-**BioNumbers** (<https://bionumbers.hms.harvard.edu>), a public database of quantitative biology,
-whose record shape and `BNID` identifiers the loader and citation format follow. Any corpus in that
-shape can be substituted.
-
-To cite BioNumbers itself:
-
-> Milo et al. *Nucl. Acids Res.* (2010) 38 (suppl 1): D750–D753.
-
-### Obtaining a runnable corpus
-
-**Download the export and start the app.** Nothing is redistributed: the data's licensing is
-unresolved, so this repository ships an *ingester* rather than a corpus
-([ADR-0200](docs/decisions/0200-ship-an-ingester-not-a-prepared-corpus.md)). The download is the one
-step that cannot be automated, and it falls on you — the agent does not run until you have done it.
-The build does not: the app does that itself the first time it finds an export beside a corpus that
-is not there yet.
-
-#### 1. Get the source export
-
-Go to <https://bionumbers.hms.harvard.edu/resources.aspx> and click **Download the BioNumbers
-database**. That gives you `BioNumbers.xls`, the export this project was built against.
-
-It is a button rather than a link, so there is no address to paste — the page has to be open for the
-download to work.
-
-Checked on 2026-08-28: 27,286,533 bytes, SHA-256
-`b185032ac36bfa250435ef0980180e1b5bc4341ae9e06c5f83aa764a84fd36ef`. Worth confirming, since the
-database is updated and the file you get may not be the one these figures describe:
-
-```bash
-sha256sum BioNumbers.xls
-```
-
-Do not convert, rename or pre-process it. The ingester reads it exactly as published, and its quirks
-are the reason that code exists: a 27 MB HTML `<table>` carrying an `.xls` extension, 14,297 rows
-over 14 columns of which 14,294 are data, with ranges written a dozen ways, two Unicode micrometres,
-and markup injected into the cells.
-
-#### 2. Let the app build it
-
-Point `BIONUMBERS_ASK_CORPUS` at where you want the corpus and start either driver. Finding no
-corpus there and `BioNumbers.xls` beside it, the app says what it is about to do and builds one —
-about a minute for 27 MB, once.
-
-```bash
-uv sync --extra ask --extra ingest
-export BIONUMBERS_ASK_CORPUS=~/bionumbers/bionumbers.jsonl   # BioNumbers.xls sits in that directory
-uv run bionumbers-ask
-```
-
-The `ingest` extra is what makes the build possible. Without it the agent still runs on a corpus you
-already have, and if it finds an export it cannot use it says so and names it, rather than reporting
-only that no corpus exists.
-
-**A corpus that is already there is never rebuilt** — not when it is older than the export, not when
-its manifest names a different file. One you produced deliberately is not replaced without being
-asked.
-
-To build it yourself instead, or to build one with different options:
-
-```bash
-uv run bionumbers-ingest path/to/BioNumbers.xls
-```
-
-That writes `data/processed/bionumbers.jsonl` (git-ignored) plus a manifest beside it, and prints a
-report of what it could not interpret. Use `-o` for another path, and `--limit N` to process only the
-first N rows — **not** the default, because a sampled corpus looks complete and is not.
-
-Two guards back the never-committed rule rather than relying on memory. `data/` is git-ignored, and
-**the ingest refuses to run at all if git would track its output** — corpus, manifest or the
-`.partial` files it writes through — naming the repository and stopping. That refusal lives in the
-operation rather than the command, so the automatic build is refused on exactly the same terms
-([ADR-0250](docs/decisions/0250-guards-belong-to-the-operation.md)).
-
-The same export always produces a byte-identical corpus, so two people can compare their builds and
-learn something from a difference.
-
-A six-entry sample lives at `tests/fixtures/corpus_sample.jsonl`. It is enough to run the whole test
-suite, and too small to ask real questions of.
-
-#### What a corpus line carries, and what the agent reads
-
-One JSON object per line, one line per data row. Twelve keys are the contract the loader enforces;
-the rest it ignores. Absent numbers are `null` and never `""`, and `keywords` is always an array.
-
-Nothing is dropped and nothing is silently corrected. A cell the ingester cannot read cleanly still
-becomes a record, with a flag naming what went wrong
-([ADR-0230](docs/decisions/0230-flag-and-count-never-correct.md)). `parse_flags` is the ingester's own
-vocabulary and its names may change; **four boolean fields are the stable contract**, and a consumer
-reads those rather than matching on flag names:
-
-- **`range_fused`** — the stored bounds may come from two different quantities, because bounds are the
-  lowest and highest number in the cell. 1,418 records.
-- **`range_qualified`** — the source did not state a closed interval: `<0.001` becomes 0.001 to 0.001,
-  asserting an exact equality where the source said *less than*. 2,233 records.
-- **`range_one_sided`** and **`range_approximate`** — which kind of hedge, because the two need
-  different words in front of a reader. 594 and 1,639 records; together they partition
-  `range_qualified` by construction.
-
-Each record also carries `source_digest`, twelve characters of the export's SHA-256, and the manifest
-beside the corpus records the full checksum, size, modification time, run date, ingester version and
-every count from the report. The export carries no date or version anywhere, so without the manifest
-two corpus files cannot be told apart or dated
-([ADR-0240](docs/decisions/0240-stamp-every-ingest.md)). The corpus is written first and the manifest
-second, so a corpus with no manifest is a run that did not finish.
-
-## Setup
-
-Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
-
-```bash
-uv sync --extra ask --extra ingest             # the ingest extra builds a corpus if one is needed
-export OPENROUTER_API_KEY=...                  # the model is reached through OpenRouter
-export BIONUMBERS_ASK_CORPUS=/path/to/bionumbers.jsonl
-```
+accepts questions, so the web page and — later — an evaluation harness are adapters over one agent,
+with no mode flag inside it.
 
 ## Running it
 
-### Terminal
+Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+
+**1. Install.**
 
 ```bash
-uv run bionumbers-ask                          # a session; ask questions, 'exit' to leave
-uv run bionumbers-ask --ask "how wide is an E. coli cell?"
+uv sync --extra ask --extra ingest
+export OPENROUTER_API_KEY=...                  # the model is reached through OpenRouter
 ```
 
-Each answer is followed by the entries it drew on — property, organism, value, units, identifier,
-reference — with the cited entries separated from the rest, and by a line reporting why the question
-ended, what it cost and which model produced it.
+**2. Get the corpus.** Go to <https://bionumbers.hms.harvard.edu/resources.aspx> and click
+**Download the BioNumbers database**. Put the resulting `BioNumbers.xls` in a directory **outside
+this repository** — the data's licensing is unresolved, so nothing derived from it may enter a git
+repository, and the build refuses to write anywhere git would track it.
 
-A session continues across launches:
-
-```bash
-uv run bionumbers-ask --session <id>           # the id is printed when a session starts
-```
-
-The conversation, the accumulated spend and the ceiling in force live in the checkpoint store
-(`checkpoints/`), not in the driver — which is what lets a second interface pick up the same session.
-
-### Web
+**3. Start the app.** Point `BIONUMBERS_ASK_CORPUS` at where the corpus should go. Finding none
+there and the export beside it, the app says what it is about to do and builds one — about a minute,
+once.
 
 ```bash
+export BIONUMBERS_ASK_CORPUS=~/bionumbers/bionumbers.jsonl   # BioNumbers.xls is in that directory
 uv run streamlit run streamlit_app.py
 ```
 
-Reads `BIONUMBERS_ASK_CORPUS`, `BIONUMBERS_ASK_CHECKPOINTS` and `BIONUMBERS_ASK_TRACE` from the
-environment, since a Streamlit script takes no arguments of its own.
-
-## Tests
-
-```bash
-uv run pytest                                  # runs against the six-entry fixture; no API key needed
-uv run pytest -m network                       # calls a real model; needs OPENROUTER_API_KEY and costs money
-```
-
-The suite drives the real agent with scripted models rather than mocking the framework, so the
-middleware, the checkpointer and the tool loop are exercised.
+Then ask something. `What is the minimal inhibitory concentration of kanamycin for E. coli?` is a
+good first question: the source says `<8`, and the answer says so rather than reporting 8 as a
+measurement.
 
 ## Configuration
 
@@ -210,22 +99,25 @@ middleware, the checkpointer and the tool loop are exercised.
 | `BIONUMBERS_ASK_CORPUS` | — | required; path to the JSONL corpus |
 | `BIONUMBERS_ASK_MODEL` | `anthropic/claude-haiku-4.5` | the model, as an OpenRouter slug |
 | `BIONUMBERS_ASK_QUESTION_CEILING_USD` | `0.60` | hard per-question limit; the warning is derived at 80% of it |
-| `BIONUMBERS_ASK_RUN_BUDGET_USD` | `1.20` | total across all questions in a run |
-| `BIONUMBERS_ASK_CHECKPOINTS` | `checkpoints/ask.sqlite` | where sessions persist (web only; the terminal takes `--checkpoints`) |
+| `BIONUMBERS_ASK_RUN_BUDGET_USD` | `1.20` | total across every question in a run |
+| `BIONUMBERS_ASK_RUN` | `dev` | names the run spend is counted against; a new name starts a fresh budget |
+| `BIONUMBERS_ASK_CHECKPOINTS` | `checkpoints/ask.sqlite` | where sessions persist |
 | `BIONUMBERS_ASK_TRACE` | `logs/trace.jsonl` | the structured trail; `-` for stderr, empty to discard |
-| `BIONUMBERS_ASK_RUN` | `dev` | a label carried on every record, so one run's spend is separable |
-
-Two further limits are module constants rather than settings, in `agent.py`: **12 model calls**
-per question, and a conversation bounded at **120,000 tokens** (warning at 75% of it). Both are
-numbers to tune against measured sessions rather than knobs.
 
 Spend is enforced, not merely reported: a question stops at its ceiling and presents what it had
 established, marked incomplete, rather than being cut off mid-sentence. A limit is configured where
-it binds — the number you set is the one that stops work, and the warning is derived from it — and an
-answer that ran to a limit says so, which is a different thing from one that finished with room to
-spare ([ADR-0180](docs/decisions/0180-limits-named-where-they-bind.md)).
+it binds — the number you set is the one that stops work
+([ADR-0180](docs/decisions/0180-limits-named-where-they-bind.md)).
 
-Two test suites are excluded by default because they need something the repository does not carry:
+## Tests
+
+```bash
+uv run pytest                                  # 850 tests on a six-entry fixture; no API key needed
+```
+
+The suite drives the real agent with scripted models rather than mocking the framework, so the
+middleware, the checkpointer and the tool loop are exercised. Two suites are excluded by default
+because they need something the repository does not carry:
 
 ```bash
 BIONUMBERS_ASK_CORPUS=... uv run pytest -m corpus    # markers checked against a real corpus
@@ -238,24 +130,21 @@ Nothing writes to the corpus, and no tool can create, modify or delete an entry.
 retrieve literature or fetch papers. It is not given the name of whichever driver is calling it, so
 it cannot behave one way for a person and another for a harness.
 
-One part of the plan is not built yet and is visible as unticked tasks in
-`openspec/changes/add-ask-agent/tasks.md`: the evaluation harness — scoring citations against
-expected entries, scoring refusals on unanswerable questions — has not been started. The web
-interface is complete: a session, streamed retrieval progress, the cited and uncited tables, and the
-full entries in the side panel.
+**The evaluation harness is not built.** Scoring citations against expected entries and scoring
+refusals on unanswerable questions are specified in `openspec/changes/add-ask-agent/tasks.md`
+(group 9) and unticked. That is why the prototype warning above says what it says.
 
 ## For the course review
 
 Sprint 3 asks for an agent with a clear purpose, real tools, a usable interface, error handling and
-documentation. Those are covered above. What follows is where the project went past the brief, and
-where it deliberately has not gone yet.
+documentation. Those are covered above. Where the project went past the brief:
 
 | Beyond the brief | Where |
 |---|---|
 | Provenance as a hard requirement, not a prompt instruction — citations are checked against what was actually retrieved, and unsupported ones flagged | `citations.py`, `entries_table.py` |
 | Agentic retrieval over a 14,294-entry corpus: capped summaries with an honest total, then full entries on demand | ADR-0150, `tools.py` |
 | Spend enforced in middleware — a per-question ceiling and a run budget that stop the next call rather than reporting after the fact | ADR-0120, ADR-0180, `spend.py` |
-| The agent separated from its drivers, so a terminal, a web page and an evaluation harness run the identical agent with no mode flag | ADR-0110, `test_driver_independence.py` |
+| The agent separated from its drivers, so a web page and an evaluation harness run the identical agent with no mode flag | ADR-0110, `test_driver_independence.py` |
 | Fault injection at the seams that fail silently — a spend ledger that cannot write, a marker whose condition can never fire | `test_spend.py`, `test_markers_against_corpus.py` |
 | Decisions recorded as ADRs, and behaviour specified in OpenSpec rather than prose | `docs/decisions/`, `openspec/` |
 
@@ -263,18 +152,15 @@ Of the optional tasks: token usage and cost are displayed per question and per r
 long-term memory are LangGraph checkpoints resumable across processes; the model is configurable and
 reached through OpenRouter; and retrieval is agentic rather than a single similarity lookup.
 
-**Not done, and the honest gap:** there is no evaluation report. The question set and scoring are
-specified (`tasks.md`, group 9) and unbuilt, which is exactly why the prototype warning above says
-what it says — nothing here has been measured against expected answers.
+**Not done, and the honest gap:** there is no evaluation report. Nothing here has been measured
+against expected answers.
 
 ## Where to read next
 
-- `docs/diagrams/architecture.md` — the agent's graph (generated from the compiled
-  object), one question as a sequence, and which modules may depend on which
-
+- [`docs/diagrams/architecture.md`](docs/diagrams/architecture.md) — the middleware stack, one
+  question as a sequence, and which modules may depend on which
 - `openspec/changes/add-ask-agent/proposal.md` — why an agent rather than a search box, what was
   deferred and why
-- `openspec/changes/add-ask-agent/design.md` — the middleware stack and the shape of the tools
 - `src/bionumbers_ask/events.py` — the port: everything the agent emits and the one command it takes
-- `openspec/changes/add-corpus-ingestion/proposal.md` — why an ingester rather than a prepared
-  corpus, and what the export's quirks cost
+
+To cite BioNumbers itself: Milo et al. *Nucl. Acids Res.* (2010) 38 (suppl 1): D750–D753.
