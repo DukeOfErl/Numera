@@ -29,6 +29,9 @@ any release; `1.0.0` when it stabilizes.
 - **`range_percent_deviation`** in `parse_flags` where the bounds came from a
   relative uncertainty: `±23%` is a fraction of the value, not a quantity, and
   reading it as one gave a 46-unit interval around a value of 0.488.
+- **`range_one_sided`** and **`range_approximate`** on every record: which kind
+  of hedge the source used, because the two need different words in front of a
+  reader. 594 and 1,639 records; together they partition `range_qualified`.
 - **`range_qualified`** on every record: the source did not state a closed
   interval. `<0.001` stored as the interval 0.001–0.001 asserts an exact equality
   where the source said *less than*. 2,233 records.

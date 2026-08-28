@@ -107,6 +107,24 @@ class BioNumberRecord(BaseModel):
     Widening that one would have changed a contract `add-ask-agent` already reads.
     """
 
+    range_one_sided: bool = False
+    """`True` when the hedge is a bound: `<0.001`, `>100`, `≥10`. 594 records.
+
+    Which kind of hedge it is decides the words a consumer puts in front of a
+    reader -- "8.0 (a bound, not exact)" is not "8.0 (approximate)" -- so the kind
+    is a field like the fact. `add-ask-agent` read it out of `parse_flags` by name
+    until this field existed, which meant a rename here would have turned it
+    silently false there rather than failing.
+
+    Together with `range_approximate` this partitions `range_qualified`: that
+    field is true exactly when one of these two is, by construction rather than by
+    coincidence.
+    """
+
+    range_approximate: bool = False
+    """`True` when the hedge is an approximation marker: `~5`, `≈5`, `about 5`.
+    1,639 records. See `range_one_sided` for why the kind is its own field."""
+
     range_fused: bool = False
     """`True` when `range_low`/`range_high` may fuse numbers that do not belong
     to one quantity, so the range must not be presented as a measurement.

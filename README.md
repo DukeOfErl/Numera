@@ -78,7 +78,7 @@ learn something from a difference.
 Nothing is dropped and nothing is silently corrected. A cell the ingester cannot read cleanly still
 becomes a record, with a flag naming what went wrong ([ADR-0230](docs/decisions/0230-flag-and-count-never-correct.md)).
 
-`parse_flags` is the ingester's own vocabulary and its names may change. **Two boolean fields are the
+`parse_flags` is the ingester's own vocabulary and its names may change. **Four boolean fields are the
 stable contract, and a consumer should read those rather than match on flag names:**
 
 - **`range_fused`** — the stored bounds may come from two different quantities. Bounds are the lowest
@@ -88,8 +88,13 @@ stable contract, and a consumer should read those rather than match on flag name
   from 0.001 to 0.001, which asserts an exact equality where the source said *less than*; `~5`
   likewise loses its hedge. 2,233 records.
 
-A record can carry either without the other, and they need different words in a caveat. Neither means
-the range is *implausible* — judging that needs the comment text, and the ingester does not judge.
+- **`range_one_sided`** and **`range_approximate`** — which kind of hedge it was, because the two need
+  different words in front of a reader: `8.0 (a bound, not exact)` is not `20.0 (approximate)`. 594 and
+  1,639 records. They partition `range_qualified` by construction: that field is true exactly when one
+  of these is.
+
+A record can carry fusion and hedging independently, and they need different words in a caveat. Neither
+means the range is *implausible* — judging that needs the comment text, and the ingester does not judge.
 
 ## Development
 

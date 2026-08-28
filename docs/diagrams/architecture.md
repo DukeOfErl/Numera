@@ -51,7 +51,7 @@ Two things the boxes cannot show:
 flowchart LR
     line[/"one corpus line"/]
     twelve["<b>twelve keys</b><br/>bnid, property, organism,<br/>units, value, range_low/high,<br/>reference(+pmid), method,<br/>comments, keywords"]
-    predicates["<b>two booleans</b><br/>range_fused<br/>range_qualified"]
+    predicates["<b>four booleans</b><br/>range_fused, range_qualified,<br/>range_one_sided, range_approximate"]
     internal["<b>ours to change</b><br/>parse_flags, range_raw,<br/>table_link, source_digest,<br/>primary_source, entered_by"]
     loader["ask agent's loader"]
 
@@ -67,7 +67,10 @@ flowchart LR
 ```
 
 The twelve keys and their types are what the loader enforces; it ignores every other key, which is
-what lets the flags and the provenance stamp be added without touching it. The two booleans are the
+what lets the flags and the provenance stamp be added without touching it. The four booleans are the
 contract terms a consumer should read **instead of** matching on flag names — the names behind them
-are cleaning's own vocabulary and may be renamed, split or dropped
+are cleaning's own vocabulary and may be renamed, split or dropped. The last two arrived because the
+consumer was reading `range_approximate` and `range_one_sided` out of `parse_flags` by name to choose
+the wording it shows a reader, and a rename here would have turned those silently false there rather
+than failing
 ([ADR-0230](../decisions/0230-flag-and-count-never-correct.md), [ADR-0210](../decisions/0210-verifying-a-contract-owned-by-another-branch.md)).

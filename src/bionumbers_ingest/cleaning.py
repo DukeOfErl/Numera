@@ -207,9 +207,16 @@ _APPROXIMATE_RE = re.compile(
 #: The value column gets the same treatment as the range column. Reporting a hedge
 #: in one and hiding it in the other would mean `<2` in `Value` reaches a consumer
 #: as an exact 2, which is the unsourced correction ADR-0230 forbids.
-QUALIFIED_RANGE_FLAGS = frozenset(
-    {"range_one_sided", "range_approximate", "value_one_sided", "value_approximate"}
-)
+#: The two kinds of hedge, each behind its own field. A consumer needs them apart
+#: because they need different words -- "20.0 (approximate)" against "8.0 (a
+#: bound, not exact)" -- and a reader shown "bounded" for `~20` is being told
+#: something false.
+ONE_SIDED_FLAGS = frozenset({"range_one_sided", "value_one_sided"})
+APPROXIMATE_FLAGS = frozenset({"range_approximate", "value_approximate"})
+#: Derived from the two, not listed separately, so the union cannot drift from
+#: them: `range_qualified` is true exactly when one of the two fields is. A third
+#: kind of hedge added to only one of these sets would break that silently.
+QUALIFIED_RANGE_FLAGS = ONE_SIDED_FLAGS | APPROXIMATE_FLAGS
 
 
 def _flag_hedging(text: str, flags: list[str], column: str) -> None:
@@ -784,4 +791,6 @@ def clean_row(raw: dict[str, str]) -> BioNumberRecord:
         parse_flags=flags,
         range_fused=bool(FUSED_RANGE_FLAGS.intersection(flags)),
         range_qualified=bool(QUALIFIED_RANGE_FLAGS.intersection(flags)),
+        range_one_sided=bool(ONE_SIDED_FLAGS.intersection(flags)),
+        range_approximate=bool(APPROXIMATE_FLAGS.intersection(flags)),
     )

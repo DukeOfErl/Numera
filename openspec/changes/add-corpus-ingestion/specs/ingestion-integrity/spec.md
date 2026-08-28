@@ -183,6 +183,18 @@ and `false` otherwise. This field, not any flag name, is the contract `add-ask-a
 read directly, forwarded without interpretation, and unaffected by anything cleaning does inside
 `parse_flags`.
 
+#### Scenario: The kind of hedge is a field, not a flag name
+
+- **WHEN** a record's stored bounds came from a one-sided bound or from an approximation marker
+- **THEN** its line carries `range_one_sided` and `range_approximate` as boolean fields
+- **AND** `range_qualified` is true exactly when one of those two is
+
+The kind matters to a consumer, not only the fact: a one-sided bound and an approximation need
+different words in front of a reader, and showing "bounded, not exact" for `~20` states something the
+source did not. `add-ask-agent` read both kinds out of `parse_flags` by name until these fields
+existed — so a rename here would have turned them silently false there, with its fallback wording
+continuing to work, which is what would have hidden it.
+
 The flag names remain internal to cleaning and MAY be renamed, split, merged or dropped as the corpus
 is better understood; `range_fused` MUST continue to answer the same question when they do. Cleaning
 SHALL NOT retire or redefine `range_fused` without a message to `add-ask-agent`.

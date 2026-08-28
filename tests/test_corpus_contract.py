@@ -149,3 +149,39 @@ def test_round_trip_through_the_real_loader(tmp_path, sample_html):
     for entry in entries:
         assert entry.value_display, f"bnid {entry.bnid} renders as an empty measurement"
         assert isinstance(entry.keywords, tuple)
+
+
+def test_the_two_hedge_kinds_partition_the_qualified_field(sample_html, tmp_path):
+    """`range_qualified` is true exactly when one of the two kinds is.
+
+    Derived from the two sets rather than listed beside them, so a third kind of
+    hedge cannot be added to one and forgotten in the other. `add-ask-agent`
+    asserts the same partition from its side; this holds up its end.
+    """
+    from bionumbers_ingest.ingest import build_records
+
+    records, *_ = build_records(sample_html)
+    assert records
+    for record in records:
+        assert record.range_qualified == (record.range_one_sided or record.range_approximate)
+
+
+def test_the_hedge_kind_is_a_field_not_a_flag_name():
+    """The kind decides the words a reader is shown, so it is contract.
+
+    Read out of `parse_flags` by name, a rename here turned the consumer's field
+    silently false -- its fallback wording kept working, which is what would have
+    hidden it.
+    """
+    from bionumbers_ingest.cleaning import clean_row
+
+    bound = clean_row({"bion_id": "1", "Range": "'<0.001"})
+    assert bound.range_one_sided is True
+    assert bound.range_approximate is False
+
+    about = clean_row({"bion_id": "1", "Range": "'~5"})
+    assert about.range_approximate is True
+    assert about.range_one_sided is False
+
+    plain = clean_row({"bion_id": "1", "Range": "'5 - 10"})
+    assert plain.range_one_sided is False and plain.range_approximate is False
