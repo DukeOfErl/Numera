@@ -19,7 +19,8 @@ the caller supplies the names it expects — a renamed column.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+import codecs
+from collections.abc import Callable, Iterator, Sequence
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -81,11 +82,19 @@ class _TableParser(HTMLParser):
             self._buf.append(f"&#{name};")
 
 
-def _iter_raw_rows(path: str | Path) -> Iterator[list[str]]:
+def _iter_raw_rows(
+    path: str | Path, on_bytes: Callable[[bytes], None] | None = None
+) -> Iterator[list[str]]:
     """Yield every complete ``<tr>`` as a list of raw cells.
 
     Reads in chunks and drains completed rows after each one, so memory stays
     flat over a 27 MB export rather than growing with it.
+
+    ``on_bytes`` receives each raw chunk before it is decoded, so a caller can
+    fingerprint the source in this same pass. Hashing separately would mean a
+    second pass over 27 MB and, worse, a second read — which could see a
+    different file than the one that was parsed. The file is therefore opened in
+    binary and decoded incrementally here rather than by the text layer.
 
     Raises ``ValueError`` if the input ends mid-row or mid-cell. Without that
     check a truncated download — an interrupted transfer, a half-written file —
@@ -93,14 +102,24 @@ def _iter_raw_rows(path: str | Path) -> Iterator[list[str]]:
     loads cleanly and is missing entries nobody can enumerate.
     """
     parser = _TableParser()
-    with open(path, encoding="utf-8", errors="replace") as fh:
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    with open(path, "rb") as fh:
         while True:
-            chunk = fh.read(_CHUNK)
-            if not chunk:
+            raw = fh.read(_CHUNK)
+            if not raw:
                 break
-            parser.feed(chunk)
+            if on_bytes is not None:
+                on_bytes(raw)
+            # A multi-byte character split across two chunks is held by the
+            # decoder until the rest arrives, so this can legitimately be empty.
+            chunk = decoder.decode(raw)
+            if chunk:
+                parser.feed(chunk)
             while parser.rows:
                 yield parser.rows.pop(0)
+    tail = decoder.decode(b"", final=True)
+    if tail:
+        parser.feed(tail)
     parser.close()
     while parser.rows:
         yield parser.rows.pop(0)
@@ -115,6 +134,7 @@ def iter_rows(
     path: str | Path,
     limit: int | None = None,
     expect_headers: Sequence[str] | None = None,
+    on_bytes: Callable[[bytes], None] | None = None,
 ) -> Iterator[dict[str, str]]:
     """Yield each row after the header as ``{header: raw_cell}``.
 
@@ -127,6 +147,11 @@ def iter_rows(
     that field is ``None`` on every record with nothing flagged. Pass the names
     you rely on and a rename becomes a failure instead.
 
+    ``on_bytes`` is handed each raw chunk of the source, for fingerprinting in the
+    same pass — see :mod:`bionumbers_ingest.provenance`. Note that a run stopped
+    early by ``limit`` has not read the whole file, so any digest taken alongside
+    it covers only the part read; the manifest records the limit for that reason.
+
     Raises ``ValueError`` if a row's cell count does not match the header's. Every
     row of the published export carries exactly 14 cells, so a mismatch is a
     malformed file — and zipping a short row against the headers would drop the
@@ -134,7 +159,7 @@ def iter_rows(
     """
     headers: list[str] | None = None
     yielded = 0
-    for row in _iter_raw_rows(path):
+    for row in _iter_raw_rows(path, on_bytes=on_bytes):
         if headers is None:
             headers = row
             if expect_headers is not None and list(headers) != list(expect_headers):

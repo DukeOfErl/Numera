@@ -85,6 +85,14 @@ class BioNumberRecord(BaseModel):
     """Cleaning's own reporting vocabulary. Internal: names may be renamed,
     split, merged or dropped. Consumers read `range_fused`, never these."""
 
+    source_digest: str | None = None
+    """First 12 characters of the SHA-256 of the export this record came from.
+
+    The join key to the run's manifest, so a corpus line separated from its
+    manifest can still be traced to the file it came from — which matters because
+    the export carries no date of its own (ADR-0240).
+    """
+
     range_fused: bool = False
     """`True` when `range_low`/`range_high` may fuse numbers that do not belong
     to one quantity, so the range must not be presented as a measurement.

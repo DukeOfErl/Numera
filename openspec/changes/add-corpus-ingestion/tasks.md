@@ -77,25 +77,25 @@ dependency and parquet output are dropped here.
 
 ## 6. Provenance
 
-- [ ] 6.1 Compute the source file's SHA-256 and size while reading it, without a second pass over 27 MB
-- [ ] 6.2 Stamp each record with the first 12 characters of that digest as the join key to its manifest
-- [ ] 6.3 Write the manifest beside the corpus — full digest, source size, source modification time named as such rather than as a fetch time, ingest date, ingester version, the run's counts, and the row limit if one applied — renamed into place after the corpus, so a corpus with no manifest is a run that did not finish
-- [ ] 6.4 Test that two corpora from different sources carry different digests, that each record's stamp matches its own manifest, and that a limited run records its limit
-- [ ] 6.5 Record **ADR-0240**: stamp every ingest with source identity and dates — that the export carries no temporal information at all, that the loss is unrecoverable afterwards, why the fetch time can only ever be a proxy, and why the stamp is on the record as well as in the manifest
+- [x] 6.1 Compute the source file's SHA-256 and size while reading it, without a second pass over 27 MB
+- [x] 6.2 Stamp each record with the first 12 characters of that digest as the join key to its manifest
+- [x] 6.3 Write the manifest beside the corpus — full digest, source size, source modification time named as such rather than as a fetch time, ingest date, ingester version, the run's counts, and the row limit if one applied — renamed into place after the corpus, so a corpus with no manifest is a run that did not finish
+- [x] 6.4 Test that two corpora from different sources carry different digests, that each record's stamp matches its own manifest, and that a limited run records its limit
+- [x] 6.5 Record **ADR-0240**: stamp every ingest with source identity and dates — that the export carries no temporal information at all, that the loss is unrecoverable afterwards, why the fetch time can only ever be a proxy, and why the stamp is on the record as well as in the manifest
 
 ## 7. Integrity reporting
 
-- [ ] 7.1 Port the validation report: records, rows skipped as non-data, duplicate identifiers, link-carrying records, records with no scalar, and a count per parse flag — plus the `range_fused` count stated separately, so the predicate's population is read off the run rather than inferred from the flags behind it
-- [ ] 7.2 Test that records written plus rows skipped equals rows read, and that a clean run states its zeroes rather than omitting them
-- [ ] 7.3 Test that duplicate identifiers are reported and both records kept
-- [ ] 7.4 Test that flags appear on the emitted record as well as in the report, and that `range_fused` appears on every record and in the report's counts
+- [x] 7.1 Port the validation report: records, rows skipped as non-data, duplicate identifiers, link-carrying records, records with no scalar, and a count per parse flag — plus the `range_fused` count stated separately, so the predicate's population is read off the run rather than inferred from the flags behind it
+- [x] 7.2 Test that records written plus rows skipped equals rows read, and that a clean run states its zeroes rather than omitting them
+- [x] 7.3 Test that duplicate identifiers are reported and both records kept
+- [x] 7.4 Test that flags appear on the emitted record as well as in the report, and that `range_fused` appears on every record and in the report's counts
 
 ## 8. The command
 
-- [ ] 8.1 Implement `bionumbers-ingest <file>`, with an output path option, defaulting inside the ignored `data/` directory
-- [ ] 8.2 Make the whole file the default and the row limit an explicit request, inverting the source repository's 200-row default, and have the report state when a limit was applied
-- [ ] 8.3 Fail on a missing or unreadable source with a message naming the path, a non-zero exit, and no output file
-- [ ] 8.4 Test the command end to end over the fixture: corpus, manifest and report, with the expected line count
+- [x] 8.1 Implement `bionumbers-ingest <file>`, with an output path option, defaulting inside the ignored `data/` directory
+- [x] 8.2 Make the whole file the default and the row limit an explicit request, inverting the source repository's 200-row default, and have the report state when a limit was applied
+- [x] 8.3 Fail on a missing or unreadable source with a message naming the path, a non-zero exit, and no output file
+- [x] 8.4 Test the command end to end over the fixture: corpus, manifest and report, with the expected line count
 
 ## 9. Testing the tests, and the full run
 
