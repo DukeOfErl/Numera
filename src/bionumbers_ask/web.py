@@ -112,22 +112,27 @@ class Item:
     kind: Kind
     text: str = ""
     table: Table | None = None
+    # Decided here rather than at the screen, for the reason the whole module is
+    # shaped this way (ADR-0100): whether the run is over is a decision, and a
+    # test can read it off an item where it cannot read it off a drawn page.
+    ends_the_run: bool = False
+    run_spend: int = 0
+    run_budget: int = 0
 
 
 def item_for(event: Event, repo: CorpusRepository | None = None) -> Item | None:
     """One item for an event, or None for one the page does not draw.
 
-    The entries table is not here yet -- that is task 8.6. Everything else the
-    agent emits produces an item, warnings included: a warning that reaches this
-    function and falls through is a fact the agent established and the page never
-    said, which is worse than an ugly one.
+    Every event the agent emits produces an item, warnings included: a warning that
+    reaches this function and falls through is a fact the agent established and the
+    page never said, which is worse than an ugly one.
     """
     if isinstance(event, Retrieval):
         return Item(Kind.PROGRESS, messages.retrieval_text(event))
     if isinstance(event, AnswerEntries):
         # Needs the corpus: the event carries identifiers, and the reference
         # deliberately never travels through the agent.
-        if repo is None or not event.retrieved:
+        if repo is None:
             return None
         rows = entries_table.rows_for(repo, event.cited, event.retrieved, event.question)
         if not rows:
@@ -142,13 +147,17 @@ def item_for(event: Event, repo: CorpusRepository | None = None) -> Item | None:
     if isinstance(event, Answer):
         return Item(Kind.ANSWER, event.text)
     if isinstance(event, QuestionEnded):
-        return Item(Kind.ENDING, messages.ending_text(event))
+        return Item(
+            Kind.ENDING,
+            messages.ending_text(event),
+            ends_the_run=event.reason in messages.STOP_THE_RUN,
+            run_spend=event.run_spend,
+            run_budget=event.run_budget,
+        )
     return None
 
 
-def items_for(
-    events: Iterable[Event], repo: CorpusRepository | None = None
-) -> Iterator[Item]:
+def items_for(events: Iterable[Event], repo: CorpusRepository | None = None) -> Iterator[Item]:
     """Each event's item, as the event arrives.
 
     A generator, because a question's events arrive over its whole life -- a
@@ -300,11 +309,34 @@ def _draw_entry(row: entries_table.Row) -> None:
         st.caption(entries_table.NO_METHOD_LEGEND)
     if row.comments:
         st.markdown(f"*Comments.* {as_text(row.comments)}")
-    if row.keywords:
-        st.caption("Keywords: " + as_text(", ".join(k for k in row.keywords if k)))
+    keywords = shown_keywords(row)
+    if keywords:
+        st.caption("Keywords: " + as_text(", ".join(keywords)))
     reference = row.reference or "(no reference recorded)"
     pubmed = f" · PubMed {row.reference_pubmed_id}" if row.reference_pubmed_id else ""
     st.caption(f"{as_text(reference)}{pubmed}")
+
+
+def shown_keywords(row: entries_table.Row) -> list[str]:
+    """The keywords that will actually appear, markup already stripped.
+
+    Testing `row.keywords` instead drew a bare "Keywords: " for every entry whose
+    only keyword was the injected `<IMG SRC=...>` -- which `_without_markup`
+    empties, and which the corpus carries on 10,206 of 14,294 records.
+    """
+    return [keyword for keyword in row.keywords if keyword]
+
+
+def summary_for(table: Table, shown: int) -> str:
+    """How much went unshown, or "" when there is nothing to report.
+
+    Guarded as the terminal guards it. `table.rows` includes entries cited without
+    being retrieved while `table.retrieved` counts only retrieved ones, so `shown`
+    can exceed it and the ungated sentence read "showing 4 of 1 entries retrieved".
+    """
+    if table.retrieved > shown or table.matched > shown:
+        return entries_table.summarise(shown, table.retrieved, table.matched, table.searches)
+    return ""
 
 
 def _dataframe(rows: tuple[entries_table.Row, ...]) -> None:
@@ -313,8 +345,7 @@ def _dataframe(rows: tuple[entries_table.Row, ...]) -> None:
         width="stretch",
         hide_index=True,
         column_config={
-            name: st.column_config.TextColumn(width=width)
-            for name, width in COLUMN_WIDTHS.items()
+            name: st.column_config.TextColumn(width=width) for name, width in COLUMN_WIDTHS.items()
         },
     )
 
@@ -361,9 +392,7 @@ def _draw_table(table: Table) -> None:
     note = entries_table.dimension_note(table.rows)
     if note:
         st.caption(as_text(note))
-    summary = entries_table.summarise(
-        len(shown), table.retrieved, table.matched, table.searches
-    )
+    summary = summary_for(table, len(shown))
     if summary:
         # Body text, not a caption. How much of the corpus went unlooked-at is one
         # of the few things a reader can use to judge whether an answer is worth
@@ -395,13 +424,49 @@ def draw_full_entries(table: Table | None) -> None:
 
 
 def latest_table(transcript: Iterable[tuple[str, list[Item]]]) -> Table | None:
-    """The entries of the most recent answer that had any."""
-    found = None
-    for _, items in transcript:
+    """The newest question's entries, or None if that question produced none.
+
+    The newest question's, not the newest that had any. Falling back to an older
+    one leaves a previous question's entries under a heading that says "Full
+    entries", with nothing on the page marking them as belonging to a question
+    already answered -- and the main column's warning about rows not shown here
+    would then be pointing at a panel that no longer holds them.
+    """
+    for _, items in reversed(list(transcript)):
         for item in items:
             if item.kind is Kind.ENTRIES and item.table is not None:
-                found = item.table
-    return found
+                return item.table
+        return None
+    return None
+
+
+def run_is_over(transcript: Iterable[tuple[str, list[Item]]]) -> bool:
+    """Whether any question ended the run, so the page should stop taking them.
+
+    The terminal returns from its read loop on these endings; without the same
+    check here the chat input stays live and every further question replays an
+    identical refusal, which reads as a broken app rather than a limit reached.
+    Any question, not the last: nothing un-spends a run budget.
+    """
+    return any(
+        item.ends_the_run for _, items in transcript for item in items if item.kind is Kind.ENDING
+    )
+
+
+def run_status(transcript: Iterable[tuple[str, list[Item]]]) -> tuple[int, int] | None:
+    """What the run has spent and what it may spend, or None before the first answer.
+
+    Read from the ending events rather than from configuration, because a session
+    resumed in a process configured differently spends against the budget it was
+    created with -- reading the environment here would report a cap this run is
+    not subject to.
+    """
+    latest = None
+    for _, items in transcript:
+        for item in items:
+            if item.kind is Kind.ENDING and item.run_budget:
+                latest = (item.run_spend, item.run_budget)
+    return latest
 
 
 def draw(item: Item) -> None:

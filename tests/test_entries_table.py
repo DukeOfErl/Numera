@@ -150,9 +150,9 @@ def test_the_columns_appear_in_the_reference_order(repo):
 def test_every_row_occupies_the_same_number_of_lines(repo):
     """Uniform height is what makes a long table scannable, and what the
     reference page does -- cells wrap to two lines, then truncate."""
-    rows = entries_table.rows_for(repo, (), (FIRST, SECOND))
+    rows = entries_table.rows_for(repo, (FIRST, SECOND), (FIRST, SECOND))
     # Everything after the header and its rule, less the footnotes the table may
-    # append below the rows.
+    # append below the rows. Cited, so no "nothing cited" notice stands between.
     body = [
         line
         for line in entries_table.render(rows).splitlines()[2:]
@@ -433,17 +433,19 @@ def test_an_entry_whose_method_the_corpus_does_not_record_is_marked(repo):
 
 
 def test_the_marker_and_its_legend_appear_only_when_a_marked_row_is_shown(repo):
-    unmarked = entries_table.render(entries_table.rows_for(repo, (), (FIRST,)))
+    unmarked = entries_table.render(entries_table.rows_for(repo, (FIRST,), (FIRST,)))
     assert entries_table.NO_METHOD not in unmarked
 
-    marked = entries_table.render(entries_table.rows_for(repo, (), (SECOND,)))
+    marked = entries_table.render(entries_table.rows_for(repo, (SECOND,), (SECOND,)))
     assert marked.splitlines()[2].startswith(f"{entries_table.NO_METHOD} ")
     assert marked.splitlines()[-1] == entries_table.NO_METHOD_LEGEND
 
 
 def test_the_marker_is_not_appended_to_the_identifier(repo):
     """The id has to stay copyable, and will one day be a link."""
-    row_line = entries_table.render(entries_table.rows_for(repo, (), (SECOND,))).splitlines()[2]
+    row_line = entries_table.render(
+        entries_table.rows_for(repo, (SECOND,), (SECOND,))
+    ).splitlines()[2]
     assert f"{SECOND}" in row_line and f"{SECOND}{entries_table.NO_METHOD}" not in row_line
 
 
@@ -541,13 +543,22 @@ def test_a_banner_separates_the_entries_the_answer_rests_on_from_the_rest(repo):
     assert f"{SECOND}" in "\n".join(lines[banner:])
 
 
-def test_no_banner_when_every_shown_entry_falls_on_one_side(repo):
+def test_a_table_where_nothing_was_cited_says_so_before_the_rows(repo):
+    """Otherwise it renders exactly as a table whose top rows are the cited ones,
+    and a reader takes the first row for the citation -- because everywhere else
+    it is. The web driver said this from the start; the terminal did not."""
     nothing_cited = entries_table.render(entries_table.rows_for(repo, (), (FIRST, SECOND)))
+    lines = nothing_cited.splitlines()
+    assert lines[2] == entries_table.NOTHING_CITED
+    assert entries_table.UNCITED_BANNER in lines[3], "the rows below it are still labelled"
+
+
+def test_no_banner_and_no_notice_when_every_shown_entry_is_cited(repo):
     all_cited = entries_table.render(
         entries_table.rows_for(repo, (FIRST, SECOND), (FIRST, SECOND))
     )
-    assert entries_table.UNCITED_BANNER not in nothing_cited
     assert entries_table.UNCITED_BANNER not in all_cited
+    assert entries_table.NOTHING_CITED not in all_cited
 
 
 def test_the_banner_is_not_drawn_for_a_break_below_the_row_limit(repo):

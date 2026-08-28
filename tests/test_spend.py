@@ -571,3 +571,55 @@ def test_a_real_question_carries_the_ceiling_it_ran_against(repo, tight, tmp_pat
 
     assert end.spend_ceiling == CEILING, "the ending could not report a bound it never carried"
     assert not end.at_spend_ceiling
+
+
+# -- a resumed session's warning ------------------------------------------
+
+
+def test_a_resumed_session_warns_against_its_own_ceiling_not_the_environment(
+    repo, tight, tmp_path
+):
+    """The ceiling persists with the session (ADR-0180) and the warning is derived
+    from it, so deriving the warning from configuration instead lets the two drift.
+
+    The dangerous direction is this one: a session created tight, resumed in a
+    process configured loosely. The gate still stops at the session's ceiling while
+    the warning sits above it, so the notice can never fire and the question is cut
+    off with no warning at all -- the exact failure the 80 per cent rule exists to
+    prevent. It went unnoticed because every test resumed under one configuration.
+    """
+    store = str(tmp_path / "ask.sqlite")
+    # Created under the tight ceiling: 120 micro, warning at 96.
+    first = agent_with(
+        repo, tight, tmp_path, scripted(costing(says("first (BNID 100002)"), 0.000_001)), store
+    )
+    list(first.ask("s", "q1"))
+
+    # Resumed under a ceiling five hundred times larger. Its warning would be
+    # 48,000 micro -- unreachable here -- if the threshold followed configuration.
+    loose = Config(
+        model=tight.model,
+        question_ceiling=usd("0.060"),
+        run_budget=usd("1.20"),
+        prices=tight.prices,
+    )
+    resumed = agent_with(
+        repo, loose, tmp_path, scripted(costing(says("second (BNID 100002)"), 0.000_110)), store
+    )
+    events = list(resumed.ask("s", "q2"))
+
+    warning = next((e for e in events if isinstance(e, SpendWarning)), None)
+    assert warning is not None, "no warning fired before the session's own ceiling"
+    assert warning.threshold == THRESHOLD, (
+        "the warning was derived from the environment's ceiling, not the session's"
+    )
+    assert ended(events).spend_ceiling == CEILING, "the session kept its ceiling"
+
+
+def test_every_ending_carries_the_run_budget_it_was_measured_against(repo, tight, tmp_path):
+    """So a driver can show how much of the run is left without reading
+    configuration -- which would report this process's budget for a run that may
+    have been started under another, the way the warning threshold used to."""
+    model = scripted(costing(says("x (BNID 100002)"), 0.000_001))
+    end = ended(list(agent_with(repo, tight, tmp_path, model).ask("s", "q")))
+    assert end.run_budget == tight.run_budget

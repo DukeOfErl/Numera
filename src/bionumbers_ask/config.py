@@ -96,8 +96,13 @@ class Config:
 
     @property
     def warning_threshold(self) -> int:
-        """Notice, at four fifths of the stop. Derived, so it cannot exceed it."""
-        return self.question_ceiling * WARN_AT_NUMERATOR // WARN_AT_DENOMINATOR
+        """Notice, at four fifths of the stop configured here.
+
+        Only correct for a question running against *this* configuration's
+        ceiling. A session keeps the ceiling it was created with, so a resumed
+        session must derive its warning from that one -- use `warning_for`.
+        """
+        return warning_for(self.question_ceiling)
 
     def prices_for(self, model: str) -> ModelPrices | None:
         return self.prices.get(model)
@@ -116,9 +121,7 @@ class Config:
             )
         return cls(
             model=os.environ.get("BIONUMBERS_ASK_MODEL", DEFAULT_MODEL),
-            question_ceiling=usd(
-                os.environ.get("BIONUMBERS_ASK_QUESTION_CEILING_USD", "0.60")
-            ),
+            question_ceiling=usd(os.environ.get("BIONUMBERS_ASK_QUESTION_CEILING_USD", "0.60")),
             run_budget=usd(os.environ.get("BIONUMBERS_ASK_RUN_BUDGET_USD", "1.20")),
             prices=dict(FALLBACK_PRICES),
             run_label=os.environ.get("BIONUMBERS_ASK_RUN", "").strip() or "dev",
@@ -135,6 +138,20 @@ DEFAULT_MODEL = "anthropic/claude-haiku-4.5"
 # rounding at the one place the ledger is careful to avoid it.
 WARN_AT_NUMERATOR = 8
 WARN_AT_DENOMINATOR = 10
+
+
+def warning_for(ceiling: int) -> int:
+    """Where notice is given for a question stopping at `ceiling`.
+
+    Takes the ceiling rather than reading configuration, because the two can
+    differ: a session keeps the ceiling it was created with (ADR-0180), so a
+    session made under one ceiling and resumed under another would otherwise get
+    a warning derived from a limit it is not subject to -- silently never firing
+    when the session's ceiling is the lower of the two, which is exactly the case
+    the warning exists for.
+    """
+    return ceiling * WARN_AT_NUMERATOR // WARN_AT_DENOMINATOR
+
 
 # Prices read from OpenRouter's models endpoint on 2026-08-18, in micro-dollars per
 # million tokens. Only reached if a provider stops reporting cost -- OpenRouter's

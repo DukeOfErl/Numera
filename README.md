@@ -26,6 +26,10 @@ To cite BioNumbers itself:
 
 Download the prepared file: **&lt;CORPUS-DOWNLOAD-LINK&gt;** (JSONL, ~20 MB, 14,294 entries).
 
+> **The link above is a placeholder and must be filled in before this README is given to anyone.**
+> Without it this section describes a file the reader has no way to obtain, and every instruction
+> below it is unrunnable.
+
 It is provided ready to use because what BioNumbers distributes is not directly readable here: the
 export is a 27 MB HTML `<table>` carrying an `.xls` extension, and converting it into the record
 shape this agent reads — normalising ranges written a dozen ways, reconciling two Unicode
@@ -122,10 +126,11 @@ Nothing writes to the corpus, and no tool can create, modify or delete an entry.
 retrieve literature or fetch papers. It is not given the name of whichever driver is calling it, so
 it cannot behave one way for a person and another for a harness.
 
-Two parts of the plan are not built yet and are visible as unticked tasks in
-`openspec/changes/add-ask-agent/tasks.md`: the web interface is partial (a session and its answers,
-but not yet retrieval progress or the entries table), and the evaluation harness — scoring citations
-against expected entries, scoring refusals on unanswerable questions — has not been started.
+One part of the plan is not built yet and is visible as unticked tasks in
+`openspec/changes/add-ask-agent/tasks.md`: the evaluation harness — scoring citations against
+expected entries, scoring refusals on unanswerable questions — has not been started. The web
+interface is complete: a session, streamed retrieval progress, the cited and uncited tables, and the
+full entries in the side panel.
 
 ## Where to read next
 

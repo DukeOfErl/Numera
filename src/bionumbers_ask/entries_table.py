@@ -335,6 +335,13 @@ def render(
     rule = "  ".join("-" * width for _, _, width in COLUMNS)
     header = "  ".join(title.ljust(width) for _, title, width in COLUMNS).rstrip()
     out = [header, rule]
+    # Nothing cited draws no transition, so without this the table renders exactly
+    # as one whose top rows are the cited ones -- and a reader would take the first
+    # row for the citation, because everywhere else it is. Said where the cited
+    # rows would have been.
+    if not shown[0].cited:
+        out.append(NOTHING_CITED)
+        out.append(_banner(len(rule)))
     for index, row in enumerate(shown):
         if index and shown[index - 1].cited and not row.cited:
             # A reader checking the prose needs the entries it rests on separated

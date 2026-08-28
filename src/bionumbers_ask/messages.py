@@ -19,10 +19,24 @@ from .events import (
     CitationWarning,
     ConversationWarning,
     CostProjection,
+    EndReason,
     Event,
     QuestionEnded,
     Retrieval,
     SpendWarning,
+)
+
+# Endings after which asking again cannot produce a different answer. What these
+# share is that they are not about the question just asked: a spent run budget
+# stays spent, and a conversation over its token bound only grows. The per-question
+# ceiling is deliberately absent -- that one refreshes.
+#
+# Shared because it is a fact about the ending rather than a rendering of it. The
+# terminal quit on these and the web went on accepting questions, replaying the
+# same refusal indefinitely; two drivers disagreeing about whether the door is shut
+# is the divergence `messages` exists to prevent.
+STOP_THE_RUN = frozenset(
+    {EndReason.RUN_BUDGET, EndReason.CONVERSATION_BOUND, EndReason.NOT_CONFIGURED}
 )
 
 
@@ -71,6 +85,20 @@ def retrieval_text(event: Retrieval) -> str:
     return f"{event.tool} {detail}".rstrip()
 
 
+def _run_clause(event: QuestionEnded) -> str:
+    """Run spend, against the run's cap where the ending carries one.
+
+    The cap is shown on every ending rather than only when it is reached, because
+    unlike the per-question ceiling it is not refreshed by asking again: spend
+    accumulates until the run stops taking questions at all. A reader watching a
+    number climb needs to know what it is climbing towards, and the moment it is
+    worth knowing is before the run ends, not at it.
+    """
+    if not event.run_budget:
+        return f"(run {format_usd(event.run_spend)})"
+    return f"(run {format_usd(event.run_spend)} of {format_usd(event.run_budget)})"
+
+
 def ending_text(event: QuestionEnded) -> str:
     """Why a question ended, what it consumed, and against which limits.
 
@@ -88,7 +116,7 @@ def ending_text(event: QuestionEnded) -> str:
     parts = [
         f"{event.reason.value}{mark}",
         format_usd(event.spend),
-        f"(run {format_usd(event.run_spend)})",
+        _run_clause(event),
         event.model,
         f"{event.tool_calls} tool calls",
     ]

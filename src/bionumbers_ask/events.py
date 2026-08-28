@@ -164,6 +164,11 @@ class QuestionEnded:
     # different thing from one that finished with room to spare, and without this
     # the two are indistinguishable. ADR-0180.
     spend_ceiling: int = 0
+    # What the whole run spends against. Carried so a driver can show how much of
+    # the run is left without reading configuration itself -- a driver that did
+    # would report this process's budget for a run that may have been started
+    # under another, the same way the warning threshold used to.
+    run_budget: int = 0
 
     @property
     def at_spend_ceiling(self) -> bool:

@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from bionumbers_ask import entries_table, web
+from bionumbers_ask import entries_table, messages, web
 from bionumbers_ask.corpus import load
 from bionumbers_ask.repository import CorpusRepository
 from bionumbers_ask.agent import AskAgent
@@ -717,3 +717,98 @@ def test_how_much_went_unlooked_at_is_body_text_not_a_footnote(
     body = [m.value for m in at.markdown]
     assert any("entries retrieved" in line for line in body), body
     assert not any("entries retrieved" in c.value for c in at.caption), "still a caption"
+
+
+# -- what the review found -------------------------------------------------
+
+
+def test_a_citation_with_nothing_retrieved_still_draws_its_row(repo):
+    """The fabricated-citation case, and the one where the table matters most.
+
+    The page warns that an entry was cited without being retrieved; the rows are
+    the evidence a reader would check that against. Guarding on `event.retrieved`
+    dropped the whole table exactly there, so the warning arrived with nothing
+    behind it -- while the terminal drew the row marked as not retrieved.
+    """
+    item = web.item_for(entries(cited=(100001,), retrieved=()), repo)
+    assert item is not None and item.kind is web.Kind.ENTRIES
+    assert [row.bnid for row in item.table.rows] == [100001]
+    assert not item.table.rows[0].retrieved
+    # The same fact reaches the terminal, and has all along.
+    assert entries_table.NOT_RETRIEVED in render(
+        entries(cited=(100001,), retrieved=()), repo
+    )
+
+
+def test_the_summary_is_not_drawn_when_it_would_undercount_what_is_shown(repo):
+    """`rows` counts cited entries too, `retrieved` does not, so a table showing
+    three cited rows against one retrieved read 'showing 4 of 1 entries retrieved'.
+    The terminal guards this; the web called it unconditionally."""
+    item = web.item_for(
+        entries(cited=(100001, 100002, 100003), retrieved=(100010,), matched=1), repo
+    )
+    shown = len(item.table.rows)
+    assert shown > item.table.retrieved, "the case that produced the nonsense"
+    assert "of 1 entries" in entries_table.summarise(
+        shown, item.table.retrieved, item.table.matched, item.table.searches
+    ), "ungated, this is the sentence"
+    assert web.summary_for(item.table, shown) == "", "and the page must not draw it"
+    # Still drawn where it says something true.
+    assert web.summary_for(web.Table(item.table.rows, retrieved=99, matched=99), shown)
+
+
+def test_the_side_panel_holds_the_newest_question_or_nothing(repo):
+    """Not the newest question that had entries. Falling back leaves an earlier
+    question's entries under 'Full entries' with nothing saying they are stale --
+    and the main column's 'every one is in the side panel' then points at a panel
+    that no longer holds them."""
+    with_entries = [web.item_for(entries(), repo)]
+    without = [web.Item(web.Kind.ANSWER, "no entries this time")]
+    assert web.latest_table([("q1", with_entries)]) is not None
+    assert web.latest_table([("q1", with_entries), ("q2", without)]) is None
+
+
+def ending(reason, **kwargs):
+    return QuestionEnded(
+        question_id="q", reason=reason, spend=10, run_spend=10,
+        model="m", tool_calls=0, **kwargs,
+    )
+
+
+@pytest.mark.parametrize("reason", sorted(messages.STOP_THE_RUN, key=lambda r: r.value))
+def test_an_ending_that_stops_the_terminal_stops_the_page(reason):
+    """Same agent, same events, same answer to 'may I ask another?'. The page used
+    to keep the input live and replay an identical refusal for ever, which reads as
+    a broken app rather than a limit reached."""
+    item = web.item_for(ending(reason))
+    assert item.ends_the_run
+    assert web.run_is_over([("q", [item])])
+
+
+def test_a_question_stopped_on_its_own_ceiling_does_not_stop_the_run():
+    """The per-question ceiling refreshes; the run budget does not."""
+    item = web.item_for(ending(EndReason.SPEND_CEILING))
+    assert not item.ends_the_run
+    assert not web.run_is_over([("q", [item])])
+
+
+def test_the_run_budget_shown_is_the_one_the_run_was_measured_against():
+    """Read off the ending rather than out of configuration, so a session resumed
+    in a differently-configured process reports the cap it is actually subject to."""
+    item = web.item_for(ending(EndReason.ANSWERED, run_budget=1_200_000))
+    assert web.run_status([("q", [item])]) == (10, 1_200_000)
+    assert web.run_status([("q", [web.Item(web.Kind.ANSWER, "x")])]) is None
+
+
+def test_keywords_that_are_all_stripped_markup_draw_no_keyword_line(repo):
+    """`_without_markup` empties them, and testing the stored tuple rather than the
+    stripped one rendered a bare 'Keywords: '. Most of the corpus is affected."""
+    def row(keywords):
+        return entries_table.Row(
+            bnid=1, property="p", organism="o", value="1", units="μm",
+            reference="r", cited=True, keywords=keywords,
+        )
+
+    assert row(("",)).keywords, "truthy as stored, which is what the old guard read"
+    assert web.shown_keywords(row(("",))) == [], "and empty once drawn"
+    assert web.shown_keywords(row(("cell", ""))) == ["cell"]

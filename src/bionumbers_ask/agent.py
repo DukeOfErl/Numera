@@ -28,7 +28,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 
 from . import run_ledger
 from .citations import citations
-from .config import Config, NotConfigured, format_usd
+from .config import Config, NotConfigured, format_usd, warning_for
 from .events import (
     Answer,
     AnswerEntries,
@@ -331,13 +331,25 @@ class AskAgent:
     def conversation_length(self, session_id: str) -> int:
         """How many messages a session holds.
 
+        A count of messages, and **not** comparable to `CONVERSATION_BOUND`, which
+        is a number of tokens: one retrieved entry runs from 16 characters to
+        8,023, so the two differ by orders of magnitude and a caller comparing
+        them would find every session empty. Use `conversation_tokens` for how
+        full a session is; this answers whether a turn was recorded at all.
+
         Read straight from the checkpoint. Constructing an agent for this would
         build a chat model, which reads the API key from the environment -- so a
-        driver asking how full a session is would fail wherever that key is
-        absent, to answer a question needing no model at all.
+        driver asking about a session would fail wherever that key is absent, to
+        answer a question needing no model at all.
         """
         with self._saver() as saver:
             return len(_persisted(saver, session_id).get("messages") or [])
+
+    def conversation_tokens(self, session_id: str) -> int:
+        """How full a session is, in the units `CONVERSATION_BOUND` is expressed in."""
+        with self._saver() as saver:
+            persisted = _persisted(saver, session_id)
+            return _conversation_size(persisted, persisted.get("messages") or [])
 
     def run_spend(self) -> int:
         """What this run has spent so far, across every session in it.
@@ -456,12 +468,15 @@ class AskAgent:
             # flagged only if it exceeds the warning threshold. An estimate, never
             # enforcement -- the gate below acts on measured spend alone.
             projected = project_question_cost(self._config, question, RUN_CALL_LIMIT)
-            if projected is not None and projected > self._config.warning_threshold:
+            # Against the ceiling this session actually stops at, not the one this
+            # process is configured with -- a resumed session keeps its own.
+            warning_threshold = warning_for(ceiling)
+            if projected is not None and projected > warning_threshold:
                 trace.record("spend.projected", projected=projected)
                 yield CostProjection(
                     question_id=trace.question_id,
                     projected=projected,
-                    threshold=self._config.warning_threshold,
+                    threshold=warning_threshold,
                 )
 
             ledger = SpendLedger(
@@ -478,7 +493,7 @@ class AskAgent:
                 persist=record_spend,
                 ceiling=ceiling,
                 run_budget=self._config.run_budget,
-                warning_threshold=self._config.warning_threshold,
+                warning_threshold=warning_threshold,
                 question_id=trace.question_id,
                 emit=pending.append,
                 trace=trace,
@@ -596,6 +611,7 @@ class AskAgent:
                             model_calls=model_calls,
                             call_limit=RUN_CALL_LIMIT,
                             spend_ceiling=ceiling,
+                            run_budget=self._config.run_budget,
                             incomplete=True,
                         )
                         return
@@ -615,6 +631,7 @@ class AskAgent:
                             model_calls=model_calls,
                             call_limit=RUN_CALL_LIMIT,
                             spend_ceiling=ceiling,
+                            run_budget=self._config.run_budget,
                             incomplete=True,
                         )
                         return
@@ -625,6 +642,7 @@ class AskAgent:
                             model_calls=model_calls,
                             call_limit=RUN_CALL_LIMIT,
                             spend_ceiling=ceiling,
+                            run_budget=self._config.run_budget,
                         )
                         # Same reasoning as the spend limit above, and it was missing
                         # here: a question stopped at the bound may already have
@@ -652,6 +670,7 @@ class AskAgent:
                             model_calls=model_calls,
                             call_limit=RUN_CALL_LIMIT,
                             spend_ceiling=ceiling,
+                            run_budget=self._config.run_budget,
                             incomplete=True,
                         )
                         return
@@ -682,6 +701,7 @@ class AskAgent:
                             model_calls=model_calls,
                             call_limit=RUN_CALL_LIMIT,
                             spend_ceiling=ceiling,
+                            run_budget=self._config.run_budget,
                             incomplete=True,
                         )
                         return
@@ -727,6 +747,7 @@ class AskAgent:
                 model_calls=model_calls,
                 call_limit=RUN_CALL_LIMIT,
                 spend_ceiling=ceiling,
+                run_budget=self._config.run_budget,
                 incomplete=True,
             )
             return
@@ -739,6 +760,7 @@ class AskAgent:
             model_calls=model_calls,
             call_limit=RUN_CALL_LIMIT,
             spend_ceiling=ceiling,
+            run_budget=self._config.run_budget,
         )
         yield Answer(question_id=trace.question_id, text=answer_text)
         yield from evidence()
@@ -752,4 +774,5 @@ class AskAgent:
             model_calls=model_calls,
             call_limit=RUN_CALL_LIMIT,
             spend_ceiling=ceiling,
+            run_budget=self._config.run_budget,
         )

@@ -127,8 +127,14 @@
   that condition measures our dimension table's coverage, not the corpus's quality, and it is the
   largest single filter (19.4% against 34.6% at the time of writing, of 14,294 entries). Extend the
   `corpus`-marked reporting test rather than writing a script, so the figures are re-derived by a
-  command that already exists. `range_fused` is not emitted by any corpus yet, so compute it the way
-  the ingester does and replace that with the flag once task 8.7 unblocks.
+  command that already exists.
+  - **Recompute once `range_fused` ships.** The 19.4%/34.6% pair used a fused-range population of
+    1,222; `add-corpus-ingestion` has since corrected its number lexer (a caret exponent, a `×10^`
+    mantissa and a thousands separator each read as several numbers, inflating every flag built on
+    the count) and the population is now **1,445 records — 10.1% of the corpus, 23.5% of the 6,146
+    entries carrying a parsed range**. Do not carry the old figures forward. The lesson they
+    recorded is worth keeping in the report: this population has been measured three times, 1,716 →
+    1,222 → 1,445, and a flag is only ever as good as the tokenizer under it.
 
 ## 10. Documentation
 

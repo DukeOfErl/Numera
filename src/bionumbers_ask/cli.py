@@ -19,28 +19,21 @@ from typing import TextIO
 
 from . import entries_table, messages, trace
 from .agent import AskAgent
-from .config import Config
+from .config import Config, NotConfigured
 from .corpus import CorpusUnavailable, load
 from .events import (
     Answer,
     AnswerEntries,
-    EndReason,
     Event,
     QuestionEnded,
     Retrieval,
 )
 from .repository import CorpusRepository
 
+
 # Endings that finish the run rather than the question. Continuing past a spent
 # budget or a full conversation would put the same refusal on every subsequent
 # question, which reads as a broken prompt rather than a limit.
-STOP_THE_RUN = {
-    EndReason.RUN_BUDGET,
-    EndReason.CONVERSATION_BOUND,
-    EndReason.NOT_CONFIGURED,
-}
-
-
 def render(event: Event, repo: CorpusRepository | None = None) -> str | None:
     """One line for an event, or None for one a terminal need not show.
 
@@ -109,7 +102,7 @@ def run(
                     # read them as success. `incomplete` is already the flag that
                     # says the question did not finish as intended.
                     code = 1
-                if event.reason in STOP_THE_RUN:
+                if event.reason in messages.STOP_THE_RUN:
                     return code
     return code
 
@@ -160,12 +153,15 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     trace.to_file(args.trace)
 
+    # Both are misconfiguration a person can fix, not a fault: the message is the
+    # whole point of raising them, and a traceback buries it in a stack the reader
+    # did not cause. `NotConfigured` carries the instructions for the retired
+    # BIONUMBERS_ASK_WARN_USD, which arriving as a crash would waste entirely.
     try:
         repo = CorpusRepository(load(args.corpus))
-    except CorpusUnavailable as exc:
+        config = Config.from_env()
+    except (CorpusUnavailable, NotConfigured) as exc:
         raise SystemExit(f"bionumbers-ask: {exc}") from exc
-
-    config = Config.from_env()
     # The store is created on demand by the checkpointer, but its directory is not.
     directory = os.path.dirname(args.checkpoints)
     if directory:

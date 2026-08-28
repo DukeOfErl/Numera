@@ -12,15 +12,17 @@ a Streamlit script is given no arguments of its own.
 import streamlit as st
 
 from bionumbers_ask import web
+from bionumbers_ask.config import NotConfigured, format_usd
 from bionumbers_ask.corpus import CorpusUnavailable
 
 st.set_page_config(page_title="BioNumbers ask", page_icon=":material/biotech:")
 
 try:
     repo, agent = web.resources()
-except CorpusUnavailable as exc:
-    # An external input, so its absence is a condition to explain rather than a
-    # traceback to show.
+except (CorpusUnavailable, NotConfigured) as exc:
+    # Both are misconfiguration a person can fix, so the message is the point:
+    # Streamlit's exception panel would bury it under a stack the reader did not
+    # cause, and NotConfigured's message is a set of instructions.
     st.error(str(exc))
     st.stop()
 
@@ -37,9 +39,19 @@ for asked, drawn in web.transcript(st.session_state):
     with st.chat_message("assistant"):
         web.show(drawn)
 
+# Some endings close the run: the budget is spent, or the conversation is past its
+# token bound. Asking again cannot come out differently, so the input goes away
+# rather than replaying the same refusal -- the terminal returns from its read loop
+# at exactly these endings.
+if web.run_is_over(web.transcript(st.session_state)):
+    st.error(
+        "This run has stopped taking questions. Start a new session to continue —"
+        " reload with a fresh `?session=` or clear this one.",
+        icon=":material/block:",
+    )
 # `submit_mode="disable"` because a question runs for as long as the agent takes:
 # leaving the input live invites a second question into the middle of the first.
-if question := st.chat_input("Ask a question", submit_mode="disable"):
+elif question := st.chat_input("Ask a question", submit_mode="disable"):
     with st.chat_message("user"):
         st.markdown(web.as_text(question))
     with st.chat_message("assistant"):
@@ -50,3 +62,15 @@ if question := st.chat_input("Ask a question", submit_mode="disable"):
 # main column's table is the first few rows of the same set. Written after the
 # conversation so it reflects the question just asked.
 web.draw_full_entries(web.latest_table(web.transcript(st.session_state)))
+
+# What the run has spent against what it may spend. Shown standing rather than
+# only at the limit, because unlike the per-question ceiling this one is not
+# refreshed by asking again: it climbs until the run stops, and the moment worth
+# knowing it is before that, not at it.
+spent_and_cap = web.run_status(web.transcript(st.session_state))
+if spent_and_cap:
+    spent, cap = spent_and_cap
+    with st.sidebar:
+        st.header("Run budget")
+        st.progress(min(1.0, spent / cap) if cap else 0.0)
+        st.caption(f"{format_usd(spent)} of {format_usd(cap)}")
