@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-from bionumbers_ingest.io import PARTIAL_SUFFIX
+from bionumbers_ingest.io import partial_path_for
 
 #: Characters of the digest carried on each record. Enough to tie a line to its
 #: manifest without putting 64 characters on all 14,294 of them.
@@ -119,7 +119,9 @@ def manifest_path_for(corpus_path: str | Path) -> Path:
     return corpus_path.with_name(corpus_path.name + ".manifest.json")
 
 
-def write_manifest(manifest: Manifest, corpus_path: str | Path) -> Path:
+def write_manifest(
+    manifest: Manifest, corpus_path: str | Path, partial: Path | None = None
+) -> Path:
     """Write the manifest beside the corpus, corpus first.
 
     Called only after the corpus is in place, so a corpus with no manifest is a
@@ -127,10 +129,9 @@ def write_manifest(manifest: Manifest, corpus_path: str | Path) -> Path:
     describing a corpus that does not exist.
     """
     path = manifest_path_for(corpus_path)
-    # The same suffix the corpus writer uses, imported rather than repeated: the
-    # CLI refuses to run when git would track any path a run can create, and it
-    # builds that list from one constant.
-    partial = path.with_name(path.name + PARTIAL_SUFFIX)
+    # The corpus writer's scratch naming, imported rather than repeated: unique
+    # per write, so two concurrent builds cannot share one file.
+    partial = partial or partial_path_for(path)
     try:
         partial.write_text(manifest.to_json(), encoding="utf-8")
         os.replace(partial, path)

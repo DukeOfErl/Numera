@@ -71,7 +71,11 @@ def _export_in(directory: Path) -> Path | None:
 def plan(configured: str | Path) -> CorpusPlan:
     """Report what stands between ``configured`` and a readable corpus.
 
-    Looks only; writes nothing. Four outcomes, in the order they are checked:
+    Looks only; writes nothing. Raises ``ValueError`` for an empty path or a
+    directory — both are misconfigurations that would otherwise resolve to
+    somewhere surprising rather than fail.
+
+    Four outcomes, in the order they are checked:
 
     - the configured path holds a corpus — use it, and **never rebuild it**
     - the configured path is the export itself — the corpus belongs beside it,
@@ -80,7 +84,18 @@ def plan(configured: str | Path) -> CorpusPlan:
       a build would produce the corpus at the configured path
     - neither — nothing to do here, and the caller's own error stands
     """
+    if not str(configured).strip():
+        # `Path("")` is `Path(".")`, so an unset environment variable would make
+        # the working directory the corpus path: an export in the cwd then reads
+        # as buildable, and the run announces "building into ." before the writer
+        # refuses. A caller's empty value is a misconfiguration, and saying so is
+        # more use than resolving it to somewhere surprising.
+        raise ValueError("no corpus path was given")
     configured = Path(configured)
+    if configured.is_dir():
+        # Same class: a directory is not a corpus, and treating it as one searches
+        # its *parent* for the export, which is not what anyone meant by it.
+        raise ValueError(f"{configured} is a directory, not a corpus path")
 
     if configured.is_file() and configured.suffix.lower() != ".xls":
         return CorpusPlan(configured, None)

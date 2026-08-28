@@ -141,3 +141,21 @@ def test_the_export_name_agrees_with_the_consumers_copy():
 
     autobuild = pytest.importorskip("bionumbers_ask.autobuild")
     assert autobuild.EXPORT_NAME == EXPORT_NAME
+
+
+def test_an_empty_path_is_a_misconfiguration_not_the_working_directory():
+    """`Path("")` is `Path(".")`.
+
+    An unset environment variable would otherwise make the working directory the
+    corpus path: an export in the cwd reads as buildable, and the run announces
+    "building into ." before the writer refuses. Reported by the consumer, whose
+    drivers pass "" when the variable is unset.
+    """
+    with pytest.raises(ValueError, match="no corpus path"):
+        plan("")
+
+
+def test_a_directory_is_not_a_corpus_path(tmp_path):
+    """Treating one as a corpus searches its *parent* for the export."""
+    with pytest.raises(ValueError, match="directory"):
+        plan(tmp_path)

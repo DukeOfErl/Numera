@@ -13,6 +13,7 @@ A guard in a driver is a guard for one driver. This one belongs to the operation
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
 
 from bionumbers_ingest.io import PARTIAL_SUFFIX
@@ -75,22 +76,28 @@ def committable_repo_for(output: Path) -> str | None:
     return None if ignored.returncode == 0 else top.stdout.strip()
 
 
-def paths_a_run_can_create(output: Path) -> list[Path]:
-    """Every file an ingest of ``output`` may leave on disk, partials included.
+def paths_a_run_can_create(output: Path, scratch: Sequence[Path] = ()) -> list[Path]:
+    """Every file an ingest of ``output`` may leave on disk, scratch files included.
 
     The manifest is written beside the corpus under a different name, so a rule
     like `bionumbers*.jsonl` ignores one and not the other. And each is written
-    through a `.partial` first, which a suffix-matching ignore rule does not cover
-    either: the partial is unlinked on the way out of an exception, but a SIGKILL,
-    an OOM or a power cut leaves it behind on a committable path.
+    through a scratch file first: it is unlinked on the way out of an exception,
+    but a SIGKILL, an OOM or a power cut leaves it behind on a committable path.
+
+    ``scratch`` is the actual paths the writers will use, which the caller knows
+    because it generates them — they carry a unique component so two concurrent
+    builds cannot share one file, and asking git about a *representative* name
+    instead would be asking about a file that never exists. The generic
+    `<name>.partial` forms stay in the list as well, for a caller that passes
+    nothing and for the ignore rules that are written against them.
     """
     final = [output, manifest_path_for(output)]
-    return final + [p.with_name(p.name + PARTIAL_SUFFIX) for p in final]
+    return final + [p.with_name(p.name + PARTIAL_SUFFIX) for p in final] + list(scratch)
 
 
-def refuse_if_committable(output: Path) -> None:
+def refuse_if_committable(output: Path, scratch: Sequence[Path] = ()) -> None:
     """Raise if any file the run may create is one git would track."""
-    for candidate in paths_a_run_can_create(output):
+    for candidate in paths_a_run_can_create(output, scratch):
         repo = committable_repo_for(candidate)
         if repo is not None:
             raise OutputWouldBeCommitted(candidate, repo)
