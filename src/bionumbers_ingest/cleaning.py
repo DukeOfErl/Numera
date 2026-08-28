@@ -123,10 +123,21 @@ _SEPARATORS_ONLY_RE = re.compile(r"^[\s;,\-–—±+/]*$")
 # the hyphen as a sign invents a negative bound the source never states.
 _UNIT_TAIL_RE = re.compile(r"[A-Za-z%\u00b0\u00c5\u212b/)\]}'\"\u00b2\u00b3]")
 
+# A number written as an explicit mantissa times a power of ten, which is what a
+# *shared* exponent looks like on the second bound of a range. A bare `10^6` is
+# deliberately excluded: it has no separate mantissa, so `1 to 10^6` reads as two
+# numbers and needs no reinterpretation.
+_MANTISSA_EXP_RE = re.compile(
+    rf"^[-+]?{_DIGITS}\s*(?:[eE]\s*[-+]?\d+|{_MULT}\s*10\s*\^\s*[-+]?\d+)$"
+)
+_ANY_EXP_RE = re.compile(r"[eE]\s*[-+]?\d|\^")
+
 #: `parse_flags` entries that mean the stored bounds may fuse two quantities.
 #: The `range_fused` field is derived from exactly these; no other flag implies
 #: it, and consumers read the field rather than this set.
-FUSED_RANGE_FLAGS = frozenset({"range_multi_number", "range_prose_between_bounds"})
+FUSED_RANGE_FLAGS = frozenset(
+    {"range_multi_number", "range_prose_between_bounds", "range_shared_exponent"}
+)
 
 
 def _clean_text(raw: str) -> tuple[str, bool]:
@@ -260,6 +271,37 @@ def _prose_stands_between_bounds(text: str, found: list[tuple[float, int, int]])
     return not _SEPARATORS_ONLY_RE.match(text[a[2] : b[1]])
 
 
+def _shared_exponent_is_ambiguous(text: str, found: list[tuple[float, int, int]]) -> bool:
+    """Does a trailing exponent look like it belongs to both bounds?
+
+    `1-2×10^9` is written once and means 1×10⁹ to 2×10⁹ — the notation the source
+    uses for a range within one order of magnitude. Read literally it gives
+    1 to 2,000,000,000: a lower bound nine orders of magnitude out, on a cell that
+    parses without complaint. Three cells of the export are shaped this way, and
+    each stores a range spanning at least a millionfold.
+
+    Which reading is right cannot be settled from the cell: `1-5e-7` is either
+    "1 to 5e-7" or "1e-7 to 5e-7", and only knowing that an epithelial cell is not
+    a square centimetre decides it. So this is flagged, never corrected — the
+    bounds stay as computed and the record says they are not usable as a
+    measurement. ADR-0230.
+    """
+    if len(found) != 2:
+        return False
+    (v1, s1, e1), (_, s2, e2) = sorted(found, key=lambda t: t[1])
+    first, second = text[s1:e1], text[s2:e2]
+    if _ANY_EXP_RE.search(first):
+        return False  # the first bound carries its own exponent; nothing is shared
+    if not _MANTISSA_EXP_RE.match(second.strip()):
+        return False  # a bare power of ten is a number in its own right
+    if not _SEPARATORS_ONLY_RE.match(text[e1:s2]):
+        return False
+    # Flag only where the two readings actually disagree. `0 - 1.3×10^6` is the
+    # same range either way, so there is no ambiguity to report — and marking a
+    # correct record teaches a reader to ignore the marking.
+    return v1 != 0
+
+
 def _parse_value(raw: str, flags: list[str]) -> float | None:
     """The scalar, or ``None`` with a flag saying why there isn't one.
 
@@ -361,6 +403,8 @@ def _parse_range(
             flags.append("range_multi_number")
         if _prose_stands_between_bounds(normalised, found):
             flags.append("range_prose_between_bounds")
+        if _shared_exponent_is_ambiguous(normalised, found):
+            flags.append("range_shared_exponent")
         values = [v for v, _, _ in found]
         return range_raw, min(values), max(values), table_link
     if table_link is None:

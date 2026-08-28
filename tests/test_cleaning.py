@@ -505,3 +505,48 @@ def test_an_identifier_that_int_would_reject_is_not_a_data_row():
     # "²".isdigit() is True but int("²") raises, and one exception mid-run costs
     # the entire corpus rather than one row.
     assert is_data_row({"bion_id": "²"}) is False
+
+
+@pytest.mark.parametrize(
+    "range_text,low,high",
+    [
+        ("'1-2×10^9", 1.0, 2e9),  # E. coli saturation: means 1e9 .. 2e9
+        ("'0.25-2.5e30", 0.25, 2.5e30),
+        ("'1-5e-7", 5e-7, 1.0),
+    ],
+)
+def test_a_shared_exponent_is_flagged_and_the_bounds_left_alone(range_text, low, high):
+    # The exponent is written once and applies to both bounds, but which reading is
+    # right cannot be settled from the cell — `1-5e-7` is either "1 to 5e-7" or
+    # "1e-7 to 5e-7", and only knowing an epithelial cell is not a square
+    # centimetre decides it. So: flagged, never corrected.
+    r = clean_row({"bion_id": "1", "Range": range_text})
+    assert r.range_low == pytest.approx(low)
+    assert r.range_high == pytest.approx(high)
+    assert "range_shared_exponent" in r.parse_flags
+    assert r.range_fused is True
+
+
+@pytest.mark.parametrize(
+    "range_text",
+    [
+        "'5e-9 to 8e-9",  # both bounds carry their own exponent
+        "'1.2E-8 - 1.7E-8",
+        "'10^-6-10^-9",
+        "'1 to 10^6",  # a bare power of ten is a number, not a shared exponent
+        "'0.44-1.79",
+    ],
+)
+def test_a_range_with_no_shared_exponent_is_not_flagged_for_one(range_text):
+    r = clean_row({"bion_id": "1", "Range": range_text})
+    assert "range_shared_exponent" not in r.parse_flags
+
+
+def test_a_shared_exponent_that_changes_nothing_is_not_flagged():
+    # `0 - 1.3×10^6` reads the same either way, so there is no ambiguity to
+    # report, and marking a correct record teaches a reader to ignore the mark.
+    r = clean_row({"bion_id": "1", "Range": "'0 - 1.3×10^6"})
+    assert r.range_low == pytest.approx(0.0)
+    assert r.range_high == pytest.approx(1.3e6)
+    assert "range_shared_exponent" not in r.parse_flags
+    assert r.range_fused is False

@@ -135,8 +135,17 @@ the result is a range that reads as one measurement and is not. The system SHALL
 rather than correct it: bounds are computed unchanged, and the record carries a flag naming why it is
 suspect.
 
-Two conditions SHALL be flagged: a cell from which more than two numbers were read, and text
-standing between the two numbers that became the bounds. A consumer SHALL be able to read the
+Three conditions SHALL be flagged: a cell from which more than two numbers were read; text standing
+between the two numbers that became the bounds; and a range whose second bound carries an exponent the
+first lacks, where the two readings disagree.
+
+That last is a notation the source uses for a range inside one order of magnitude: `1-2×10^9` writes
+the exponent once and means 1×10⁹ to 2×10⁹, but read literally gives 1 to 2,000,000,000 — a lower
+bound nine orders of magnitude out, on a cell that parses without complaint. Which reading is intended
+cannot be settled from the cell: `1-5e-7` is either "1 to 5e-7" or "1e-7 to 5e-7", and only knowing
+that an epithelial cell is not a square centimetre decides it. The system SHALL therefore flag it and
+leave the bounds as computed, and SHALL NOT flag a cell where the two readings agree — `0 - 1.3×10^6`
+is the same range either way, and marking a correct record teaches a reader to ignore the marking. A consumer SHALL be able to read the
 presence of either flag as "this range is not usable as a measurement" without knowing which
 condition applied.
 
@@ -156,7 +165,19 @@ Correcting the bounds is out of scope for this capability; see `proposal.md` —
 #### Scenario: An ordinary two-number range is not flagged
 
 - **WHEN** a range cell holds exactly two numbers separated only by a separator
-- **THEN** neither flag is present
+- **THEN** no fused-range flag is present
+
+#### Scenario: An exponent written once for both bounds
+
+- **WHEN** a range cell reads `'1-2×10^9`
+- **THEN** the bounds are left as computed
+- **AND** the record is flagged as carrying a shared exponent
+- **AND** the record is not usable as a measurement
+
+#### Scenario: A shared exponent that changes nothing
+
+- **WHEN** a range cell reads `'0 - 1.3×10^6`, where both readings give the same range
+- **THEN** the record is not flagged as carrying a shared exponent
 
 ### Requirement: A row whose range is only a link is kept
 
