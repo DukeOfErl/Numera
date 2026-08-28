@@ -47,6 +47,13 @@ To cite BioNumbers itself:
 
 ### Obtaining a runnable corpus
 
+<!-- TEMPORARY. Delete the prepared-file line and the note under it once both
+     `add-ask-agent` and `add-corpus-ingestion` are merged to `dev`, and promote
+     "Getting the source export yourself" to open this section. From then on the
+     supported route is: download the raw export, run `bionumbers-ingest` on it.
+     This offer exists only because the ingester was unbuilt when a reviewer needed
+     a runnable corpus, and it points at a file nobody has agreed to host. -->
+
 Download the prepared file: **&lt;CORPUS-DOWNLOAD-LINK&gt;** (JSONL, ~20 MB, 14,294 entries).
 
 > **The link above is a placeholder and must be filled in before this README is given to anyone.**
