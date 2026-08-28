@@ -399,3 +399,33 @@ def test_the_build_notice_is_not_drawn_from_inside_the_cache():
     assert body.index("autobuild.corpus_path(") < body.index("web.resources("), (
         "the corpus must be resolved before the cached function is called"
     )
+
+
+def test_a_directory_instead_of_a_corpus_is_explained(tmp_path):
+    """The likeliest typo -- pointing the variable at the folder holding the export
+    rather than at the corpus. The resolver rejects it with a ValueError, which
+    neither driver catches, so it arrived as a traceback and Streamlit's exception
+    panel for what is a one-character mistake."""
+    (tmp_path / "BioNumbers.xls").write_text("export")
+    with pytest.raises(CorpusUnavailable) as raised:
+        autobuild.corpus_path(str(tmp_path), lambda _t: None)
+    said = str(raised.value)
+    assert "is a directory" in said
+    assert "not the directory holding it" in said
+
+
+def test_the_drivers_catch_everything_the_resolver_can_raise(tmp_path):
+    """`plan` raises `ValueError` for what it will not accept and the drivers catch
+    `CorpusUnavailable`, so every such path has to be translated here. Enumerated
+    rather than trusted: a new rejection on the resolver's side would otherwise
+    reach a reader as a stack."""
+    (tmp_path / "BioNumbers.xls").write_text("export")
+    for configured in ("", str(tmp_path), str(tmp_path) + "/"):
+        try:
+            autobuild.corpus_path(configured, lambda _t: None)
+        except CorpusUnavailable:
+            pass
+        except Exception as exc:  # pragma: no cover - the failure this prevents
+            raise AssertionError(
+                f"{configured!r} raised {type(exc).__name__}, which no driver catches"
+            ) from exc

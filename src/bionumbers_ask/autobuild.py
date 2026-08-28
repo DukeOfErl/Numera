@@ -147,7 +147,17 @@ def corpus_path(configured: str, announce: Callable[[str], None]) -> str:
         # corpus in one directory is the arrangement the README now describes.
         return _without_the_ingester(configured)
 
-    found = plan(configured)
+    try:
+        found = plan(configured)
+    except ValueError as exc:
+        # The resolver rejects a path that cannot name a corpus -- a directory,
+        # most likely, from someone who pointed the variable at the folder holding
+        # their export. A `ValueError` out of here is a traceback in the terminal
+        # and Streamlit's exception panel on the page, for what is a typo.
+        raise CorpusUnavailable(
+            f"{exc}. BIONUMBERS_ASK_CORPUS names the corpus file itself, not the "
+            "directory holding it."
+        ) from exc
     if found.is_ready:
         return str(found.corpus_path)
     if not found.needs_build:
