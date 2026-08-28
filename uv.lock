@@ -87,6 +87,9 @@ ask = [
     { name = "langgraph" },
     { name = "streamlit" },
 ]
+ingest = [
+    { name = "pydantic" },
+]
 validator = [
     { name = "anthropic" },
     { name = "httpx" },
@@ -109,9 +112,10 @@ requires-dist = [
     { name = "langgraph", marker = "extra == 'ask'" },
     { name = "lxml", marker = "extra == 'validator'", specifier = ">=5.2" },
     { name = "pint", marker = "extra == 'validator'", specifier = ">=0.24" },
+    { name = "pydantic", marker = "extra == 'ingest'", specifier = ">=2.6" },
     { name = "streamlit", marker = "extra == 'ask'" },
 ]
-provides-extras = ["validator", "ask"]
+provides-extras = ["validator", "ask", "ingest"]
 
 [package.metadata.requires-dev]
 dev = [
