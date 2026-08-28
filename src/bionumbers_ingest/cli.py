@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 from bionumbers_ingest.ingest import VERSION, ingest
+from bionumbers_ingest.provenance import manifest_path_for
 
 DEFAULT_OUTPUT = Path("data/processed/bionumbers.jsonl")
 
@@ -114,10 +115,16 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     output = Path(args.output)
-    repo = committable_repo_for(output)
+    # Both files, not just the corpus: the manifest is written beside it under a
+    # different name, so a rule like `bionumbers*.jsonl` ignores one and not the
+    # other, and the run would leave a committable manifest behind.
+    for candidate in (output, manifest_path_for(output)):
+        repo = committable_repo_for(candidate)
+        if repo is not None:
+            break
     if repo is not None:
         print(
-            f"bionumbers-ingest: refusing to write {output} — git would track it "
+            f"bionumbers-ingest: refusing to write {candidate} — git would track it "
             f"in {repo}.\n"
             f"  The published BioNumbers data has unresolved licensing, so nothing "
             f"derived from it may enter a repository (ADR-0200), and git history is "

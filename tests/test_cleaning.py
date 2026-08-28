@@ -819,3 +819,57 @@ def test_a_range_cell_holding_only_the_text_marker_is_empty_not_unreadable():
     # could not be read.
     assert "range_unparsed" not in clean_row({"bion_id": "1", "Range": "'"}).parse_flags
     assert "range_unparsed" not in clean_row({"bion_id": "1", "Range": ""}).parse_flags
+
+
+@pytest.mark.parametrize(
+    "range_text,low,high",
+    [
+        ("'37 deg C-42 deg C", 37.0, 42.0),  # a unit with a space in it
+        ("'10 cells per ml-20 cells per ml", 10.0, 20.0),
+        ("'0.5 mg dry weight-1.5 mg dry weight", 0.5, 1.5),
+        ("'5%-10%", 5.0, 10.0),  # the single-token case must still work
+        ("'-90 to -60", -90.0, -60.0),  # and a real sign is still a sign
+        ("'-70", -70.0, -70.0),
+    ],
+)
+def test_a_multi_word_unit_before_a_hyphen_is_still_a_separator(range_text, low, high):
+    # The walk stepped over one run of unit characters and one run of spaces, so a
+    # unit containing a space landed it on a letter: `37 deg C-42 deg C` stored
+    # -42 .. 37, an inverted range with a bound the source never wrote.
+    r = clean_row({"bion_id": "1", "Range": range_text})
+    assert r.range_low == pytest.approx(low)
+    assert r.range_high == pytest.approx(high)
+
+
+@pytest.mark.parametrize(
+    "range_text", ["'10 mM to 20 mM", "'12 h to 24 h", "'1.5 μm - 2.5 μm", "'49°C to 55°C"]
+)
+def test_a_unit_written_on_both_bounds_is_not_a_second_quantity(range_text):
+    # One range annotated twice, not two quantities. Marking it would put an
+    # ordinary range behind the predicate a consumer reads as "do not present
+    # this as a measurement".
+    r = clean_row({"bion_id": "1", "Range": range_text})
+    assert "range_prose_between_bounds" not in r.parse_flags
+    assert r.range_fused is False
+
+
+@pytest.mark.parametrize(
+    "range_text",
+    [
+        "'436 metabolites: 720 reactions",  # two different things
+        "'1 cone/2 ganglion cells",
+        "'7.4 in one strain 5.9 in another",
+    ],
+)
+def test_a_genuine_second_quantity_is_still_flagged(range_text):
+    # The repetition test must not suppress the 87% of this flag that are real.
+    r = clean_row({"bion_id": "1", "Range": range_text})
+    assert r.range_fused is True
+
+
+def test_an_overflowing_caret_exponent_is_reported_not_dropped():
+    # It used to vanish from the number list, so a two-bound cell collapsed to a
+    # degenerate range with no flag, while the `e` form was correctly caught.
+    r = clean_row({"bion_id": "1", "Range": "'1-10^400"})
+    assert r.range_low is None and r.range_high is None
+    assert "range_unparsed" in r.parse_flags

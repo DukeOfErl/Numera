@@ -102,7 +102,12 @@ def _token_to_float(tok: str) -> float | None:
         try:
             value = float(mul) ** float(exponent)
             return float(base) * value if base else value
-        except (ValueError, OverflowError):
+        except OverflowError:
+            # Return infinity rather than nothing, so the `_finite` guard reports
+            # an unusable number. Dropping it from the list instead let a
+            # two-bound cell collapse to a degenerate range with no flag at all.
+            return math.inf
+        except ValueError:
             return None
     try:
         return float(mantissa)
@@ -129,6 +134,9 @@ _SEPARATORS_ONLY_RE = re.compile(r"^[\s;,\-–—±+/]*$")
 # these is still a range separator: `5%-10%` and `5g-10g` are ranges, and reading
 # the hyphen as a sign invents a negative bound the source never states.
 _UNIT_TAIL_RE = re.compile(r"[A-Za-z%\u00b0\u00c5\u212b/)\]}'\"\u00b2\u00b3]")
+# A unit as written after a bound: letters and unit symbols, optionally spaced
+# words, but nothing with a digit in it.
+_UNIT_TOKEN_RE = re.compile(r"([A-Za-z\u00b5\u03bc\u00b0\u00c5\u212b%/^]+(?:\s+[A-Za-z/]+)*)")
 
 # A number written as an explicit mantissa times a power of ten, which is what a
 # *shared* exponent looks like on the second bound of a range. A bare `10^6` is
@@ -276,12 +284,19 @@ def _numbers_with_spans(text: str) -> tuple[str, list[tuple[float, int, int]]]:
             continue
         if tok[0] in "+-":
             j = m.start() - 1
-            while j >= 0 and text[j] == " ":
-                j -= 1
-            while j >= 0 and _UNIT_TAIL_RE.match(text[j]):  # step over a trailing unit
-                j -= 1
-            while j >= 0 and text[j] == " ":
-                j -= 1
+            # Walk back over the whole trailing unit, however many words it is.
+            # Stepping over one run of unit characters and one run of spaces
+            # handles `5%-10%` but not `37 deg C-42 deg C`, where the walk lands
+            # on a letter, calls the hyphen a sign, and stores -42 .. 37 — an
+            # inverted range with a negative bound the source never wrote.
+            while True:
+                before = j
+                while j >= 0 and text[j] == " ":
+                    j -= 1
+                while j >= 0 and _UNIT_TAIL_RE.match(text[j]):
+                    j -= 1
+                if j == before:
+                    break
             if j >= 0 and text[j].isdigit():  # sign is really a separator
                 tok = tok[1:]
         value = _token_to_float(tok)
@@ -316,7 +331,30 @@ def _prose_stands_between_bounds(text: str, found: list[tuple[float, int, int]])
     if first is last:
         return False
     a, b = sorted((first, last), key=lambda t: t[1])
-    return not _SEPARATORS_ONLY_RE.match(text[a[2] : b[1]])
+    span = text[a[2] : b[1]]
+    if _SEPARATORS_ONLY_RE.match(span):
+        return False
+    return not _is_the_unit_repeated(span, text[b[2] :])
+
+
+def _is_the_unit_repeated(span: str, after_high: str) -> bool:
+    """Is the text between the bounds just the unit, written on both of them?
+
+    `10 mM to 20 mM` states one range twice-annotated, not two quantities, and
+    marking it would put an ordinary range behind the predicate a consumer reads
+    as "do not present this as a measurement".
+
+    The discriminator is repetition: a unit appears after *both* bounds, while a
+    second quantity names something different each time — `436 metabolites: 720
+    reactions` is two things, `10 mM to 20 mM` is one. Requiring the repeat keeps
+    the 87% of this flag that are genuine second quantities.
+    """
+    token = _UNIT_TOKEN_RE.match(span.lstrip(" ;,-–—±+/"))
+    if token is None:
+        return False
+    return _UNIT_TOKEN_RE.match(after_high.lstrip(" ")) is not None and token.group(
+        1
+    ) == _UNIT_TOKEN_RE.match(after_high.lstrip(" ")).group(1)
 
 
 def _shared_exponent_is_ambiguous(text: str, found: list[tuple[float, int, int]]) -> bool:

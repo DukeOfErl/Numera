@@ -206,3 +206,18 @@ def test_it_writes_outside_any_repository(tmp_path, sample_html):
     out = tmp_path / "plain" / "corpus.jsonl"
     assert main([str(sample_html), "-o", str(out)]) == 0
     assert out.exists()
+
+
+def test_the_guard_covers_the_manifest_as_well_as_the_corpus(tmp_path, sample_html, capsys):
+    # The manifest is written beside the corpus under a different name, so an
+    # ignore rule can cover one and not the other.
+    import subprocess
+
+    repo = tmp_path / "partial"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    (repo / ".gitignore").write_text("bionumbers*.jsonl\n", encoding="utf-8")
+
+    assert main([str(sample_html), "-o", str(repo / "bionumbers.jsonl")]) == 3
+    assert "manifest" in capsys.readouterr().err
+    assert not (repo / "bionumbers.jsonl.manifest.json").exists()

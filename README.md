@@ -31,7 +31,8 @@ committable path.
 ## Getting the export
 
 Fetch it from BioNumbers yourself, as published: a single HTML `<table>` served with an `.xls`
-extension, around 27 MB, 14,297 data rows over 14 columns. Do not convert, rename or pre-process it —
+extension, around 27 MB: 14,297 rows over 14 columns, of which 14,294 are data and three are
+trailing padding. Do not convert, rename or pre-process it —
 the ingester reads it exactly as published, and its quirks are the reason this code exists.
 
 **Cite BioNumbers if you publish anything derived from it.** The database asks to be cited as
@@ -82,7 +83,7 @@ stable contract, and a consumer should read those rather than match on flag name
 
 - **`range_fused`** — the stored bounds may come from two different quantities. Bounds are the lowest
   and highest number in the cell, so a cell naming a second measurement contributes a bound to the
-  first, and the result reads as one measurement while spanning two. 1,461 records.
+  first, and the result reads as one measurement while spanning two. 1,307 records.
 - **`range_qualified`** — the source did not state a closed interval. `<0.001` becomes the interval
   from 0.001 to 0.001, which asserts an exact equality where the source said *less than*; `~5`
   likewise loses its hedge. 2,233 records.
