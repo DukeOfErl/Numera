@@ -16,7 +16,8 @@ Two branches that each number ADRs from the current highest id will both claim t
 |---|---|
 | `add-grounding-validator` | `0040`–`0090` |
 | `add-ask-agent` | `0100`–`0190`, `0260`–`0290` |
-| `add-corpus-ingestion` | `0200`–`0250` — `0200`–`0240` written, `0250` free |
+| `add-corpus-ingestion` | `0200`–`0250` — all written |
+| `add-corpus-autobuild` | `0300`–`0340` |
 
 **This table is the authority, not a scan of `docs/decisions/`.** A scan cannot see uncommitted ADRs on another branch: `git ls-tree` reads committed trees, and each branch is checked out in its own worktree, so a number can be spent and still invisible from here. `add-ask-agent` has written `0100`–`0190` and holds a second range, `0260`–`0290`, because its first block ran out while the change was still open. A block is extended rather than renumbered: the ADRs already written are referenced from code comments and commit messages, and renumbering would break every one of those references to buy contiguity that nothing needs. Its first block was also uncommitted for two sessions, which is how a scan came to report those numbers as free. Never conclude a number is free because no file for it turns up.
 
@@ -109,7 +110,8 @@ Five things about it that reading one module will not tell you:
   that list by name, where a rename would have turned them silently false. ADR-0230.
 - **The git-tracking refusal is in `guard.py`, called by `ingest()`, not by the command.** It lived
   in `cli.py` and so protected one caller; the operation invoked as a library wrote 20 MB onto a
-  committable path in silence. A guard in a driver is a guard for one driver.
+  committable path in silence. A guard in a driver is a guard for one
+  driver; ADR-0250.
 - **`cleaning.py` has been the densest source of defects in the project**, and every one of them
   produced a plausible number rather than an error. Seven review passes, fault seeding and mutation
   testing each found more; treat a change there as needing all three, and **measure both directions**
@@ -149,3 +151,5 @@ Two techniques, both scoped by consequence: spend the effort where a silent bug 
 **Mutation testing** is the automated complement, and finds what seeding structurally cannot — code no test can distinguish. Run it at the end of a task, over the module just touched, via the **`mutation-test-module`** skill, which carries the recipe and this project's three setup gotchas. Not over the whole package (2,000+ mutants, hours) and never as a CI gate.
 
 Its yield decays, and that is expected rather than a failure: a module's first run finds real gaps, later runs on settled code return mostly equivalent mutants. Once two or three consecutive runs turn up nothing but string-sentinel and default-argument survivors, stop running it on that area and reach for it again only when the code changes substantially. It is a tool for new and reworked code, not a standing gate.
+
+**Yield decays per instrument, not absolutely, and that distinction has already been paid for.** `cleaning.py` was reviewed by reading seven times, with findings each time and no downward trend: 9, 11, 6, 5, 5, 5, 7. The sixth pass caught a defect the fifth pass had *introduced*, and the seventh — after mutation testing had run over the same module — still found a HIGH. Reading the same code again is the instrument with the fastest decay; a lens it cannot use (mutation testing, a scoped adversarial review, a question about a second caller) resets the yield. So "the last pass found little" is evidence about the instrument, not about the code, and the move is to switch lenses rather than to conclude the module is clean.

@@ -66,8 +66,9 @@ any release; `1.0.0` when it stabilizes.
 - **`range_qualified`** on every record: the source did not state a closed
   interval. `<0.001` stored as the interval 0.001–0.001 asserts an exact equality
   where the source said *less than*. 2,233 records.
-- The command **refuses to run where git would track its output**, naming the
-  repository, rather than writing unlicensed data onto a committable path.
+- **The ingest operation refuses to run where git would track its output**, naming
+  the repository, rather than writing unlicensed data onto a committable path. In
+  the operation rather than the command, so every caller inherits it ([ADR-0250]).
 
 ### Changed
 
@@ -108,3 +109,4 @@ number rather than an error:
 [ADR-0220]: docs/decisions/0220-jsonl-only.md
 [ADR-0230]: docs/decisions/0230-flag-and-count-never-correct.md
 [ADR-0240]: docs/decisions/0240-stamp-every-ingest.md
+[ADR-0250]: docs/decisions/0250-guards-belong-to-the-operation.md
