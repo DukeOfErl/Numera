@@ -8,7 +8,21 @@ This project follows the user-level documentation-upkeep conventions with one su
 
 ## Parallel branches and ADR numbers
 
-Two branches that each number ADRs from the current highest id will both claim the same numbers, and the second to merge conflicts. Before parallel work starts, give each branch a disjoint block and record the allocation in that change's `tasks.md`. Currently allocated: `add-grounding-validator` holds `0040`–`0090`, `add-ask-agent` holds `0100`–`0150`.
+Two branches that each number ADRs from the current highest id will both claim the same numbers, and the second to merge conflicts. Before parallel work starts, give each branch a disjoint block.
+
+**This file is the allocation's source of truth.** Recording it only in each change's `tasks.md` is what let the blocks drift: no branch can see another's copy, so a change that outgrows its block updates its own note and nothing else, and the next branch allocates against a stale ceiling. Keep the block in the change's `tasks.md` too — that is where someone implementing reads it — but reconcile against this table, and widen a block here first.
+
+| Change | Block |
+|---|---|
+| `add-grounding-validator` | `0040`–`0090` |
+| `add-ask-agent` | `0100`–`0190` |
+| `add-corpus-ingestion` | `0200`–`0250` |
+
+`0000`–`0030` exist as files; everything above is reserved, not yet written. `add-ask-agent` was originally given `0100`–`0150` and has since planned `0160` and `0170`, which is why its block is wider here than in its own `tasks.md` — that note and `add-grounding-validator`'s both still say `0150` and should be corrected when each next merges.
+
+## Running the tests
+
+`pytest` is offline by default: `addopts = "-m 'not network'"` deselects the `network` marker, so a green run may never have executed the tests that hit a real service. Run those explicitly with `pytest -m network`.
 
 ## Testing the tests
 
