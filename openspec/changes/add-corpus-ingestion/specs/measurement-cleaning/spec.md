@@ -68,10 +68,17 @@ never be read as a separator.
 `+/-`. The system SHALL read it as the interval from `value − Δ` to `value + Δ`, and SHALL record
 that the range came from an uncertainty.
 
-Where the value column is empty and the range cell is entirely one `mean±sd` expression, the system
-SHALL recover the mean from the range cell and derive the same interval. Where the value column is
-empty and the cell holds more than one measurement, the system SHALL record no bounds and flag the
-row rather than collapsing several measurements into one range.
+The deviation is the number that **follows** the sign. Taking the first number in the cell instead
+reads `(n=3) ±1.15` as a deviation of 3, and produces an interval that appears nowhere in the source.
+
+Where the range cell is entirely one `mean±sd` expression, the system SHALL recover the mean from that
+cell and derive the interval from it — **whether or not the value column is filled**. Gating this on an
+empty value column mis-parses the cell when both are present, using the mean itself as the deviation.
+
+Where the cell holds **more than one** plus-or-minus expression it holds more than one measurement, and
+the system SHALL record no bounds and flag the row rather than deriving one interval from several. This
+too SHALL hold whether or not the value column is filled: 138 rows of the export are such cells, and
+the fused-range flags are never reached on this branch, so a collapsed interval would ship unmarked.
 
 #### Scenario: Uncertainty around a value
 
@@ -87,9 +94,38 @@ row rather than collapsing several measurements into one range.
 
 #### Scenario: Two measurements in one cell
 
-- **WHEN** the value is empty and the range cell reads `'7.4±0.3 one face 5.9±0.3 other face`
-- **THEN** no bounds are recorded
-- **AND** the row is flagged as a plus-or-minus range with no value
+- **WHEN** the range cell reads `'7.4±0.3 one face 5.9±0.3 other face`
+- **THEN** no bounds are recorded, whether or not the value column is filled
+- **AND** the row is flagged as holding more than one measurement
+
+#### Scenario: The deviation is the number after the sign
+
+- **WHEN** the value is `7.4` and the range cell reads `'(n=3) ±1.15`
+- **THEN** the bounds are `6.25` and `8.55`, not an interval derived from the `3`
+
+#### Scenario: A mean and deviation alongside a filled value column
+
+- **WHEN** the value is `-3.26` and the range cell reads `'-3.26±0.41`
+- **THEN** the bounds are `-3.67` and `-2.85`
+
+### Requirement: A value cell that is not a number does not become one
+
+The system SHALL emit a scalar only from a cell that is a number. Where a number can be recovered from
+a cell that says more than that — `<2` is a bound, `2-3` is a range — the system SHALL recover it and
+SHALL flag the record, because emitting `<2` as an exact `2` is the unsourced correction this project
+exists to avoid. A cell yielding no number at all SHALL be flagged as unparsed. A cell parsing to a
+non-finite number SHALL be treated as no measurement: `nan` and `inf` both parse, neither is a
+measurement, and neither survives JSON.
+
+#### Scenario: A bound written in the value column
+
+- **WHEN** a value cell reads `<2`
+- **THEN** the record carries `2` and a flag saying the number was recovered from other text
+
+#### Scenario: A non-finite value
+
+- **WHEN** a value cell reads `nan` or `inf`
+- **THEN** the record carries no value, and is flagged as unparsed
 
 ### Requirement: A range that may fuse two quantities is flagged
 

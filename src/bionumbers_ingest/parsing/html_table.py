@@ -10,11 +10,16 @@ markup arrives HTML-escaped (``&lt;IMG SRC="/WF_SQL_XSRF.html"&gt;``), and a
 reader that unescaped it here would hand cleaning a live tag and destroy the
 evidence of which form the source used. Unescaping happens once, in cleaning,
 before markup is stripped. See ADR-0230 and `specs/measurement-cleaning`.
+
+Three ways a file can be wrong end the read loudly rather than quietly, because
+each of them otherwise produces a short or shifted corpus that loads cleanly:
+a truncated table, a row whose cell count disagrees with the header, and — when
+the caller supplies the names it expects — a renamed column.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -35,6 +40,11 @@ class _TableParser(HTMLParser):
         self._row: list[str] | None = None
         self._in_cell = False
         self._buf: list[str] = []
+
+    @property
+    def incomplete(self) -> bool:
+        """A row or a cell was still open when the input ran out."""
+        return self._row is not None or self._in_cell
 
     def handle_starttag(self, tag: str, attrs: object) -> None:
         if tag == "tr":
@@ -71,21 +81,18 @@ class _TableParser(HTMLParser):
             self._buf.append(f"&#{name};")
 
 
-def iter_rows(path: str | Path, limit: int | None = None) -> Iterator[dict[str, str]]:
-    """Yield each row after the header as ``{header: raw_cell}``.
+def _iter_raw_rows(path: str | Path) -> Iterator[list[str]]:
+    """Yield every complete ``<tr>`` as a list of raw cells.
 
-    Reads the file in chunks and drains completed rows after each one, so memory
-    stays flat over a 27 MB export rather than growing with it. Stops once
-    ``limit`` rows have been yielded; ``None`` or ``0`` means every row.
+    Reads in chunks and drains completed rows after each one, so memory stays
+    flat over a 27 MB export rather than growing with it.
 
-    Raises ``ValueError`` if a row's cell count does not match the header's. Every
-    row of the published export carries exactly 14 cells, so a mismatch is a
-    malformed file — and zipping a short row against the headers would drop the
-    missing columns without a word, producing a record that looks complete.
+    Raises ``ValueError`` if the input ends mid-row or mid-cell. Without that
+    check a truncated download — an interrupted transfer, a half-written file —
+    yields every row it managed to parse and stops, producing a short corpus that
+    loads cleanly and is missing entries nobody can enumerate.
     """
     parser = _TableParser()
-    headers: list[str] | None = None
-    yielded = 0
     with open(path, encoding="utf-8", errors="replace") as fh:
         while True:
             chunk = fh.read(_CHUNK)
@@ -93,16 +100,57 @@ def iter_rows(path: str | Path, limit: int | None = None) -> Iterator[dict[str, 
                 break
             parser.feed(chunk)
             while parser.rows:
-                row = parser.rows.pop(0)
-                if headers is None:
-                    headers = row
-                    continue
-                if len(row) != len(headers):
-                    raise ValueError(
-                        f"row {yielded + 1} has {len(row)} cells, "
-                        f"but the header declares {len(headers)} columns"
-                    )
-                yield dict(zip(headers, row, strict=True))
-                yielded += 1
-                if limit and yielded >= limit:
-                    return
+                yield parser.rows.pop(0)
+    parser.close()
+    while parser.rows:
+        yield parser.rows.pop(0)
+    if parser.incomplete:
+        raise ValueError(
+            "the table ends mid-row: the source file appears truncated, "
+            "so any corpus built from it would be silently short"
+        )
+
+
+def iter_rows(
+    path: str | Path,
+    limit: int | None = None,
+    expect_headers: Sequence[str] | None = None,
+) -> Iterator[dict[str, str]]:
+    """Yield each row after the header as ``{header: raw_cell}``.
+
+    Stops once ``limit`` rows have been yielded; ``None`` or ``0`` means every row.
+
+    ``expect_headers`` makes the caller's assumption about the schema checkable.
+    Cleaning reads fields by name, so a renamed column is invisible to it: rename
+    the identifier column and every row fails the is-it-data test, producing an
+    empty corpus from a run that reports no error at all; rename any other and
+    that field is ``None`` on every record with nothing flagged. Pass the names
+    you rely on and a rename becomes a failure instead.
+
+    Raises ``ValueError`` if a row's cell count does not match the header's. Every
+    row of the published export carries exactly 14 cells, so a mismatch is a
+    malformed file — and zipping a short row against the headers would drop the
+    missing columns without a word, producing a record that looks complete.
+    """
+    headers: list[str] | None = None
+    yielded = 0
+    for row in _iter_raw_rows(path):
+        if headers is None:
+            headers = row
+            if expect_headers is not None and list(headers) != list(expect_headers):
+                missing = [h for h in expect_headers if h not in headers]
+                unexpected = [h for h in headers if h not in expect_headers]
+                raise ValueError(
+                    f"the export's columns are not the ones expected: "
+                    f"missing {missing}, unexpected {unexpected}"
+                )
+            continue
+        if len(row) != len(headers):
+            raise ValueError(
+                f"row {yielded + 1} has {len(row)} cells, "
+                f"but the header declares {len(headers)} columns"
+            )
+        yield dict(zip(headers, row, strict=True))
+        yielded += 1
+        if limit and yielded >= limit:
+            return

@@ -90,6 +90,30 @@ manifest beside it SHALL be treated as the product of a run that did not finish.
 - **WHEN** a run applied a row limit
 - **THEN** the manifest records the limit that was applied
 
+### Requirement: A source that cannot be read whole is an error
+
+Two ways the source can be wrong produce a corpus that is short or shifted while the run reports
+success, and both SHALL end the run instead.
+
+A file that ends mid-row is truncated — an interrupted transfer, a half-written download. Reading it
+yields every row that parsed and stops, producing exactly the short corpus that loads cleanly and is
+missing entries nobody can enumerate. The system SHALL detect an unterminated table and fail.
+
+Cleaning reads columns by name, so a renamed column is invisible to it: rename the identifier column
+and every row fails the is-it-data test, so the run writes an **empty** corpus and reports no error at
+all; rename any other and that field is absent from every record with nothing flagged. The system
+SHALL state the column names it relies on and SHALL fail when the source does not carry them.
+
+#### Scenario: A truncated source
+
+- **WHEN** the source file ends mid-row
+- **THEN** the run fails rather than writing the rows it managed to read
+
+#### Scenario: A renamed column
+
+- **WHEN** the source's header row does not carry the expected column names
+- **THEN** the run fails, naming which are missing and which are unexpected
+
 ### Requirement: A flag that cannot fire is worse than no flag
 
 A flag whose condition is unreachable reports zero and reads as "this does not occur in the source".

@@ -76,7 +76,9 @@ _GREEK_MU = "μ"  # μ GREEK SMALL LETTER MU
 # number rather than delimiters between numbers.
 _MINUS = r"[-+\u2212\u2013]"  # ASCII, unicode minus, en dash — all signs inside an exponent
 _MULT = r"[\u00d7x\u0445*]"  # ×, Latin x, Cyrillic х, asterisk
-_DIGITS = r"\d+(?:,\d{3})*(?:\.\d+)?"  # 3-digit groups only, so `1,2` stays two numbers
+# 3-digit groups only, so `1,2` stays two numbers; the `\.\d+` alternative catches
+# a number written without its leading zero, which would otherwise lose the point
+_DIGITS = r"(?:\d+(?:,\d{3})*(?:\.\d+)?|\.\d+)"
 _CARET = rf"\s*\^\s*{_MINUS}?\d+"
 _NUM_RE = re.compile(
     rf"""
@@ -109,13 +111,17 @@ def _token_to_float(tok: str) -> float | None:
 
 _URL_RE = re.compile(r"https?://\S+")
 _PM_RE = re.compile(r"±|\+/-|\+-")  # plus/minus: ±X means value ± X
-_NUM = r"\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
+_NUM = r"(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][-+]?\d+)?"
 # a single "mean±sd" expression filling the whole cell (e.g. "-3.26±0.41"); the
 # full-string anchor keeps multi-measurement cells from matching
 _MEAN_SD_RE = re.compile(rf"^([-+]?{_NUM})\s*(?:±|\+/-|\+-)\s*({_NUM})$")
 # what may stand between two bounds without being a second quantity: the
 # separators _extract_numbers normalises to, and whitespace
 _SEPARATORS_ONLY_RE = re.compile(r"^[\s;,\-–—±+/]*$")
+# Characters that can trail a number as part of its unit. A hyphen after one of
+# these is still a range separator: `5%-10%` and `5g-10g` are ranges, and reading
+# the hyphen as a sign invents a negative bound the source never states.
+_UNIT_TAIL_RE = re.compile(r"[A-Za-z%\u00b0\u00c5\u212b/)\]}'\"\u00b2\u00b3]")
 
 #: `parse_flags` entries that mean the stored bounds may fuse two quantities.
 #: The `range_fused` field is derived from exactly these; no other flag implies
@@ -213,6 +219,10 @@ def _numbers_with_spans(text: str) -> tuple[str, list[tuple[float, int, int]]]:
             j = m.start() - 1
             while j >= 0 and text[j] == " ":
                 j -= 1
+            while j >= 0 and _UNIT_TAIL_RE.match(text[j]):  # step over a trailing unit
+                j -= 1
+            while j >= 0 and text[j] == " ":
+                j -= 1
             if j >= 0 and text[j].isdigit():  # sign is really a separator
                 tok = tok[1:]
         value = _token_to_float(tok)
@@ -236,24 +246,46 @@ def _prose_stands_between_bounds(text: str, found: list[tuple[float, int, int]])
     """
     if len(found) < 2:
         return False
-    low = min(found, key=lambda t: t[0])
-    high = max(found, key=lambda t: t[0])
-    first, second = sorted((low, high), key=lambda t: t[1])
-    return not _SEPARATORS_ONLY_RE.match(text[first[2] : second[1]])
+    # Take the EARLIEST occurrence of the low value and the LATEST of the high one.
+    # Selecting by value alone returns the same element when the two extremes are
+    # equal — `5 in one strain 5 in another` — leaving an empty span to inspect and
+    # shipping two unrelated quantities as one measurement.
+    lowest = min(value for value, _, _ in found)
+    highest = max(value for value, _, _ in found)
+    first = next(t for t in found if t[0] == lowest)
+    last = next(t for t in reversed(found) if t[0] == highest)
+    if first is last:
+        return False
+    a, b = sorted((first, last), key=lambda t: t[1])
+    return not _SEPARATORS_ONLY_RE.match(text[a[2] : b[1]])
 
 
 def _parse_value(raw: str, flags: list[str]) -> float | None:
+    """The scalar, or ``None`` with a flag saying why there isn't one.
+
+    A cell that is not simply a number does not yield one silently: `<2` is a
+    bound, not a measurement, and emitting it as an exact `2.0` is the unsourced
+    correction ADR-0230 forbids. Recovering a number from such a cell is still
+    better than dropping the row, so it is recovered *and* flagged.
+    """
     text, _ = _clean_text(raw)
     if not text:
         return None
     try:
-        return float(text)
+        value = float(text)
     except ValueError:
         nums = _extract_numbers(text)
         if nums:
+            flags.append("value_recovered_from_text")
             return nums[0]
         flags.append("value_unparsed")
         return None
+    if value != value or value in (float("inf"), float("-inf")):
+        # `float("nan")` and `float("inf")` both parse. Neither is a measurement,
+        # and neither survives JSON: they would serialize as invalid tokens.
+        flags.append("value_unparsed")
+        return None
+    return value
 
 
 def _parse_range(
@@ -276,27 +308,47 @@ def _parse_range(
 
     table_link = None
     if "Table link" in text or _URL_RE.search(text):
-        m = _URL_RE.search(text)
-        if m:
-            table_link = m.group()
-            text = text[: m.start()]  # strip URL so its digits don't parse as numbers
+        urls = _URL_RE.findall(text)
+        if urls:
+            table_link = urls[0]
+            # Excise the URLs and keep the rest. Truncating from the first URL
+            # onward instead would silently drop bounds written after the link.
+            text = _URL_RE.sub(" ", text)
         flags.append("range_is_link")
         text = re.sub(r"Table link\s*-?\s*", "", text).strip()
 
-    if _PM_RE.search(text):
+    signs = list(_PM_RE.finditer(text))
+    if signs:
         flags.append("range_plus_minus")
+
+        # A cell that is entirely one "mean±sd" expression carries its own centre,
+        # so it is read the same way whether or not the value column is filled.
+        # Gating this on an empty value column mis-parsed the cell when both were
+        # present, using the mean itself as the deviation.
+        whole = _MEAN_SD_RE.match(text.strip())
+        if whole:
+            mean, delta = float(whole.group(1)), abs(float(whole.group(2)))
+            flags.append("range_mean_sd_embedded")
+            return range_raw, mean - delta, mean + delta, table_link
+
+        # More than one plus-or-minus is more than one measurement. Deriving one
+        # interval from it fuses them, and the fused-range flags never see this
+        # branch, so the result would ship unmarked.
+        if len(signs) > 1:
+            flags.append("range_multi_measurement")
+            if value is None:
+                flags.append("range_plus_minus_no_value")
+            return range_raw, None, None, table_link
+
+        # The deviation is the number that FOLLOWS the sign. Taking the first
+        # number in the cell instead reads "(n=3) ±1.15" as a deviation of 3.
         if value is not None:
-            deltas = _extract_numbers(_PM_RE.sub(" ", text))
+            deltas = _extract_numbers(text[signs[0].end() :])
             if deltas:
                 delta = abs(deltas[0])
                 return range_raw, value - delta, value + delta, table_link
             return range_raw, None, None, table_link
-        # no value column: recover a single embedded "mean±sd" cell if that's all it is
-        m = _MEAN_SD_RE.match(text.strip())
-        if m:
-            mean, delta = float(m.group(1)), abs(float(m.group(2)))
-            flags.append("range_mean_sd_embedded")
-            return range_raw, mean - delta, mean + delta, table_link
+
         flags.append("range_plus_minus_no_value")
         return range_raw, None, None, table_link
 
@@ -330,7 +382,9 @@ def is_data_row(raw: dict[str, str]) -> bool:
     non-breaking space and whose other cells are empty.
     """
     text, _ = _clean_text(raw.get("bion_id", ""))
-    return text.isdigit()
+    # `isascii()` as well: "²".isdigit() is True but int("²") raises, and by the
+    # writer's design one exception mid-run costs the entire corpus, not one row.
+    return text.isascii() and text.isdigit()
 
 
 def clean_row(raw: dict[str, str]) -> BioNumberRecord:

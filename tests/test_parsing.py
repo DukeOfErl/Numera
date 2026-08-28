@@ -105,3 +105,40 @@ def test_a_row_with_too_MANY_cells_is_also_an_error(tmp_path):
     )
     with pytest.raises(ValueError, match="3 cells.*2 columns"):
         list(iter_rows(bad))
+
+
+def test_a_truncated_table_is_an_error_not_a_short_corpus(tmp_path):
+    # An interrupted download yields every row it managed to parse and stops. That
+    # is the failure the writer's own design calls unaffordable: a short corpus
+    # loads cleanly and is missing entries nobody can enumerate.
+    cut = tmp_path / "truncated.html"
+    cut.write_text(
+        "<table><tr><td>a</td><td>b</td></tr>"
+        "<tr><td>1</td><td>2</td></tr>"
+        "<tr><td>3</td><td>4",  # ends mid-row
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="truncated"):
+        list(iter_rows(cut))
+
+
+def test_a_well_formed_table_is_not_reported_as_truncated(sample_html):
+    assert len(list(iter_rows(sample_html))) == 7
+
+
+def test_expected_headers_are_checked_when_the_caller_supplies_them(sample_html):
+    from bionumbers_ingest.model import EXPECTED_HEADERS
+
+    assert len(list(iter_rows(sample_html, expect_headers=EXPECTED_HEADERS))) == 7
+
+
+def test_a_renamed_column_is_an_error_rather_than_an_empty_corpus(tmp_path):
+    # Renaming the identifier column makes every row fail the is-it-data test, so
+    # the run writes an empty corpus and reports no error at all.
+    renamed = tmp_path / "renamed.html"
+    renamed.write_text(
+        "<table><tr><td>id</td><td>Value</td></tr><tr><td>1</td><td>2</td></tr></table>",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="not the ones expected"):
+        list(iter_rows(renamed, expect_headers=("bion_id", "Value")))

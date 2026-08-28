@@ -17,6 +17,30 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+#: The export's 14 columns, in order, as `clean_row` expects to find them.
+#:
+#: Cleaning reads fields by name, so a renamed column is invisible to it: rename
+#: the identifier column and every row fails the is-it-data test, producing an
+#: empty corpus from a run that reports no error; rename any other and that field
+#: is `None` on every record with nothing flagged. Pass this to `iter_rows` as
+#: `expect_headers` and a rename becomes a failure instead of a silent one.
+EXPECTED_HEADERS = (
+    "bion_id",
+    "Properties",
+    "Organism",
+    "Value",
+    "Range",
+    "Units",
+    "Reference",
+    "Reference PubMed ID",
+    "Primary Source",
+    "Primary Source PubMed ID",
+    "Measurement Method",
+    "Comments",
+    "Entered By",
+    "Keywords",
+)
+
 
 class BioNumberRecord(BaseModel):
     """One cleaned BioNumbers row.

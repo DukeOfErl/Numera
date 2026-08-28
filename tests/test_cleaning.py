@@ -415,3 +415,93 @@ def test_link_only_row_over_the_fixture(sample_html):
     assert r.range_low is None and r.range_high is None
     assert "range_is_link" in r.parse_flags
     assert r.range_fused is False
+
+
+# --- defects found by code review, each reproduced before it was fixed --------
+
+
+@pytest.mark.parametrize(
+    "row,low,high,flag",
+    [
+        # The deviation is the number AFTER the sign, not the first in the cell.
+        ({"Value": "7.4", "Range": "'(n=3) ±1.15"}, 7.4 - 1.15, 7.4 + 1.15, None),
+        # A whole-cell mean±sd is read that way whether or not Value is filled.
+        # Gated on an empty Value, this used the mean itself as the deviation.
+        ({"Value": "-3.26", "Range": "'-3.26±0.41"}, -3.67, -2.85, "range_mean_sd_embedded"),
+    ],
+)
+def test_the_plus_minus_deviation_is_the_number_after_the_sign(row, low, high, flag):
+    r = clean_row({"bion_id": "1", **row})
+    assert r.range_low == pytest.approx(low)
+    assert r.range_high == pytest.approx(high)
+    if flag:
+        assert flag in r.parse_flags
+
+
+def test_more_than_one_plus_minus_is_more_than_one_measurement():
+    # 138 records of the export. With a value present this used to fuse them into
+    # one interval, and the fused-range flags never see this branch, so it shipped
+    # unmarked as an exact measurement.
+    r = clean_row({"bion_id": "1", "Value": "7.4", "Range": "'7.4±0.3 one face 5.9±0.3 other face"})
+    assert r.range_low is None and r.range_high is None
+    assert "range_multi_measurement" in r.parse_flags
+
+
+def test_a_value_that_is_not_a_bare_number_is_flagged():
+    # `<2` is a bound, not a measurement; emitting an exact 2.0 is the unsourced
+    # correction ADR-0230 forbids.
+    r = clean_row({"bion_id": "1", "Value": "&lt;2"})
+    assert r.value == pytest.approx(2.0)
+    assert "value_recovered_from_text" in r.parse_flags
+
+
+@pytest.mark.parametrize("text", ["nan", "inf", "-inf"])
+def test_a_non_finite_value_is_not_a_measurement(text):
+    # float() accepts all three; none survives JSON or means anything here.
+    r = clean_row({"bion_id": "1", "Value": text})
+    assert r.value is None
+    assert "value_unparsed" in r.parse_flags
+
+
+def test_bounds_written_after_the_link_are_not_discarded():
+    # Truncating from the URL onward dropped them with no flag. 10 real records.
+    r = clean_row({"bion_id": "1", "Range": "'Table link - http://x.invalid/a.pdf 0.44-1.79"})
+    assert r.range_low == pytest.approx(0.44)
+    assert r.range_high == pytest.approx(1.79)
+    assert "range_is_link" in r.parse_flags
+
+
+def test_equal_extremes_do_not_blind_the_prose_check():
+    # min() and max() by value return the SAME element here, leaving an empty span
+    # to inspect and shipping two unrelated quantities as one measurement.
+    r = clean_row({"bion_id": "1", "Range": "'5 in one strain 5 in another"})
+    assert r.range_fused is True
+    assert "range_prose_between_bounds" in r.parse_flags
+
+
+def test_a_number_without_a_leading_zero_keeps_its_decimal_point():
+    # `.5` tokenised as 5, giving bounds 1.5..5.0 — a bound 10x off, and swapped.
+    r = clean_row({"bion_id": "1", "Range": "'.5-1.5"})
+    assert r.range_low == pytest.approx(0.5)
+    assert r.range_high == pytest.approx(1.5)
+
+
+@pytest.mark.parametrize(
+    "range_text,low,high",
+    [
+        ("'5%-10%", 5.0, 10.0),  # invented a low bound of -10 before the fix
+        ("'5g-10g", 5.0, 10.0),
+        ("'-90 to -60", -90.0, -60.0),  # a real sign must still be a sign
+        ("'-70", -70.0, -70.0),
+    ],
+)
+def test_a_hyphen_after_a_unit_is_a_separator_not_a_sign(range_text, low, high):
+    r = clean_row({"bion_id": "1", "Range": range_text})
+    assert r.range_low == pytest.approx(low)
+    assert r.range_high == pytest.approx(high)
+
+
+def test_an_identifier_that_int_would_reject_is_not_a_data_row():
+    # "²".isdigit() is True but int("²") raises, and one exception mid-run costs
+    # the entire corpus rather than one row.
+    assert is_data_row({"bion_id": "²"}) is False
