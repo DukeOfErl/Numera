@@ -21,6 +21,9 @@ validator = [
 ask = [
     "langchain>=1.1",
     "langgraph",
+    # SqliteSaver ships separately from langgraph; the file-backed checkpointer
+    # is load-bearing here, so it is a direct dependency rather than an option.
+    "langgraph-checkpoint-sqlite",
     "langchain-openai",
     "streamlit",
 ]
@@ -35,6 +38,10 @@ bionumbers-ask = "bionumbers_ask.cli:main"
 [dependency-groups]
 dev = [
     "pytest>=8.3",
+    # Coverage is used here as a discovery tool, not a target: it answers "which
+    # lines does no test ever run", which is the signature of a real path hidden
+    # behind an injected fake.
+    "pytest-cov>=5.0",
     "ruff>=0.16",
 ]
 
@@ -54,8 +61,14 @@ only-include = ["src"]
 testpaths = ["tests"]
 # Tests import the doubles in tests/ directly, and default to offline.
 pythonpath = ["tests"]
-addopts = "-m 'not network'"
-markers = ["network: hits a real external service; run with `pytest -m network`"]
+addopts = "-m 'not network and not corpus'"
+markers = [
+    "network: hits a real external service; run with `pytest -m network`",
+    # The corpus is an external input kept out of the repository (ADR-0170), so
+    # the default suite runs on the six-entry fixture -- which is exactly the
+    # blind spot these checks exist to cover.
+    "corpus: needs a real corpus at BIONUMBERS_ASK_CORPUS; run with `pytest -m corpus`",
+]
 
 # Linting and formatting, both from ruff: `ruff check` finds problems, `ruff
 # format` rewrites layout. The config lives here on dev so both work packages

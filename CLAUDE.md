@@ -15,16 +15,87 @@ Two branches that each number ADRs from the current highest id will both claim t
 | Change | Block |
 |---|---|
 | `add-grounding-validator` | `0040`–`0090` |
-| `add-ask-agent` | `0100`–`0190` |
+| `add-ask-agent` | `0100`–`0190`, `0260`–`0290` |
 | `add-corpus-ingestion` | `0200`–`0250` |
 
-**This table is the authority, not a scan of `docs/decisions/`.** A scan cannot see uncommitted ADRs on another branch: `git ls-tree` reads committed trees, and each branch is checked out in its own worktree, so a number can be spent and still invisible from here. At the time of writing `add-ask-agent` has written `0100`–`0180` — uncommitted — leaving `0190` as the last number in its block. Never conclude a number is free because no file for it turns up.
+**This table is the authority, not a scan of `docs/decisions/`.** A scan cannot see uncommitted ADRs on another branch: `git ls-tree` reads committed trees, and each branch is checked out in its own worktree, so a number can be spent and still invisible from here. `add-ask-agent` has written `0100`–`0190` and holds a second range, `0260`–`0290`, because its first block ran out while the change was still open. A block is extended rather than renumbered: the ADRs already written are referenced from code comments and commit messages, and renumbering would break every one of those references to buy contiguity that nothing needs. Its first block was also uncommitted for two sessions, which is how a scan came to report those numbers as free. Never conclude a number is free because no file for it turns up.
 
 **Allocate by creating the file.** Copy the template to the number you are claiming and commit that stub early, rather than writing the ADR at the end of the change. A ceiling only holds if claiming the number and writing the file are the same step; a block widened in a note that only your own branch reads is how the last drift happened. Reconcile each change's `tasks.md` against this table when it merges.
 
+**Write each ADR with the change that makes the decision, never as a batch at the end.** A task
+list that defers all of them to a documentation group produces retroactive ADRs, and by then the
+options that were rejected -- the part worth recording -- are gone, and what survives is a
+description of the code.
+
+## Architecture
+
+Diagrams — including the agent's graph generated from the compiled object — are in
+`docs/diagrams/architecture.md`. Regenerate that graph whenever middleware changes.
+
+**Ports and adapters.** `agent.py` emits events (`events.py`) and accepts a
+question; it never touches an interface and never blocks for input. `cli.py` and
+`web.py` are adapters over it, and the evaluation harness will be a third. The
+agent takes no parameter naming its caller, so it cannot behave one way for a
+person and another for a harness (ADR-0110).
+
+**The dependency direction is the one rule with teeth.** Adapters may reach into
+the core; the core may not reach back. Nothing in Python enforces this — an
+`import streamlit` in the tool layer would run perfectly — so
+`tests/test_driver_independence.py` asserts it over the source. `entries_table.py`
+and `messages.py` are shared *by* the drivers and count as presentation, which is
+why a rule both the table and the model need (the implausible-span test) lives on
+`Entry` rather than in the table.
+
+| Module | Holds |
+|---|---|
+| `agent.py` | The graph, the system prompt, the middleware list, the event stream |
+| `events.py` | The port: everything the agent emits, and the one command it takes |
+| `tools.py` | The corpus tools the model calls, and `ToolBudget` (ADR-0260) |
+| `spend.py` | `SpendGate` (a `wrap_model_call` middleware), the ledger, projection |
+| `run_ledger.py` | Run spend, in sqlite beside the checkpoints, written as deltas |
+| `corpus.py` | `Entry`, the loader, and the judgements that belong to a value |
+| `repository.py` | Indexes, search, vocabulary, the alias index (ADR-0130) |
+| `units.py` | Three-valued dimensional compatibility (ADR-0160) |
+| `citations.py` | Parsing and formatting `BNID nnnnnn` |
+| `entries_table.py` | Rows, marks and legends — shared by both drivers |
+| `messages.py` | Wording both drivers use, and `STOP_THE_RUN` |
+| `cli.py` / `web.py` | The two adapters |
+| `trace.py` | The structured trail, one question id throughout |
+
+**Patterns, named where they are used.** Ports and adapters (above). Repository
+(`repository.py`). Middleware, LangChain's own rather than hand-rolled — the spend
+gate is a `wrap_model_call`, and retry, tool-error and call-limit middleware are
+all stock. The event stream is a generator, so a driver decides when to consume.
+
+**Limits, and which is which.** `RUN_CALL_LIMIT` bounds model calls;
+`TOOL_CALL_LIMIT` bounds retrievals and is enforced in the tools because a model
+batches several into one hop; `question_ceiling` and `run_budget` bound spend;
+`CONVERSATION_BOUND` bounds a session's tokens. Each is configured where it binds
+and reported when it is reached (ADR-0180).
+
+## Specs and the code that is meant to satisfy them
+
+`openspec validate --strict` checks that a spec is well formed. It does not check
+that anything implements it, and the difference has already cost this project
+once: `grounded-answering` required bounding "the number of tool calls made in
+answering a single question" while the code bounded *model* calls, and the two
+only came apart when a model batched several tool calls into one hop.
+
+`tests/test_spec_conformance.py` maps each requirement to the tests that assert
+it, and fails when a requirement is neither mapped nor explicitly recorded as a
+gap. **Add the mapping entry in the same change that adds the requirement**, the
+way ADRs are written with the decision rather than collected at the end.
+
+Be clear about what it proves. It catches a requirement nothing claims, and a
+claim naming a test that no longer exists. It does not catch a test that claims a
+requirement and checks the wrong thing -- which is exactly what happened above.
+What it buys is that the requirement's words sit next to the name of the test
+asserting them, where a reader comparing the two can see the mismatch. A review
+aid, not a proof.
+
 ## Running the tests
 
-`pytest` is offline by default: `addopts = "-m 'not network'"` deselects the `network` marker, so a green run may never have executed the tests that hit a real service. Run those explicitly with `pytest -m network`.
+`pytest` is offline by default and runs on the six-entry fixture: `addopts = "-m 'not network and not corpus'"` deselects both markers, so a green run may never have executed the tests that hit a real service or the ones that check a marker can fire against a real corpus. Run those explicitly with `pytest -m network` and `BIONUMBERS_ASK_CORPUS=... pytest -m corpus`.
 
 ## Testing the tests
 
