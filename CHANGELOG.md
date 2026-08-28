@@ -71,8 +71,9 @@ any release; `1.0.0` when it stabilizes.
   failing with "no corpus at that path" while the export sits in the same
   directory. Reporting is separate from building, so the caller can say what is
   about to happen before a 27 MB read. A corpus that exists is never rebuilt.
-- The command **refuses to run where git would track its output**, naming the
-  repository, rather than writing unlicensed data onto a committable path.
+- **The ingest operation refuses to run where git would track its output**, naming
+  the repository, rather than writing unlicensed data onto a committable path. In
+  the operation rather than the command, so every caller inherits it ([ADR-0250]).
 
 ### Changed
 
@@ -113,3 +114,4 @@ number rather than an error:
 [ADR-0220]: docs/decisions/0220-jsonl-only.md
 [ADR-0230]: docs/decisions/0230-flag-and-count-never-correct.md
 [ADR-0240]: docs/decisions/0240-stamp-every-ingest.md
+[ADR-0250]: docs/decisions/0250-guards-belong-to-the-operation.md
