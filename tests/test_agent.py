@@ -804,3 +804,73 @@ def test_the_conversation_bound_stops_a_session_that_is_too_large(
     assert end.reason is EndReason.CONVERSATION_BOUND
     assert end.incomplete is True
     assert not any(isinstance(e, ConversationWarning) for e in events), "warned as it refused"
+
+
+# -- 8.7: the model is told what the source did not claim -----------------
+
+
+@pytest.fixture
+def hedged_repo():
+    """One entry whose source said `<8`, stored as the interval [8, 8]."""
+    from bionumbers_ask.corpus import Entry
+    from bionumbers_ask.repository import CorpusRepository
+
+    return CorpusRepository((
+        Entry(bnid=1, property="Minimal inhibitory concentration", organism="E. coli",
+              units="mg/L", value=None, range_low=8.0, range_high=8.0, reference="r",
+              reference_pubmed_id=None, measurement_method="", comments="",
+              keywords=(), range_qualified=True),
+    ))
+
+
+@pytest.fixture
+def fused_repo():
+    """One entry whose bounds may be two different quantities."""
+    from bionumbers_ask.corpus import Entry
+    from bionumbers_ask.repository import CorpusRepository
+
+    return CorpusRepository((
+        Entry(bnid=2, property="Cell width", organism="E. coli", units="um",
+              value=None, range_low=0.5, range_high=72.0, reference="r",
+              reference_pubmed_id=None, measurement_method="", comments="",
+              keywords=(), range_fused=True),
+    ))
+
+
+def entry_text(repo, bnid: int) -> str:
+    """What `get_entry` actually hands the model."""
+    from bionumbers_ask.tools import build_tools
+    from bionumbers_ask.trace import QuestionTrace
+
+    tools = build_tools(repo, emit=lambda _e: None, trace=QuestionTrace("q", "run"))
+    get_entry = next(t for t in tools if t.name == "get_entry")
+    return get_entry.invoke({"bnid": bnid})
+
+
+def test_the_model_is_told_when_the_source_stated_a_bound(hedged_repo):
+    """The prose is what people read. A model that only sees "8.0" states it as a
+    measurement while the table alone contradicts it -- which is exactly what
+    happened live: "the minimal inhibitory concentration is 8.0 mg/L", table
+    agreeing, nothing on the page dissenting.
+
+    Given as an instruction, not as `range_qualified: true`: a flag is something the
+    model may act on, a sentence saying what the source did claim is harder to round
+    away.
+    """
+    text = entry_text(hedged_repo, 1)
+    assert "caution:" in text
+    assert "bound" in text and "not a measured quantity" not in text
+    assert "do not report this number as a measured quantity" in text
+    # Still returned in full and still citable: a citation claims provenance, and
+    # that stays true of an entry whose value the source hedged.
+    assert "bnid: 1" in text and "reference:" in text
+
+
+def test_the_model_is_told_separately_about_a_fused_range(fused_repo):
+    text = entry_text(fused_repo, 2)
+    assert "may have been taken from different" in text
+    assert "do not report this number as a measured quantity" not in text
+
+
+def test_an_entry_the_source_stated_plainly_carries_no_caution(repo):
+    assert "caution:" not in entry_text(repo, 100002)

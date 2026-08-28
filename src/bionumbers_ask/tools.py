@@ -96,6 +96,16 @@ def build_tools(repo: CorpusRepository, trace: QuestionTrace, emit: Emit) -> lis
             f"value: {e.value_display} {e.units}".rstrip(),
             f"reference: {e.reference}",
         ]
+        # Said to the model, not only drawn in the table. The prose is what people
+        # read, and a model that does not know will state a hedged or fused range as
+        # a measurement while only the table contradicts it -- which is how "<8"
+        # reached a reader as "is 8.0 mg/L" with both surfaces agreeing.
+        #
+        # Written as an instruction rather than a field name: `range_qualified: true`
+        # is a flag the model may or may not act on, where a sentence saying what the
+        # source did claim leaves less room to round it away.
+        for caveat in _caveats(e):
+            parts.append(f"caution: {caveat}")
         if e.reference_pubmed_id:
             parts.append(f"pubmed: {e.reference_pubmed_id}")
         if e.measurement_method:
@@ -105,6 +115,33 @@ def build_tools(repo: CorpusRepository, trace: QuestionTrace, emit: Emit) -> lis
         if found.cited_bnids:
             parts.append("cites: " + ", ".join(str(i) for i in found.cited_bnids))
         return "\n".join(parts)
+
+    def _caveats(e) -> list[str]:
+        """What the source did not claim about this value, in words the model reads.
+
+        Never repairs and never withholds: the entry is still returned and still
+        citable, because a citation claims provenance and that stays true of a
+        marked entry. What changes is that the model cannot state the number as a
+        measurement without contradicting a line it was given.
+        """
+        out = []
+        if e.range_qualified:
+            out.append(
+                "the source stated a bound or an approximation, not an exact value -- "
+                "do not report this number as a measured quantity; say that the source "
+                "gives a bound"
+            )
+        if e.range_fused:
+            out.append(
+                "the two bounds of this range may have been taken from different "
+                "quantities in the source, so the range may not be a real interval"
+            )
+        if e.spans_implausibly:
+            out.append(
+                "these bounds span more than a millionfold, which no single measurement "
+                "does -- treat the range as unreliable"
+            )
+        return out
 
     def list_values(field: str, contains: str = "") -> str:
         try:

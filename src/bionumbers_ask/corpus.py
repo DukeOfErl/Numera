@@ -39,6 +39,18 @@ class Entry:
     measurement_method: str
     comments: str
     keywords: tuple[str, ...]
+    # What the source did not claim, reported by the ingester and never repaired
+    # here. Two fields and not one: a record can carry either without the other,
+    # and "the source states a bound, not a range" is a different sentence from
+    # "these bounds may belong to two different quantities". BNID 100420 carries
+    # both -- `~160,000 (21,000 to 195,700)` is hedged *and* fused -- and one flag
+    # would have said a single thing about a record wrong in two ways.
+    #
+    # Default False so a corpus without the fields still loads, at the cost of
+    # reporting nothing rather than reporting wrongly. `tests/test_markers_against_corpus.py`
+    # is what catches a corpus where they never arrive.
+    range_qualified: bool = False
+    range_fused: bool = False
 
     @property
     def value_display(self) -> str:
@@ -51,6 +63,14 @@ class Entry:
             # whose bounds are equal. Rendered literally that reads "400.0–400.0",
             # which invites a reader to look for a spread that is not there.
             if self.range_low == self.range_high:
+                # A hedged bound is stored as a degenerate interval: `<8` arrives as
+                # [8, 8]. Printed as "8.0" it asserts an equality the source never
+                # made, which is a different claim rather than a rounder one -- an
+                # MIC of `<8` means susceptible at or below 8. The bound is all the
+                # corpus kept, so this says a bound was stated without inventing
+                # which direction it pointed.
+                if self.range_qualified:
+                    return f"{self.range_low} (bounded, not exact)"
                 return str(self.range_low)
             return f"{self.range_low}–{self.range_high}"
         if self.range_low is not None:
@@ -60,9 +80,36 @@ class Entry:
         return "(no scalar value)"
 
     @property
+    def spans_implausibly(self) -> bool:
+        """Whether the two bounds are too far apart to be one measurement.
+
+        Ours to judge, and deliberately not the ingester's. `range_fused` claims the
+        bounds may come from two quantities, which is a statement about provenance;
+        this is a judgement about the number, and the ingester does not judge ranges
+        (its ADR-0230). So the threshold is this project's to choose and defend.
+
+        A millionfold. Far outside what a measurement of one quantity spans -- cell
+        volumes across all life cover about 10^4 -- and the entries above it in this
+        corpus are wrong on inspection rather than merely broad. 47 entries span it;
+        `range_fused` already marks 42, so this adds five that parsed correctly and
+        are still unusable, `0.25-2.5e30` among them.
+
+        Zero and negative bounds are not judged: a ratio is meaningless across zero,
+        and a mark firing on arithmetic rather than evidence is worse than no mark.
+        """
+        low, high = self.range_low, self.range_high
+        if low is None or high is None or low <= 0 or high <= 0:
+            return False
+        return max(low, high) / min(low, high) > IMPLAUSIBLE_SPAN
+
+    @property
     def quotation_text(self) -> str:
         """Where curator quotations live, when an entry carries one."""
         return f"{self.comments}\n{self.measurement_method}".strip()
+
+
+# See `Entry.spans_implausibly` for why this number and why it is ours.
+IMPLAUSIBLE_SPAN = 1_000_000
 
 
 def _number(value: Any) -> float | None:
@@ -105,6 +152,8 @@ def _entry(raw: dict) -> Entry:
         measurement_method=(raw.get("measurement_method") or "").strip(),
         comments=(raw.get("comments") or "").strip(),
         keywords=_keywords(raw.get("keywords")),
+        range_qualified=bool(raw.get("range_qualified")),
+        range_fused=bool(raw.get("range_fused")),
     )
 
 

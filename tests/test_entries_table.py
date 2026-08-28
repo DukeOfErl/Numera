@@ -716,3 +716,80 @@ def test_a_long_method_is_cut_to_the_table_and_says_so():
     width = sum(w for _, _, w in entries_table.COLUMNS) + 2 * (len(entries_table.COLUMNS) - 1)
     assert all(len(line) <= width for line in text.splitlines()), "a method line overran"
     assert "…" in text
+
+
+# -- 8.7 and 8.8: what the source did not claim ---------------------------
+
+
+def an_entry(**kwargs):
+    from bionumbers_ask.corpus import Entry
+
+    base = dict(
+        bnid=1, property="p", organism="o", units="mg/L", value=None,
+        range_low=8.0, range_high=8.0, reference="r", reference_pubmed_id=None,
+        measurement_method="m", comments="", keywords=(),
+    )
+    return Entry(**{**base, **kwargs})
+
+
+def test_a_hedged_bound_is_not_displayed_as_an_exact_value():
+    """The live failure this exists for: `<8` reaches the corpus as [8, 8] and
+    printed as "8.0", which asserts an equality the source never made. A bound is a
+    different claim, not a rounder one -- an MIC of `<8` means susceptible at or
+    below 8, and the agent answered "is 8.0 mg/L" with the table agreeing."""
+    assert an_entry(range_qualified=True).value_display == "8.0 (bounded, not exact)"
+    assert an_entry(range_qualified=False).value_display == "8.0"
+
+
+def test_the_span_rule_holds_at_its_own_threshold():
+    """A millionfold exactly is not more than a millionfold. Tested on both sides
+    because a threshold written `>=` where `>` was meant is invisible otherwise."""
+    assert not an_entry(range_low=1.0, range_high=1_000_000.0).spans_implausibly
+    assert an_entry(range_low=1.0, range_high=1_000_001.0).spans_implausibly
+
+
+def test_the_span_rule_says_nothing_where_it_cannot_be_applied():
+    """A ratio is meaningless across zero, and a mark firing on arithmetic rather
+    than on evidence is worse than no mark."""
+    for low, high in ((0.0, 1e30), (-1.0, 1e30), (None, 1e30), (1.0, None)):
+        assert not an_entry(range_low=low, range_high=high).spans_implausibly
+
+
+def test_the_real_entry_that_prompted_the_span_rule():
+    """BNID 100550, `0.25-2.5e30`: parsed exactly as written, so `range_fused` does
+    not mark it and correctly does not -- it is one cell, not two quantities."""
+    entry = an_entry(range_low=0.25, range_high=2.5e30, range_fused=False)
+    assert entry.spans_implausibly and not entry.range_fused
+
+
+def test_each_flag_draws_its_own_mark_and_its_own_legend(repo):
+    """Two marks and two sentences, never one of each. A record can carry either
+    flag without the other, and "the source stated a bound" is not "these bounds may
+    be different quantities" -- BNID 100420 carries both and is wrong in two ways."""
+    row = entries_table.Row(
+        bnid=1, property="p", organism="o", value="8.0", units="mg/L",
+        reference="r", cited=True, qualified=True,
+    )
+    assert entries_table.QUALIFIED in row.markers()
+    assert entries_table.FUSED not in row.markers()
+
+    both = entries_table.Row(
+        bnid=1, property="p", organism="o", value="1–2", units="u",
+        reference="r", cited=True, qualified=True, fused=True,
+    )
+    rendered = entries_table.render((both,))
+    assert entries_table.QUALIFIED_LEGEND in rendered
+    assert entries_table.FUSED_LEGEND in rendered
+
+
+def test_a_legend_is_absent_when_no_shown_row_carries_its_mark(repo):
+    plain = entries_table.Row(
+        bnid=1, property="p", organism="o", value="1", units="u", reference="r", cited=True,
+    )
+    rendered = entries_table.render((plain,))
+    for legend in (
+        entries_table.QUALIFIED_LEGEND,
+        entries_table.FUSED_LEGEND,
+        entries_table.IMPLAUSIBLE_LEGEND,
+    ):
+        assert legend not in rendered

@@ -33,7 +33,7 @@ from collections.abc import Callable
 import pytest
 
 from bionumbers_ask.corpus import Entry, load
-from bionumbers_ask.entries_table import NO_METHOD, NO_SCALAR
+from bionumbers_ask.entries_table import FUSED, IMPLAUSIBLE, NO_METHOD, NO_SCALAR, QUALIFIED
 from bionumbers_ask.units import dimension
 
 pytestmark = [
@@ -55,7 +55,16 @@ MARKERS: dict[str, Callable[[Entry], bool]] = {
         lambda e: e.value is None and e.range_low is None and e.range_high is None
     ),
     "a unit the dimension table does not classify": lambda e: dimension(e.units) is None,
+    f"{QUALIFIED} the source stated a bound, not an exact range": lambda e: e.range_qualified,
+    f"{FUSED} the bounds may describe different quantities": lambda e: e.range_fused,
+    f"{IMPLAUSIBLE} the bounds span more than a millionfold": lambda e: e.spans_implausibly,
 }
+
+# The first two are read from the corpus rather than computed here, which is the
+# case this file exists for: a corpus that stops emitting a field leaves the mark
+# silently undrawable, every test still passing, and the count reading zero as
+# though the problem had gone away. That is precisely how the ingester's own
+# markup flag read zero while 71 per cent of records were affected.
 
 # Not here, and deliberately. The cited-but-not-retrieved mark is a property of an
 # answer against what a question retrieved, not of an entry, so no corpus can say

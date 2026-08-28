@@ -96,14 +96,24 @@
 - [x] 8.4 Verify that a follow-up question is answered correctly after the application has been restarted mid-session (needed the identifier published to the URL: session state dies with the server, the checkpoint it points at does not)
 - [x] 8.5 Verify that the agent code is unchanged from the terminal driver's version -- asserted over the source as an import direction, so it stays answered rather than being answered once
 - [x] 8.6 Render the entries table after each answer, the first ten to twenty entries with a way to reach the rest, and make a row open the full entry. Separate the cited entries from the uncited ones as the terminal already does -- the separation is the requirement, its visual form (colour, a divider, a heading) is decided when the table is built -- and carry the no-recorded-method marking through
-- [ ] 8.7 Mark an entry the ingester reports as `range_fused`, beside the existing no-recorded-method
-      marking, and send the same boolean to the model on a retrieved entry -- the prose is what people
-      read, and a model that does not know will state a fused range as a measurement while only the
-      table contradicts it. Shown, never hidden and never repaired, and still citable: a citation
-      claims provenance, which stays true of a marked entry.
-      **Blocked on `add-corpus-ingestion`**, which is unimplemented; no corpus emits the field yet, so
-      building it now would be dead code with no data to test it against.
-- [ ] 8.8 Mark a range whose bounds span implausibly far apart, and say in the legend what the mark
+- [x] 8.7 Mark the two range flags the ingester reports, beside the existing no-recorded-method
+      marking, and send both booleans to the model on a retrieved entry -- the prose is what people
+      read, and a model that does not know will state a hedged or fused range as a measurement while
+      only the table contradicts it. Shown, never hidden and never repaired, and still citable: a
+      citation claims provenance, which stays true of a marked entry.
+      **Unblocked as of 2026-08-28**: a corpus emitting both fields exists, 14,294 records, and this
+      project's whole offline suite passes against it.
+  - `range_qualified` (2,233 records) -- the source never claimed an interval. `<0.001` was stored as
+    the closed interval [0.001, 0.001], `>100` as [100, 100], `~5` as [5, 5]. This is the more urgent
+    of the two and the larger population: nothing about the rendering looks wrong, and *less than*
+    reaching a reader as *equal to* is a misreading the table itself creates.
+  - `range_fused` (1,461 records) -- the bounds may come from two different quantities.
+  - **Two marks and two footnote sentences, not one of each.** A record can carry either without the
+    other, and "the source states a bound, not a range" is not "these bounds may belong to two
+    different quantities". The ingester kept them as separate booleans for exactly this reason rather
+    than widening a term this project already reads.
+  - Check both marks can fire against a real corpus, per `tests/test_markers_against_corpus.py`.
+- [x] 8.8 Mark a range whose bounds span implausibly far apart, and say in the legend what the mark
       means. Not blocked and not the ingester's to fix: `range_fused` claims only that two bounds may
       come from different quantities, so a range parsed exactly as written stays unmarked however wide
       it is. 47 entries span more than a millionfold; `range_fused` marks 42, and the remaining five

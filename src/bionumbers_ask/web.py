@@ -282,6 +282,9 @@ def _legend(rows: tuple[entries_table.Row, ...]) -> list[str]:
         (entries_table.NOT_RETRIEVED_LEGEND, lambda r: not r.retrieved),
         (entries_table.NO_METHOD_LEGEND, lambda r: not r.method_recorded),
         (entries_table.NO_SCALAR_LEGEND, lambda r: not r.has_scalar),
+        (entries_table.QUALIFIED_LEGEND, lambda r: r.qualified),
+        (entries_table.FUSED_LEGEND, lambda r: r.fused),
+        (entries_table.IMPLAUSIBLE_LEGEND, lambda r: r.implausible_span),
     )
     return [legend for legend, applies in applying if any(applies(row) for row in rows)]
 

@@ -59,6 +59,32 @@ UNCITED_BANNER = "possibly relevant (not cited in the answer)"
 # that simply started with uncited rows looked the same, and they are not.
 NOTHING_CITED = "No entries cited"
 
+# Marks a value the source hedged. `<8` reaches the corpus as the interval [8, 8]
+# and prints as "8.0", which asserts an equality the source never made -- and a
+# bound is a different claim, not a rounder one: an MIC of `<8` means susceptible
+# at or below 8. Measured live before this existed: the agent answered "the minimal
+# inhibitory concentration of kanamycin for E. coli is 8.0 mg/L" (BNID 100763),
+# with the table agreeing, so nothing on the page contradicted anything. 2,233
+# entries carry it, and they concentrate in the well-known quantities people ask
+# about, so the flag is denser in the answered population than in the stored one.
+QUALIFIED = "\u00b0"
+QUALIFIED_LEGEND = f"{QUALIFIED} the source stated a bound or an approximation, not an exact range"
+
+# Marks a range whose bounds may have come from two different quantities: the
+# ingester takes the smallest and largest number in a cell, so a generation time
+# sitting beside a width becomes one plausible-looking interval. 1,461 entries.
+FUSED = "\u2248"
+FUSED_LEGEND = f"{FUSED} the two bounds may describe different quantities"
+
+# Marks a range spanning further than any single measurement plausibly does. The
+# rule and its threshold live on `Entry` (corpus.py), because the model is told
+# about it too and the agent must not reach into a presentation module for it.
+IMPLAUSIBLE = "\u00a1"
+IMPLAUSIBLE_LEGEND = (
+    f"{IMPLAUSIBLE} the bounds span more than a millionfold, which no single "
+    "measurement does"
+)
+
 # Words that carry no topic. Kept small on purpose -- this is a tie-breaker for
 # rows nobody cited, not a retrieval engine.
 _STOPWORDS = frozenset(
@@ -107,6 +133,9 @@ class Row:
     comments: str = ""
     keywords: tuple[str, ...] = ()
     reference_pubmed_id: str = ""
+    qualified: bool = False
+    fused: bool = False
+    implausible_span: bool = False
 
     def markers(self) -> str:
         # Deliberately not `has_scalar`: the terminal writes "(no scalar value)"
@@ -115,6 +144,9 @@ class Row:
         applying = (
             (NOT_RETRIEVED, not self.retrieved),
             (NO_METHOD, not self.method_recorded),
+            (QUALIFIED, self.qualified),
+            (FUSED, self.fused),
+            (IMPLAUSIBLE, self.implausible_span),
         )
         return "".join(mark for mark, applies in applying if applies)
 
@@ -202,6 +234,9 @@ def rows_for(
                 comments=entry.comments,
                 keywords=tuple(_without_markup(k) for k in entry.keywords),
                 reference_pubmed_id=entry.reference_pubmed_id or "",
+                qualified=entry.range_qualified,
+                fused=entry.range_fused,
+                implausible_span=entry.spans_implausibly,
             )
         )
     return tuple(out)
@@ -373,4 +408,10 @@ def render(
         out.append(NOT_RETRIEVED_LEGEND)
     if any(not row.method_recorded for row in shown):
         out.append(NO_METHOD_LEGEND)
+    if any(row.qualified for row in shown):
+        out.append(QUALIFIED_LEGEND)
+    if any(row.fused for row in shown):
+        out.append(FUSED_LEGEND)
+    if any(row.implausible_span for row in shown):
+        out.extend(textwrap.wrap(IMPLAUSIBLE_LEGEND, len(rule), subsequent_indent="  "))
     return "\n".join(out)
