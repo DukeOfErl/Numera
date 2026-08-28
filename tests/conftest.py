@@ -23,6 +23,23 @@ def _fast_retries(monkeypatch):
     monkeypatch.setattr("bionumbers_ask.agent.RETRY_INITIAL_DELAY", 0.0)
 
 
+@pytest.fixture(autouse=True)
+def _trail_stays_in_the_tmp_dir(tmp_path, monkeypatch):
+    """Keep the structured trail out of the working directory.
+
+    `--trace` defaults to `logs/trace.jsonl` *relative to the cwd*, so five driver
+    tests that call `main()` without it were writing into whatever directory pytest
+    was started from. Harmless in this repo, where the path is git-ignored, and a
+    hard failure anywhere the cwd is not writable: a peer running this suite from
+    another checkout got `OSError: [Errno 30] Read-only file system` on exactly
+    those five and reported them as our failing tests.
+
+    Set through the documented environment variable rather than by patching, so the
+    path a real run takes is the one under test.
+    """
+    monkeypatch.setenv("BIONUMBERS_ASK_TRACE", str(tmp_path / "trace.jsonl"))
+
+
 @pytest.fixture
 def config() -> Config:
     return Config(model="fake/model", question_ceiling=usd("0.60"), run_budget=usd("1.20"))

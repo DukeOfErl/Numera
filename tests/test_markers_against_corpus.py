@@ -56,6 +56,14 @@ MARKERS: dict[str, Callable[[Entry], bool]] = {
     f"{QUALIFIED} the source stated a bound, not an exact range": lambda e: e.range_qualified,
     f"{FUSED} the bounds may describe different quantities": lambda e: e.range_fused,
     f"{IMPLAUSIBLE} the bounds span more than a millionfold": lambda e: e.spans_implausibly,
+    # Not marks of their own -- these two choose the words inside the value column,
+    # "(approximate)" against "(a bound, not exact)". Counted here because they are
+    # read by *name* out of the ingester's `parse_flags`, and that vocabulary is
+    # explicitly its own to rename (its ADR-0230). A rename would turn both fields
+    # False, and the value would quietly fall back to the vaguer wording with
+    # nothing failing. This is what makes that loud.
+    "range_approximate, which picks the word 'approximate'": lambda e: e.range_approximate,
+    "range_one_sided, which picks 'a bound, not exact'": lambda e: e.range_one_sided,
 }
 
 # The first two are read from the corpus rather than computed here, which is the
@@ -89,6 +97,20 @@ def test_the_marker_is_not_drawn_on_everything(description, entries):
     """A mark on every row distinguishes nothing, and a reader learns to skip it."""
     holds = sum(1 for entry in entries if MARKERS[description](entry))
     assert holds < len(entries), f"'{description}' holds for every entry"
+
+
+def test_the_two_hedge_kinds_together_account_for_every_qualified_entry(entries):
+    """Measured, not assumed. If they stop partitioning `range_qualified`, either a
+    flag was renamed or a third kind appeared -- and in both cases some hedged value
+    is being described by the fallback wording rather than its own."""
+    qualified = [e for e in entries if e.range_qualified]
+    kinds = sum(1 for e in qualified if e.range_approximate or e.range_one_sided)
+    both = sum(1 for e in qualified if e.range_approximate and e.range_one_sided)
+    assert kinds == len(qualified), (
+        f"{len(qualified) - kinds} qualified entries carry neither hedge kind, so they "
+        "render with the fallback wording instead of saying which hedge the source used"
+    )
+    assert not both, f"{both} entries are both approximate and one-sided; the kinds overlap"
 
 
 def test_more_than_one_dimension_is_represented(entries):

@@ -203,6 +203,9 @@ def test_the_driver_writes_a_trail_when_it_runs(tmp_path, monkeypatch):
     from bionumbers_ask.trace import DEFAULT_FILE
 
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    # This test is about the default path, so it opts out of the autouse fixture
+    # that redirects the trail -- and chdirs first, so the default is written here.
+    monkeypatch.delenv("BIONUMBERS_ASK_TRACE", raising=False)
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit):
         main(["--corpus", FIXTURE, "--checkpoints", str(tmp_path / "c.sqlite"), "--ask", "q"])
