@@ -78,7 +78,8 @@ def test_the_report_states_its_zeroes_rather_than_omitting_them(tmp_path, capsys
     assert main([str(clean), "-o", str(tmp_path / "c.jsonl")]) == 0
     printed = capsys.readouterr().out
     assert "duplicate identifiers:  0" in printed
-    assert "range_fused): 0" in printed
+    assert "(range_fused):  0" in printed
+    assert "(range_qualified):        0" in printed
 
 
 def test_duplicate_identifiers_are_reported_and_both_records_kept(tmp_path, capsys):
@@ -135,3 +136,35 @@ def test_a_run_that_raised_no_flags_says_so_rather_than_printing_nothing(tmp_pat
     clean.write_text(f"<table><tr>{header}</tr><tr>{row}</tr></table>", encoding="utf-8")
     assert main([str(clean), "-o", str(tmp_path / "c.jsonl")]) == 0
     assert "(none raised)" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("bad", ["-5", "0"])
+def test_a_limit_below_one_is_rejected_rather_than_writing_one_row(
+    tmp_path, sample_html, bad, capsys
+):
+    out = tmp_path / "c.jsonl"
+    assert main([str(sample_html), "-o", str(out), "--limit", bad]) == 2
+    assert "--limit must be at least 1" in capsys.readouterr().err
+    assert not out.exists()
+
+
+def test_an_unwritable_destination_blames_the_destination(tmp_path, sample_html, capsys):
+    readonly = tmp_path / "readonly"
+    readonly.mkdir()
+    readonly.chmod(0o500)
+    try:
+        rc = main([str(sample_html), "-o", str(readonly / "out.jsonl")])
+        err = capsys.readouterr().err
+        assert rc == 2
+        assert "out.jsonl" in err, f"the message names the wrong file: {err}"
+        assert str(sample_html) not in err
+    finally:
+        readonly.chmod(0o700)
+
+
+def test_the_link_count_and_the_link_flag_agree(tmp_path, sample_html, capsys):
+    assert main([str(sample_html), "-o", str(tmp_path / "c.jsonl")]) == 0
+    printed = capsys.readouterr().out
+    manifest = json.loads((tmp_path / "c.jsonl.manifest.json").read_text())
+    flagged = manifest["flag_counts"].get("range_is_link", 0)
+    assert f"records carrying a link:{flagged:>6}" in printed

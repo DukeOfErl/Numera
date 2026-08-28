@@ -93,6 +93,20 @@ class BioNumberRecord(BaseModel):
     the export carries no date of its own (ADR-0240).
     """
 
+    range_qualified: bool = False
+    """`True` when the source did not state the range as a closed interval, so the
+    stored bounds are not the exact measurement they look like.
+
+    A one-sided bound (`<0.001`, `>100`, `≥10`) or an approximation (`~5`, `≈5`).
+    2,233 records of the export carry such a marker. The damaging half is the
+    one-sided one: `<0.001` stored as [0.001, 0.001] asserts an exact equality
+    where the source said *less than*.
+
+    A second field rather than a redefinition of `range_fused`, which means
+    something else — that the bounds may come from two different quantities.
+    Widening that one would have changed a contract `add-ask-agent` already reads.
+    """
+
     range_fused: bool = False
     """`True` when `range_low`/`range_high` may fuse numbers that do not belong
     to one quantity, so the range must not be presented as a measurement.

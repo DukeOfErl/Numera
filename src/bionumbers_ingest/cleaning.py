@@ -75,7 +75,7 @@ _GREEK_MU = "μ"  # μ GREEK SMALL LETTER MU
 # caret exponent, a `×10^` mantissa and a thousands separator are all part of the
 # number rather than delimiters between numbers.
 _MINUS = r"[-+\u2212\u2013]"  # ASCII, unicode minus, en dash — all signs inside an exponent
-_MULT = r"[\u00d7x\u0445*]"  # ×, Latin x, Cyrillic х, asterisk
+_MULT = r"[\u00d7xX\u0445\u0425*]"  # ×, Latin x/X, Cyrillic х/Х, asterisk
 # 3-digit groups only, so `1,2` stays two numbers; the `\.\d+` alternative catches
 # a number written without its leading zero, which would otherwise lose the point
 _DIGITS = r"(?:\d+(?:,\d{3})*(?:\.\d+)?|\.\d+)"
@@ -114,7 +114,10 @@ _PM_RE = re.compile(r"±|\+/-|\+-")  # plus/minus: ±X means value ± X
 _NUM = r"(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][-+]?\d+)?"
 # a single "mean±sd" expression filling the whole cell (e.g. "-3.26±0.41"); the
 # full-string anchor keeps multi-measurement cells from matching
-_MEAN_SD_RE = re.compile(rf"^([-+]?{_NUM})\s*(?:±|\+/-|\+-)\s*({_NUM})$")
+# Anchored at the start and allowing a trailing unit or note, but nothing that
+# could be another number: `7.4±0.3 μm` is one measurement, `7.4±0.3 and 5.9` is
+# not, and the multi-sign check above has already taken the two-± case.
+_MEAN_SD_RE = re.compile(rf"^([-+]?{_NUM})\s*(?:±|\+/-|\+-)\s*({_NUM})\s*(?![\d.])(?:[^\d]*)$")
 # what may stand between two bounds without being a second quantity: the
 # separators _extract_numbers normalises to, and whitespace
 _SEPARATORS_ONLY_RE = re.compile(r"^[\s;,\-–—±+/]*$")
@@ -131,6 +134,29 @@ _MANTISSA_EXP_RE = re.compile(
     rf"^[-+]?{_DIGITS}\s*(?:[eE]\s*[-+]?\d+|{_MULT}\s*10\s*\^\s*[-+]?\d+)$"
 )
 _ANY_EXP_RE = re.compile(r"[eE]\s*[-+]?\d|\^")
+# The mantissa of such a number, so the shared reading can be checked for coherence.
+_MANTISSA_OF_RE = re.compile(rf"^[-+]?({_DIGITS})\s*(?:[eE]|{_MULT})")
+
+# A range the source did not state as a closed interval. One-sided bounds are the
+# damaging half: `<0.001` stored as [0.001, 0.001] asserts an exact equality where
+# the source said *less than*. Approximation markers are milder — `~5` really is
+# about 5 — but the hedge is still lost, and a reader cannot tell either case from
+# a measured interval.
+_ONE_SIDED_RE = re.compile(
+    r"(?:^|[\s(\[])(?:[<>]|\u2264|\u2265|up to|at least|at most|no more than|"
+    r"less than|more than|greater than|fewer than)",
+    re.IGNORECASE,
+)
+_APPROXIMATE_RE = re.compile(
+    r"(?:^|[\s(\[])(?:[~\u2248\u223c\u2245\u2243]|about|approx\.?|approximately|circa|ca\.)",
+    re.IGNORECASE,
+)
+
+#: `parse_flags` entries that mean the range was not stated as a closed interval,
+#: so the stored bounds are not the exact measurement they look like. Behind the
+#: `range_qualified` field, for the same reason the fusion flags are behind
+#: `range_fused`: the names are cleaning's, the field is the contract.
+QUALIFIED_RANGE_FLAGS = frozenset({"range_one_sided", "range_approximate"})
 
 #: `parse_flags` entries that mean the stored bounds may fuse two quantities.
 #: The `range_fused` field is derived from exactly these; no other flag implies
@@ -296,10 +322,15 @@ def _shared_exponent_is_ambiguous(text: str, found: list[tuple[float, int, int]]
         return False  # a bare power of ten is a number in its own right
     if not _SEPARATORS_ONLY_RE.match(text[e1:s2]):
         return False
-    # Flag only where the two readings actually disagree. `0 - 1.3×10^6` is the
-    # same range either way, so there is no ambiguity to report — and marking a
-    # correct record teaches a reader to ignore the marking.
-    return v1 != 0
+    # Flag only where the shared reading is both different AND coherent.
+    # `0 - 1.3×10^6` is the same range either way, so there is nothing to report.
+    # `1000-2e5` would invert under the shared reading (1000e5 above 2e5), so the
+    # literal reading is the only possible one and the range is simply correct.
+    # Marking a correct record teaches a reader to ignore the marking.
+    if v1 == 0:
+        return False
+    mantissa = _MANTISSA_OF_RE.match(text[s2:e2].strip())
+    return mantissa is not None and abs(v1) < abs(float(mantissa.group(1)))
 
 
 def _parse_value(raw: str, flags: list[str]) -> float | None:
@@ -363,24 +394,26 @@ def _parse_range(
     if signs:
         flags.append("range_plus_minus")
 
-        # A cell that is entirely one "mean±sd" expression carries its own centre,
-        # so it is read the same way whether or not the value column is filled.
-        # Gating this on an empty value column mis-parsed the cell when both were
-        # present, using the mean itself as the deviation.
-        whole = _MEAN_SD_RE.match(text.strip())
-        if whole:
-            mean, delta = float(whole.group(1)), abs(float(whole.group(2)))
-            flags.append("range_mean_sd_embedded")
-            return range_raw, mean - delta, mean + delta, table_link
-
         # More than one plus-or-minus is more than one measurement. Deriving one
         # interval from it fuses them, and the fused-range flags never see this
-        # branch, so the result would ship unmarked.
+        # branch, so the result would ship unmarked. Checked FIRST, so that the
+        # mean-and-deviation match below can afford to be lenient about trailing
+        # text without swallowing a multi-measurement cell.
         if len(signs) > 1:
             flags.append("range_multi_measurement")
             if value is None:
                 flags.append("range_plus_minus_no_value")
             return range_raw, None, None, table_link
+
+        # One "mean±sd" expression carries its own centre, so it is read the same
+        # way whether or not the value column is filled. A trailing unit or note
+        # is tolerated — `7.4±0.3 μm` is unambiguous, and discarding both bounds
+        # over a unit is the opposite of the recover-and-flag rule elsewhere.
+        one = _MEAN_SD_RE.match(text.strip())
+        if one:
+            mean, delta = float(one.group(1)), abs(float(one.group(2)))
+            flags.append("range_mean_sd_embedded")
+            return range_raw, mean - delta, mean + delta, table_link
 
         # The deviation is the number that FOLLOWS the sign. Taking the first
         # number in the cell instead reads "(n=3) ±1.15" as a deviation of 3.
@@ -405,6 +438,12 @@ def _parse_range(
             flags.append("range_prose_between_bounds")
         if _shared_exponent_is_ambiguous(normalised, found):
             flags.append("range_shared_exponent")
+        # The source hedged: a one-sided bound or an approximation. Stored as a
+        # closed interval either way, so the record has to say so.
+        if _ONE_SIDED_RE.search(text):
+            flags.append("range_one_sided")
+        elif _APPROXIMATE_RE.search(text):
+            flags.append("range_approximate")
         values = [v for v, _, _ in found]
         return range_raw, min(values), max(values), table_link
     if table_link is None:
@@ -469,4 +508,5 @@ def clean_row(raw: dict[str, str]) -> BioNumberRecord:
         keywords=_split_keywords(raw.get("Keywords")),
         parse_flags=flags,
         range_fused=bool(FUSED_RANGE_FLAGS.intersection(flags)),
+        range_qualified=bool(QUALIFIED_RANGE_FLAGS.intersection(flags)),
     )

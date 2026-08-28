@@ -179,6 +179,40 @@ Correcting the bounds is out of scope for this capability; see `proposal.md` —
 - **WHEN** a range cell reads `'0 - 1.3×10^6`, where both readings give the same range
 - **THEN** the record is not flagged as carrying a shared exponent
 
+### Requirement: A range the source did not state as an interval says so
+
+The source frequently hedges a range rather than bounding it: `<0.001`, `>100`, `≤5`, `≥10`, `up to
+30`, `at least 2`, and the approximation markers `~5` and `≈5`. Bounds are still taken as the lowest
+and highest number found, which turns `<0.001` into the closed interval from `0.001` to `0.001` — an
+exact equality where the source said *less than*. 2,233 records of the export carry such a marker.
+
+The system SHALL flag a range whose cell carries a one-sided bound, and separately one carrying an
+approximation marker, and SHALL leave the bounds as computed. A consumer SHALL be able to read one
+field to know that the stored bounds are not the exact interval they appear to be, without knowing
+which marker applied.
+
+That field SHALL be distinct from the fused-range predicate. The two say different things — one that
+the bounds may come from two quantities, the other that the source never claimed a closed interval —
+and a record can carry either without the other. Widening the fused-range predicate to cover hedging
+would redefine a term `add-ask-agent` already reads.
+
+#### Scenario: A one-sided bound
+
+- **WHEN** a range cell reads `'<0.001`
+- **THEN** the bounds are left as computed
+- **AND** the record is flagged as one-sided
+- **AND** the record reports that its range was not stated as a closed interval
+
+#### Scenario: An approximation
+
+- **WHEN** a range cell reads `'~5`
+- **THEN** the record is flagged as approximate, and reports the same
+
+#### Scenario: A plainly stated range
+
+- **WHEN** a range cell reads `'0.44-1.79`
+- **THEN** neither flag is present, and the record does not report hedging
+
 ### Requirement: A row whose range is only a link is kept
 
 About 23% of rows carry, in place of a scalar, a "Table link" URL to an external PDF. The system

@@ -41,6 +41,24 @@ class SourceDigest:
         self._hash.update(chunk)
         self.size_bytes += len(chunk)
 
+    def complete_from(self, path: str | Path) -> None:
+        """Hash whatever of ``path`` has not been fed in yet.
+
+        A run stopped early by ``--limit`` never reaches the end of the file, so
+        without this the recorded digest and size describe only the part read —
+        under names that assert whole-file facts. Worse, two different limits
+        that both stop inside the first chunk produce the *same* digest, so two
+        corpora could not be told apart, which is the failure this module exists
+        to prevent. Reading the remaining bytes is cheap; being wrong is not.
+        """
+        total = os.path.getsize(path)
+        if self.size_bytes >= total:
+            return
+        with open(path, "rb") as fh:
+            fh.seek(self.size_bytes)
+            while chunk := fh.read(1 << 20):
+                self.update(chunk)
+
     @property
     def hexdigest(self) -> str:
         return self._hash.hexdigest()
@@ -67,6 +85,7 @@ class Manifest:
     duplicate_bnids: list[int]
     flag_counts: dict[str, int]
     range_fused_count: int
+    range_qualified_count: int = 0
     row_limit: int | None = None
     notes: dict[str, str] = field(default_factory=dict)
 
@@ -107,6 +126,10 @@ def write_manifest(manifest: Manifest, corpus_path: str | Path) -> Path:
     """
     path = manifest_path_for(corpus_path)
     partial = path.with_name(path.name + ".partial")
-    partial.write_text(manifest.to_json(), encoding="utf-8")
-    os.replace(partial, path)
+    try:
+        partial.write_text(manifest.to_json(), encoding="utf-8")
+        os.replace(partial, path)
+    except BaseException:
+        partial.unlink(missing_ok=True)
+        raise
     return path

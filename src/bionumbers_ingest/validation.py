@@ -28,6 +28,7 @@ class RunReport:
     duplicate_bnids: list[int] = field(default_factory=list)
     flag_counts: dict[str, int] = field(default_factory=dict)
     range_fused_count: int = 0
+    range_qualified_count: int = 0
     link_records: int = 0
     records_with_no_scalar: int = 0
     row_limit: int | None = None
@@ -47,7 +48,8 @@ class RunReport:
             + (f" {self.duplicate_bnids[:10]}" if self.duplicate_bnids else ""),
             f"  records carrying a link:{self.link_records:>6}",
             f"  records with no scalar: {self.records_with_no_scalar}",
-            f"  ranges not usable as a measurement (range_fused): {self.range_fused_count}",
+            f"  ranges that may fuse two quantities (range_fused):  {self.range_fused_count}",
+            f"  ranges the source hedged (range_qualified):        {self.range_qualified_count}",
         ]
         if self.row_limit:
             lines.append(f"  ROW LIMIT APPLIED:      {self.row_limit} — this corpus is a sample")
@@ -83,7 +85,12 @@ def report_for(
         duplicate_bnids=sorted(b for b, n in seen.items() if n > 1),
         flag_counts=dict(flags),
         range_fused_count=sum(1 for r in records if r.range_fused),
-        link_records=sum(1 for r in records if r.table_link is not None),
+        range_qualified_count=sum(1 for r in records if r.range_qualified),
+        # Counted from the flag, not from `table_link`. A "Table link" cell whose
+        # URL has no scheme raises the flag but yields no URL, and counting the two
+        # differently printed `range_is_link: 1` beside `records carrying a link: 0`
+        # — two counts of the same thing, disagreeing, with nothing explaining why.
+        link_records=sum(1 for r in records if "range_is_link" in r.parse_flags),
         records_with_no_scalar=sum(1 for r in records if r.value is None and r.range_low is None),
         row_limit=row_limit,
     )

@@ -90,6 +90,22 @@ manifest beside it SHALL be treated as the product of a run that did not finish.
 - **WHEN** a run applied a row limit
 - **THEN** the manifest records the limit that was applied
 
+### Requirement: A sampled run's fingerprint still describes the whole file
+
+A run stopped early by a row limit reads only part of the source, so a fingerprint accumulated during
+that read covers only the part read — while being recorded under a name that asserts a fact about the
+file. Two different limits that both stop within the first read block then produce the *same*
+fingerprint, so two corpora cannot be told apart, which is the failure the manifest exists to prevent.
+
+The system SHALL complete the fingerprint over the rest of the file when a run has not read all of it,
+so the recorded checksum and size are always the whole file's.
+
+#### Scenario: A limited run and a full run of the same file
+
+- **WHEN** one run applies a row limit and another does not, over the same source
+- **THEN** both record the same source checksum and the same source size
+- **AND** both stamp their records with the same short digest
+
 ### Requirement: A source that cannot be read whole is an error
 
 Two ways the source can be wrong produce a corpus that is short or shifted while the run reports

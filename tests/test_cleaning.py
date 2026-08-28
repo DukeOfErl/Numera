@@ -550,3 +550,97 @@ def test_a_shared_exponent_that_changes_nothing_is_not_flagged():
     assert r.range_high == pytest.approx(1.3e6)
     assert "range_shared_exponent" not in r.parse_flags
     assert r.range_fused is False
+
+
+# --- ranges the source did not state as a closed interval ---------------------
+
+
+@pytest.mark.parametrize(
+    "range_text,flag",
+    [
+        ("'<0.001", "range_one_sided"),
+        ("'>100", "range_one_sided"),
+        ("'≤ 5", "range_one_sided"),
+        ("'≥ 10", "range_one_sided"),
+        ("'up to 30", "range_one_sided"),
+        ("'at least 2", "range_one_sided"),
+        ("'~5", "range_approximate"),
+        ("'≈ 5", "range_approximate"),
+        ("'about 12", "range_approximate"),
+    ],
+)
+def test_a_hedged_range_is_flagged_and_marked_not_exact(range_text, flag):
+    # 2,233 records of the export carry such a marker. `<0.001` stored as the
+    # closed interval [0.001, 0.001] asserts an exact equality where the source
+    # said *less than* — the project's own unfalsifiable-error class.
+    r = clean_row({"bion_id": "1", "Range": range_text})
+    assert flag in r.parse_flags
+    assert r.range_qualified is True
+
+
+@pytest.mark.parametrize("range_text", ["'0.44-1.79", "'1.94 to 2.72", "'-90 to -60"])
+def test_a_plainly_stated_range_is_not_marked_hedged(range_text):
+    r = clean_row({"bion_id": "1", "Range": range_text})
+    assert r.range_qualified is False
+    assert "range_one_sided" not in r.parse_flags
+    assert "range_approximate" not in r.parse_flags
+
+
+def test_hedging_is_a_separate_predicate_from_fusion():
+    # They mean different things and must not be conflated: `range_fused` says the
+    # bounds may come from two quantities; `range_qualified` says the source never
+    # claimed a closed interval. Widening range_fused would have redefined a
+    # contract add-ask-agent already reads.
+    hedged = clean_row({"bion_id": "1", "Range": "'<0.001"})
+    assert hedged.range_qualified is True and hedged.range_fused is False
+    fused = clean_row({"bion_id": "1", "Range": "'2 4 9"})
+    assert fused.range_fused is True and fused.range_qualified is False
+
+
+def test_an_incoherent_shared_exponent_reading_is_not_flagged():
+    # `1000-2e5` would invert under the shared reading (1000e5 above 2e5), so the
+    # literal 1000..200000 is the only possible reading and the range is correct.
+    r = clean_row({"bion_id": "1", "Range": "'1000-2e5"})
+    assert "range_shared_exponent" not in r.parse_flags
+    assert r.range_fused is False
+
+
+@pytest.mark.parametrize(
+    "range_text,low,high",
+    [
+        ("'7.4±0.3 μm", 7.1, 7.7),  # a trailing unit no longer costs both bounds
+        ("'0.5±0.1 SD", 0.4, 0.6),
+        ("'-3.26±0.41 kcal/mol", -3.67, -2.85),
+    ],
+)
+def test_a_mean_and_deviation_with_a_trailing_unit_keeps_its_bounds(range_text, low, high):
+    r = clean_row({"bion_id": "1", "Value": "", "Range": range_text})
+    assert r.range_low == pytest.approx(low)
+    assert r.range_high == pytest.approx(high)
+    assert "range_mean_sd_embedded" in r.parse_flags
+
+
+@pytest.mark.parametrize(
+    "range_text",
+    [
+        "'1.3±0.2x10^6",  # the exponent applies to BOTH mean and deviation
+        "'15.6±0.5х10^3",
+        "'± 300 to 400",  # a range OF the deviation
+        "'0.5±0.1 (n=12)",  # a sample size, indistinguishable from a second number
+    ],
+)
+def test_trailing_text_containing_a_number_yields_no_bounds_and_is_flagged(range_text):
+    # Deliberately conservative. 21 cells of the export are shaped this way, and
+    # most are `mean±sd × 10^n` — reading the mean and deviation while dropping
+    # the exponent would be wrong by a factor of a million, silently. So no
+    # bounds and a flag, rather than a plausible number.
+    r = clean_row({"bion_id": "1", "Value": "", "Range": range_text})
+    assert r.range_low is None and r.range_high is None
+    assert "range_plus_minus" in r.parse_flags
+
+
+def test_an_uppercase_X_multiplier_is_read_like_the_others():
+    r = clean_row({"bion_id": "1", "Range": "'2X10^5 to 4X10^5"})
+    assert r.range_low == pytest.approx(2e5)
+    assert r.range_high == pytest.approx(4e5)
+    assert "range_multi_number" not in r.parse_flags

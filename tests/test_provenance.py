@@ -185,3 +185,20 @@ def test_accounting_that_does_not_add_up_is_reported_as_a_warning():
     off = RunReport(rows_read=10, rows_skipped_non_data=1, records_written=8)
     assert off.rows_accounted_for is False
     assert "WARNING" in off.format()
+
+
+def test_a_limited_run_fingerprints_the_whole_file_anyway(tmp_path, sample_html, monkeypatch):
+    # Otherwise two limits that both stop inside the first read block produce the
+    # same digest, and two corpora cannot be told apart.
+    from bionumbers_ingest.parsing import html_table
+
+    monkeypatch.setattr(html_table, "_CHUNK", 128)
+    full = ingest(sample_html, tmp_path / "full.jsonl")
+    small = ingest(sample_html, tmp_path / "small.jsonl", limit=1)
+    bigger = ingest(sample_html, tmp_path / "bigger.jsonl", limit=4)
+
+    assert small.source_digest == bigger.source_digest == full.source_digest
+    for result in (full, small, bigger):
+        m = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+        assert m["source_sha256"] == hashlib.sha256(sample_html.read_bytes()).hexdigest()
+        assert m["source_size_bytes"] == sample_html.stat().st_size

@@ -58,14 +58,26 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
+    if args.limit is not None and args.limit < 1:
+        # `--limit -100` is truthy and compares as "already past the limit", so it
+        # used to write a one-row corpus and exit 0. Given that a sampled corpus
+        # looks complete and is not, a typo here is the worst thing to accept.
+        print(
+            f"bionumbers-ingest: --limit must be at least 1, got {args.limit}",
+            file=sys.stderr,
+        )
+        return 2
+
     source = Path(args.source)
     try:
         result = ingest(source, args.output, limit=args.limit)
     except OSError as exc:
-        # Covers a missing file as well as an unreadable one. An explicit
-        # is_file() check ahead of this was removed: fault seeding showed the two
-        # paths were indistinguishable, so it was one branch earning nothing.
-        print(f"bionumbers-ingest: cannot read {source}: {exc}", file=sys.stderr)
+        # Covers a missing source as well as an unwritable destination, so it
+        # names the file the operating system actually complained about — saying
+        # "cannot read <source>" when the output directory is read-only sends the
+        # reader to the wrong file.
+        blamed = exc.filename or source
+        print(f"bionumbers-ingest: {exc.strerror or exc}: {blamed}", file=sys.stderr)
         return 2
     except ValueError as exc:
         # A malformed or truncated source, or columns that are not the ones this

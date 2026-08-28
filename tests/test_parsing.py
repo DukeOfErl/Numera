@@ -142,3 +142,25 @@ def test_a_renamed_column_is_an_error_rather_than_an_empty_corpus(tmp_path):
     )
     with pytest.raises(ValueError, match="not the ones expected"):
         list(iter_rows(renamed, expect_headers=("bion_id", "Value")))
+
+
+def test_an_end_tag_inside_a_cell_reaches_cleaning(tmp_path):
+    # Dropping it joined the words either side AND left no tag for cleaning to
+    # find, so a contaminated cell raised no markup flag at all.
+    src = tmp_path / "endtag.html"
+    src.write_text(
+        "<table><tr><td>bion_id</td><td>Comments</td></tr>"
+        "<tr><td>1</td><td>alpha</b>beta</td></tr></table>",
+        encoding="utf-8",
+    )
+    assert list(iter_rows(src))[0]["Comments"] == "alpha</b>beta"
+
+
+def test_a_reordered_header_is_accepted_because_fields_are_read_by_name(tmp_path):
+    src = tmp_path / "reordered.html"
+    src.write_text(
+        "<table><tr><td>Value</td><td>bion_id</td></tr><tr><td>1</td><td>2</td></tr></table>",
+        encoding="utf-8",
+    )
+    rows = list(iter_rows(src, expect_headers=("bion_id", "Value")))
+    assert rows == [{"Value": "1", "bion_id": "2"}]

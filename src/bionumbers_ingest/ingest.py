@@ -79,6 +79,9 @@ def ingest(
     corpus_path = Path(corpus_path)
 
     records, rows_read, skipped, digest = build_records(source, limit=limit)
+    # A limited run stops before the end of the file, so finish the fingerprint
+    # over the rest of it: the manifest names these as whole-file facts.
+    digest.complete_from(source)
     stamp = digest.stamp
     for record in records:
         record.source_digest = stamp
@@ -99,6 +102,7 @@ def ingest(
         duplicate_bnids=report.duplicate_bnids,
         flag_counts=report.flag_counts,
         range_fused_count=report.range_fused_count,
+        range_qualified_count=report.range_qualified_count,
         row_limit=limit,
         notes={
             "source_modified": (

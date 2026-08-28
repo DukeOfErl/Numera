@@ -68,6 +68,11 @@ class _TableParser(HTMLParser):
         elif tag == "tr" and self._row is not None:
             self.rows.append(self._row)
             self._row = None
+        elif self._in_cell:
+            # An end tag inside a cell is content like any other tag. Dropping it
+            # joined the words either side of it AND left no tag for cleaning to
+            # find, so a contaminated cell raised no markup flag at all.
+            self._buf.append(f"</{tag}>")
 
     def handle_data(self, data: str) -> None:
         if self._in_cell:
@@ -162,13 +167,17 @@ def iter_rows(
     for row in _iter_raw_rows(path, on_bytes=on_bytes):
         if headers is None:
             headers = row
-            if expect_headers is not None and list(headers) != list(expect_headers):
+            if expect_headers is not None:
                 missing = [h for h in expect_headers if h not in headers]
                 unexpected = [h for h in headers if h not in expect_headers]
-                raise ValueError(
-                    f"the export's columns are not the ones expected: "
-                    f"missing {missing}, unexpected {unexpected}"
-                )
+                if missing or unexpected:
+                    raise ValueError(
+                        f"the export's columns are not the ones expected: "
+                        f"missing {missing}, unexpected {unexpected}"
+                    )
+                # Order is deliberately not checked: cleaning reads fields by
+                # name, so a reordered header changes nothing, and failing on it
+                # would abort a perfectly ingestible file.
             continue
         if len(row) != len(headers):
             raise ValueError(
