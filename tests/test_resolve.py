@@ -117,3 +117,27 @@ def test_a_build_is_refused_where_git_would_track_the_corpus(tmp_path, sample_ht
 def test_building_without_an_export_is_a_programming_error(tmp_path):
     with pytest.raises(ValueError, match="no export"):
         build(plan(tmp_path / "bionumbers.jsonl"))
+
+
+def test_two_exports_differing_only_in_case_are_ambiguous(tmp_path, sample_html):
+    """Nothing, rather than whichever the filesystem lists first.
+
+    They can coexist on a case-sensitive filesystem, and picking one by directory
+    order picks differently on another machine.
+    """
+    shutil.copy(sample_html, tmp_path / "BioNumbers.xls")
+    shutil.copy(sample_html, tmp_path / "bionumbers.xls")
+    assert not plan(tmp_path / "corpus.jsonl").needs_build
+
+
+def test_the_export_name_agrees_with_the_consumers_copy():
+    """The consumer restates this constant, and cannot import it.
+
+    `bionumbers_ask.autobuild` names the export in the branch where importing this
+    package failed, so the duplication is unavoidable. Asserting the two agree
+    whenever both are installed is what keeps it from drifting.
+    """
+    from bionumbers_ingest.resolve import EXPORT_NAME
+
+    autobuild = pytest.importorskip("bionumbers_ask.autobuild")
+    assert autobuild.EXPORT_NAME == EXPORT_NAME

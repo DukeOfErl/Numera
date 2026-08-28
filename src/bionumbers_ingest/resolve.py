@@ -24,11 +24,15 @@ from pathlib import Path
 
 from bionumbers_ingest.ingest import ingest
 
-#: The export's published filename. Matched case-insensitively because a browser
-#: on a case-preserving filesystem is not consistent about it, and exactly —
-#: a directory of several exports is ambiguous, and this reports nothing rather
-#: than choosing one.
-EXPORT_NAME = "bionumbers.xls"
+#: The export's published filename, in the form the site serves it. Matched
+#: case-insensitively, because a browser on a case-preserving filesystem is not
+#: consistent about it.
+#:
+#: Restated in `bionumbers_ask.autobuild`, unavoidably: that module has to name the
+#: export in the branch where this package failed to import, so it cannot import
+#: this. `tests/test_resolve.py` asserts the two agree whenever both are present,
+#: which is the only thing that makes the duplication safe.
+EXPORT_NAME = "BioNumbers.xls"
 
 
 @dataclass(frozen=True)
@@ -57,8 +61,11 @@ def _export_in(directory: Path) -> Path | None:
         entries = list(directory.iterdir())
     except OSError:
         return None
-    matches = [p for p in entries if p.name.lower() == EXPORT_NAME and p.is_file()]
-    return matches[0] if matches else None
+    matches = [p for p in entries if p.name.lower() == EXPORT_NAME.lower() and p.is_file()]
+    # Exactly one, or nothing. Two files differing only in case can coexist on a
+    # case-sensitive filesystem, and taking the first would pick between them by
+    # directory order -- silently, and differently on another machine.
+    return matches[0] if len(matches) == 1 else None
 
 
 def plan(configured: str | Path) -> CorpusPlan:

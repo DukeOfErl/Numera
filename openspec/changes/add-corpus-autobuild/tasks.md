@@ -1,7 +1,7 @@
 # Tasks
 
-ADR block for this change: `0250` (the last number of `add-corpus-ingestion`'s block, unspent), then
-`0300`–`0340` if more are needed. Reconcile against the table in `CLAUDE.md`.
+ADR block for this change: `0300`–`0340`. `0250` went to ADR-0250 on `add-corpus-ingestion`, which
+spent its block; the table in `CLAUDE.md` is the authority and has been reconciled.
 
 ## 1. The resolver
 
@@ -25,8 +25,9 @@ ADR block for this change: `0250` (the last number of `add-corpus-ingestion`'s b
 
 ## 3. Documentation
 
-- [ ] 3.1 `README.md`: the two-step becomes "download, then run the app", with the manual route kept.
-      **Held until `add-ask-agent` wires the drivers** — the resolver alone changes nothing a reader
-      can see, and a README promising a build that no call site performs is worse than the old one
+- [x] 3.1 `README.md`: the two-step becomes "download, then run the app", with the manual route kept.
+      Held until `add-ask-agent` wired the drivers (their `feat/ask-corpus-autobuild`, 6370873) —
+      the resolver alone changed nothing a reader could see, and a README promising a build that no
+      call site performs is worse than the old one
 - [x] 3.2 `CLAUDE.md`: `resolve.py` in the module table
 - [x] 3.3 `CHANGELOG.md`
