@@ -134,10 +134,30 @@ _MEAN_SD_RE = re.compile(rf"^([-+]?{_NUM})\s*(?:±|\+/-|\+-)\s*({_NUM})\s*(?!\d)
 # what may stand between two bounds without being a second quantity: the
 # separators _extract_numbers normalises to, and whitespace
 _SEPARATORS_ONLY_RE = re.compile(r"^[\s;,\-–—±+/]*$")
+#: Markers that hedge a bound rather than name anything. They say something about
+#: the number beside them, so they are not evidence of a second quantity — and
+#: the hedge itself is already reported by `range_approximate` / `range_one_sided`.
+_HEDGE_MARKERS = "~\u223c\u2248\u2243<>\u2264\u2265"
+_SEPARATOR_CHARS = ";,-\u2013\u2014/"
+_SEPARATORS_AND_HEDGES_RE = re.compile(rf"^[\s;,\-–—±+/{_HEDGE_MARKERS}]*$")
+#: Both bounds wrapped in their own brackets — `(-390)-(-450)` — which makes them
+#: peers of one range rather than one quantity annotating another.
+_BRACKETED_BOUNDS_RE = re.compile(r"^\s*[)\]][\s;,\-–—±+/]*[(\[]\s*$")
 # Characters that can trail a number as part of its unit. A hyphen after one of
 # these is still a range separator: `5%-10%` and `5g-10g` are ranges, and reading
 # the hyphen as a sign invents a negative bound the source never states.
-_UNIT_TAIL_RE = re.compile(r"[A-Za-z%\u00b0\u00c5\u212b/)\]}'\"\u00b2\u00b3]")
+# \u00b5 and \u03bc are here for the same reason `_normalize_units` exists: the
+# export writes the micrometre both ways, and a unit the walk cannot step over
+# leaves the range separator to be read as a sign -- `width 2µm-5µm` stored
+# -5 .. 2, a negative width.
+#: How many space-separated words a trailing unit may be.
+#: `mg dry weight` and `cells per ml` are the longest written inline in this
+#: export; beyond that the walk is crossing prose. The number is empirical, and
+#: the requirement it serves is that a unit is short and prose is not.
+_MAX_UNIT_WORDS = 3
+#: Words that are never a unit, however unit-shaped they look.
+_NOT_A_UNIT = frozenset({"and", "or", "versus", "vs", "then", "but"})
+_UNIT_TAIL_RE = re.compile(r"[A-Za-z%\u00b0\u00b5\u03bc\u00c5\u212b/)\]}'\"\u00b2\u00b3]")
 # A unit as written after a bound: letters and unit symbols, optionally spaced
 # words, but nothing with a digit in it.
 _UNIT_TOKEN_RE = re.compile(r"([A-Za-z\u00b5\u03bc\u00b0\u00c5\u212b%/^]+(?:\s+[A-Za-z/]+)*)")
@@ -299,19 +319,33 @@ def _numbers_with_spans(text: str) -> tuple[str, list[tuple[float, int, int]]]:
             continue
         if tok[0] in "+-":
             j = m.start() - 1
-            # Walk back over the whole trailing unit, however many words it is.
-            # Stepping over one run of unit characters and one run of spaces
-            # handles `5%-10%` but not `37 deg C-42 deg C`, where the walk lands
-            # on a letter, calls the hyphen a sign, and stores -42 .. 37 — an
-            # inverted range with a negative bound the source never wrote.
+            # Walk back over the trailing unit, which may be more than one word:
+            # stepping over a single run of unit characters handles `5%-10%` but
+            # not `37 deg C-42 deg C`, where the walk lands on a letter, calls the
+            # hyphen a sign, and stores -42 .. 37 — an inverted range with a
+            # negative bound the source never wrote.
+            #
+            # Bounded, though, because a unit is short and prose is not. Unbounded,
+            # the walk crossed four words of `lateral bond energy -2.2 to -5.7kT
+            # longitudinal bond energy -6.8` to reach a digit, and stored +6.8.
+            words = 0
             while True:
-                before = j
                 while j >= 0 and text[j] == " ":
                     j -= 1
+                if j < 0 or text[j].isdigit():
+                    break
+                if words == _MAX_UNIT_WORDS or not _UNIT_TAIL_RE.match(text[j]):
+                    break
+                end = j
                 while j >= 0 and _UNIT_TAIL_RE.match(text[j]):
                     j -= 1
-                if j == before:
+                if text[j + 1 : end + 1].lower() in _NOT_A_UNIT:
+                    # A conjunction is not a unit, and a sign after one is a sign:
+                    # `-50 and -300` walked over "and", found the 0 of 50, called
+                    # the minus a separator and stored -50 .. 300.
+                    j = end
                     break
+                words += 1
             if j >= 0 and text[j].isdigit():  # sign is really a separator
                 tok = tok[1:]
         value = _token_to_float(tok)
@@ -349,9 +383,31 @@ def _prose_stands_between_bounds(
         return False
     a, b = sorted((first, last), key=lambda t: t[1])
     span = text[a[2] : b[1]]
-    if _SEPARATORS_ONLY_RE.match(span):
+    if _SEPARATORS_ONLY_RE.match(span) or _is_only_hedged_separator(span):
+        return False
+    if _BRACKETED_BOUNDS_RE.match(span):
         return False
     return not _is_the_unit_repeated(span, text[b[2] :], units)
+
+
+def _is_only_hedged_separator(span: str) -> bool:
+    """Is the span a separator carrying hedge markers, and nothing else?
+
+    `8 to >90`, `~30-~60` and `<0.6 to >9` are single ranges whose bounds the
+    source hedged. The hedge is already reported — every one of these carries
+    `range_one_sided` or `range_approximate` — so also calling them two quantities
+    says something false about them, and behind a predicate that means "do not
+    present this as a measurement".
+
+    **A separator has to be present, not just the marker.** Without that,
+    `in year 1978 ~290g: in year 1979 ~200g` qualifies on its lone `~` and is
+    released as a range from 200 to 1979. Measured over the export the pair of
+    conditions splits the class exactly: 16 hedged ranges out, and the five cells
+    whose span is a bare marker or an `=` left flagged.
+    """
+    if not _SEPARATORS_AND_HEDGES_RE.match(span):
+        return False
+    return any(ch in _SEPARATOR_CHARS for ch in span)
 
 
 def _unit_after(text: str) -> list[str]:
@@ -468,7 +524,39 @@ def _shared_exponent_is_ambiguous(text: str, found: list[tuple[float, int, int]]
     if v1 == 0:
         return False
     mantissa = _MANTISSA_OF_RE.match(text[s2:e2].strip())
-    return mantissa is not None and abs(v1) < abs(float(mantissa.group(1)))
+    if mantissa is None:
+        return False
+    # `_DIGITS` permits a thousands separator and `float` does not, so `2-1,500e3`
+    # raised here -- and one exception mid-run costs the whole corpus, on an
+    # export nobody has seen yet. `_token_to_float` strips them; so does this.
+    return abs(v1) < abs(float(mantissa.group(1).replace(",", "")))
+
+
+_PERCENT_DEVIATION_RE = re.compile(rf"^\s*({_NUM})\s*%")
+
+
+def _deviation(text: str, centre: float, units: str | None, flags: list[str]) -> float | None:
+    """The half-width of ``±…``, as an absolute quantity.
+
+    **A percentage after the sign is a fraction of the value, not a quantity.**
+    `Value=0.488 μm/min, Range=±23%` read as an absolute 23 gives -22.512 .. 23.488
+    — a 46-unit interval including negative speeds — and it ships carrying only
+    `range_plus_minus`, which is the flag for a *successful* parse. Nothing marks
+    it, so nothing downstream can decline to present it.
+
+    Reading it as a percentage is not a correction under ADR-0230: the cell is not
+    ambiguous, it was being misread. The flag records that the bounds were derived
+    from a relative uncertainty, because that is worth being able to count.
+
+    The exception is a row whose Units column *is* `%`. There the value is itself a
+    percentage and `±10%` is ten points, so the absolute reading stands.
+    """
+    percent = _PERCENT_DEVIATION_RE.match(text)
+    if percent and (units or "").strip() != "%":
+        flags.append("range_percent_deviation")
+        return abs(centre) * float(percent.group(1)) / 100
+    numbers = _extract_numbers(text)
+    return abs(numbers[0]) if numbers else None
 
 
 def _finite(value: float | None) -> bool:
@@ -591,16 +679,18 @@ def _parse_range(
         # over a unit is the opposite of the recover-and-flag rule elsewhere.
         one = _MEAN_SD_RE.match(text.strip())
         if one:
-            mean, delta = float(one.group(1)), abs(float(one.group(2)))
+            mean = float(one.group(1))
             flags.append("range_mean_sd_embedded")
+            delta = _deviation(text.strip()[one.start(2) :], mean, units, flags)
+            if delta is None:  # pragma: no cover - the regex guarantees a number
+                return range_raw, None, None, table_link
             return _bounds_or_unparsed(range_raw, mean - delta, mean + delta, table_link, flags)
 
         # The deviation is the number that FOLLOWS the sign. Taking the first
         # number in the cell instead reads "(n=3) ±1.15" as a deviation of 3.
         if value is not None:
-            deltas = _extract_numbers(text[signs[0].end() :])
-            if deltas:
-                delta = abs(deltas[0])
+            delta = _deviation(text[signs[0].end() :], value, units, flags)
+            if delta is not None:
                 return _bounds_or_unparsed(
                     range_raw, value - delta, value + delta, table_link, flags
                 )

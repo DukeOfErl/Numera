@@ -25,7 +25,10 @@ any release; `1.0.0` when it stabilizes.
   zeroes stated rather than omitted.
 - **`range_fused`** on every record: the stored bounds may come from two
   different quantities, because bounds are the lowest and highest number in the
-  cell. 1,438 records of the current export ([ADR-0230]).
+  cell. 1,418 records of the current export ([ADR-0230]).
+- **`range_percent_deviation`** in `parse_flags` where the bounds came from a
+  relative uncertainty: `±23%` is a fraction of the value, not a quantity, and
+  reading it as one gave a 46-unit interval around a value of 0.488.
 - **`range_qualified`** on every record: the source did not state a closed
   interval. `<0.001` stored as the interval 0.001–0.001 asserts an exact equality
   where the source said *less than*. 2,233 records.

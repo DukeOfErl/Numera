@@ -1025,3 +1025,107 @@ def test_an_en_dash_between_two_numbers_is_a_separator_not_a_sign():
     # knowingly read as unsigned -- a seeded survivor this docstring accepts.
     r = clean_row({"bion_id": "1", "Range": "'2.5–3.5"})
     assert (r.range_low, r.range_high) == (2.5, 3.5)
+
+
+def test_a_percentage_deviation_is_a_fraction_of_the_value_not_a_quantity():
+    # `Value=0.488 μm/min, Range=±23%` read as an absolute 23 gives -22.512 ..
+    # 23.488 -- a 46-unit interval including negative speeds -- and it ships
+    # carrying only `range_plus_minus`, the flag for a *successful* parse. Nothing
+    # marks it, so nothing downstream can decline to present it.
+    r = clean_row({"bion_id": "1", "Value": "0.488", "Units": "μm/min", "Range": "'±23%"})
+    assert (r.range_low, r.range_high) == pytest.approx((0.37576, 0.60024))
+    assert "range_percent_deviation" in r.parse_flags
+
+
+def test_a_percentage_deviation_on_a_percentage_value_stays_absolute():
+    # The value is itself a percentage, so ±10% is ten points and the absolute
+    # reading is the right one.
+    r = clean_row({"bion_id": "1", "Value": "12", "Units": "%", "Range": "'±10%"})
+    assert (r.range_low, r.range_high) == pytest.approx((2.0, 22.0))
+    assert "range_percent_deviation" not in r.parse_flags
+
+
+def test_a_percentage_deviation_is_read_the_same_way_when_it_carries_its_own_mean():
+    r = clean_row({"bion_id": "1", "Units": "mM", "Range": "'50±10%"})
+    assert (r.range_low, r.range_high) == pytest.approx((45.0, 55.0))
+    assert "range_percent_deviation" in r.parse_flags
+
+
+@pytest.mark.parametrize(
+    ("range_text", "low", "high"),
+    [
+        ("'width 2µm-5µm: thickness 0.1µm-0.5µm", 0.1, 5.0),
+        ("'68µg/liter-99mg/liter", 68.0, 99.0),
+        (f"'2{GREEK_MU}m-5{GREEK_MU}m", 2.0, 5.0),
+    ],
+)
+def test_a_micrometre_is_a_unit_the_sign_test_can_step_over(range_text, low, high):
+    # Both glyphs were missing from the unit-tail class -- the exact quirk this
+    # module documents and normalises everywhere else -- so the walk stopped on
+    # the µ and read the range separator as a minus. A negative width.
+    r = clean_row({"bion_id": "1", "Range": range_text})
+    assert (r.range_low, r.range_high) == (low, high)
+
+
+@pytest.mark.parametrize(
+    "range_text",
+    [
+        "'8 to >180",
+        "'~3 - >90",
+        "'~30-~60",
+        "'<0.6 to >9",
+        "'170≤ - ≤1,350",
+        "'(-390)-(-450)",
+    ],
+)
+def test_a_hedged_or_bracketed_separator_is_not_a_second_quantity(range_text):
+    # The hedge is already reported by range_qualified; also calling these two
+    # quantities says something false, behind the predicate that means "do not
+    # present this as a measurement". Bracketed bounds are peers, not one
+    # quantity annotating another.
+    r = clean_row({"bion_id": "1", "Range": range_text})
+    assert r.range_fused is False
+
+
+@pytest.mark.parametrize(
+    "range_text",
+    [
+        "'in year 1978 ~290g: in year 1979 ~200g",  # a lone marker, no separator
+        "'RNA1 ∼3300nt: RNA2 ∼3000 nt",
+        "'1 OD600 = 0.62 gDCW/L",  # a definition, not a range
+    ],
+)
+def test_a_marker_without_a_separator_is_still_two_quantities(range_text):
+    # Accepting a bare marker releases `in year 1978 ~290g: in year 1979 ~200g` as
+    # a range from 200 to 1979 -- a year as a bound. A separator has to be there
+    # too, and over the export that pair of conditions splits the class exactly.
+    r = clean_row({"bion_id": "1", "Range": range_text})
+    assert r.range_fused is True
+
+
+def test_the_unit_walk_stops_at_a_conjunction():
+    # `-50 and -300` walked over "and", found the 0 of 50, called the minus a
+    # separator and stored -50 .. 300. A conjunction is not a unit.
+    r = clean_row({"bion_id": "1", "Range": "'-50 and -300"})
+    assert (r.range_low, r.range_high) == (-300.0, -50.0)
+
+
+def test_the_unit_walk_does_not_cross_prose_to_find_a_digit():
+    # Unbounded, the walk crossed four words to reach the 7 of `-5.7kT` and stored
+    # `-6.8` as `+6.8`. A unit is short; prose is not.
+    r = clean_row(
+        {
+            "bion_id": "1",
+            "Range": "'lateral bond energy -2.2 to -5.7kT longitudinal bond energy -6.8 to -9.4kT",
+        }
+    )
+    assert r.range_low == -9.4
+    assert r.range_high == -2.2
+
+
+def test_a_mantissa_with_a_thousands_separator_does_not_end_the_run():
+    # `_DIGITS` permits the separator and `float` does not, so this raised -- and
+    # one exception mid-run costs the whole corpus. No record of today's export
+    # takes this path; a future one may.
+    r = clean_row({"bion_id": "1", "Range": "'2-1,500e3"})
+    assert (r.range_low, r.range_high) == (2.0, 1_500_000.0)

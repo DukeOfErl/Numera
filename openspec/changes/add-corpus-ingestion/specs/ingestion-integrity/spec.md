@@ -167,14 +167,15 @@ read it the same way on every line, instead of distinguishing "clean" from "key 
 
 ### Requirement: The fused-range predicate is a field, not a naming convention
 
-`parse_flags` is a reporting vocabulary, not a consumer interface. It carries at least eight names
-today, of which five begin with `range_` and only two mean the stored bounds may fuse two unrelated
-quantities: `range_plus_minus` and `range_mean_sd_embedded` mark *successful* parses, `range_is_link`
-and `no_scalar` mark rows with no scalar at all, and `range_unparsed` marks a cell no number could be
-read from. Neither "non-empty `parse_flags`" nor a `range_` prefix is therefore the predicate: on the
-existing corpus those rules select 5,148 and 5,494 records against the 1,445 meant, and would mark
-thousands of correctly-parsed entries as untrustworthy in a user-visible marking — teaching a reader
-to ignore it, which is a worse outcome than the defect being marked.
+`parse_flags` is a reporting vocabulary, not a consumer interface. It carries fourteen names today,
+of which eleven begin with `range_` and only three mean the stored bounds may fuse two unrelated
+quantities: `range_plus_minus`, `range_mean_sd_embedded` and `range_percent_deviation` mark
+*successful* parses, `range_is_link` and `no_scalar` mark rows with no scalar at all, and
+`range_unparsed` marks a cell no number could be read from. Neither "non-empty `parse_flags`" nor a
+`range_` prefix is therefore the predicate: over the export those rules select 13,016 and 8,055
+records against the 1,418 meant, and would mark thousands of correctly-parsed entries as
+untrustworthy in a user-visible marking — teaching a reader to ignore it, which is a worse outcome
+than the defect being marked.
 
 The system SHALL therefore emit a dedicated boolean field, `range_fused`, present on every record,
 `true` when the stored `range_low`/`range_high` may fuse numbers that do not belong to one quantity
