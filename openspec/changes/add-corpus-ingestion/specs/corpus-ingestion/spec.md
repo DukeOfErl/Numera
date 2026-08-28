@@ -100,6 +100,21 @@ ignored, or there is no repository, or git cannot be consulted, the run SHALL pr
 - **WHEN** the output path is git-ignored, or lies outside any repository
 - **THEN** the command runs normally
 
+### Requirement: Each key carries the value of its own column
+
+Requiring that the twelve keys are *present with an accepted type* is not enough, because `null` is an
+accepted type for ten of them. A record with every text field empty satisfies that requirement
+completely, loads without error, and answers questions with no organism, no reference and no
+measurement method — while every test of the key set passes.
+
+The system SHALL therefore carry each column's value into its own field, and that mapping SHALL be
+asserted per column rather than inferred from the keys being present.
+
+#### Scenario: Every column reaches its field
+
+- **WHEN** a row whose fourteen columns each hold a distinguishable value is cleaned
+- **THEN** each of the record's fields carries the value of the column it names
+
 ### Requirement: Every line stands on its own
 
 The ask agent's loader rejects an entire corpus on its first unusable line, so a single malformed

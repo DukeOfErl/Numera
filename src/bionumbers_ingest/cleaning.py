@@ -110,6 +110,9 @@ def _token_to_float(tok: str) -> float | None:
 
 
 _URL_RE = re.compile(r"https?://\S+")
+# The export writes the phrase three ways -- "Table link", "Table Link" and
+# "table link" -- so matching one exactly leaves the other two in the text.
+_TABLE_LINK_RE = re.compile(r"table\s*link\s*-?\s*", re.IGNORECASE)
 _PM_RE = re.compile(r"±|\+/-|\+-")  # plus/minus: ±X means value ± X
 _NUM = r"(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][-+]?\d+)?"
 # a single "mean±sd" expression filling the whole cell (e.g. "-3.26±0.41"); the
@@ -380,7 +383,7 @@ def _parse_range(
     range_raw = text or None
 
     table_link = None
-    if "Table link" in text or _URL_RE.search(text):
+    if _TABLE_LINK_RE.search(text) or _URL_RE.search(text):
         urls = _URL_RE.findall(text)
         if urls:
             table_link = urls[0]
@@ -388,7 +391,7 @@ def _parse_range(
             # onward instead would silently drop bounds written after the link.
             text = _URL_RE.sub(" ", text)
         flags.append("range_is_link")
-        text = re.sub(r"Table link\s*-?\s*", "", text).strip()
+        text = _TABLE_LINK_RE.sub("", text).strip()
 
     signs = list(_PM_RE.finditer(text))
     if signs:

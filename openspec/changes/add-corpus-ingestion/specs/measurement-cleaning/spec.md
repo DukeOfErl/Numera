@@ -39,6 +39,27 @@ remove the link first. The link is separately available on the record, so nothin
 - **WHEN** a range cell is parsed
 - **THEN** the record carries the cell's text with the leading apostrophe removed
 
+### Requirement: A unit's exponent is not a measurement
+
+The source writes units with exponents — `μm^3`, `M^-1`, `Å^2` — and those exponents are digits
+sitting in the range cell. Read as numbers they become bounds: `1-2 μm^3` would report a high bound of
+3, and a cell whose unit stands between its two bounds would lose the second one entirely.
+
+The system SHALL NOT treat a number whose base is a caret rather than a digit as a measurement, and
+skipping such a number SHALL NOT stop it reading the numbers that follow. 258 range cells carry a
+caret exponent ahead of a later number, so abandoning the scan at the first one is not a theoretical
+concern.
+
+#### Scenario: A unit exponent after the bounds
+
+- **WHEN** a range cell reads `'1-2 μm^3`
+- **THEN** the bounds are `1` and `2`
+
+#### Scenario: A unit exponent between the bounds
+
+- **WHEN** a range cell reads `'1 μm^3 to 5`
+- **THEN** the bounds are `1` and `5`, not `1` and `1`
+
 ### Requirement: A sign is told apart from a separator
 
 A hyphen in this source is sometimes a minus sign and sometimes a range separator, and reading one

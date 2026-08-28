@@ -644,3 +644,90 @@ def test_an_uppercase_X_multiplier_is_read_like_the_others():
     assert r.range_low == pytest.approx(2e5)
     assert r.range_high == pytest.approx(4e5)
     assert "range_multi_number" not in r.parse_flags
+
+
+def test_a_unit_exponent_between_the_bounds_does_not_stop_the_scan():
+    """Holds `A unit's exponent is not a measurement` in measurement-cleaning.
+
+    Skipping the exponent must not abandon the numbers after it. Found by mutation
+    testing: turning the skip's `continue` into a `break` survived the whole
+    suite, and 258 range cells carry a caret exponent ahead of a later number, so
+    the difference is between bounds of 1..5 and bounds of 1..1.
+    """
+    r = clean_row({"bion_id": "1", "Range": "'1 " + GREEK_MU + "m^3 to 5"})
+    assert r.range_low == pytest.approx(1.0)
+    assert r.range_high == pytest.approx(5.0)
+
+
+def test_two_mutation_survivors_are_knowingly_left_alive():
+    """Two mutants survive this suite deliberately; neither is a contract.
+
+    1. `re.IGNORECASE` on the `to` separator. The export uses lowercase `to` 845
+       times and uppercase `TO` zero times, so case-insensitivity is tuning. A
+       test asserting `1 TO 5` parses would pin a behaviour nothing requires.
+    2. The `j >= 0` boundary in the sign-versus-separator scan. It differs from
+       `j > 0` only for a cell beginning with whitespace then a signed number, of
+       which the export has none.
+
+    Both are recorded here rather than killed, because a survivor nobody triaged
+    is an oversight while one nobody killed on purpose is a decision. What the
+    suite does assert is the requirement itself — that a hyphen after a digit
+    separates and a leading sign is a sign — which the cases below cover.
+    """
+    assert clean_row({"bion_id": "1", "Range": "'1-1.1"}).range_low == pytest.approx(1.0)
+    assert clean_row({"bion_id": "1", "Range": "'-70"}).range_low == pytest.approx(-70.0)
+
+
+COLUMN_TO_FIELD = {
+    "Properties": "property",
+    "Organism": "organism",
+    "Units": "units",
+    "Reference": "reference",
+    "Reference PubMed ID": "reference_pubmed_id",
+    "Primary Source": "primary_source",
+    "Primary Source PubMed ID": "primary_source_pubmed_id",
+    "Measurement Method": "measurement_method",
+    "Comments": "comments",
+    "Entered By": "entered_by",
+}
+
+
+@pytest.mark.parametrize("column,field", sorted(COLUMN_TO_FIELD.items()))
+def test_each_column_reaches_its_own_field(column, field):
+    """Holds `Each key carries the value of its own column` in corpus-ingestion.
+
+    Found by mutation testing, and it is the gap the contract test structurally
+    could not catch: `null` is an accepted type for ten of the twelve keys, so
+    blanking eight pass-through fields left all 205 tests passing. The corpus
+    would have loaded cleanly and answered with no organism, no reference and no
+    measurement method.
+    """
+    raw = {"bion_id": "900001"}
+    raw.update({c: f"value-of-{f}" for c, f in COLUMN_TO_FIELD.items()})
+    record = clean_row(raw)
+    assert getattr(record, field) == f"value-of-{field}"
+
+
+def test_the_numeric_columns_reach_their_own_fields():
+    r = clean_row({"bion_id": "900002", "Value": "1.5", "Range": "'2-3"})
+    assert r.bnid == 900002
+    assert r.value == pytest.approx(1.5)
+    assert r.range_low == pytest.approx(2.0)
+    assert r.range_high == pytest.approx(3.0)
+
+
+def test_the_keyword_column_reaches_the_keyword_field():
+    r = clean_row({"bion_id": "1", "Keywords": "alpha, beta, gamma"})
+    assert r.keywords == ["alpha", "beta", "gamma"]
+
+
+@pytest.mark.parametrize("phrase", ["Table link", "Table Link", "table link"])
+def test_the_table_link_phrase_is_matched_however_it_is_cased(phrase):
+    # All three spellings occur in the export; matching one exactly left the
+    # other two sitting in the text the bounds are read from.
+    r = clean_row({"bion_id": "1", "Range": f"'0.44-1.79 {phrase} - http://x.invalid/a.pdf"})
+    assert r.range_low == pytest.approx(0.44)
+    assert r.range_high == pytest.approx(1.79)
+    assert r.table_link == "http://x.invalid/a.pdf"
+    assert "range_is_link" in r.parse_flags
+    assert "link" not in (r.range_raw or "").lower().split("http")[0].replace(phrase.lower(), "")
