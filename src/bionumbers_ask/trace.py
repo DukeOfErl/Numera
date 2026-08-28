@@ -14,11 +14,18 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 LOGGER_NAME = "bionumbers_ask"
+
+# Inside the repository but gitignored: the trail is this project's own output, not
+# corpus data, and the records carry search terms, identifiers and token counts --
+# no entry text, so nothing of the corpus's licensing travels with them.
+DEFAULT_FILE = "logs/trace.jsonl"
 
 # Set at import, not only in configure(). An unconfigured logger inherits the
 # root's WARNING level, so every INFO record would be discarded without error --
@@ -92,3 +99,27 @@ class QuestionTrace:
 
 def start_question(run_label: str = "dev") -> QuestionTrace:
     return QuestionTrace(question_id=uuid.uuid4().hex[:12], run_label=run_label)
+
+
+def to_file(spec: str) -> None:
+    """Point the structured trail somewhere a real run can be read from.
+
+    Nothing called this outside the tests, so every search, alias resolution,
+    truncation decision and spend increment was discarded in every real run: the
+    logger is at INFO with no handler, and the handler-less root drops the records
+    at WARNING without error. The trail vanished precisely where nobody would think
+    to look for it, which is the failure this module exists to prevent.
+
+    Never stdout: the rendered answer goes there, and interleaving JSON with it
+    would corrupt both.
+    """
+    if not spec:
+        return
+    if spec == "-":
+        configure(sys.stderr)
+        return
+    path = Path(spec)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # Appended and left open for the life of the process: a run is a sequence of
+    # questions, and each carries its own identifier for filtering afterwards.
+    configure(path.open("a", encoding="utf-8"))

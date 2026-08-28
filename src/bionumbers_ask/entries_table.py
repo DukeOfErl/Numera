@@ -45,7 +45,19 @@ NO_METHOD_LEGEND = f"{NO_METHOD} no measurement method recorded"
 # mark it sits among the cited entries as though the answer rested on it legitimately.
 NOT_RETRIEVED = "\u2021"
 NOT_RETRIEVED_LEGEND = f"{NOT_RETRIEVED} cited but not retrieved during this question"
-UNCITED_BANNER = "not cited in the answer"
+
+# Marks an entry the corpus holds without a scalar value -- a table link, or a
+# figure that lives only in the comments. Spelled once in a legend rather than
+# repeated in every such row, where it crowds out the values that are there.
+NO_SCALAR = "\u00a7"
+NO_SCALAR_LEGEND = f"{NO_SCALAR} no scalar value recorded"
+# "Possibly relevant" because these rows are ranked, not left in retrieval order:
+# they are the entries whose wording is closest to the question and the cited
+# properties. Saying only what they are not would invite reading them as noise.
+UNCITED_BANNER = "possibly relevant (not cited in the answer)"
+# Said where the cited table would be. An answer that cited nothing and a table
+# that simply started with uncited rows looked the same, and they are not.
+NOTHING_CITED = "No entries cited"
 
 # Words that carry no topic. Kept small on purpose -- this is a tie-breaker for
 # rows nobody cited, not a retrieval engine.
@@ -53,6 +65,18 @@ _STOPWORDS = frozenset(
     "the of a an in on at and or is are was were for to from with by what "
     "which its their per between during under over into".split()
 )
+
+
+# The corpus carries injected markup in `keywords` on 10,206 of its 14,294
+# entries -- `<IMG SRC="/WF_SQL_XSRF.html">`, an artefact of the source export.
+# Stripped for display only: the corpus is an external input this project does
+# not correct, and the fix belongs to whatever produces the file. Not stripped at
+# load, which would silently change what the search index matches on.
+_MARKUP_RE = re.compile(r"<[^>]*>")
+
+
+def _without_markup(text: str) -> str:
+    return _MARKUP_RE.sub("", text).strip()
 
 
 def _topic_words(text: str) -> frozenset[str]:
@@ -74,9 +98,20 @@ class Row:
     cited: bool
     method_recorded: bool = True
     retrieved: bool = True
+    has_scalar: bool = True
     method: str = ""
+    # Not shown in the terminal's columns, which follow the reference database's
+    # results page. Carried so a driver that can open a row -- the web page -- has
+    # the whole entry without holding the repository to look it up again, and so a
+    # transcript of what was drawn can be redrawn on its own.
+    comments: str = ""
+    keywords: tuple[str, ...] = ()
+    reference_pubmed_id: str = ""
 
     def markers(self) -> str:
+        # Deliberately not `has_scalar`: the terminal writes "(no scalar value)"
+        # in the value column, so a marker there would say it twice. The web
+        # driver blanks that column and adds the marker itself.
         applying = (
             (NOT_RETRIEVED, not self.retrieved),
             (NO_METHOD, not self.method_recorded),
@@ -159,8 +194,14 @@ def rows_for(
                 reference=entry.reference,
                 cited=bnid in cited,
                 method_recorded=bool(entry.measurement_method.strip()),
+                has_scalar=entry.value is not None
+                or entry.range_low is not None
+                or entry.range_high is not None,
                 retrieved=bnid in retrieved,
                 method=" ".join(entry.measurement_method.split()),
+                comments=entry.comments,
+                keywords=tuple(_without_markup(k) for k in entry.keywords),
+                reference_pubmed_id=entry.reference_pubmed_id or "",
             )
         )
     return tuple(out)
@@ -209,6 +250,23 @@ def summarise(shown: int, retrieved: int, matched: int = 0, searches: int = 0) -
         across = f" across {searches} searches" if searches > 1 else ""
         parts.append(f"{matched} matched{across}")
     return "… " + "; ".join(parts)
+
+
+def dimension_note(rows: tuple[Row, ...]) -> str | None:
+    """What kinds of quantity the cited entries measure, when they measure more than one.
+
+    Over every cited row, not only the shown ones: the answer rests on all of
+    them. Stated as a fact about the units rather than as a fault, because citing
+    a length and a mass together is often exactly right -- what is wrong is
+    reading them as one another's alternatives.
+    """
+    spanned = dimensions_of([row.units for row in rows if row.cited])
+    if len(spanned) <= 1:
+        return None
+    return (
+        f"cited entries measure {len(spanned)} kinds of quantity "
+        f"({', '.join(spanned)}) -- not alternatives for one another"
+    )
 
 
 def _banner(width: int) -> str:
@@ -298,16 +356,8 @@ def render(
     retrieved = total if total is not None else len(rows)
     if retrieved > len(shown) or matched > len(shown):
         out.append(summarise(len(shown), retrieved, matched, searches))
-    spanned = dimensions_of([row.units for row in rows if row.cited])
-    if len(spanned) > 1:
-        # Over every cited row, not only the shown ones: the answer rests on all of
-        # them. Stated as a fact about the units rather than as a fault, because
-        # citing a length and a mass together is often exactly right -- what is
-        # wrong is reading them as one another's alternatives.
-        note = (
-            f"cited entries measure {len(spanned)} kinds of quantity "
-            f"({', '.join(spanned)}) -- not alternatives for one another"
-        )
+    note = dimension_note(rows)
+    if note:
         # Wrapped to the table, because the number of dimensions is unbounded and
         # a footnote running past the rule reads as a line of a different table.
         out.extend(textwrap.wrap(note, len(rule), subsequent_indent="  "))

@@ -15,32 +15,21 @@ import os
 import sys
 import uuid
 from collections.abc import Iterable
-from pathlib import Path
-from typing import Any, TextIO
+from typing import TextIO
 
-from . import entries_table, trace
+from . import entries_table, messages, trace
 from .agent import AskAgent
-from .citations import format_citation
-from .config import Config, format_usd
+from .config import Config
 from .corpus import CorpusUnavailable, load
 from .events import (
     Answer,
     AnswerEntries,
-    CitationWarning,
-    ConversationWarning,
-    CostProjection,
     EndReason,
     Event,
     QuestionEnded,
     Retrieval,
-    SpendWarning,
 )
 from .repository import CorpusRepository
-
-# Inside the repository but gitignored: the trail is this project's own output, not
-# corpus data, and the records carry search terms, identifiers and token counts --
-# no entry text, so nothing of the corpus's licensing travels with them.
-DEFAULT_TRACE = "logs/trace.jsonl"
 
 # Endings that finish the run rather than the question. Continuing past a spent
 # budget or a full conversation would put the same refusal on every subsequent
@@ -52,19 +41,6 @@ STOP_THE_RUN = {
 }
 
 
-# Carried for the entries table and the citation check, not for a person to read:
-# fifty identifiers on a progress line would bury what the search was for.
-_UNRENDERED_DETAIL = {"bnids"}
-
-
-def _detail(detail: dict[str, Any]) -> str:
-    return " ".join(
-        f"{k}={v!r}"
-        for k, v in detail.items()
-        if v is not None and k not in _UNRENDERED_DETAIL
-    )
-
-
 def render(event: Event, repo: CorpusRepository | None = None) -> str | None:
     """One line for an event, or None for one a terminal need not show.
 
@@ -73,32 +49,10 @@ def render(event: Event, repo: CorpusRepository | None = None) -> str | None:
     below actually does.
     """
     if isinstance(event, Retrieval):
-        return f"  · {event.tool} {_detail(event.detail)}".rstrip()
-    if isinstance(event, ConversationWarning):
-        return (
-            f"  ! this session holds {event.messages} of {event.bound} messages; "
-            "it will stop taking questions at the bound"
-        )
-    if isinstance(event, SpendWarning):
-        return (
-            f"  ! spent {format_usd(event.spent)}, past the "
-            f"{format_usd(event.threshold)} warning threshold"
-        )
-    if isinstance(event, CostProjection):
-        return (
-            f"  ! this question could cost up to {format_usd(event.projected)}, "
-            f"above the {format_usd(event.threshold)} threshold (an estimate)"
-        )
-    if isinstance(event, CitationWarning):
-        parts = []
-        if event.unknown:
-            parts.append(f"not in the corpus: {', '.join(map(format_citation, event.unknown))}")
-        if event.unretrieved:
-            parts.append(
-                "cited without being retrieved: "
-                + ", ".join(map(format_citation, event.unretrieved))
-            )
-        return f"  ! {'; '.join(parts)}"
+        return f"  · {messages.retrieval_text(event)}"
+    warning = messages.warning_text(event)
+    if warning is not None:
+        return f"  ! {warning}"
     if isinstance(event, AnswerEntries):
         # Needs the corpus to show anything: the event carries identifiers, and the
         # reference deliberately never travels through the agent.
@@ -115,20 +69,7 @@ def render(event: Event, repo: CorpusRepository | None = None) -> str | None:
     if isinstance(event, Answer):
         return f"\n{event.text}\n"
     if isinstance(event, QuestionEnded):
-        mark = " (incomplete)" if event.incomplete else ""
-        # Only when the bound was actually reached. Printing the pair on every
-        # answer would put a number nobody needs beside the ones they do, and the
-        # figure means something precisely when there was no room for another call.
-        bound = (
-            f" · {event.model_calls} of {event.call_limit} model calls"
-            if event.at_retrieval_bound
-            else ""
-        )
-        return (
-            f"  — {event.reason.value}{mark} · {format_usd(event.spend)} "
-            f"(run {format_usd(event.run_spend)}) · {event.model} · "
-            f"{event.tool_calls} tool calls{bound}"
-        )
+        return f"  — {messages.ending_text(event)}"
     return None
 
 
@@ -185,30 +126,6 @@ def _questions_from_terminal(out: TextIO) -> Iterable[str]:
         yield line
 
 
-def configure_trace(spec: str) -> None:
-    """Point the structured trail somewhere a real run can be read from.
-
-    Nothing called this outside the tests, so every search, alias resolution,
-    truncation decision and spend increment was discarded in every real run: the
-    logger is at INFO with no handler, and the handler-less root drops the records
-    at WARNING without error. The trail vanished precisely where nobody would think
-    to look for it, which is the failure the trace module exists to prevent.
-
-    Never stdout: the rendered answer goes there, and interleaving JSON with it
-    would corrupt both.
-    """
-    if not spec:
-        return
-    if spec == "-":
-        trace.configure(sys.stderr)
-        return
-    path = Path(spec)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # Appended and left open for the life of the process: a run is a sequence of
-    # questions, and each carries its own identifier for filtering afterwards.
-    trace.configure(path.open("a", encoding="utf-8"))
-
-
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="bionumbers-ask",
@@ -231,8 +148,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--trace",
-        default=os.environ.get("BIONUMBERS_ASK_TRACE", DEFAULT_TRACE),
-        help=f"where the structured trail is written (default {DEFAULT_TRACE}); "
+        default=os.environ.get("BIONUMBERS_ASK_TRACE", trace.DEFAULT_FILE),
+        help=f"where the structured trail is written (default {trace.DEFAULT_FILE}); "
         "'-' for stderr, empty to discard it",
     )
     parser.add_argument(
@@ -241,7 +158,7 @@ def main(argv: list[str] | None = None) -> None:
         help="ask a single question and exit, instead of reading from the terminal",
     )
     args = parser.parse_args(argv)
-    configure_trace(args.trace)
+    trace.to_file(args.trace)
 
     try:
         repo = CorpusRepository(load(args.corpus))

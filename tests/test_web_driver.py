@@ -1,0 +1,719 @@
+"""The web driver: the session identifier it keeps, and the state it does not.
+
+Streamlit re-runs the whole script on every interaction, so a driver built on it
+starts from nothing each time. Everything the conversation needs comes back from
+the checkpoint, reached through one identifier held in session state -- which is
+the same property the terminal driver's `run()` demonstrates by being callable
+twice, tested here against the framework that actually re-runs.
+
+`AppTest` runs the real entry script in-process. It sees only the last value
+written to any one screen location, which is why what the page draws is decided
+in `web.items_for` and asserted there rather than read back off the page.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from streamlit.testing.v1 import AppTest
+
+from bionumbers_ask import entries_table, web
+from bionumbers_ask.corpus import load
+from bionumbers_ask.repository import CorpusRepository
+from bionumbers_ask.agent import AskAgent
+from bionumbers_ask.cli import render
+from bionumbers_ask.events import (
+    Answer,
+    AnswerEntries,
+    CitationWarning,
+    ConversationWarning,
+    CostProjection,
+    EndReason,
+    QuestionEnded,
+    QuestionStarted,
+    Retrieval,
+    SpendWarning,
+)
+
+from agent_doubles import batched_tool_calls, costing, says, scripted, tool_call
+from conftest import FIXTURE, agent_with
+
+APP = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
+
+# Generous, and deliberately so: the default is three seconds, the first run in a
+# process pays for component discovery, and a timeout here is indistinguishable
+# from a hang in the agent.
+TIMEOUT = 30
+
+
+def app(monkeypatch, repo, agent) -> AppTest:
+    """The real script, with the corpus and agent a test chose.
+
+    `resources` is replaced rather than driven through the environment because it
+    is cached for the life of the process: a second test would be served the
+    first one's agent.
+    """
+    monkeypatch.setattr(web, "resources", lambda: (repo, agent))
+    return AppTest.from_file(APP, default_timeout=TIMEOUT)
+
+
+def ask(at: AppTest, question: str) -> AppTest:
+    return at.chat_input[0].set_value(question).run()
+
+
+# -- events become items --------------------------------------------------
+
+
+def test_an_answer_becomes_an_answer_item():
+    item = web.item_for(Answer(question_id="q", text="about 1 micrometre (BNID 100002)"))
+    assert item.kind is web.Kind.ANSWER
+    assert item.text == "about 1 micrometre (BNID 100002)"
+
+
+def test_the_ending_reports_why_it_ended_what_it_cost_and_which_model():
+    item = web.item_for(
+        QuestionEnded(question_id="q", reason=EndReason.ANSWERED, spend=110,
+                      run_spend=220, model="fake/model", tool_calls=3)
+    )
+    assert item.kind is web.Kind.ENDING
+    assert "answered" in item.text
+    assert "$0.000110" in item.text and "run $0.000220" in item.text
+    assert "fake/model" in item.text and "3 tool calls" in item.text
+
+
+def test_an_unfinished_question_says_so_rather_than_reading_as_an_answer():
+    item = web.item_for(
+        QuestionEnded(question_id="q", reason=EndReason.SPEND_CEILING, spend=110,
+                      run_spend=220, model="fake/model", tool_calls=3, incomplete=True)
+    )
+    assert "incomplete" in item.text
+
+
+def test_an_event_the_page_does_not_draw_yields_no_item():
+    """The start of a question is the driver's cue, not something to say."""
+    started = QuestionStarted(question_id="q", session_id="s", question="how wide?")
+    assert web.item_for(started) is None
+
+
+def test_the_stream_is_drained_in_order_and_only_once(repo, config, tmp_path):
+    model = scripted(tool_call("search_entries", property="Cell"), says("an answer"))
+    agent = agent_with(repo, config, tmp_path, model)
+
+    items = web.items_for(agent.ask("s", "how wide?"))
+
+    assert [item.kind for item in items] == [
+        web.Kind.PROGRESS, web.Kind.ANSWER, web.Kind.ENDING
+    ]
+
+
+# -- the session identifier ------------------------------------------------
+
+
+def test_a_first_run_creates_a_session_identifier(monkeypatch, repo, config, tmp_path):
+    at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
+    assert at.session_state[web.SESSION_KEY]
+
+
+def test_the_identifier_survives_a_re_run(monkeypatch, repo, config, tmp_path):
+    """A re-run is what every interaction causes, so this is the whole claim."""
+    at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
+    first = at.session_state[web.SESSION_KEY]
+
+    at.run()
+
+    assert at.session_state[web.SESSION_KEY] == first
+
+
+def test_two_browser_sessions_do_not_share_an_identifier(monkeypatch, repo, config, tmp_path):
+    """Otherwise one visitor's conversation would continue in another's tab."""
+    model = scripted(says("a"))
+    one = app(monkeypatch, repo, agent_with(repo, config, tmp_path, model, "1.sqlite")).run()
+    two = app(monkeypatch, repo, agent_with(repo, config, tmp_path, model, "2.sqlite")).run()
+
+    assert one.session_state[web.SESSION_KEY] != two.session_state[web.SESSION_KEY]
+
+
+def test_the_identifier_is_generated_rather_than_read_from_an_empty_state():
+    state: dict = {}
+    first = web.session_id(state, {})
+    assert web.session_id(state, {}) == first
+    assert web.session_id({}, {}) != first
+
+
+# -- a question, and the one after it --------------------------------------
+
+
+def test_a_question_is_put_to_the_agent_and_its_answer_drawn(
+    monkeypatch, repo, config, tmp_path
+):
+    model = scripted(tool_call("search_entries", property="Cell"),
+                     says("about 1 micrometre (BNID 100002)"))
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    assert "about 1 micrometre (BNID 100002)" in [m.value for m in at.markdown]
+    assert any("answered" in c.value for c in at.caption)
+
+
+def test_a_follow_up_continues_the_conversation_rather_than_starting_one(
+    monkeypatch, repo, config, tmp_path
+):
+    """The identifier is only worth keeping if it reaches the same conversation."""
+    model = scripted(says("first answer"), says("second answer"))
+    agent = agent_with(repo, config, tmp_path, model)
+    at = app(monkeypatch, repo, agent).run()
+
+    ask(at, "how wide is an E. coli cell?")
+    session = at.session_state[web.SESSION_KEY]
+    assert agent.conversation_length(session) == 2
+
+    ask(at, "and yeast?")
+    assert agent.conversation_length(session) == 4, "the follow-up began a fresh conversation"
+
+
+def test_both_questions_and_answers_stay_on_screen_across_the_re_run(
+    monkeypatch, repo, config, tmp_path
+):
+    model = scripted(says("first answer"), says("second answer"))
+    at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run()
+
+    ask(at, "how wide is an E. coli cell?")
+    at = ask(at, "and yeast?")
+
+    drawn = [m.value for m in at.markdown]
+    assert drawn.index("how wide is an E. coli cell?") < drawn.index("first answer")
+    assert drawn.index("first answer") < drawn.index("and yeast?") < drawn.index("second answer")
+
+
+# -- the driver holds no agent state ---------------------------------------
+
+
+def test_spend_is_the_ledger_s_rather_than_something_the_page_added_up(
+    monkeypatch, repo, config, tmp_path
+):
+    """Two re-runs, and the run total still comes from the checkpoint."""
+    model = scripted(costing(says("first"), 0.000_110), costing(says("second"), 0.000_110))
+    agent = agent_with(repo, config, tmp_path, model)
+    at = app(monkeypatch, repo, agent).run()
+
+    ask(at, "first")
+    at = ask(at, "second")
+
+    assert agent.run_spend() == 220
+    assert any(r"run \$0.000220" in c.value for c in at.caption)
+
+
+def test_session_state_holds_the_identifier_and_what_was_drawn_and_nothing_else(
+    monkeypatch, repo, config, tmp_path
+):
+    """A copy of the conversation, the spend or the ceiling here would be a
+    second source of truth for something the checkpoint already owns."""
+    model = scripted(says("an answer"))
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    kept = {k for k in at.session_state.filtered_state if k.startswith("bionumbers_ask.")}
+    assert kept == {web.SESSION_KEY, web.TRANSCRIPT_KEY}
+
+
+def test_a_missing_corpus_is_explained_rather_than_raised(monkeypatch):
+    from bionumbers_ask.corpus import CorpusUnavailable
+
+    def unavailable():
+        raise CorpusUnavailable("no corpus was supplied")
+
+    monkeypatch.setattr(web, "resources", unavailable)
+    at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+
+    assert not at.exception
+    assert "no corpus was supplied" in [e.value for e in at.error]
+
+
+# -- what the markdown renderer would misread ------------------------------
+
+
+def test_a_cost_keeps_its_currency_sign_rather_than_opening_an_equation():
+    """Two dollar signs in one line made Streamlit typeset the cost between them.
+
+    The ending carries a per-question figure and a run figure, so the pair is on
+    every line the page draws: "$0.008181 (run $0.008181)" rendered as mathematics
+    with both signs eaten, leaving a bare number with no currency on it.
+    """
+    assert web.as_text("$0.008181 (run $0.008181)") == r"\$0.008181 (run \$0.008181)"
+
+
+def test_the_ending_the_page_draws_is_escaped(monkeypatch, repo, config, tmp_path):
+    model = scripted(costing(says("an answer"), 0.000_110))
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    ending = next(c.value for c in at.caption if "answered" in c.value)
+    assert r"\$0.000110" in ending
+    assert "$0.000110" not in ending.replace(r"\$", "")
+
+
+def test_an_answer_is_escaped_too_since_a_model_may_write_a_dollar_sign(
+    monkeypatch, repo, config, tmp_path
+):
+    model = scripted(says("about $5 of glucose"))
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "cost?")
+
+    assert r"about \$5 of glucose" in [m.value for m in at.markdown]
+
+
+# -- the indexes are built once, not per interaction -----------------------
+
+
+@pytest.fixture
+def counted(monkeypatch, tmp_path):
+    """The real cached `resources()`, with the file read and the index build counted.
+
+    The other tests here replace `resources` wholesale, which bypasses the cache
+    entirely -- so the caching is exactly the thing they cannot see. This drives
+    the real one and counts what happens inside it.
+
+    `st.cache_resource` holds its entry in the function for the life of the
+    process, not in the per-run storage the harness replaces, so it has to be
+    cleared on both sides or one test is served another's corpus.
+    """
+    web.resources.clear()
+    counts = {"read": 0, "indexed": 0}
+    rows = load(FIXTURE)
+
+    def counting_load(path):
+        counts["read"] += 1
+        return rows
+
+    def counting_repository(entries):
+        counts["indexed"] += 1
+        return CorpusRepository(entries)
+
+    monkeypatch.setattr(web, "load", counting_load)
+    monkeypatch.setattr(web, "CorpusRepository", counting_repository)
+    monkeypatch.setattr(web.trace, "to_file", lambda spec: None)
+    monkeypatch.setenv("BIONUMBERS_ASK_CHECKPOINTS", str(tmp_path / "c.sqlite"))
+    yield counts
+    web.resources.clear()
+
+
+def test_the_corpus_is_read_and_indexed_once_however_often_the_script_re_runs(counted):
+    """Every interaction re-runs the whole script; the index must not follow it."""
+    at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+    at.run()
+    at.run()
+
+    assert counted == {"read": 1, "indexed": 1}
+
+
+def test_a_second_browser_session_is_served_the_same_index(counted):
+    """The point of a resource cache rather than session state: one index, not one each."""
+    AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+    AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+
+    assert counted == {"read": 1, "indexed": 1}
+
+
+def test_the_page_is_served_the_index_that_was_built(counted):
+    """Cached and correct are separate claims; a cache returning nothing passes the first."""
+    at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+
+    assert any("6 entries" in c.value for c in at.caption)
+
+
+# -- progress, drawn while the question is still running -------------------
+
+
+def test_a_retrieval_becomes_a_progress_item_naming_the_tool_and_its_argument():
+    item = web.item_for(
+        Retrieval(question_id="q", tool="search_entries",
+                  detail={"property": "Cell volume", "matched": 12})
+    )
+    assert item.kind is web.Kind.PROGRESS
+    assert "search_entries" in item.text
+    assert "'Cell volume'" in item.text and "matched=12" in item.text
+
+
+def test_the_identifiers_a_search_returned_stay_off_the_progress_line():
+    """Fifty identifiers would bury what the search was actually for."""
+    item = web.item_for(
+        Retrieval(question_id="q", tool="search_entries",
+                  detail={"property": "Cell", "bnids": [100001, 100002]})
+    )
+    assert "bnids" not in item.text and "100001" not in item.text
+
+
+def test_progress_reaches_the_page_in_order_before_the_answer(
+    monkeypatch, repo, config, tmp_path
+):
+    """The point of the whole exercise: the page is not blank while work happens."""
+    model = scripted(
+        batched_tool_calls(("search_entries", {"property": "Cell"}),
+                           ("list_values", {"field": "organism", "term": "coli"})),
+        says("about 1 micrometre (BNID 100002)"),
+    )
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    progress = [c.value for c in at.caption if c.value.startswith("·")]
+    assert len(progress) == 2, progress
+    assert any("search_entries" in line for line in progress)
+
+
+def test_each_retrieval_is_its_own_element_rather_than_one_line_rewritten(
+    monkeypatch, repo, config, tmp_path
+):
+    """A rewritten line composes into its last value and the sequence is lost."""
+    model = scripted(
+        tool_call("search_entries", property="Cell"),
+        tool_call("get_entry", bnid=100002),
+        says("an answer"),
+    )
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    progress = [c.value for c in at.caption if c.value.startswith("·")]
+    assert len(progress) == 2, "one retrieval overwrote the other"
+    assert "search_entries" in progress[0] and "get_entry" in progress[1]
+
+
+# -- warnings are said, not swallowed --------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("event", "expected"),
+    [
+        (SpendWarning(question_id="q", spent=600, threshold=500), "past the"),
+        (CostProjection(question_id="q", projected=900, threshold=500), "could cost up to"),
+        (
+            ConversationWarning(question_id="q", tokens=90_000, bound=120_000),
+            "90,000 of 120,000 tokens",
+        ),
+        (CitationWarning(question_id="q", unknown=(999999,)), "not in the corpus"),
+        (CitationWarning(question_id="q", unretrieved=(100002,)), "cited without being retrieved"),
+    ],
+)
+def test_every_warning_becomes_an_item(event, expected):
+    item = web.item_for(event)
+    assert item is not None, "a warning the page would never show"
+    assert item.kind is web.Kind.WARNING
+    assert expected in item.text
+
+
+def test_the_two_drivers_word_a_warning_identically():
+    """Same fact, same sentence. The terminal adds a marker and nothing else."""
+    event = SpendWarning(question_id="q", spent=600, threshold=500)
+    assert render(event).strip(" !") == web.item_for(event).text
+
+
+def test_a_citation_warning_reaches_the_page(monkeypatch, repo, config, tmp_path):
+    """It was silently dropped before: an answer citing what it never retrieved looked clean."""
+    model = scripted(says("about 1 micrometre (BNID 100002)"))
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    assert any("cited without being retrieved" in w.value for w in at.warning)
+
+
+# -- 8.4: the session survives the server ----------------------------------
+
+
+def test_the_identifier_is_published_to_the_url(monkeypatch, repo, config, tmp_path):
+    at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
+    assert at.query_params[web.QUERY_KEY] == [at.session_state[web.SESSION_KEY]]
+
+
+def test_a_url_identifier_is_adopted_rather_than_replaced():
+    state: dict = {}
+    assert web.session_id(state, {web.QUERY_KEY: "abc12345"}) == "abc12345"
+
+
+def test_session_state_wins_over_a_url_edited_mid_session():
+    """Otherwise pasting a link into the address bar would silently switch sessions."""
+    state = {web.SESSION_KEY: "original"}
+    assert web.session_id(state, {web.QUERY_KEY: "someone-elses"}) == "original"
+
+
+def test_a_follow_up_continues_the_conversation_after_a_restart(
+    monkeypatch, repo, config, tmp_path
+):
+    """8.4. A restart loses session state; the checkpoint and the URL survive it.
+
+    The second AppTest is a new server process as far as the driver can tell:
+    nothing carries over but the checkpoint file on disk and the identifier in
+    the link the browser reloads.
+    """
+    store = str(tmp_path / "restart.sqlite")
+    first = agent_with(repo, config, tmp_path, scripted(says("first answer")), "restart.sqlite")
+    at = app(monkeypatch, repo, first).run()
+    ask(at, "how wide is an E. coli cell?")
+    session = at.session_state[web.SESSION_KEY]
+    assert first.conversation_length(session) == 2
+
+    # The server restarts: a new agent over the same store, and a page that knows
+    # only what the URL carried.
+    restarted = AskAgent(repo, config, store, model=scripted(says("second answer")))
+    monkeypatch.setattr(web, "resources", lambda: (repo, restarted))
+    after = AppTest.from_file(APP, default_timeout=TIMEOUT)
+    after.query_params = {web.QUERY_KEY: session}
+    after.run()
+
+    assert after.session_state[web.SESSION_KEY] == session, "the restart orphaned the session"
+    ask(after, "and yeast?")
+    assert restarted.conversation_length(session) == 4, "the follow-up began a fresh conversation"
+
+
+def test_without_the_url_a_restart_starts_a_new_session(monkeypatch, repo, config, tmp_path):
+    """The negative half: what the URL is actually carrying."""
+    at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
+    session = at.session_state[web.SESSION_KEY]
+
+    fresh = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+
+    assert fresh.session_state[web.SESSION_KEY] != session
+
+
+# -- 8.6: the entries table ------------------------------------------------
+
+
+def entries(cited=(100002,), retrieved=(100002, 100001), **kwargs):
+    return AnswerEntries(question_id="q", cited=cited, retrieved=retrieved, **kwargs)
+
+
+def test_the_table_needs_the_corpus_since_the_event_carries_only_identifiers(repo):
+    assert web.item_for(entries()) is None
+    assert web.item_for(entries(), repo).kind is web.Kind.ENTRIES
+
+
+def test_a_question_that_retrieved_nothing_draws_no_table(repo):
+    assert web.item_for(entries(cited=(), retrieved=()), repo) is None
+
+
+def test_the_cited_entries_come_first(repo):
+    table = web.item_for(entries(cited=(100002,), retrieved=(100001, 100002)), repo).table
+    assert [row.bnid for row in table.rows][0] == 100002
+    assert [row.cited for row in table.rows] == [True, False]
+
+
+def test_a_row_names_the_entry_and_its_identifier(repo):
+    table = web.item_for(entries(), repo).table
+    label = web._row_label(table.rows[0])
+    assert "Cell diameter" in label and "Escherichia coli" in label
+    assert "BNID 100002" in label
+
+
+def test_a_row_without_a_recorded_method_is_marked(repo):
+    """The corpus records no method for 100002, and a marked row says so."""
+    table = web.item_for(entries(), repo).table
+    row = next(r for r in table.rows if r.bnid == 100002)
+    assert not row.method_recorded
+    assert web._row_label(row).startswith(entries_table.NO_METHOD)
+
+
+def test_every_retrieved_entry_is_reachable_even_past_the_cap(
+    monkeypatch, repo, config, tmp_path
+):
+    """Beyond the cap they are listed rather than dropped: nothing retrieved is hidden."""
+    monkeypatch.setattr(web, "CITED_ROWS", 2)
+    monkeypatch.setattr(web, "UNCITED_ROWS", 1)
+    every = tuple(entry.bnid for entry in load(FIXTURE))
+    table = web.item_for(entries(cited=(), retrieved=every), repo).table
+    assert len(table.rows) == len(every) > 2, "rows were dropped rather than carried"
+
+
+def test_the_table_reaches_the_main_column_as_a_table(
+    monkeypatch, repo, config, tmp_path
+):
+    model = scripted(tool_call("get_entry", bnid=100002),
+                     says("about 1 micrometre (BNID 100002)"))
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    assert at.dataframe, "no table was drawn"
+    assert any("Cited in the answer" in m.value for m in at.markdown)
+
+
+def test_the_openable_entries_are_in_the_side_panel_not_the_main_column(
+    monkeypatch, repo, config, tmp_path
+):
+    """The main column is for reading the answer against; the panel is for digging."""
+    model = scripted(tool_call("get_entry", bnid=100002),
+                     says("about 1 micrometre (BNID 100002)"))
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    labels = [e.label for e in at.sidebar.expander]
+    assert any("BNID 100002" in label for label in labels), labels
+    assert any("Full entries" in h.value for h in at.sidebar.header)
+
+
+def test_an_opened_row_shows_the_entry_the_model_never_saw(
+    monkeypatch, repo, config, tmp_path
+):
+    """The reference is looked up for display and never travels through the agent."""
+    model = scripted(tool_call("get_entry", bnid=100002),
+                     says("about 1 micrometre (BNID 100002)"))
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    drawn = " ".join(c.value for c in at.caption) + " ".join(m.value for m in at.markdown)
+    assert "Nelson DE. J Bacteriol. 2000 p.1719" in drawn
+
+
+def test_the_cited_and_uncited_entries_are_separated(repo):
+    """The requirement is the separation, not the terminal's dashed banner."""
+    table = web.item_for(entries(cited=(100002,), retrieved=(100001, 100002)), repo).table
+    assert [row.cited for row in table.rows] == [True, False], "not ordered for a break"
+
+
+def test_the_panel_carries_every_entry_however_the_table_is_capped(repo):
+    every = tuple(entry.bnid for entry in load(FIXTURE))
+    table = web.item_for(entries(cited=(), retrieved=every), repo).table
+    assert len(table.rows) == len(every), "the panel would be missing entries"
+
+
+def test_an_entry_with_no_scalar_is_marked_and_its_value_left_blank():
+    """Repeating "(no scalar value)" in every such row crowds out the values that are there.
+
+    Built here rather than read from the fixture, which holds no such entry: a
+    test that reaches for one and silently skips when it is absent is a test that
+    passes without running.
+    """
+    row = entries_table.Row(
+        bnid=106614, property="Length, diameter, volume", organism="Bacteria Escherichia coli",
+        value="(no scalar value)", units="N/A", reference="Prats R. J Bacteriol. 1989",
+        cited=False, has_scalar=False,
+    )
+    cell = web._frame((row,))[0]
+
+    assert cell["Value"] == "", "the placeholder was repeated in the value column"
+    assert cell["Property"].startswith(entries_table.NO_SCALAR)
+    assert entries_table.NO_SCALAR_LEGEND in web._legend((row,))
+
+
+def test_the_legend_comes_before_the_table_and_only_for_marks_in_use(repo):
+    table = web.item_for(entries(), repo).table
+    legend = web._legend(table.rows)
+    assert entries_table.NO_METHOD_LEGEND in legend
+    assert entries_table.NOT_RETRIEVED_LEGEND not in legend, "explained a mark nothing carries"
+
+
+def test_injected_markup_is_stripped_from_keywords_for_display(repo):
+    """10,206 of the corpus's 14,294 entries carry `<IMG SRC=...>` in `keywords`."""
+    rows = entries_table.rows_for(repo, (), (100001,), "")
+    assert rows[0].keywords
+    assert not any("<" in keyword for keyword in rows[0].keywords)
+
+
+def test_the_side_panel_is_there_before_any_question(monkeypatch, repo, config, tmp_path):
+    """A panel that materialises after the first answer reads as a glitch."""
+    at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
+
+    assert any("Full entries" in h.value for h in at.sidebar.header)
+    assert not at.sidebar.expander, "entries before anything was retrieved"
+
+
+def test_the_legend_sits_between_the_two_tables(monkeypatch, repo, config, tmp_path):
+    """Before both it explains marks nobody has met; after both it is too late."""
+    model = scripted(tool_call("search_entries", property="Cell"),
+                     says("about 1 micrometre (BNID 100002)"))
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    headings = [m.value for m in at.markdown]
+    captions = [c.value for c in at.caption]
+    assert any("Cited in the answer" in h for h in headings)
+    assert any(entries_table.NO_METHOD_LEGEND in c for c in captions)
+
+
+def test_every_column_is_given_a_width_so_the_table_does_not_scroll_sideways(repo):
+    """A table scrolled sideways hides the identifier, the one cell being checked."""
+    table = web.item_for(entries(), repo).table
+    assert set(web._frame(table.rows)[0]) == set(web.COLUMN_WIDTHS)
+    assert sum(web.COLUMN_WIDTHS.values()) <= 700
+
+
+def test_an_identifier_is_a_string_so_it_keeps_matching_the_prose(repo):
+    """As a number it picks up a thousands separator and stops reading as a BNID."""
+    table = web.item_for(entries(), repo).table
+    assert web._frame(table.rows)[0]["ID"] == "100002"
+
+
+# -- the two caps ----------------------------------------------------------
+
+
+def many(cited_count: int, uncited_count: int) -> tuple[entries_table.Row, ...]:
+    """Rows enough to exercise both caps, cited first as `rows_for` orders them."""
+    def row(i: int, cited: bool) -> entries_table.Row:
+        return entries_table.Row(
+            bnid=100000 + i, property=f"Property {i}", organism="Bacteria Escherichia coli",
+            value="1.0", units="um", reference="A reference", cited=cited,
+        )
+    return tuple(row(i, True) for i in range(cited_count)) + tuple(
+        row(100 + i, False) for i in range(uncited_count)
+    )
+
+
+def test_every_cited_entry_is_shown_when_they_fit(repo):
+    """Nine cited entries against a single eight-row cap dropped one of them."""
+    rows = many(cited_count=9, uncited_count=5)
+    cited = tuple(r for r in rows if r.cited)[:web.CITED_ROWS]
+    assert len(cited) == 9, "a cited entry the answer rests on was left out of the table"
+
+
+def test_the_uncited_section_survives_an_answer_that_cited_many(repo):
+    """The single cap spent all its rows on cited entries and the section vanished."""
+    rows = many(cited_count=9, uncited_count=5)
+    rest = tuple(r for r in rows if not r.cited)[:web.UNCITED_ROWS]
+    assert len(rest) == web.UNCITED_ROWS == 4
+
+
+def test_fewer_uncited_entries_than_the_cap_shows_what_there_is(repo):
+    rows = many(cited_count=1, uncited_count=2)
+    assert len(tuple(r for r in rows if not r.cited)[:web.UNCITED_ROWS]) == 2
+
+
+def test_cited_entries_beyond_the_cap_are_announced_not_dropped_silently(
+    monkeypatch, repo, config, tmp_path
+):
+    """The one omission a reader cannot detect by looking at the table."""
+    monkeypatch.setattr(web, "CITED_ROWS", 2)
+    cited = (100001, 100002, 100003)
+    model = scripted(
+        batched_tool_calls(*[("get_entry", {"bnid": b}) for b in cited]),
+        says("BNIDs 100001, 100002 and 100003"),
+    )
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "sizes?")
+
+    warnings = [w.value for w in at.warning]
+    assert any("more cited" in w and "side panel" in w for w in warnings), warnings
+
+
+def test_nothing_is_announced_when_every_cited_entry_is_shown(
+    monkeypatch, repo, config, tmp_path
+):
+    model = scripted(tool_call("get_entry", bnid=100002), says("about 1 um (BNID 100002)"))
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    assert not any("more cited" in w.value for w in at.warning)
+
+
+def test_an_answer_that_cited_nothing_says_so_where_the_cited_table_would_be(
+    monkeypatch, repo, config, tmp_path
+):
+    """A table that simply began with uncited rows read as though it had cited them."""
+    model = scripted(tool_call("search_entries", property="Cell"), says("I could not find it."))
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    headings = [m.value for m in at.markdown]
+    assert any(entries_table.NOTHING_CITED in h for h in headings), headings
+    assert any(entries_table.UNCITED_BANNER.capitalize() in h for h in headings)
+
+
+def test_the_uncited_heading_says_what_the_rows_are_not_only_what_they_are_not():
+    """They are ranked by closeness to the question, so "possibly relevant" is a fact."""
+    assert "possibly relevant" in entries_table.UNCITED_BANNER
+    assert "not cited" in entries_table.UNCITED_BANNER
+
+
+def test_how_much_went_unlooked_at_is_body_text_not_a_footnote(
+    monkeypatch, repo, config, tmp_path
+):
+    """It is one of the few things a reader can judge an answer's worth by."""
+    model = scripted(tool_call("search_entries", property="Cell", limit=1),
+                     says("about 1 micrometre (BNID 100002)"))
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    body = [m.value for m in at.markdown]
+    assert any("entries retrieved" in line for line in body), body
+    assert not any("entries retrieved" in c.value for c in at.caption), "still a caption"

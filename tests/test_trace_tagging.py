@@ -56,7 +56,7 @@ def test_the_run_label_reaches_the_frameworks_own_run_config():
 
 def test_the_run_label_defaults_rather_than_going_missing():
     assert start_question().run_label == "dev"
-    assert Config(model="m", warning_threshold=1, run_budget=2).run_label == "dev"
+    assert Config(model="m", question_ceiling=1, run_budget=2).run_label == "dev"
 
 
 def test_a_blank_environment_value_does_not_produce_an_unlabelled_run(monkeypatch):
@@ -76,7 +76,7 @@ def test_a_question_records_its_run_label_and_the_model_it_spent_on(repo, tmp_pa
     configure(buf)
     config = Config(
         model="fake/model",
-        warning_threshold=usd("0.50"),
+        question_ceiling=usd("0.60"),
         run_budget=usd("1.20"),
         run_label="eval-2026-08-24",
     )
@@ -104,7 +104,7 @@ def test_the_increment_records_the_tokens_behind_the_cost(repo, tmp_path):
     """
     buf = io.StringIO()
     configure(buf)
-    config = Config(model="fake/model", warning_threshold=usd("0.50"), run_budget=usd("1.20"))
+    config = Config(model="fake/model", question_ceiling=usd("0.60"), run_budget=usd("1.20"))
     # The pinned OpenRouter shape: 14 prompt tokens, 4 completion, $0.000034.
     model = scripted(says("about 1 micrometre (BNID 100002)"))
     list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
@@ -199,22 +199,23 @@ def test_the_driver_writes_a_trail_when_it_runs(tmp_path, monkeypatch):
     """
     from conftest import FIXTURE
 
-    from bionumbers_ask.cli import DEFAULT_TRACE, main
+    from bionumbers_ask.cli import main
+    from bionumbers_ask.trace import DEFAULT_FILE
 
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit):
         main(["--corpus", FIXTURE, "--checkpoints", str(tmp_path / "c.sqlite"), "--ask", "q"])
 
-    written = (tmp_path / DEFAULT_TRACE).read_text()
+    written = (tmp_path / DEFAULT_FILE).read_text()
     assert '"event": "not_configured"' in written, written
 
 
 def test_the_trail_is_written_as_json_lines_to_the_given_path(tmp_path):
-    from bionumbers_ask.cli import configure_trace
+    from bionumbers_ask.trace import to_file
 
     path = tmp_path / "nested" / "trace.jsonl"
-    configure_trace(str(path))
+    to_file(str(path))
     start_question("run-a").record("search", matched=7)
 
     written = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
@@ -224,9 +225,9 @@ def test_the_trail_is_written_as_json_lines_to_the_given_path(tmp_path):
 def test_the_trail_can_be_sent_to_stderr(capsys):
     """Never stdout: the rendered answer and the table go there, and interleaving
     JSON with them would corrupt both."""
-    from bionumbers_ask.cli import configure_trace
+    from bionumbers_ask.trace import to_file
 
-    configure_trace("-")
+    to_file("-")
     start_question("run-b").record("search", matched=1)
     captured = capsys.readouterr()
     assert '"matched": 1' in captured.err
@@ -238,13 +239,13 @@ def test_an_empty_spec_adds_no_handler_and_writes_no_file(tmp_path, monkeypatch)
     empty, which reads as a trail that recorded nothing."""
     import logging
 
-    from bionumbers_ask.cli import configure_trace
+    from bionumbers_ask.trace import to_file
     from bionumbers_ask.trace import LOGGER_NAME
 
     logger = logging.getLogger(LOGGER_NAME)
     monkeypatch.setattr(logger, "handlers", [])
     monkeypatch.chdir(tmp_path)
 
-    configure_trace("")
+    to_file("")
     assert logger.handlers == []
     assert not list(tmp_path.iterdir())

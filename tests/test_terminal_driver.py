@@ -75,7 +75,7 @@ def test_an_incomplete_ending_says_so():
 @pytest.mark.parametrize(
     "event",
     [
-        ConversationWarning(question_id="q", messages=45, bound=60),
+        ConversationWarning(question_id="q", tokens=90_000, bound=120_000),
         SpendWarning(question_id="q", spent=usd("0.55"), threshold=usd("0.50")),
         CostProjection(question_id="q", projected=usd("0.80"), threshold=usd("0.50")),
     ],
@@ -131,7 +131,7 @@ class Counting:
 
 def test_the_run_stops_when_the_budget_is_spent(repo, config, tmp_path):
     """Continuing would put the same refusal on every remaining question."""
-    budgeted = Config(model=config.model, warning_threshold=usd("0.50"),
+    budgeted = Config(model=config.model, question_ceiling=usd("0.60"),
                       run_budget=usd("0.000050"))
     out = io.StringIO()
     model = scripted(costing(says("an answer"), 0.000_110))
