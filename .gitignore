@@ -14,6 +14,12 @@ wheels/
 .coverage.*
 htmlcov/
 
+# The corpus and the export it came from. The published BioNumbers data has
+# unresolved licensing (ADR-0170 on feat/ask-agent), so neither the 27 MB source
+# nor any corpus built from it may enter this repository. The ingester exists so
+# a reader fetches the export themselves and builds the corpus locally.
+data/
+
 # Secrets — see CLAUDE.md, "Never commit secrets"
 .env
 .env.*
