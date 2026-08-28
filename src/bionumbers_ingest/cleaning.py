@@ -1,0 +1,796 @@
+"""Turn one raw parsed row (``{header: raw_html}``) into one canonical record.
+
+Every quirk handled here is one the published export actually contains: markup
+injected into cells, HTML entities, the Excel text-marker apostrophe on
+``Range``, "Table link" URLs standing in for a scalar, six range notations, and
+the two micrometre glyphs.
+
+Two rules govern the whole module, and both exist because the alternative fails
+silently:
+
+**Unescape before stripping, at one boundary.** The injected markup arrives
+HTML-escaped, so stripping tags first matches nothing and the unescape then
+*manufactures* a live tag that nothing strips again. Everything textual goes
+through :func:`_clean_text`; no field does its own.
+
+**Flag and count, never correct.** A cell we cannot read, or can read only
+ambiguously, produces a record with the fields we could resolve and a flag
+naming what we could not. Nothing is dropped and nothing is guessed. ADR-0230.
+"""
+
+from __future__ import annotations
+
+import html
+import math
+import re
+
+from bionumbers_ingest.model import BioNumberRecord
+
+# Angle brackets in this source are usually NOT markup. The export contains
+# exactly one HTML element — <IMG SRC="/WF_SQL_XSRF.html">, 20,411 times — while
+# 85 other angle-bracket tokens across 49 records are content: variable notation
+# (<D>, <Csat>, <Chla>, <Raf/cell>) and the less-than sign in prose. A generic
+# `<[^>]+>` eats from a `<` to the next `>`, which deletes whole clauses — a
+# p-value, a rate comparison, a DOI fragment — out of `Comments`, a field the
+# consumer sends to the model. So a tag is recognised only by a real HTML element
+# name; anything else between angle brackets is text and survives.
+_TAG_RE = re.compile(r"</?\s*([A-Za-z][A-Za-z0-9]*)\b[^>]*>")
+_HTML_ELEMENTS = frozenset(
+    """a abbr address area article aside audio b base bdi bdo big blockquote body br
+    button canvas caption center cite code col colgroup data datalist dd del details
+    dfn dialog div dl dt em embed fieldset figcaption figure font footer form h1 h2 h3
+    h4 h5 h6 head header hgroup hr html i iframe img input ins kbd label legend li link
+    main map mark menu meta meter nav noscript object ol optgroup option output p
+    param picture pre progress q rp rt ruby s samp script section select slot small
+    source span strike strong style sub summary sup svg table tbody td template
+    textarea tfoot th thead time title tr track tt u ul var video wbr""".split()
+)
+
+
+def _is_html_tag(match: re.Match[str]) -> bool:
+    return match.group(1).lower() in _HTML_ELEMENTS
+
+
+def _strip_html_tags(text: str) -> tuple[str, bool]:
+    """Remove real HTML tags; leave every other angle-bracket token in place."""
+    found = False
+
+    def drop(m: re.Match[str]) -> str:
+        nonlocal found
+        if _is_html_tag(m):
+            found = True
+            return ""
+        return m.group()
+
+    return _TAG_RE.sub(drop, text), found
+
+
+_WS_RE = re.compile(r"\s+")
+_MICRO_SIGN = "µ"  # µ MICRO SIGN
+_GREEK_MU = "μ"  # μ GREEK SMALL LETTER MU
+# One number, in every notation this source writes them.
+#
+# The naive `[-+]?\d+(\.\d+)?([eE][-+]?\d+)?` reads `2×10^5` as three numbers and
+# `150,000` as two, and every spurious number inflates both fused-range flags:
+# more than two numbers in a cell, and "prose" standing between the bounds. So a
+# caret exponent, a `×10^` mantissa and a thousands separator are all part of the
+# number rather than delimiters between numbers.
+_MINUS = r"[-+\u2212\u2013]"  # ASCII, unicode minus, en dash — all signs inside an exponent
+_MULT = r"[\u00d7xX\u0445\u0425*]"  # ×, Latin x/X, Cyrillic х/Х, asterisk
+# 3-digit groups only, so `1,2` stays two numbers; the `\.\d+` alternative catches
+# a number written without its leading zero, which would otherwise lose the point
+_DIGITS = r"(?:\d+(?:,\d{3})*(?:\.\d+)?|\.\d+)"
+_CARET = rf"\s*\^\s*{_MINUS}?\d+"
+_NUM_RE = re.compile(
+    rf"""
+    (?:{_MINUS}|\+)?{_DIGITS}\s*{_MULT}\s*10{_CARET}   # 2×10^5, 1.4×10^-6
+  | 10{_CARET}                                          # 10^11, 10^-8
+  | (?:{_MINUS}|\+)?{_DIGITS}(?:[eE][-+]?\d+)?(?:{_CARET})?  # 1.5e-3, 150,000, 4^2
+    """,
+    re.VERBOSE,
+)
+
+
+def _token_to_float(tok: str) -> float | None:
+    """Parse one `_NUM_RE` match. ``None`` when it is not a number after all."""
+    t = re.sub(r"\s+", "", tok).replace(",", "")
+    t = t.replace("\u2212", "-").replace("\u2013", "-")
+    t = re.sub(_MULT, "*", t)
+    mantissa, _, exponent = t.partition("^")
+    if exponent:
+        base, _, mul = mantissa.rpartition("*")
+        try:
+            value = float(mul) ** float(exponent)
+            return float(base) * value if base else value
+        except OverflowError:
+            # Return infinity rather than nothing, so the `_finite` guard reports
+            # an unusable number. Dropping it from the list instead let a
+            # two-bound cell collapse to a degenerate range with no flag at all.
+            return math.inf
+        except ValueError:
+            return None
+    try:
+        return float(mantissa)
+    except ValueError:
+        return None
+
+
+_URL_RE = re.compile(r"https?://\S+")
+# The export writes the phrase three ways -- "Table link", "Table Link" and
+# "table link" -- so matching one exactly leaves the other two in the text.
+_TABLE_LINK_RE = re.compile(r"table\s*link\s*-?\s*", re.IGNORECASE)
+_PM_RE = re.compile(r"±|\+/-|\+-")  # plus/minus: ±X means value ± X
+_NUM = r"(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][-+]?\d+)?"
+# a single "mean±sd" expression filling the whole cell (e.g. "-3.26±0.41"); the
+# full-string anchor keeps multi-measurement cells from matching
+# Anchored at the start and allowing a trailing unit or note, but nothing that
+# could be another number: `7.4±0.3 μm` is one measurement, `7.4±0.3 and 5.9` is
+# not, and the multi-sign check above has already taken the two-± case.
+# The lookahead excludes only a digit, not a full stop: `7.4±0.3.` ends a
+# sentence, and treating the stop as part of the number discarded both bounds
+# over a punctuation mark. Nothing runs on -- the `[^\d]*$` tail already refuses
+# any later digit.
+_MEAN_SD_RE = re.compile(rf"^([-+]?{_NUM})\s*(?:±|\+/-|\+-)\s*({_NUM})\s*(?!\d)(?:[^\d]*)$")
+# what may stand between two bounds without being a second quantity: the
+# separators _extract_numbers normalises to, and whitespace
+_SEPARATORS_ONLY_RE = re.compile(r"^[\s;,\-–—±+/]*$")
+#: Markers that hedge a bound rather than name anything. They say something about
+#: the number beside them, so they are not evidence of a second quantity — and
+#: the hedge itself is already reported by `range_approximate` / `range_one_sided`.
+_HEDGE_MARKERS = "~\u223c\u2248\u2243<>\u2264\u2265"
+_SEPARATOR_CHARS = ";,-\u2013\u2014/"
+_SEPARATORS_AND_HEDGES_RE = re.compile(rf"^[\s;,\-–—±+/{_HEDGE_MARKERS}]*$")
+#: Both bounds wrapped in their own brackets — `(-390)-(-450)` — which makes them
+#: peers of one range rather than one quantity annotating another.
+_BRACKETED_BOUNDS_RE = re.compile(r"^\s*[)\]][\s;,\-–—±+/]*[(\[]\s*$")
+# Characters that can trail a number as part of its unit. A hyphen after one of
+# these is still a range separator: `5%-10%` and `5g-10g` are ranges, and reading
+# the hyphen as a sign invents a negative bound the source never states.
+# \u00b5 and \u03bc are here for the same reason `_normalize_units` exists: the
+# export writes the micrometre both ways, and a unit the walk cannot step over
+# leaves the range separator to be read as a sign -- `width 2µm-5µm` stored
+# -5 .. 2, a negative width.
+#: How many space-separated words a trailing unit may be.
+#: `mg dry weight` and `cells per ml` are the longest written inline in this
+#: export; beyond that the walk is crossing prose. The number is empirical, and
+#: the requirement it serves is that a unit is short and prose is not.
+_MAX_UNIT_WORDS = 3
+#: Words that are never a unit, however unit-shaped they look.
+_NOT_A_UNIT = frozenset({"and", "or", "versus", "vs", "then", "but"})
+_UNIT_TAIL_RE = re.compile(r"[A-Za-z%\u00b0\u00b5\u03bc\u00c5\u212b/)\]}'\"\u00b2\u00b3]")
+# A unit as written after a bound: letters and unit symbols, optionally spaced
+# words, but nothing with a digit in it.
+_UNIT_TOKEN_RE = re.compile(r"([A-Za-z\u00b5\u03bc\u00b0\u00c5\u212b%/^]+(?:\s+[A-Za-z/]+)*)")
+# Words that join two bounds rather than naming a unit. They ride along in the
+# span's token (`20 min to 30 min` gives "min to") and would never appear after
+# the high bound, so they are dropped before the two sides are compared.
+# Deliberately not "and": `12 hours and 1.65 hours` reads as two measurements at
+# least as easily as one range, and this predicate errs towards saying so.
+_RANGE_CONNECTORS = frozenset({"to", "up", "upto", "until", "through", "till"})
+#: Leading punctuation to step over before looking for a unit.
+_SPAN_STRIP = " ;,-–—±+/~"
+#: What may remain between the bounds once the unit is taken away. `×` is absent
+#: on purpose: `25Å × 15Å` is two dimensions of one object, not a range.
+_SPAN_FILLER_RE = re.compile(r"^[\s;,\-–—±+/~]*$")
+
+# A number written as an explicit mantissa times a power of ten, which is what a
+# *shared* exponent looks like on the second bound of a range. A bare `10^6` is
+# deliberately excluded: it has no separate mantissa, so `1 to 10^6` reads as two
+# numbers and needs no reinterpretation.
+_MANTISSA_EXP_RE = re.compile(
+    rf"^[-+]?{_DIGITS}\s*(?:[eE]\s*[-+]?\d+|{_MULT}\s*10\s*\^\s*[-+]?\d+)$"
+)
+_ANY_EXP_RE = re.compile(r"[eE]\s*[-+]?\d|\^")
+# The mantissa of such a number, so the shared reading can be checked for coherence.
+_MANTISSA_OF_RE = re.compile(rf"^[-+]?({_DIGITS})\s*(?:[eE]|{_MULT})")
+
+# A range the source did not state as a closed interval. One-sided bounds are the
+# damaging half: `<0.001` stored as [0.001, 0.001] asserts an exact equality where
+# the source said *less than*. Approximation markers are milder — `~5` really is
+# about 5 — but the hedge is still lost, and a reader cannot tell either case from
+# a measured interval.
+_ONE_SIDED_RE = re.compile(
+    r"(?:^|[\s(\[])(?:[<>]|\u2264|\u2265|up to|at least|at most|no more than|"
+    r"less than|more than|greater than|fewer than)",
+    re.IGNORECASE,
+)
+_APPROXIMATE_RE = re.compile(
+    r"(?:^|[\s(\[])(?:[~\u2248\u223c\u2245\u2243]|about|approx\.?|approximately|circa|ca\.)",
+    re.IGNORECASE,
+)
+
+#: `parse_flags` entries that mean a stored number was not stated as an exact
+#: measurement, so it is not the figure it looks like. Behind the
+#: `range_qualified` field, for the same reason the fusion flags are behind
+#: `range_fused`: the names are cleaning's, the field is the contract.
+#:
+#: The value column gets the same treatment as the range column. Reporting a hedge
+#: in one and hiding it in the other would mean `<2` in `Value` reaches a consumer
+#: as an exact 2, which is the unsourced correction ADR-0230 forbids.
+#: The two kinds of hedge, each behind its own field. A consumer needs them apart
+#: because they need different words -- "20.0 (approximate)" against "8.0 (a
+#: bound, not exact)" -- and a reader shown "bounded" for `~20` is being told
+#: something false.
+ONE_SIDED_FLAGS = frozenset({"range_one_sided", "value_one_sided"})
+APPROXIMATE_FLAGS = frozenset({"range_approximate", "value_approximate"})
+#: Derived from the two, not listed separately, so the union cannot drift from
+#: them: `range_qualified` is true exactly when one of the two fields is. A third
+#: kind of hedge added to only one of these sets would break that silently.
+QUALIFIED_RANGE_FLAGS = ONE_SIDED_FLAGS | APPROXIMATE_FLAGS
+
+
+def _flag_hedging(text: str, flags: list[str], column: str) -> None:
+    """Note a one-sided bound or an approximation marker in ``text``."""
+    if _ONE_SIDED_RE.search(text):
+        flags.append(f"{column}_one_sided")
+    elif _APPROXIMATE_RE.search(text):
+        flags.append(f"{column}_approximate")
+
+
+#: `parse_flags` entries that mean the stored bounds may fuse two quantities.
+#: The `range_fused` field is derived from exactly these; no other flag implies
+#: it, and consumers read the field rather than this set.
+FUSED_RANGE_FLAGS = frozenset(
+    {"range_multi_number", "range_prose_between_bounds", "range_shared_exponent"}
+)
+
+
+def _clean_text(raw: str) -> tuple[str, bool]:
+    """Return (clean text, had_markup): unescape entities, strip tags, collapse space.
+
+    In the published export the injected markup appears only as
+    ``&lt;IMG SRC="/WF_SQL_XSRF.html"&gt;`` — 20,411 occurrences, not one literal
+    ``<IMG``. Stripping tags before unescaping entities therefore matches nothing,
+    and the unescape then *manufactures* a live tag.
+
+    **The repeat-until-stable loop is what fixes that, not the order within one
+    pass.** Fault seeding showed the two orders are indistinguishable here: a pass
+    that only unescapes leaves a tag for the next pass to strip, and the loop runs
+    again. Unescaping first is kept because it makes the single-pass reading
+    correct too, but the loop is the load-bearing part — which also means removing
+    it would reintroduce the defect even with the order left alone.
+
+    `had_markup` is accumulated across passes for the same reason; determined from
+    the raw cell in a single pass it reports zero on a corpus that is 71%
+    contaminated.
+
+    A tag is recognised only by a real HTML element name. Angle brackets in this
+    source are mostly not markup, and a generic pattern deletes scientific
+    content — see the comment on `_TAG_RE`.
+
+    The loop terminates without needing a pass limit: neither unescaping nor
+    stripping can lengthen the string, and a pass that changes nothing is the
+    exit condition, so length strictly decreases until it stabilises.
+    """
+    text = raw
+    had_markup = False
+    while True:
+        unescaped = html.unescape(text)
+        stripped, found = _strip_html_tags(unescaped)
+        had_markup = had_markup or found
+        if stripped == text:
+            break
+        text = stripped
+    return _WS_RE.sub(" ", text).strip(), had_markup
+
+
+def _text_or_none(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    text, _ = _clean_text(raw)
+    return text or None
+
+
+def _normalize_units(text: str | None) -> str | None:
+    """Fold the micro sign into the Greek mu.
+
+    The direction matters and is asserted in the tests: the consumer's own corpus
+    uses the Greek letter, so normalising the other way would make every unit
+    comparison miss while the strings looked identical on screen.
+    """
+    if text is None:
+        return None
+    return text.replace(_MICRO_SIGN, _GREEK_MU)
+
+
+def _numbers_with_spans(text: str) -> tuple[str, list[tuple[float, int, int]]]:
+    """Return (normalised text, [(value, start, end)]) for every number in it.
+
+    Spans are offsets into the *returned* text, not the argument, because the
+    separator normalisation below shifts positions. Callers that reason about
+    what stands between two numbers must use both halves of this result.
+
+    A hyphen is a range separator only where it directly follows a digit, so
+    ``1-1.1`` yields two numbers while ``-70`` yields one negative one and
+    ``-90 to -60`` yields two negatives. Exponents are captured whole, so the
+    sign in ``1e-3`` is never mistaken for a separator.
+    """
+    # A dash directly after a caret is that exponent's sign, not a separator, so
+    # it has to be settled before the blanket dash-to-separator rule below turns
+    # `10^–11` into `10^;11` and leaves the exponent stranded as its own number.
+    # Only the MINUS forms. `+` was in this class and rewrote `10^+5` as `10^-5`,
+    # a number ten orders of magnitude out that parsed without complaint.
+    # `_token_to_float` reads `^+5` correctly on its own, so nothing is needed here.
+    text = re.sub(r"\^\s*[-\u2212\u2013\u2014]", "^-", text)
+    # unicode minus -> ASCII minus (a sign); en/em dashes -> ';' (a separator
+    # that, unlike a space, hides the preceding digit from the sign test)
+    text = text.replace("−", "-").replace("–", ";").replace("—", ";")
+    text = re.sub(r"\bto\b", ";", text, flags=re.IGNORECASE)
+
+    found: list[tuple[float, int, int]] = []
+    for m in _NUM_RE.finditer(text):
+        tok = m.group()
+        # A caret whose base is not a digit is a unit exponent (`μm^3`), not a
+        # measurement: the exponent alone would otherwise become a bound.
+        if tok.lstrip("+-").startswith("^") or (m.start() > 0 and text[m.start() - 1] == "^"):
+            continue
+        if tok[0] in "+-":
+            j = m.start() - 1
+            # Walk back over the trailing unit, which may be more than one word:
+            # stepping over a single run of unit characters handles `5%-10%` but
+            # not `37 deg C-42 deg C`, where the walk lands on a letter, calls the
+            # hyphen a sign, and stores -42 .. 37 — an inverted range with a
+            # negative bound the source never wrote.
+            #
+            # Bounded, though, because a unit is short and prose is not. Unbounded,
+            # the walk crossed four words of `lateral bond energy -2.2 to -5.7kT
+            # longitudinal bond energy -6.8` to reach a digit, and stored +6.8.
+            words = 0
+            while True:
+                while j >= 0 and text[j] == " ":
+                    j -= 1
+                if j < 0 or text[j].isdigit():
+                    break
+                if words == _MAX_UNIT_WORDS or not _UNIT_TAIL_RE.match(text[j]):
+                    break
+                end = j
+                while j >= 0 and _UNIT_TAIL_RE.match(text[j]):
+                    j -= 1
+                if text[j + 1 : end + 1].lower() in _NOT_A_UNIT:
+                    # A conjunction is not a unit, and a sign after one is a sign:
+                    # `-50 and -300` walked over "and", found the 0 of 50, called
+                    # the minus a separator and stored -50 .. 300.
+                    j = end
+                    break
+                words += 1
+            if j >= 0 and text[j].isdigit():  # sign is really a separator
+                tok = tok[1:]
+        value = _token_to_float(tok)
+        if value is None:
+            continue
+        found.append((value, m.start(), m.end()))
+    return text, found
+
+
+def _extract_numbers(text: str) -> list[float]:
+    """Every number in the cell, signs and separators disambiguated."""
+    return [value for value, _, _ in _numbers_with_spans(text)[1]]
+
+
+def _prose_stands_between_bounds(
+    text: str, found: list[tuple[float, int, int]], units: str | None = None
+) -> bool:
+    """Does anything but a separator stand between the two numbers used as bounds?
+
+    A second quantity named mid-cell ("7.4 one face 5.9 other face") is the case
+    this catches. A trailing unit is not between the bounds and does not count,
+    which is why the check is positional rather than a search of the whole cell.
+    """
+    if len(found) < 2:
+        return False
+    # Take the EARLIEST occurrence of the low value and the LATEST of the high one.
+    # Selecting by value alone returns the same element when the two extremes are
+    # equal — `5 in one strain 5 in another` — leaving an empty span to inspect and
+    # shipping two unrelated quantities as one measurement.
+    lowest = min(value for value, _, _ in found)
+    highest = max(value for value, _, _ in found)
+    first = next(t for t in found if t[0] == lowest)
+    last = next(t for t in reversed(found) if t[0] == highest)
+    if first is last:
+        return False
+    a, b = sorted((first, last), key=lambda t: t[1])
+    span = text[a[2] : b[1]]
+    if _SEPARATORS_ONLY_RE.match(span) or _is_only_hedged_separator(span):
+        return False
+    if _BRACKETED_BOUNDS_RE.match(span):
+        return False
+    return not _is_the_unit_repeated(span, text[b[2] :], units)
+
+
+def _is_only_hedged_separator(span: str) -> bool:
+    """Is the span a separator carrying hedge markers, and nothing else?
+
+    `8 to >90`, `~30-~60` and `<0.6 to >9` are single ranges whose bounds the
+    source hedged. The hedge is already reported — every one of these carries
+    `range_one_sided` or `range_approximate` — so also calling them two quantities
+    says something false about them, and behind a predicate that means "do not
+    present this as a measurement".
+
+    **A separator has to be present, not just the marker.** Without that,
+    `in year 1978 ~290g: in year 1979 ~200g` qualifies on its lone `~` and is
+    released as a range from 200 to 1979. Measured over the export the pair of
+    conditions splits the class exactly: 16 hedged ranges out, and the five cells
+    whose span is a bare marker or an `=` left flagged.
+    """
+    if not _SEPARATORS_AND_HEDGES_RE.match(span):
+        return False
+    return any(ch in _SEPARATOR_CHARS for ch in span)
+
+
+def _unit_after(text: str) -> list[str]:
+    """The unit written at the start of ``text``, as a list of words."""
+    token = _UNIT_TOKEN_RE.match(text.lstrip(_SPAN_STRIP))
+    return token.group(1).split() if token else []
+
+
+def _is_the_unit_repeated(span: str, after_high: str, units: str | None = None) -> bool:
+    """Is the text between the bounds just the unit, written on both of them?
+
+    `10 mM to 20 mM` states one range twice-annotated, not two quantities, and
+    marking it would put an ordinary range behind the predicate a consumer reads
+    as "do not present this as a measurement".
+
+    Two things have to hold, and each without the other admits the wrong cells:
+
+    **Nothing but the unit stands between the bounds.** Repetition alone is not
+    enough — `volume 1147 µm^3: surface area 747 µm^2` repeats "µm" and names two
+    different quantities, and `Length 54nm: width 45nm` does the same. What
+    separates those from a range is the words left over once the unit is taken
+    away.
+
+    **And the unit is repeated after the high bound.** Emptiness alone is not
+    enough either: it would read `436 metabolites 720` as a range on the strength
+    of one noun.
+
+    **Unless the cell ends at the high bound**, in which case there is nothing to
+    repeat and the row's own Units column decides. `10 µm - 15` writes its unit
+    once, and only the declared unit says that "µm" is a unit rather than the
+    second quantity `Length ~1500 Diameter 500` writes in the same shape. Both are
+    one word next to a bound; nothing inside the cell tells them apart.
+
+    Between them they keep the 87% of this flag that are genuine second
+    quantities, while releasing the ordinary ranges that only looked like them.
+    """
+    body = span.lstrip(_SPAN_STRIP)
+    token = _UNIT_TOKEN_RE.match(body)
+    if token is None:
+        return False
+    unit = [w for w in token.group(1).split() if w.lower() not in _RANGE_CONNECTORS]
+    if not unit:
+        # Nothing but a connector: `34,000 to170,000` is a range with no unit
+        # anywhere, and reads as one only because the missing space kept "to"
+        # from being normalised to a separator. A connector cannot name a second
+        # quantity, so this is a range as long as the cell ends here.
+        return not after_high.strip()
+    rest = body[token.end() :]
+    if token.group(1).endswith("^"):
+        # `µm^3` splits as the token "µm^" and a leftover exponent, because a
+        # digit cannot be in the unit pattern without swallowing the bounds
+        # themselves. The exponent belongs to the unit, so it is not leftover text.
+        rest = rest.lstrip("0123456789-")
+    if not _SPAN_FILLER_RE.match(rest):
+        return False
+    if not after_high.strip():
+        return _matches_the_declared_unit(unit, units)
+    # A prefix comparison on the far side, not equality: `_UNIT_TOKEN_RE` runs
+    # greedily over whatever follows the high bound, so `5 nm to 10 nm diameter`
+    # offers "nm" against "nm diameter", and any trailing word would defeat the
+    # test — leaving an ordinary range behind the fused predicate.
+    return _unit_after(after_high)[: len(unit)] == unit
+
+
+def _matches_the_declared_unit(unit: list[str], units: str | None) -> bool:
+    """Is the word beside the low bound this row's unit, or a second quantity?
+
+    Equality against the Units column, not containment. Measured over the export,
+    that separates the two populations exactly: `10 µm - 15` (units `μm`),
+    `2 hours - 5` (`hours`) and `70% - 90` (`%`) match, while `Length ~1500
+    Diameter 500` (`nm`), `Catalogued ~950,000 Predicted ~7,770,000` (`species`)
+    and `at 18°C 580: at 11°C 1,100` (`unitless`) do not. Containment would admit
+    the last of those, whose `°C` is a condition the measurement was taken at.
+
+    A multi-word unit is not accepted here. `in nerve and muscle 0.1 in red blood
+    cell 10^-8` offers four words that no Units column will match, and the shape
+    is too weak to spend a guess on.
+    """
+    if not units or len(unit) != 1:
+        return False
+    return _normalize_units(unit[0]).casefold() == units.casefold()
+
+
+def _shared_exponent_is_ambiguous(text: str, found: list[tuple[float, int, int]]) -> bool:
+    """Does a trailing exponent look like it belongs to both bounds?
+
+    `1-2×10^9` is written once and means 1×10⁹ to 2×10⁹ — the notation the source
+    uses for a range within one order of magnitude. Read literally it gives
+    1 to 2,000,000,000: a lower bound nine orders of magnitude out, on a cell that
+    parses without complaint. Three cells of the export are shaped this way, and
+    each stores a range spanning at least a millionfold.
+
+    Which reading is right cannot be settled from the cell: `1-5e-7` is either
+    "1 to 5e-7" or "1e-7 to 5e-7", and only knowing that an epithelial cell is not
+    a square centimetre decides it. So this is flagged, never corrected — the
+    bounds stay as computed and the record says they are not usable as a
+    measurement. ADR-0230.
+    """
+    if len(found) != 2:
+        return False
+    (v1, s1, e1), (_, s2, e2) = sorted(found, key=lambda t: t[1])
+    first, second = text[s1:e1], text[s2:e2]
+    if _ANY_EXP_RE.search(first):
+        return False  # the first bound carries its own exponent; nothing is shared
+    if not _MANTISSA_EXP_RE.match(second.strip()):
+        return False  # a bare power of ten is a number in its own right
+    if not _SEPARATORS_ONLY_RE.match(text[e1:s2]):
+        return False
+    # Flag only where the shared reading is both different AND coherent.
+    # `0 - 1.3×10^6` is the same range either way, so there is nothing to report.
+    # `1000-2e5` would invert under the shared reading (1000e5 above 2e5), so the
+    # literal reading is the only possible one and the range is simply correct.
+    # Marking a correct record teaches a reader to ignore the marking.
+    if v1 == 0:
+        return False
+    mantissa = _MANTISSA_OF_RE.match(text[s2:e2].strip())
+    if mantissa is None:
+        return False
+    # `_DIGITS` permits a thousands separator and `float` does not, so `2-1,500e3`
+    # raised here -- and one exception mid-run costs the whole corpus, on an
+    # export nobody has seen yet. `_token_to_float` strips them; so does this.
+    return abs(v1) < abs(float(mantissa.group(1).replace(",", "")))
+
+
+_PERCENT_DEVIATION_RE = re.compile(rf"^\s*({_NUM})\s*%")
+
+
+def _deviation(text: str, centre: float, units: str | None, flags: list[str]) -> float | None:
+    """The half-width of ``±…``, as an absolute quantity.
+
+    **A percentage after the sign is a fraction of the value, not a quantity.**
+    `Value=0.488 μm/min, Range=±23%` read as an absolute 23 gives -22.512 .. 23.488
+    — a 46-unit interval including negative speeds — and it ships carrying only
+    `range_plus_minus`, which is the flag for a *successful* parse. Nothing marks
+    it, so nothing downstream can decline to present it.
+
+    Reading it as a percentage is not a correction under ADR-0230: the cell is not
+    ambiguous, it was being misread. The flag records that the bounds were derived
+    from a relative uncertainty, because that is worth being able to count.
+
+    The exception is a row whose Units column *is* `%`. There the value is itself a
+    percentage and `±10%` is ten points, so the absolute reading stands.
+    """
+    percent = _PERCENT_DEVIATION_RE.match(text)
+    if percent and (units or "").strip() != "%":
+        flags.append("range_percent_deviation")
+        return abs(centre) * float(percent.group(1)) / 100
+    numbers = _extract_numbers(text)
+    return abs(numbers[0]) if numbers else None
+
+
+def _finite(value: float | None) -> bool:
+    """Is this a number a measurement could be?
+
+    ``float("1e400")`` returns ``inf`` rather than raising, and pydantic serializes
+    ``inf`` as JSON ``null`` — so an overflowing literal becomes an absent value on
+    a record the report counted as having one, and the corpus and its manifest then
+    disagree about the same record.
+    """
+    return value is not None and math.isfinite(value)
+
+
+def _bounds_or_unparsed(
+    range_raw: str | None,
+    low: float,
+    high: float,
+    table_link: str | None,
+    flags: list[str],
+) -> tuple[str | None, float | None, float | None, str | None]:
+    """Return the bounds, or nothing plus a flag if either is unusable.
+
+    Every path that computes a pair of bounds goes through here. The plus-or-minus
+    paths once returned theirs directly, so `1e400±1e400` shipped ``nan`` and
+    ``inf`` — written to the corpus as two nulls, on a record carrying neither
+    ``range_unparsed`` nor ``no_scalar``. The manifest then claimed a range the
+    corpus line does not have, which is the disagreement `_finite` exists to stop.
+    """
+    if not (_finite(low) and _finite(high)):
+        flags.append("range_unparsed")
+        return range_raw, None, None, table_link
+    return range_raw, low, high, table_link
+
+
+def _parse_value(raw: str, flags: list[str]) -> float | None:
+    """The scalar, or ``None`` with a flag saying why there isn't one.
+
+    A cell that is not simply a number does not yield one silently: `<2` is a
+    bound, not a measurement, and emitting it as an exact `2.0` is the unsourced
+    correction ADR-0230 forbids. Recovering a number from such a cell is still
+    better than dropping the row, so it is recovered *and* flagged.
+    """
+    text, _ = _clean_text(raw)
+    if not text:
+        return None
+    try:
+        value = float(text)
+    except ValueError:
+        nums = _extract_numbers(text)
+        if nums and _finite(nums[0]):
+            _flag_hedging(text, flags, "value")
+            flags.append("value_recovered_from_text")
+            return nums[0]
+        flags.append("value_unparsed")
+        return None
+    if not _finite(value):
+        flags.append("value_unparsed")
+        return None
+    return value
+
+
+def _parse_range(
+    raw: str, value: float | None, flags: list[str], units: str | None = None
+) -> tuple[str | None, float | None, float | None, str | None]:
+    """Return (range_raw, range_low, range_high, table_link).
+
+    ``units`` is the row's own Units column, already normalised. It is the only
+    thing in the row that can say whether a word next to a bound is this
+    measurement's unit or the name of a second quantity -- see
+    :func:`_is_the_unit_repeated`.
+
+    ``range_raw`` is the source cell with the apostrophe removed, captured
+    *before* the link URL is taken out — see the field's own docstring on
+    :class:`~bionumbers_ingest.model.BioNumberRecord` for why it stays that way.
+
+    ``±Δ`` in this column is an uncertainty around ``value``, not a bound.
+    """
+    text, _ = _clean_text(raw)
+    text = text.lstrip("'").strip()  # drop the Excel text-marker FIRST: a cell
+    if not text:  # that is only the marker is an empty cell, not an unreadable one
+        return None, None, None, None
+    range_raw = text or None
+
+    table_link = None
+    if _TABLE_LINK_RE.search(text) or _URL_RE.search(text):
+        urls = _URL_RE.findall(text)
+        if urls:
+            table_link = urls[0]
+            # Excise the URLs and keep the rest. Truncating from the first URL
+            # onward instead would silently drop bounds written after the link.
+            text = _URL_RE.sub(" ", text)
+        flags.append("range_is_link")
+        text = _TABLE_LINK_RE.sub("", text).strip()
+        if not urls:
+            # The phrase is there but no URL could be recognised, so whatever
+            # remains is a link this module could not parse -- and a filename's
+            # percent-escapes read as numbers (`table%2012.pdf` gives 2012).
+            # Deriving bounds from it would invent a measurement from a filename.
+            flags.append("range_link_unparsed")
+            return range_raw, None, None, table_link
+
+    signs = list(_PM_RE.finditer(text))
+    if signs:
+        flags.append("range_plus_minus")
+
+        # More than one plus-or-minus is more than one measurement. Deriving one
+        # interval from it fuses them, and the fused-range flags never see this
+        # branch, so the result would ship unmarked. Checked FIRST, so that the
+        # mean-and-deviation match below can afford to be lenient about trailing
+        # text without swallowing a multi-measurement cell.
+        if len(signs) > 1:
+            flags.append("range_multi_measurement")
+            if value is None:
+                flags.append("range_plus_minus_no_value")
+            return range_raw, None, None, table_link
+
+        # One "mean±sd" expression carries its own centre, so it is read the same
+        # way whether or not the value column is filled. A trailing unit or note
+        # is tolerated — `7.4±0.3 μm` is unambiguous, and discarding both bounds
+        # over a unit is the opposite of the recover-and-flag rule elsewhere.
+        one = _MEAN_SD_RE.match(text.strip())
+        if one:
+            mean = float(one.group(1))
+            flags.append("range_mean_sd_embedded")
+            delta = _deviation(text.strip()[one.start(2) :], mean, units, flags)
+            if delta is None:  # pragma: no cover - the regex guarantees a number
+                return range_raw, None, None, table_link
+            return _bounds_or_unparsed(range_raw, mean - delta, mean + delta, table_link, flags)
+
+        # The deviation is the number that FOLLOWS the sign. Taking the first
+        # number in the cell instead reads "(n=3) ±1.15" as a deviation of 3.
+        if value is not None:
+            delta = _deviation(text[signs[0].end() :], value, units, flags)
+            if delta is not None:
+                return _bounds_or_unparsed(
+                    range_raw, value - delta, value + delta, table_link, flags
+                )
+            return range_raw, None, None, table_link
+
+        flags.append("range_plus_minus_no_value")
+        return range_raw, None, None, table_link
+
+    normalised, found = _numbers_with_spans(text)
+    if found:
+        # Bounds are the lowest and highest number in the cell, so a cell naming a
+        # second quantity contributes a bound to the first. Flag it; never correct
+        # it — the bounds below are unchanged.
+        if len(found) > 2:
+            flags.append("range_multi_number")
+        if _prose_stands_between_bounds(normalised, found, units):
+            flags.append("range_prose_between_bounds")
+        if _shared_exponent_is_ambiguous(normalised, found):
+            flags.append("range_shared_exponent")
+        # The source hedged: a one-sided bound or an approximation. Stored as a
+        # closed interval either way, so the record has to say so.
+        _flag_hedging(text, flags, "range")
+        values = [v for v, _, _ in found]
+        # An overflowing literal reaches here as inf, and pydantic writes inf as
+        # null -- which would break the both-or-neither invariant the record and
+        # the report both rely on.
+        return _bounds_or_unparsed(range_raw, min(values), max(values), table_link, flags)
+    if table_link is None:
+        flags.append("range_unparsed")
+    return range_raw, None, None, table_link
+
+
+def _split_keywords(raw: str | None) -> list[str]:
+    text = _text_or_none(raw)
+    if not text:
+        return []
+    return [kw.strip() for kw in text.split(",") if kw.strip()]
+
+
+def is_data_row(raw: dict[str, str]) -> bool:
+    """A real record has a numeric identifier.
+
+    The export ends with HTML padding rows whose identifier cell is a
+    non-breaking space and whose other cells are empty.
+    """
+    text, _ = _clean_text(raw.get("bion_id", ""))
+    # `isascii()` as well: "²".isdigit() is True but int("²") raises, and by the
+    # writer's design one exception mid-run costs the entire corpus, not one row.
+    return text.isascii() and text.isdigit()
+
+
+def clean_row(raw: dict[str, str]) -> BioNumberRecord:
+    """Clean one raw parsed row into a canonical record."""
+    flags: list[str] = []
+
+    # Markup anywhere in the row, judged from the unescaped text. Computed here
+    # rather than per field so one row yields one flag.
+    if any(_clean_text(v)[1] for v in raw.values()):
+        flags.append("injected_html_removed")
+
+    bnid_text, _ = _clean_text(raw.get("bion_id", ""))
+    bnid = int(bnid_text)
+
+    value = _parse_value(raw.get("Value", ""), flags)
+    units = _normalize_units(_text_or_none(raw.get("Units")))
+    range_raw, range_low, range_high, table_link = _parse_range(
+        raw.get("Range", ""), value, flags, units
+    )
+
+    if value is None and range_low is None and range_high is None:
+        flags.append("no_scalar")
+
+    return BioNumberRecord(
+        bnid=bnid,
+        property=_text_or_none(raw.get("Properties")),
+        organism=_text_or_none(raw.get("Organism")),
+        value=value,
+        range_raw=range_raw,
+        range_low=range_low,
+        range_high=range_high,
+        table_link=table_link,
+        units=units,
+        reference=_text_or_none(raw.get("Reference")),
+        reference_pubmed_id=_text_or_none(raw.get("Reference PubMed ID")),
+        primary_source=_text_or_none(raw.get("Primary Source")),
+        primary_source_pubmed_id=_text_or_none(raw.get("Primary Source PubMed ID")),
+        measurement_method=_text_or_none(raw.get("Measurement Method")),
+        comments=_text_or_none(raw.get("Comments")),
+        entered_by=_text_or_none(raw.get("Entered By")),
+        keywords=_split_keywords(raw.get("Keywords")),
+        parse_flags=flags,
+        range_fused=bool(FUSED_RANGE_FLAGS.intersection(flags)),
+        range_qualified=bool(QUALIFIED_RANGE_FLAGS.intersection(flags)),
+        range_one_sided=bool(ONE_SIDED_FLAGS.intersection(flags)),
+        range_approximate=bool(APPROXIMATE_FLAGS.intersection(flags)),
+    )

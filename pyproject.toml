@@ -1,7 +1,97 @@
 [project]
 name = "bionumbers"
 version = "0.1.0"
-description = "Add your description here"
+description = "A database of useful biological numbers assembled from the literature, with provenance"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
+
+# Each work package declares its own dependencies as an extra, so installing one
+# does not pull in the other's stack, and so the two branches edit different
+# tables instead of the same line.
+#   uv sync --extra validator
+#   uv sync --extra ask
+#   uv sync --extra ingest
+[project.optional-dependencies]
+validator = [
+    "anthropic>=0.40",
+    "httpx>=0.27",
+    "lxml>=5.2",
+    "pint>=0.24",
+]
+ask = [
+    "langchain>=1.1",
+    "langgraph",
+    # SqliteSaver ships separately from langgraph; the file-backed checkpointer
+    # is load-bearing here, so it is a direct dependency rather than an option.
+    "langgraph-checkpoint-sqlite",
+    "langchain-openai",
+    "streamlit",
+]
+ingest = [
+    "pydantic>=2.6",
+]
+
+# All three entry points are declared here so no branch has to edit this table.
+# Console scripts are metadata resolved when invoked, so the ones whose modules
+# are absent on a given branch are simply never run there.
+[project.scripts]
+bionumbers = "bionumbers.cli:main"
+bionumbers-ask = "bionumbers_ask.cli:main"
+bionumbers-ingest = "bionumbers_ingest.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    # Coverage is used here as a discovery tool, not a target: it answers "which
+    # lines does no test ever run", which is the signature of a real path hidden
+    # behind an injected fake.
+    "pytest-cov>=5.0",
+    "ruff>=0.16",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Deliberately not an enumerated package list. Each work package lives on its own
+# branch with only its own source tree, so listing both would break the build on
+# both branches until they merge. Including src/ wholesale packages whatever is
+# present, which is correct on either branch and after they converge.
+[tool.hatch.build.targets.wheel]
+sources = ["src"]
+only-include = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Tests import the doubles in tests/ directly, and default to offline.
+pythonpath = ["tests"]
+addopts = "-m 'not network and not corpus'"
+markers = [
+    "network: hits a real external service; run with `pytest -m network`",
+    # The corpus is an external input kept out of the repository (ADR-0170), so
+    # the default suite runs on the six-entry fixture -- which is exactly the
+    # blind spot these checks exist to cover.
+    "corpus: needs a real corpus at BIONUMBERS_ASK_CORPUS; run with `pytest -m corpus`",
+]
+
+# Linting and formatting, both from ruff: `ruff check` finds problems, `ruff
+# format` rewrites layout. The config lives here on dev so both work packages
+# lint against the same rules; each branch fixes its own tree after merging,
+# since dev carries no source of its own.
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+# E/F are the pycodestyle+pyflakes core, I keeps imports ordered, UP keeps the
+# syntax current with the floor in requires-python, and B (bugbear) flags the
+# patterns that fail silently -- which is the failure mode this project cannot
+# afford. Deliberately no style-opinion families (SIM/C4/RET): they found one
+# thing across the whole codebase, and it read worse than what was there.
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+# Without this ruff reads the packages as third-party and removes the blank line
+# separating them from real third-party imports, making every test file worse.
+[tool.ruff.lint.isort]
+known-first-party = ["bionumbers", "bionumbers_ask", "bionumbers_ingest", "agent_doubles"]

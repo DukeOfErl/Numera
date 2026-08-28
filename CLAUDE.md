@@ -2,91 +2,155 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## LLM Coding Guidelines (Karpathy-inspired)
+## Documentation upkeep — project override
 
-Behavioral guidelines to reduce common LLM coding mistakes.
+This project follows the user-level documentation-upkeep conventions with one substitution: there is no `docs/REQUIREMENTS.md`. The behavioral spec — what the app must do, kept implementation-agnostic — lives in **`openspec/specs/`**, maintained through the OpenSpec workflow rather than as a hand-written document. Write behavioral requirements as spec deltas on a change; they are promoted into `openspec/specs/` when the change is archived. See [ADR-0030](docs/decisions/0030-openspec-specs-as-the-behavioral-record.md). Wherever the conventions say to update `docs/REQUIREMENTS.md`, update the OpenSpec specs instead.
 
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+## Parallel branches and ADR numbers
 
-### 1. Think Before Coding
+Two branches that each number ADRs from the current highest id will both claim the same numbers, and the second to merge conflicts. Before parallel work starts, give each branch a disjoint block.
 
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
+**This file is the allocation's source of truth.** Recording it only in each change's `tasks.md` is what let the blocks drift: no branch can see another's copy, so a change that outgrows its block updates its own note and nothing else, and the next branch allocates against a stale ceiling. Keep the block in the change's `tasks.md` too — that is where someone implementing reads it — but reconcile against this table, and widen a block here first.
 
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
+| Change | Block |
+|---|---|
+| `add-grounding-validator` | `0040`–`0090` |
+| `add-ask-agent` | `0100`–`0190`, `0260`–`0290` |
+| `add-corpus-ingestion` | `0200`–`0250` — all written |
+| `add-corpus-autobuild` | `0300`–`0340` |
 
-### 2. Simplicity First
+**This table is the authority, not a scan of `docs/decisions/`.** A scan cannot see uncommitted ADRs on another branch: `git ls-tree` reads committed trees, and each branch is checked out in its own worktree, so a number can be spent and still invisible from here. `add-ask-agent` has written `0100`–`0190` and holds a second range, `0260`–`0290`, because its first block ran out while the change was still open. A block is extended rather than renumbered: the ADRs already written are referenced from code comments and commit messages, and renumbering would break every one of those references to buy contiguity that nothing needs. Its first block was also uncommitted for two sessions, which is how a scan came to report those numbers as free. Never conclude a number is free because no file for it turns up.
 
-**Minimum code that solves the problem. Nothing speculative.**
+**Allocate by creating the file.** Copy the template to the number you are claiming and commit that stub early, rather than writing the ADR at the end of the change. A ceiling only holds if claiming the number and writing the file are the same step; a block widened in a note that only your own branch reads is how the last drift happened. Reconcile each change's `tasks.md` against this table when it merges.
 
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
+**Write each ADR with the change that makes the decision, never as a batch at the end.** A task
+list that defers all of them to a documentation group produces retroactive ADRs, and by then the
+options that were rejected -- the part worth recording -- are gone, and what survives is a
+description of the code.
 
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+## Architecture
 
-### 3. Surgical Changes
+Three work packages, three packages under `src/`, one dependency extra each, so no two branches edit
+the same source tree: `bionumbers_ingest` (`ingest`), `bionumbers_ask` (`ask`), `bionumbers`
+(`validator`). The ingester and the ask agent are both here; the validator is not yet.
 
-**Touch only what you must. Clean up only your own mess.**
+Diagrams — including the agent's graph generated from the compiled object — are in
+`docs/diagrams/architecture.md`. Regenerate that graph whenever middleware changes.
 
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
+**Ports and adapters.** `agent.py` emits events (`events.py`) and accepts a
+question; it never touches an interface and never blocks for input. `cli.py` and
+`web.py` are adapters over it, and the evaluation harness will be a third. The
+agent takes no parameter naming its caller, so it cannot behave one way for a
+person and another for a harness (ADR-0110).
 
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
+**The dependency direction is the one rule with teeth.** Adapters may reach into
+the core; the core may not reach back. Nothing in Python enforces this — an
+`import streamlit` in the tool layer would run perfectly — so
+`tests/test_driver_independence.py` asserts it over the source. `entries_table.py`
+and `messages.py` are shared *by* the drivers and count as presentation, which is
+why a rule both the table and the model need (the implausible-span test) lives on
+`Entry` rather than in the table.
 
-The test: Every changed line should trace directly to the user's request.
+| Module | Holds |
+|---|---|
+| `agent.py` | The graph, the system prompt, the middleware list, the event stream |
+| `events.py` | The port: everything the agent emits, and the one command it takes |
+| `tools.py` | The corpus tools the model calls, and `ToolBudget` (ADR-0260) |
+| `spend.py` | `SpendGate` (a `wrap_model_call` middleware), the ledger, projection |
+| `run_ledger.py` | Run spend, in sqlite beside the checkpoints, written as deltas |
+| `corpus.py` | `Entry`, the loader, and the judgements that belong to a value |
+| `repository.py` | Indexes, search, vocabulary, the alias index (ADR-0130) |
+| `units.py` | Three-valued dimensional compatibility (ADR-0160) |
+| `citations.py` | Parsing and formatting `BNID nnnnnn` |
+| `entries_table.py` | Rows, marks and legends — shared by both drivers |
+| `messages.py` | Wording both drivers use, and `STOP_THE_RUN` |
+| `cli.py` / `web.py` | The two adapters |
+| `trace.py` | The structured trail, one question id throughout |
 
-### 4. Goal-Driven Execution
+**Patterns, named where they are used.** Ports and adapters (above). Repository
+(`repository.py`). Middleware, LangChain's own rather than hand-rolled — the spend
+gate is a `wrap_model_call`, and retry, tool-error and call-limit middleware are
+all stock. The event stream is a generator, so a driver decides when to consume.
 
-**Define success criteria. Loop until verified.**
+**Limits, and which is which.** `RUN_CALL_LIMIT` bounds model calls;
+`TOOL_CALL_LIMIT` bounds retrievals and is enforced in the tools because a model
+batches several into one hop; `question_ceiling` and `run_budget` bound spend;
+`CONVERSATION_BOUND` bounds a session's tokens. Each is configured where it binds
+and reported when it is reached (ADR-0180).
 
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
+### `bionumbers_ingest` — the corpus pipeline
 
-For multi-step tasks, state a brief plan:
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
+A **pipeline**, and the shape is load-bearing: the two ends are the only modules that know a file
+format, and nothing between them knows either.
 
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+| Module | Role |
+|---|---|
+| `parsing/html_table.py` | source format in — streams `<tr>` rows, preserving raw inner HTML |
+| `cleaning.py` | one raw row → one record; the only place that unescapes or strips |
+| `model.py` | the record, plus `EXPECTED_HEADERS` |
+| `validation.py` | the run report |
+| `provenance.py` | source fingerprint and manifest |
+| `io.py` | JSONL out, renamed into place on success |
+| `ingest.py` | wires the pipeline together |
+| `guard.py` | the refusal to write where git would track the output |
+| `resolve.py` | find a corpus, or the export that would produce one |
+| `cli.py` | the command |
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+Five things about it that reading one module will not tell you:
 
-## Git project management
+- **The reader preserves raw HTML deliberately.** The export's injected markup arrives
+  HTML-escaped, so a reader that unescaped would hand cleaning a live tag and destroy the evidence of
+  which form the source used. Unescaping happens once, in `cleaning`, before markup is stripped.
+- **An angle bracket is not evidence of markup.** The export contains exactly one HTML element and
+  uses `<` as a less-than sign in prose. A tag is recognised only by a real HTML element name.
+- **Records are buffered, not streamed, between cleaning and the writer**, because each carries a
+  digest of the whole source, which is unknown until the last byte. Roughly 70 MB; ADR-0240.
+- **Four booleans are the contract with `bionumbers_ask`**, not the flag names: `range_fused`,
+  `range_qualified`, `range_one_sided` and `range_approximate`. `parse_flags` is cleaning's own
+  vocabulary and may change — the last two became fields because the consumer was reading them out of
+  that list by name, where a rename would have turned them silently false. ADR-0230.
+- **The git-tracking refusal is in `guard.py`, called by `ingest()`, not by the command.** It lived
+  in `cli.py` and so protected one caller; the operation invoked as a library wrote 20 MB onto a
+  committable path in silence. A guard in a driver is a guard for one
+  driver; ADR-0250.
+- **`cleaning.py` has been the densest source of defects in the project**, and every one of them
+  produced a plausible number rather than an error. Seven review passes, fault seeding and mutation
+  testing each found more; treat a change there as needing all three, and **measure both directions**
+  — a fix that stops over-flagging usually starts under-flagging, and only the second is dangerous.
 
-**All work happens on a branch, scoped to an explicit work package.** A work package is a one- or two-sentence statement of the goal and what "done" looks like — small enough to live on a single branch and merge as a unit.
 
-- **Branch; don't work on `dev`/`main`.** Each work package gets a dedicated branch off `dev` (or off a daughter branch, for sub-work that builds on still-unmerged work). Integration happens only through the merge flow, which requires the user's explicit approval (a `git merge` / `gh pr merge` guardrail lives in the user's settings).
-- **No branch → stop and advise, don't start editing.** When changes are requested but nothing is open to hold them — the current branch is `dev`/`main`, or a branch whose work package doesn't cover the request — first help the user define a clear work package (goal + done-criteria) and open a dedicated branch for it (propose a name and scope). Begin the changes only once that branch exists.
-- **Drift → flag it, don't silently absorb it.** While a work package is in progress, watch for scope drift: an unrelated fix, a second feature creeping in, or growth well beyond the stated goal. When it happens, say so explicitly ("this is drifting from *&lt;work package&gt;*") and propose how to proceed — typically one of: (a) move the extra work to its own branch off `dev`, (b) consciously widen the current work package if the addition genuinely belongs to it, or (c) defer/stash the tangent. Let the user choose.
-- **Keep branches focused and short-lived** so they stay reviewable and merge cleanly.
+## Specs and the code that is meant to satisfy them
 
-## Documentation upkeep
+`openspec validate --strict` checks that a spec is well formed. It does not check
+that anything implements it, and the difference has already cost this project
+once: `grounded-answering` required bounding "the number of tool calls made in
+answering a single question" while the code bounded *model* calls, and the two
+only came apart when a model batched several tool calls into one hop.
 
-When a change alters the architecture or user-visible functionality in a major way (new module, new pipeline, new UI capability, changed data flow), update **all four** docs in the same change — they serve different readers and go stale independently:
+`tests/test_spec_conformance.py` maps each requirement to the tests that assert
+it, and fails when a requirement is neither mapped nor explicitly recorded as a
+gap. **Add the mapping entry in the same change that adds the requirement**, the
+way ADRs are written with the decision rather than collected at the end.
 
-- **`README.md`** — what the app does and how to use it (for users and new developers)
-- **`docs/diagrams/`** — the user/developer diagrams (currently `docs/diagrams/architecture.md`), updated **following the principles in `docs/diagrams/DIAGRAMS.md`** (one diagram per story, sequence diagrams for temporal flows, ~7±2 boxes each), together with the references to these diagrams from `README.md`
-- **`docs/REQUIREMENTS.md`** — the behavioral spec (what the app must do, kept implementation-agnostic)
-- **`CLAUDE.md`** — this file's Architecture section (how the code is organized, for coding agents)
+Be clear about what it proves. It catches a requirement nothing claims, and a
+claim naming a test that no longer exists. It does not catch a test that claims a
+requirement and checks the wrong thing -- which is exactly what happened above.
+What it buys is that the requirement's words sit next to the name of the test
+asserting them, where a reader comparing the two can see the mismatch. A review
+aid, not a proof.
 
-Small fixes and internal refactors that don't change behavior or structure don't need this.
+## Running the tests
 
-**Architecture Decision Records (`docs/decisions/`).** When a decision shapes the project in a way worth remembering — a non-obvious technical choice, an accepted trade-off, a convention, a reversal — record it as an ADR. Copy `docs/decisions/0000-decision-template.md` to `docs/decisions/NNNN-concise-kebab-name.md`, where `NNNN` is the highest existing id **plus 10** (the first real ADR is `0010-…`; `0000` is the reserved template). Gap numbering leaves room to slot a later decision between two existing ones. Fill in status, date, the pull request, and the context / decision / trade-off. Write the ADR as part of the same change that makes the decision — not retroactively.
+`pytest` is offline by default and runs on the six-entry fixture: `addopts = "-m 'not network and not corpus'"` deselects both markers, so a green run may never have executed the tests that hit a real service or the ones that check a marker can fire against a real corpus. Run those explicitly with `pytest -m network` and `BIONUMBERS_ASK_CORPUS=... pytest -m corpus`.
 
-**Changelog (`CHANGELOG.md`).** Keep `CHANGELOG.md` (project root, Keep a Changelog format) current as work progresses: for any user-visible or otherwise notable change (new capability, changed behavior, removal, fix), add a bullet under `## [Unreleased]` in the appropriate Added / Changed / Removed / Fixed group. Move those bullets into a versioned section when a release is tagged.
+## Testing the tests
 
+Two techniques, both scoped by consequence: spend the effort where a silent bug would be *unfalsifiable to the user* — parsers, retrieval, provenance — and not on drivers, rendering or config, where a bug announces itself the moment someone looks.
+
+**Fault seeding** is the default, and the user-level conventions cover it: seed one realistic defect into a *copy* of the source and check that exactly the right test fails.
+
+**Mutation testing** is the automated complement, and finds what seeding structurally cannot — code no test can distinguish. Run it at the end of a task, over the module just touched, via the **`mutation-test-module`** skill, which carries the recipe and this project's three setup gotchas. Not over the whole package (2,000+ mutants, hours) and never as a CI gate.
+
+Its yield decays, and that is expected rather than a failure: a module's first run finds real gaps, later runs on settled code return mostly equivalent mutants. Once two or three consecutive runs turn up nothing but string-sentinel and default-argument survivors, stop running it on that area and reach for it again only when the code changes substantially. It is a tool for new and reworked code, not a standing gate.
+
+**Yield decays per instrument, not absolutely, and that distinction has already been paid for.** `cleaning.py` was reviewed by reading seven times, with findings each time and no downward trend: 9, 11, 6, 5, 5, 5, 7. The sixth pass caught a defect the fifth pass had *introduced*, and the seventh — after mutation testing had run over the same module — still found a HIGH. Reading the same code again is the instrument with the fastest decay; a lens it cannot use (mutation testing, a scoped adversarial review, a question about a second caller) resets the yield. So "the last pass found little" is evidence about the instrument, not about the code, and the move is to switch lenses rather than to conclude the module is clean.
