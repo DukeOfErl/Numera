@@ -126,12 +126,21 @@ FUSED_RANGE_FLAGS = frozenset({"range_multi_number", "range_prose_between_bounds
 def _clean_text(raw: str) -> tuple[str, bool]:
     """Return (clean text, had_markup): unescape entities, strip tags, collapse space.
 
-    Unescaping comes **first**, and the pair repeats until the text stops
-    changing. In the published export the injected markup appears only as
+    In the published export the injected markup appears only as
     ``&lt;IMG SRC="/WF_SQL_XSRF.html"&gt;`` — 20,411 occurrences, not one literal
-    ``<IMG`` — so stripping first matches nothing and the unescape then produces
-    a live tag. `had_markup` is likewise determined from the unescaped text; read
-    from the raw cell it would report zero on a corpus that is 71% contaminated.
+    ``<IMG``. Stripping tags before unescaping entities therefore matches nothing,
+    and the unescape then *manufactures* a live tag.
+
+    **The repeat-until-stable loop is what fixes that, not the order within one
+    pass.** Fault seeding showed the two orders are indistinguishable here: a pass
+    that only unescapes leaves a tag for the next pass to strip, and the loop runs
+    again. Unescaping first is kept because it makes the single-pass reading
+    correct too, but the loop is the load-bearing part — which also means removing
+    it would reintroduce the defect even with the order left alone.
+
+    `had_markup` is accumulated across passes for the same reason; determined from
+    the raw cell in a single pass it reports zero on a corpus that is 71%
+    contaminated.
 
     A tag is recognised only by a real HTML element name. Angle brackets in this
     source are mostly not markup, and a generic pattern deletes scientific

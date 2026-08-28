@@ -147,6 +147,19 @@ def test_prose_between_the_bounds_is_flagged():
     assert r.range_fused is True
 
 
+def test_the_prose_check_spans_the_bounds_not_the_outermost_numbers():
+    # `3 1-2`: the bounds are 1 and 2, which sit side by side with only a
+    # separator between them, so no prose stands between the bounds. Comparing
+    # the first and last number instead spans " 1-", which is not separators
+    # only, and would raise the flag on a cell that does not earn it. Found by
+    # fault seeding; only the flag list distinguishes the two, because
+    # range_multi_number already covers the record either way.
+    r = clean_row({"bion_id": "1", "Range": "'3 1-2"})
+    assert r.range_low == pytest.approx(1.0)
+    assert r.range_high == pytest.approx(3.0)
+    assert "range_prose_between_bounds" not in r.parse_flags
+
+
 def test_an_ordinary_two_number_range_raises_neither_flag():
     r = clean_row({"bion_id": "1", "Range": "'0.44-1.79"})
     assert "range_multi_number" not in r.parse_flags
