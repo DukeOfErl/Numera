@@ -17,7 +17,7 @@ import uuid
 from collections.abc import Iterable
 from typing import TextIO
 
-from . import entries_table, messages, trace
+from . import autobuild, entries_table, messages, trace
 from .agent import AskAgent
 from .config import Config, NotConfigured
 from .corpus import CorpusUnavailable, load
@@ -158,7 +158,10 @@ def main(argv: list[str] | None = None) -> None:
     # did not cause. `NotConfigured` carries the instructions for the retired
     # BIONUMBERS_ASK_WARN_USD, which arriving as a crash would waste entirely.
     try:
-        repo = CorpusRepository(load(args.corpus))
+        # Announced on stderr: in one-shot mode stdout carries the answer, and a
+        # build notice mixed into it would corrupt whatever reads that.
+        corpus = autobuild.corpus_path(args.corpus, lambda text: print(text, file=sys.stderr))
+        repo = CorpusRepository(load(corpus))
         config = Config.from_env()
     except (CorpusUnavailable, NotConfigured) as exc:
         raise SystemExit(f"bionumbers-ask: {exc}") from exc

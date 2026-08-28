@@ -30,7 +30,7 @@ from typing import Any
 
 import streamlit as st
 
-from . import entries_table, messages, trace
+from . import autobuild, entries_table, messages, trace
 from .agent import AskAgent
 from .citations import format_citation
 from .config import Config
@@ -251,7 +251,14 @@ def resources() -> tuple[CorpusRepository, AskAgent]:
     script has no argv to read it from.
     """
     trace.to_file(os.environ.get("BIONUMBERS_ASK_TRACE", trace.DEFAULT_FILE))
-    repo = CorpusRepository(load(os.environ.get("BIONUMBERS_ASK_CORPUS", "")))
+    # Announced before the build starts, not after it finishes: this page would
+    # otherwise show a spinner and nothing else for a minute on first launch, which
+    # is indistinguishable from a hang.
+    corpus = autobuild.corpus_path(
+        os.environ.get("BIONUMBERS_ASK_CORPUS", ""),
+        lambda text: st.info(as_text(text), icon=":material/build:"),
+    )
+    repo = CorpusRepository(load(corpus))
     checkpoints = os.environ.get("BIONUMBERS_ASK_CHECKPOINTS", DEFAULT_CHECKPOINTS)
     # The store is created on demand by the checkpointer, but its directory is not.
     directory = os.path.dirname(checkpoints)

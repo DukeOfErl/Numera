@@ -63,3 +63,49 @@ a file at all.
 
 - **WHEN** a build is needed and the corpus path lies in a repository that does not ignore it
 - **THEN** the build is refused, naming the repository, and nothing is written
+
+
+### Requirement: A build is announced before it begins, not after it ends
+
+Where a driver builds a corpus rather than failing, it SHALL say so before the
+build starts, and SHALL name both the export being read and the path being
+written.
+
+A build takes about a minute. Announced afterwards, or not at all, the first
+launch is indistinguishable from a hang -- and a page shows an empty frame for the
+whole of it. Both paths are named because the build can be refused on its
+destination, and a reader told only what was read cannot tell which path was
+rejected.
+
+#### Scenario: A corpus is built on first launch
+- **WHEN** a driver finds an export and no corpus
+- **THEN** the notice appears before any building work is done
+- **AND** it names the export it will read and the path it will write
+
+#### Scenario: A corpus is already present
+- **WHEN** a driver finds a corpus at the configured path
+- **THEN** nothing is announced, because nothing is built
+
+### Requirement: A corpus that cannot be built is explained, not raised
+
+A driver SHALL report a refused or impossible build the way it reports a missing
+corpus: as a message a person can act on, never as a traceback.
+
+Three conditions reach a reader here -- the destination is somewhere git would
+track the corpus, the ingestion component is not installed, or there is no export
+to build from -- and all three are configuration a person can fix. The second SHALL
+name the export that was found and how to use it without that component, since an
+answer of "not installed" is less useful than one that says what to do with the
+file already present.
+
+#### Scenario: The destination would be committed
+- **WHEN** the build is refused because git would track the corpus
+- **THEN** the driver states the path and the repository, and does not raise
+
+#### Scenario: The ingestion component is absent
+- **WHEN** an export is present and the component is not installed
+- **THEN** the message names the export and the command that would convert it
+
+#### Scenario: There is nothing to build from
+- **WHEN** neither a corpus nor an export is present
+- **THEN** the ordinary missing-corpus message stands, unembellished
