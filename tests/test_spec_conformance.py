@@ -127,6 +127,9 @@ COVERED.update(
             "test_command.py::test_it_refuses_to_write_a_corpus_where_git_would_track_it",
             "test_command.py::test_the_guard_covers_the_manifest_as_well_as_the_corpus",
             "test_command.py::test_the_guard_covers_the_partial_files_a_run_writes_through",
+            "test_guard.py::test_the_library_call_refuses_where_git_would_track_the_output",
+            "test_guard.py::test_it_refuses_before_reading_the_source",
+            "test_guard.py::test_every_file_a_run_can_create_is_checked",
         ),
         "Each key carries the value of its own column": (
             "test_cleaning.py::test_each_column_reaches_its_own_field",

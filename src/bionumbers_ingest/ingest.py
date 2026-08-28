@@ -21,6 +21,7 @@ from pathlib import Path
 
 from bionumbers_ingest import provenance
 from bionumbers_ingest.cleaning import clean_row, is_data_row
+from bionumbers_ingest.guard import refuse_if_committable
 from bionumbers_ingest.io import write_corpus
 from bionumbers_ingest.model import EXPECTED_HEADERS, BioNumberRecord
 from bionumbers_ingest.parsing import iter_rows
@@ -74,9 +75,16 @@ def ingest(
     The corpus appears at ``corpus_path`` only after the last record is written,
     and the manifest only after the corpus — so a corpus with no manifest is a run
     that did not finish, and never the reverse.
+
+    Raises :class:`~bionumbers_ingest.guard.OutputWouldBeCommitted` before reading
+    anything if git would track any file the run may create. ADR-0200.
     """
     source = Path(source)
     corpus_path = Path(corpus_path)
+    # Before the 27 MB read, not after: refusing at the end would have spent the
+    # work and, worse, this is where the refusal has to be for every caller to
+    # get it. It lived in `cli.py` until a second caller was proposed.
+    refuse_if_committable(corpus_path)
 
     records, rows_read, skipped, digest = build_records(source, limit=limit)
     # A limited run stops before the end of the file, so finish the fingerprint

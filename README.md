@@ -62,7 +62,6 @@ falls on you — the agent does not run until you have done the fetch.
 
 #### 1. Get the source export
 
-
 Go to <https://bionumbers.hms.harvard.edu/resources.aspx> and click **Download the BioNumbers
 database**. That gives you `BioNumbers.xls`, the export this project was built against.
 

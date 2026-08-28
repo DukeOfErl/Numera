@@ -17,65 +17,13 @@ the repository (ADR-0200).
 from __future__ import annotations
 
 import argparse
-import subprocess
 import sys
 from pathlib import Path
 
+from bionumbers_ingest.guard import OutputWouldBeCommitted
 from bionumbers_ingest.ingest import VERSION, ingest
-from bionumbers_ingest.io import PARTIAL_SUFFIX
-from bionumbers_ingest.provenance import manifest_path_for
 
 DEFAULT_OUTPUT = Path("data/processed/bionumbers.jsonl")
-
-
-def _nearest_existing(path: Path) -> Path:
-    for candidate in [path, *path.parents]:
-        if candidate.exists():
-            return candidate
-    return Path.cwd()
-
-
-def committable_repo_for(output: Path) -> str | None:
-    """The repository this output would be committable in, if any.
-
-    The default output path is relative, so a run started from the wrong checkout
-    writes the corpus into whichever repository the caller happens to be standing
-    in. Three checkouts here share one origin and one of them tracks `main`, so
-    that is how 19.5 MB of unlicensed data reaches a public history — the single
-    irreversible mistake this change can make.
-
-    A `.gitignore` entry only protects the repositories someone remembered to
-    edit. Asking git whether it would track the file protects all of them, and
-    asks the authority rather than guessing at ignore semantics.
-
-    Returns the repository root as a string when the file would be tracked, or
-    ``None`` when it is ignored, outside any repository, or git is unavailable.
-    """
-    target = output if output.is_absolute() else Path.cwd() / output
-    anchor = _nearest_existing(target.parent)
-    try:
-        top = subprocess.run(
-            ["git", "-C", str(anchor), "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if top.returncode != 0:
-            return None  # not a repository
-        ignored = subprocess.run(
-            ["git", "-C", str(anchor), "check-ignore", "-q", str(target)],
-            capture_output=True,
-            timeout=10,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None  # no git to ask; the .gitignore is the only guard left
-    return None if ignored.returncode == 0 else top.stdout.strip()
-
-
-def _paths_a_run_can_create(output: Path) -> list[Path]:
-    """Every file an ingest of ``output`` may leave on disk, partials included."""
-    final = [output, manifest_path_for(output)]
-    return final + [p.with_name(p.name + PARTIAL_SUFFIX) for p in final]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -122,21 +70,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     output = Path(args.output)
-    # Every file the run can create, not just the corpus. The manifest is written
-    # beside it under a different name, so a rule like `bionumbers*.jsonl` ignores
-    # one and not the other. And each is written through a `.partial` first, which
-    # a suffix-matching ignore rule does not cover either: the partial is unlinked
-    # on the way out of an exception, but a SIGKILL, an OOM or a power cut leaves
-    # ~19.5 MB of unlicensed export data on a committable path, which `git add .`
-    # would then take.
-    for candidate in _paths_a_run_can_create(output):
-        repo = committable_repo_for(candidate)
-        if repo is not None:
-            break
-    if repo is not None:
+    source = Path(args.source)
+    try:
+        result = ingest(source, output, limit=args.limit)
+    except OutputWouldBeCommitted as refusal:
         print(
-            f"bionumbers-ingest: refusing to write {candidate} — git would track it "
-            f"in {repo}.\n"
+            f"bionumbers-ingest: refusing to write {refusal.path} — git would track it "
+            f"in {refusal.repo}.\n"
             f"  The published BioNumbers data has unresolved licensing, so nothing "
             f"derived from it may enter a repository (ADR-0200), and git history is "
             f"permanent.\n"
@@ -145,10 +85,6 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 3
-
-    source = Path(args.source)
-    try:
-        result = ingest(source, output, limit=args.limit)
     except OSError as exc:
         # Covers a missing source as well as an unwritable destination, so it
         # names the file the operating system actually complained about — saying

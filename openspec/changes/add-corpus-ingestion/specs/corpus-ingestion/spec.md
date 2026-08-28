@@ -100,6 +100,15 @@ ignored, or there is no repository, or git cannot be consulted, the run SHALL pr
 - **WHEN** the output path is git-ignored, or lies outside any repository
 - **THEN** the command runs normally
 
+#### Scenario: Any caller is refused, not only the command
+
+- **WHEN** the ingest operation is invoked directly rather than through the command
+- **THEN** it refuses on the same condition, before reading the source
+
+The refusal belongs to the operation. Placed in the command it protected exactly one caller, and the
+operation invoked as a library wrote the corpus onto a committable path in silence — a bypass that
+stayed invisible while the command was the only caller, and that a second caller would have taken.
+
 ### Requirement: Each key carries the value of its own column
 
 Requiring that the twelve keys are *present with an accepted type* is not enough, because `null` is an

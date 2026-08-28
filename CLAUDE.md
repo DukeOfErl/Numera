@@ -91,6 +91,7 @@ format, and nothing between them knows either.
 | `provenance.py` | source fingerprint and manifest |
 | `io.py` | JSONL out, renamed into place on success |
 | `ingest.py` | wires the pipeline together |
+| `guard.py` | the refusal to write where git would track the output |
 | `cli.py` | the command |
 
 Five things about it that reading one module will not tell you:
@@ -106,6 +107,9 @@ Five things about it that reading one module will not tell you:
   `range_qualified`, `range_one_sided` and `range_approximate`. `parse_flags` is cleaning's own
   vocabulary and may change — the last two became fields because the consumer was reading them out of
   that list by name, where a rename would have turned them silently false. ADR-0230.
+- **The git-tracking refusal is in `guard.py`, called by `ingest()`, not by the command.** It lived
+  in `cli.py` and so protected one caller; the operation invoked as a library wrote 20 MB onto a
+  committable path in silence. A guard in a driver is a guard for one driver.
 - **`cleaning.py` has been the densest source of defects in the project**, and every one of them
   produced a plausible number rather than an error. Seven review passes, fault seeding and mutation
   testing each found more; treat a change there as needing all three, and **measure both directions**
