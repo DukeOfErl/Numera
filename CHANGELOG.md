@@ -12,7 +12,7 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
-- **BioNumbers ask** — an agent answering natural-language questions about
+- **SciNumbers ask** — an agent answering natural-language questions about
   biological quantities from a supplied JSONL corpus, citing an entry for every
   number and saying it could not find one rather than answering from the model's
   own knowledge.
