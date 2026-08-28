@@ -53,10 +53,10 @@ dependency and parquet output are dropped here.
 
 ## 4. Writing the corpus
 
-- [ ] 4.1 Write the JSONL writer: one record per line, absent scalars as JSON null, keywords as an array
-- [ ] 4.2 Write the corpus to a temporary file beside the destination and rename it into place after the last row, so a failed or interrupted run leaves the previous corpus or nothing — never a short corpus, which loads cleanly and is missing entries nobody can enumerate
-- [ ] 4.3 Test the failure path: a run that raises partway leaves no file at the output path
-- [ ] 4.4 Record **ADR-0220**: JSONL only — why the parquet output and `pyarrow` go, and that a second serialization path is a place the contract can drift unnoticed
+- [x] 4.1 Write the JSONL writer: one record per line, absent scalars as JSON null, keywords as an array
+- [x] 4.2 Write the corpus to a temporary file beside the destination and rename it into place after the last row, so a failed or interrupted run leaves the previous corpus or nothing — never a short corpus, which loads cleanly and is missing entries nobody can enumerate
+- [x] 4.3 Test the failure path: a run that raises partway leaves no file at the output path
+- [x] 4.4 Record **ADR-0220**: JSONL only — why the parquet output and `pyarrow` go, and that a second serialization path is a place the contract can drift unnoticed
 
 ## 5. The corpus contract
 
