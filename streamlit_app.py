@@ -17,7 +17,7 @@ from bionumbers_ask import autobuild, web
 from bionumbers_ask.config import NotConfigured, format_usd
 from bionumbers_ask.corpus import CorpusUnavailable
 
-st.set_page_config(page_title="BioNumbers ask", page_icon=":material/biotech:")
+st.set_page_config(page_title="SciNumbers ask", page_icon=":material/biotech:")
 
 try:
     # Resolved here rather than inside `resources`, which is cached: Streamlit
@@ -42,7 +42,7 @@ session = web.session_id(st.session_state, st.query_params)
 # Pinned to the viewport, before anything that could scroll it away.
 web.draw_prototype_banner()
 
-st.title("BioNumbers ask")
+st.title("SciNumbers ask")
 st.caption(web.as_text(f"{len(repo)} entries · session {session}"))
 # The identifier is in the URL, so this page can be reloaded, bookmarked or
 # reopened after a restart and still be the same conversation.
