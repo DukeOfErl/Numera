@@ -55,8 +55,9 @@ class Entry:
     # is an approximation and "<8" is a bound, and calling the first one "bounded"
     # describes it wrongly while claiming to correct a description. The ingester
     # reports the two behind `range_qualified` as `range_approximate` (1,639) and
-    # `range_one_sided` (594); measured over this corpus they partition it exactly,
-    # with no overlap and none missing.
+    # `range_one_sided` (594), and derives `range_qualified` from them, so the
+    # partition holds by construction on its side and is asserted against a real
+    # corpus on ours.
     range_approximate: bool = False
     range_one_sided: bool = False
 
@@ -177,8 +178,12 @@ def _entry(raw: dict) -> Entry:
         range_fused=bool(raw.get("range_fused")),
         # Read from the flag list, which is where the ingester reports the kind.
         # Absent, the value still says it was hedged -- less precisely, never wrongly.
-        range_approximate="range_approximate" in (raw.get("parse_flags") or ()),
-        range_one_sided="range_one_sided" in (raw.get("parse_flags") or ()),
+        # Fields, not names read out of `parse_flags`. That list is the ingester's
+        # own vocabulary and explicitly renameable (its ADR-0230); borrowing from it
+        # for a user-visible string meant a rename would turn both False and quietly
+        # fall back to the vaguer wording. Promoted to contract on request.
+        range_approximate=bool(raw.get("range_approximate")),
+        range_one_sided=bool(raw.get("range_one_sided")),
     )
 
 
