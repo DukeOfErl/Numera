@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 from bionumbers_ingest.ingest import VERSION, ingest
+from bionumbers_ingest.io import PARTIAL_SUFFIX
 from bionumbers_ingest.provenance import manifest_path_for
 
 DEFAULT_OUTPUT = Path("data/processed/bionumbers.jsonl")
@@ -71,6 +72,12 @@ def committable_repo_for(output: Path) -> str | None:
     return None if ignored.returncode == 0 else top.stdout.strip()
 
 
+def _paths_a_run_can_create(output: Path) -> list[Path]:
+    """Every file an ingest of ``output`` may leave on disk, partials included."""
+    final = [output, manifest_path_for(output)]
+    return final + [p.with_name(p.name + PARTIAL_SUFFIX) for p in final]
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="bionumbers-ingest",
@@ -115,10 +122,14 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     output = Path(args.output)
-    # Both files, not just the corpus: the manifest is written beside it under a
-    # different name, so a rule like `bionumbers*.jsonl` ignores one and not the
-    # other, and the run would leave a committable manifest behind.
-    for candidate in (output, manifest_path_for(output)):
+    # Every file the run can create, not just the corpus. The manifest is written
+    # beside it under a different name, so a rule like `bionumbers*.jsonl` ignores
+    # one and not the other. And each is written through a `.partial` first, which
+    # a suffix-matching ignore rule does not cover either: the partial is unlinked
+    # on the way out of an exception, but a SIGKILL, an OOM or a power cut leaves
+    # ~19.5 MB of unlicensed export data on a committable path, which `git add .`
+    # would then take.
+    for candidate in _paths_a_run_can_create(output):
         repo = committable_repo_for(candidate)
         if repo is not None:
             break

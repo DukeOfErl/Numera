@@ -221,3 +221,22 @@ def test_the_guard_covers_the_manifest_as_well_as_the_corpus(tmp_path, sample_ht
     assert main([str(sample_html), "-o", str(repo / "bionumbers.jsonl")]) == 3
     assert "manifest" in capsys.readouterr().err
     assert not (repo / "bionumbers.jsonl.manifest.json").exists()
+
+
+def test_the_guard_covers_the_partial_files_a_run_writes_through(tmp_path, sample_html, capsys):
+    # The partial is unlinked on the way out of an exception, but a SIGKILL, an
+    # OOM or a power cut leaves it behind — ~19.5 MB of unlicensed export data on
+    # a path a suffix-matching ignore rule does not cover, which `git add .`
+    # would then take.
+    import subprocess
+
+    repo = tmp_path / "finals-only"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    (repo / ".gitignore").write_text(
+        "bionumbers.jsonl\nbionumbers.jsonl.manifest.json\n", encoding="utf-8"
+    )
+
+    assert main([str(sample_html), "-o", str(repo / "bionumbers.jsonl")]) == 3
+    assert ".partial" in capsys.readouterr().err
+    assert not (repo / "bionumbers.jsonl").exists()

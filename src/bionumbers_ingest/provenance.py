@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from bionumbers_ingest.io import PARTIAL_SUFFIX
+
 #: Characters of the digest carried on each record. Enough to tie a line to its
 #: manifest without putting 64 characters on all 14,294 of them.
 STAMP_LENGTH = 12
@@ -125,7 +127,10 @@ def write_manifest(manifest: Manifest, corpus_path: str | Path) -> Path:
     describing a corpus that does not exist.
     """
     path = manifest_path_for(corpus_path)
-    partial = path.with_name(path.name + ".partial")
+    # The same suffix the corpus writer uses, imported rather than repeated: the
+    # CLI refuses to run when git would track any path a run can create, and it
+    # builds that list from one constant.
+    partial = path.with_name(path.name + PARTIAL_SUFFIX)
     try:
         partial.write_text(manifest.to_json(), encoding="utf-8")
         os.replace(partial, path)

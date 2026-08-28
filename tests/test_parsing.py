@@ -122,6 +122,26 @@ def test_a_truncated_table_is_an_error_not_a_short_corpus(tmp_path):
         list(iter_rows(cut))
 
 
+def test_a_table_cut_between_two_rows_is_an_error_too(tmp_path):
+    # The likelier cut, and the one that used to pass in silence: an interrupted
+    # transfer lands on a `</tr>` boundary as often as inside a cell, and then
+    # nothing is left open for the parser to notice. Completeness is asserted
+    # against the closing tag instead.
+    cut = tmp_path / "between-rows.html"
+    cut.write_text(
+        "<table><tr><td>a</td><td>b</td></tr><tr><td>1</td><td>2</td></tr>",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="truncated"):
+        list(iter_rows(cut))
+
+
+def test_a_limited_read_is_not_mistaken_for_a_truncated_file(sample_html):
+    # `--limit` stops the read deliberately, long before the closing tag. The
+    # completeness check must not fire on it, or the flag could never be used.
+    assert len(list(iter_rows(sample_html, limit=2))) == 2
+
+
 def test_a_well_formed_table_is_not_reported_as_truncated(sample_html):
     assert len(list(iter_rows(sample_html))) == 7
 

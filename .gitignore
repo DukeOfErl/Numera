@@ -24,6 +24,9 @@ data/
 bionumbers*.jsonl
 *.corpus.jsonl
 *.jsonl.manifest.json
+# Each of those is written through a `.partial` first. A kill that skips the
+# cleanup leaves one behind, and a suffix rule above does not match it.
+*.partial
 
 # Secrets — see CLAUDE.md, "Never commit secrets"
 .env

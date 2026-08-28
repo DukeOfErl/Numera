@@ -126,7 +126,11 @@ _NUM = r"(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][-+]?\d+)?"
 # Anchored at the start and allowing a trailing unit or note, but nothing that
 # could be another number: `7.4±0.3 μm` is one measurement, `7.4±0.3 and 5.9` is
 # not, and the multi-sign check above has already taken the two-± case.
-_MEAN_SD_RE = re.compile(rf"^([-+]?{_NUM})\s*(?:±|\+/-|\+-)\s*({_NUM})\s*(?![\d.])(?:[^\d]*)$")
+# The lookahead excludes only a digit, not a full stop: `7.4±0.3.` ends a
+# sentence, and treating the stop as part of the number discarded both bounds
+# over a punctuation mark. Nothing runs on -- the `[^\d]*$` tail already refuses
+# any later digit.
+_MEAN_SD_RE = re.compile(rf"^([-+]?{_NUM})\s*(?:±|\+/-|\+-)\s*({_NUM})\s*(?!\d)(?:[^\d]*)$")
 # what may stand between two bounds without being a second quantity: the
 # separators _extract_numbers normalises to, and whitespace
 _SEPARATORS_ONLY_RE = re.compile(r"^[\s;,\-–—±+/]*$")
@@ -137,6 +141,17 @@ _UNIT_TAIL_RE = re.compile(r"[A-Za-z%\u00b0\u00c5\u212b/)\]}'\"\u00b2\u00b3]")
 # A unit as written after a bound: letters and unit symbols, optionally spaced
 # words, but nothing with a digit in it.
 _UNIT_TOKEN_RE = re.compile(r"([A-Za-z\u00b5\u03bc\u00b0\u00c5\u212b%/^]+(?:\s+[A-Za-z/]+)*)")
+# Words that join two bounds rather than naming a unit. They ride along in the
+# span's token (`20 min to 30 min` gives "min to") and would never appear after
+# the high bound, so they are dropped before the two sides are compared.
+# Deliberately not "and": `12 hours and 1.65 hours` reads as two measurements at
+# least as easily as one range, and this predicate errs towards saying so.
+_RANGE_CONNECTORS = frozenset({"to", "up", "upto", "until", "through", "till"})
+#: Leading punctuation to step over before looking for a unit.
+_SPAN_STRIP = " ;,-–—±+/~"
+#: What may remain between the bounds once the unit is taken away. `×` is absent
+#: on purpose: `25Å × 15Å` is two dimensions of one object, not a range.
+_SPAN_FILLER_RE = re.compile(r"^[\s;,\-–—±+/~]*$")
 
 # A number written as an explicit mantissa times a power of ten, which is what a
 # *shared* exponent looks like on the second bound of a range. A bare `10^6` is
@@ -337,6 +352,12 @@ def _prose_stands_between_bounds(text: str, found: list[tuple[float, int, int]])
     return not _is_the_unit_repeated(span, text[b[2] :])
 
 
+def _unit_after(text: str) -> list[str]:
+    """The unit written at the start of ``text``, as a list of words."""
+    token = _UNIT_TOKEN_RE.match(text.lstrip(_SPAN_STRIP))
+    return token.group(1).split() if token else []
+
+
 def _is_the_unit_repeated(span: str, after_high: str) -> bool:
     """Is the text between the bounds just the unit, written on both of them?
 
@@ -344,17 +365,41 @@ def _is_the_unit_repeated(span: str, after_high: str) -> bool:
     marking it would put an ordinary range behind the predicate a consumer reads
     as "do not present this as a measurement".
 
-    The discriminator is repetition: a unit appears after *both* bounds, while a
-    second quantity names something different each time — `436 metabolites: 720
-    reactions` is two things, `10 mM to 20 mM` is one. Requiring the repeat keeps
-    the 87% of this flag that are genuine second quantities.
+    Two things have to hold, and each without the other admits the wrong cells:
+
+    **Nothing but the unit stands between the bounds.** Repetition alone is not
+    enough — `volume 1147 µm^3: surface area 747 µm^2` repeats "µm" and names two
+    different quantities, and `Length 54nm: width 45nm` does the same. What
+    separates those from a range is the words left over once the unit is taken
+    away.
+
+    **And the unit is repeated after the high bound.** Emptiness alone is not
+    enough either: it would read `436 metabolites 720` as a range on the strength
+    of one noun.
+
+    Between them they keep the 87% of this flag that are genuine second
+    quantities, while releasing the ordinary ranges that only looked like them.
     """
-    token = _UNIT_TOKEN_RE.match(span.lstrip(" ;,-–—±+/"))
+    body = span.lstrip(_SPAN_STRIP)
+    token = _UNIT_TOKEN_RE.match(body)
     if token is None:
         return False
-    return _UNIT_TOKEN_RE.match(after_high.lstrip(" ")) is not None and token.group(
-        1
-    ) == _UNIT_TOKEN_RE.match(after_high.lstrip(" ")).group(1)
+    unit = [w for w in token.group(1).split() if w.lower() not in _RANGE_CONNECTORS]
+    if not unit:
+        return False  # nothing but a connector: no unit was written on the low bound
+    rest = body[token.end() :]
+    if token.group(1).endswith("^"):
+        # `µm^3` splits as the token "µm^" and a leftover exponent, because a
+        # digit cannot be in the unit pattern without swallowing the bounds
+        # themselves. The exponent belongs to the unit, so it is not leftover text.
+        rest = rest.lstrip("0123456789-")
+    if not _SPAN_FILLER_RE.match(rest):
+        return False
+    # A prefix comparison on the far side, not equality: `_UNIT_TOKEN_RE` runs
+    # greedily over whatever follows the high bound, so `5 nm to 10 nm diameter`
+    # offers "nm" against "nm diameter", and any trailing word would defeat the
+    # test — leaving an ordinary range behind the fused predicate.
+    return _unit_after(after_high)[: len(unit)] == unit
 
 
 def _shared_exponent_is_ambiguous(text: str, found: list[tuple[float, int, int]]) -> bool:
@@ -402,6 +447,27 @@ def _finite(value: float | None) -> bool:
     disagree about the same record.
     """
     return value is not None and math.isfinite(value)
+
+
+def _bounds_or_unparsed(
+    range_raw: str | None,
+    low: float,
+    high: float,
+    table_link: str | None,
+    flags: list[str],
+) -> tuple[str | None, float | None, float | None, str | None]:
+    """Return the bounds, or nothing plus a flag if either is unusable.
+
+    Every path that computes a pair of bounds goes through here. The plus-or-minus
+    paths once returned theirs directly, so `1e400±1e400` shipped ``nan`` and
+    ``inf`` — written to the corpus as two nulls, on a record carrying neither
+    ``range_unparsed`` nor ``no_scalar``. The manifest then claimed a range the
+    corpus line does not have, which is the disagreement `_finite` exists to stop.
+    """
+    if not (_finite(low) and _finite(high)):
+        flags.append("range_unparsed")
+        return range_raw, None, None, table_link
+    return range_raw, low, high, table_link
 
 
 def _parse_value(raw: str, flags: list[str]) -> float | None:
@@ -489,7 +555,7 @@ def _parse_range(
         if one:
             mean, delta = float(one.group(1)), abs(float(one.group(2)))
             flags.append("range_mean_sd_embedded")
-            return range_raw, mean - delta, mean + delta, table_link
+            return _bounds_or_unparsed(range_raw, mean - delta, mean + delta, table_link, flags)
 
         # The deviation is the number that FOLLOWS the sign. Taking the first
         # number in the cell instead reads "(n=3) ±1.15" as a deviation of 3.
@@ -497,7 +563,9 @@ def _parse_range(
             deltas = _extract_numbers(text[signs[0].end() :])
             if deltas:
                 delta = abs(deltas[0])
-                return range_raw, value - delta, value + delta, table_link
+                return _bounds_or_unparsed(
+                    range_raw, value - delta, value + delta, table_link, flags
+                )
             return range_raw, None, None, table_link
 
         flags.append("range_plus_minus_no_value")
@@ -518,14 +586,10 @@ def _parse_range(
         # closed interval either way, so the record has to say so.
         _flag_hedging(text, flags, "range")
         values = [v for v, _, _ in found]
-        low, high = min(values), max(values)
-        if not (_finite(low) and _finite(high)):
-            # An overflowing literal reaches here as inf, and pydantic writes inf
-            # as null -- which would break the both-or-neither invariant the
-            # record and the report both rely on.
-            flags.append("range_unparsed")
-            return range_raw, None, None, table_link
-        return range_raw, low, high, table_link
+        # An overflowing literal reaches here as inf, and pydantic writes inf as
+        # null -- which would break the both-or-neither invariant the record and
+        # the report both rely on.
+        return _bounds_or_unparsed(range_raw, min(values), max(values), table_link, flags)
     if table_link is None:
         flags.append("range_unparsed")
     return range_raw, None, None, table_link

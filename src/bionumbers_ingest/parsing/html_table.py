@@ -60,13 +60,38 @@ class _TableParser(HTMLParser):
         self._row: list[str] | None = None
         self._in_cell = False
         self._buf: list[str] = []
+        self.saw_table = False
+        self.saw_table_end = False
 
     @property
     def incomplete(self) -> bool:
-        """A row or a cell was still open when the input ran out."""
+        """A row or a cell was still open when the input ran out.
+
+        Not the whole of truncation: a file cut on a ``</tr>`` boundary leaves
+        nothing open, so ``truncated`` below is the check that matters and this
+        one only names *where* the cut landed.
+        """
         return self._row is not None or self._in_cell
 
+    @property
+    def truncated(self) -> bool:
+        """The table was opened and the input ran out before it closed.
+
+        A download interrupted between two rows ends on a ``</tr>`` boundary and
+        parses perfectly — every row it managed to hold, and no complaint. That is
+        the shape this project cannot ship: a corpus that loads cleanly and is
+        missing entries nobody can enumerate. So completeness is asserted against
+        the closing tag rather than against the parser's open state.
+
+        ``incomplete`` stays in the disjunction rather than being replaced by it:
+        a fragment with no ``<table>`` wrapper at all has no closing tag to miss,
+        and an open row is the only evidence of truncation it can offer.
+        """
+        return (self.saw_table and not self.saw_table_end) or self.incomplete
+
     def handle_starttag(self, tag: str, attrs: object) -> None:
+        if tag == "table" and not self._in_cell:
+            self.saw_table = True
         if tag == "tr":
             self._row = []
         elif tag == "td" and self._row is not None:
@@ -80,6 +105,8 @@ class _TableParser(HTMLParser):
             self._buf.append(self.get_starttag_text() or "")
 
     def handle_endtag(self, tag: str) -> None:
+        if tag == "table" and not self._in_cell:
+            self.saw_table_end = True
         if tag == "td" and self._in_cell:
             assert self._row is not None
             self._row.append("".join(self._buf))
@@ -147,10 +174,11 @@ def _iter_raw_rows(
     parser.close()
     while parser.rows:
         yield parser.rows.pop(0)
-    if parser.incomplete:
+    if parser.truncated:
+        where = "mid-row" if parser.incomplete else "between rows"
         raise ValueError(
-            "the table ends mid-row: the source file appears truncated, "
-            "so any corpus built from it would be silently short"
+            f"the table is never closed and ends {where}: the source file appears "
+            f"truncated, so any corpus built from it would be silently short"
         )
 
 

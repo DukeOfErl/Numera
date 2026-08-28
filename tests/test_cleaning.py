@@ -873,3 +873,63 @@ def test_an_overflowing_caret_exponent_is_reported_not_dropped():
     r = clean_row({"bion_id": "1", "Range": "'1-10^400"})
     assert r.range_low is None and r.range_high is None
     assert "range_unparsed" in r.parse_flags
+
+
+@pytest.mark.parametrize(
+    "range_text",
+    [
+        "'5 nm to 10 nm diameter",
+        "'10 mM - 20 mM measured in vivo",
+        "'20 min to 30 min after induction",
+        "'37 deg C to 42 deg C at the surface",
+    ],
+)
+def test_a_word_after_the_repeated_unit_does_not_make_a_range_two_quantities(range_text):
+    # The unit is matched greedily on both sides, so `nm` on the low bound was
+    # compared against `nm diameter` on the high one and any trailing word
+    # defeated the repeat test -- putting an ordinary range behind the predicate
+    # a consumer reads as "do not present this as a measurement".
+    r = clean_row({"bion_id": "1", "Range": range_text})
+    assert r.range_fused is False
+
+
+@pytest.mark.parametrize(
+    "range_text",
+    [
+        "'Length 54nm: width 45nm",  # same unit, two dimensions
+        "'male 0.18g: female 0.15g",  # same unit, two populations
+        "'volume 1147 µm^3: surface area 747 µm^2",  # same unit stem, two quantities
+        "'66 kDa subunit: 51 kDa subunit",  # the whole unit phrase repeats
+        "'25Å × 15Å",  # two dimensions of one object
+    ],
+)
+def test_a_repeated_unit_alone_does_not_make_two_quantities_one_range(range_text):
+    # Repetition is necessary and not sufficient. Testing it alone released 144
+    # records of the export that name two different things in the same unit, and
+    # each then reads as a single measurement spanning both -- a wrong claim that
+    # looks entirely ordinary. What separates a range from these is that nothing
+    # but the unit stands between the bounds.
+    r = clean_row({"bion_id": "1", "Range": range_text})
+    assert r.range_fused is True
+
+
+def test_an_overflowing_deviation_is_not_a_measurement():
+    # `_finite` guarded the numeric-range branch and neither plus-or-minus
+    # branch, so `1e400±1e400` shipped nan and inf -- written to the corpus as
+    # two nulls, on a record carrying no flag at all. The manifest then claimed a
+    # range the corpus line does not have.
+    r = clean_row({"bion_id": "1", "Range": "'1e400±1e400"})
+    assert r.range_low is None and r.range_high is None
+    assert "range_unparsed" in r.parse_flags
+
+    around_value = clean_row({"bion_id": "1", "Value": "5", "Range": "'±1e400"})
+    assert around_value.range_low is None and around_value.range_high is None
+    assert "range_unparsed" in around_value.parse_flags
+
+
+def test_a_full_stop_after_a_deviation_does_not_discard_both_bounds():
+    # The lookahead excluded a full stop as well as a digit, so a mean±sd ending
+    # a sentence lost its interval -- while the same cell with a note between the
+    # number and the stop kept it.
+    r = clean_row({"bion_id": "1", "Range": "'7.4±0.3."})
+    assert (r.range_low, r.range_high) == pytest.approx((7.1, 7.7))
