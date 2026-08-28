@@ -207,10 +207,14 @@ The source frequently hedges a range rather than bounding it: `<0.001`, `>100`, 
 and highest number found, which turns `<0.001` into the closed interval from `0.001` to `0.001` — an
 exact equality where the source said *less than*. 2,233 records of the export carry such a marker.
 
-The system SHALL flag a range whose cell carries a one-sided bound, and separately one carrying an
-approximation marker, and SHALL leave the bounds as computed. A consumer SHALL be able to read one
-field to know that the stored bounds are not the exact interval they appear to be, without knowing
+The system SHALL flag a hedged number, and SHALL leave it as computed. A consumer SHALL be able to
+read one field to know that a stored number is not the exact figure it appears to be, without knowing
 which marker applied.
+
+**The value column gets the same treatment as the range column, and reaches the same field.** Reporting
+a hedge in one and hiding it in the other means `<2` in a value cell arrives at a consumer as an exact
+`2` — the unsourced correction this project exists to avoid — with the only signal being a flag name
+consumers are told never to read.
 
 That field SHALL be distinct from the fused-range predicate. The two say different things — one that
 the bounds may come from two quantities, the other that the source never claimed a closed interval —
@@ -228,6 +232,28 @@ would redefine a term `add-ask-agent` already reads.
 
 - **WHEN** a range cell reads `'~5`
 - **THEN** the record is flagged as approximate, and reports the same
+
+#### Scenario: A hedged value
+
+- **WHEN** a value cell reads `<2`
+- **THEN** the record carries `2` and reports that a stored number was not stated exactly
+
+#### Scenario: A number too large to represent
+
+- **WHEN** a cell holds a literal that overflows to infinity, such as `1e400`
+- **THEN** no number is stored for it, and the record is flagged
+- **AND** the bounds remain both-present or both-absent
+
+#### Scenario: A link whose URL cannot be recognised
+
+- **WHEN** a range cell names a table link but no URL can be read from it
+- **THEN** no bounds are derived from what remains, and the record is flagged
+- **AND** a percent-escape in a filename does not become a measurement
+
+#### Scenario: A range cell holding only the text marker
+
+- **WHEN** a range cell contains just the Excel text-marker apostrophe
+- **THEN** it is treated as empty, not as a cell that could not be read
 
 #### Scenario: A plainly stated range
 

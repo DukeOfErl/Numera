@@ -21,6 +21,7 @@ naming what we could not. Nothing is dropped and nothing is guessed. ADR-0230.
 from __future__ import annotations
 
 import html
+import math
 import re
 
 from bionumbers_ingest.model import BioNumberRecord
@@ -155,11 +156,26 @@ _APPROXIMATE_RE = re.compile(
     re.IGNORECASE,
 )
 
-#: `parse_flags` entries that mean the range was not stated as a closed interval,
-#: so the stored bounds are not the exact measurement they look like. Behind the
+#: `parse_flags` entries that mean a stored number was not stated as an exact
+#: measurement, so it is not the figure it looks like. Behind the
 #: `range_qualified` field, for the same reason the fusion flags are behind
 #: `range_fused`: the names are cleaning's, the field is the contract.
-QUALIFIED_RANGE_FLAGS = frozenset({"range_one_sided", "range_approximate"})
+#:
+#: The value column gets the same treatment as the range column. Reporting a hedge
+#: in one and hiding it in the other would mean `<2` in `Value` reaches a consumer
+#: as an exact 2, which is the unsourced correction ADR-0230 forbids.
+QUALIFIED_RANGE_FLAGS = frozenset(
+    {"range_one_sided", "range_approximate", "value_one_sided", "value_approximate"}
+)
+
+
+def _flag_hedging(text: str, flags: list[str], column: str) -> None:
+    """Note a one-sided bound or an approximation marker in ``text``."""
+    if _ONE_SIDED_RE.search(text):
+        flags.append(f"{column}_one_sided")
+    elif _APPROXIMATE_RE.search(text):
+        flags.append(f"{column}_approximate")
+
 
 #: `parse_flags` entries that mean the stored bounds may fuse two quantities.
 #: The `range_fused` field is derived from exactly these; no other flag implies
@@ -242,7 +258,10 @@ def _numbers_with_spans(text: str) -> tuple[str, list[tuple[float, int, int]]]:
     # A dash directly after a caret is that exponent's sign, not a separator, so
     # it has to be settled before the blanket dash-to-separator rule below turns
     # `10^–11` into `10^;11` and leaves the exponent stranded as its own number.
-    text = re.sub(r"\^\s*[-+\u2212\u2013\u2014]", "^-", text)
+    # Only the MINUS forms. `+` was in this class and rewrote `10^+5` as `10^-5`,
+    # a number ten orders of magnitude out that parsed without complaint.
+    # `_token_to_float` reads `^+5` correctly on its own, so nothing is needed here.
+    text = re.sub(r"\^\s*[-\u2212\u2013\u2014]", "^-", text)
     # unicode minus -> ASCII minus (a sign); en/em dashes -> ';' (a separator
     # that, unlike a space, hides the preceding digit from the sign test)
     text = text.replace("−", "-").replace("–", ";").replace("—", ";")
@@ -336,6 +355,17 @@ def _shared_exponent_is_ambiguous(text: str, found: list[tuple[float, int, int]]
     return mantissa is not None and abs(v1) < abs(float(mantissa.group(1)))
 
 
+def _finite(value: float | None) -> bool:
+    """Is this a number a measurement could be?
+
+    ``float("1e400")`` returns ``inf`` rather than raising, and pydantic serializes
+    ``inf`` as JSON ``null`` — so an overflowing literal becomes an absent value on
+    a record the report counted as having one, and the corpus and its manifest then
+    disagree about the same record.
+    """
+    return value is not None and math.isfinite(value)
+
+
 def _parse_value(raw: str, flags: list[str]) -> float | None:
     """The scalar, or ``None`` with a flag saying why there isn't one.
 
@@ -351,14 +381,13 @@ def _parse_value(raw: str, flags: list[str]) -> float | None:
         value = float(text)
     except ValueError:
         nums = _extract_numbers(text)
-        if nums:
+        if nums and _finite(nums[0]):
+            _flag_hedging(text, flags, "value")
             flags.append("value_recovered_from_text")
             return nums[0]
         flags.append("value_unparsed")
         return None
-    if value != value or value in (float("inf"), float("-inf")):
-        # `float("nan")` and `float("inf")` both parse. Neither is a measurement,
-        # and neither survives JSON: they would serialize as invalid tokens.
+    if not _finite(value):
         flags.append("value_unparsed")
         return None
     return value
@@ -376,10 +405,9 @@ def _parse_range(
     ``±Δ`` in this column is an uncertainty around ``value``, not a bound.
     """
     text, _ = _clean_text(raw)
-    if not text:
+    text = text.lstrip("'").strip()  # drop the Excel text-marker FIRST: a cell
+    if not text:  # that is only the marker is an empty cell, not an unreadable one
         return None, None, None, None
-
-    text = text.lstrip("'").strip()  # drop Excel text-marker
     range_raw = text or None
 
     table_link = None
@@ -392,6 +420,13 @@ def _parse_range(
             text = _URL_RE.sub(" ", text)
         flags.append("range_is_link")
         text = _TABLE_LINK_RE.sub("", text).strip()
+        if not urls:
+            # The phrase is there but no URL could be recognised, so whatever
+            # remains is a link this module could not parse -- and a filename's
+            # percent-escapes read as numbers (`table%2012.pdf` gives 2012).
+            # Deriving bounds from it would invent a measurement from a filename.
+            flags.append("range_link_unparsed")
+            return range_raw, None, None, table_link
 
     signs = list(_PM_RE.finditer(text))
     if signs:
@@ -443,12 +478,16 @@ def _parse_range(
             flags.append("range_shared_exponent")
         # The source hedged: a one-sided bound or an approximation. Stored as a
         # closed interval either way, so the record has to say so.
-        if _ONE_SIDED_RE.search(text):
-            flags.append("range_one_sided")
-        elif _APPROXIMATE_RE.search(text):
-            flags.append("range_approximate")
+        _flag_hedging(text, flags, "range")
         values = [v for v, _, _ in found]
-        return range_raw, min(values), max(values), table_link
+        low, high = min(values), max(values)
+        if not (_finite(low) and _finite(high)):
+            # An overflowing literal reaches here as inf, and pydantic writes inf
+            # as null -- which would break the both-or-neither invariant the
+            # record and the report both rely on.
+            flags.append("range_unparsed")
+            return range_raw, None, None, table_link
+        return range_raw, low, high, table_link
     if table_link is None:
         flags.append("range_unparsed")
     return range_raw, None, None, table_link

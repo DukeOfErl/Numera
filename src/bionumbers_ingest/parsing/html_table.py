@@ -20,11 +20,30 @@ the caller supplies the names it expects — a renamed column.
 from __future__ import annotations
 
 import codecs
+import html as html_module
+import re
 from collections.abc import Callable, Iterator, Sequence
 from html.parser import HTMLParser
 from pathlib import Path
 
 _CHUNK = 1 << 20  # 1 MiB
+_TAG_RE = re.compile(r"<[^>]*>")
+_WS_RE = re.compile(r"\s+")
+
+
+def _header_name(cell: str) -> str:
+    """A header cell reduced to the name a caller would write.
+
+    Header cells arrive as raw inner HTML like every other cell — the export pads
+    them and marks them bold. Comparing or keying on that raw string means a
+    padded header both fails an `expect_headers` check on a perfectly ingestible
+    file and, when no check is asked for, silently produces keys nothing looks up,
+    so every field comes out empty with nothing flagged.
+
+    Tag stripping here is only to recover a *name*; cell content is still handed
+    to cleaning untouched, which is where the markup rules live.
+    """
+    return _WS_RE.sub(" ", html_module.unescape(_TAG_RE.sub("", cell))).strip()
 
 
 class _TableParser(HTMLParser):
@@ -166,7 +185,7 @@ def iter_rows(
     yielded = 0
     for row in _iter_raw_rows(path, on_bytes=on_bytes):
         if headers is None:
-            headers = row
+            headers = [_header_name(cell) for cell in row]
             if expect_headers is not None:
                 missing = [h for h in expect_headers if h not in headers]
                 unexpected = [h for h in headers if h not in expect_headers]

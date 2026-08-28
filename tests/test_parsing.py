@@ -164,3 +164,19 @@ def test_a_reordered_header_is_accepted_because_fields_are_read_by_name(tmp_path
     )
     rows = list(iter_rows(src, expect_headers=("bion_id", "Value")))
     assert rows == [{"Value": "1", "bion_id": "2"}]
+
+
+def test_padded_and_marked_up_header_cells_still_key_the_row(tmp_path):
+    # Header cells arrive as raw inner HTML like any other cell. Keyed raw, a
+    # padded header produces keys nothing looks up, so every field comes out
+    # empty with nothing flagged — and an expect_headers check rejects a
+    # perfectly ingestible file.
+    src = tmp_path / "padded.html"
+    src.write_text(
+        "<table><tr><td style='font-weight:bold;'>  bion_id  </td>"
+        "<td><b>Value</b></td></tr>"
+        "<tr><td>1</td><td>2</td></tr></table>",
+        encoding="utf-8",
+    )
+    rows = list(iter_rows(src, expect_headers=("bion_id", "Value")))
+    assert rows == [{"bion_id": "1", "Value": "2"}]

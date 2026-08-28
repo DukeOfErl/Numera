@@ -731,3 +731,91 @@ def test_the_table_link_phrase_is_matched_however_it_is_cased(phrase):
     assert r.table_link == "http://x.invalid/a.pdf"
     assert "range_is_link" in r.parse_flags
     assert "link" not in (r.range_raw or "").lower().split("http")[0].replace(phrase.lower(), "")
+
+
+# --- final review findings, all latent in today's export ----------------------
+
+
+@pytest.mark.parametrize(
+    "range_text,low,high",
+    [
+        ("'2×10^+5 to 4×10^+5", 2e5, 4e5),
+        ("'10^+8", 1e8, 1e8),
+        ("'10^-8", 1e-8, 1e-8),  # the minus forms must still work
+        ("'10^–8", 1e-8, 1e-8),
+    ],
+)
+def test_an_explicitly_positive_exponent_is_not_negated(range_text, low, high):
+    # A `+` in the caret-sign class rewrote `10^+5` as `10^-5`: a number ten orders
+    # of magnitude out that parsed without complaint and raised no flag.
+    r = clean_row({"bion_id": "1", "Range": range_text})
+    assert r.range_low == pytest.approx(low)
+    assert r.range_high == pytest.approx(high)
+
+
+def test_a_positive_exponent_shared_across_bounds_is_flagged_not_corrected():
+    """`1-2×10^+9` is the shared-exponent shape, and the fix must not "correct" it.
+
+    The first draft of this test asserted bounds of 1e9..2e9 — the reading a human
+    would take — which is exactly the unsourced correction ADR-0230 forbids. What
+    the fix has to deliver is that the exponent is read as POSITIVE (so the high
+    bound is 2e9 rather than 2e-09) while the ambiguity between the two readings is
+    reported rather than resolved.
+    """
+    r = clean_row({"bion_id": "1", "Range": "'1-2×10^+9"})
+    assert r.range_low == pytest.approx(1.0)
+    assert r.range_high == pytest.approx(2e9)
+    assert "range_shared_exponent" in r.parse_flags
+    assert r.range_fused is True
+
+
+def test_a_positive_exponent_in_the_value_column_is_not_negated():
+    r = clean_row({"bion_id": "1", "Value": "2×10^+5"})
+    assert r.value == pytest.approx(2e5)
+
+
+def test_a_scheme_less_link_does_not_turn_a_filename_into_bounds():
+    # `table%2012.pdf` gave a range of 2012 to 2012 — a measurement invented from
+    # a filename's percent-escapes.
+    r = clean_row({"bion_id": "1", "Range": "'Table link - www.example.org/files/table%2012.pdf"})
+    assert r.range_low is None and r.range_high is None
+    assert "range_is_link" in r.parse_flags
+    assert "range_link_unparsed" in r.parse_flags
+
+
+@pytest.mark.parametrize(
+    "value_text,flag",
+    [("&lt;2", "value_one_sided"), ("&gt;100", "value_one_sided"), ("~5", "value_approximate")],
+)
+def test_a_hedged_value_reaches_the_contract_not_just_the_flags(value_text, flag):
+    # Reporting a hedge in the range column and hiding it in the value column
+    # means `<2` arrives at a consumer as an exact 2, and the only signal was a
+    # flag the model docstring tells consumers never to read.
+    r = clean_row({"bion_id": "1", "Value": value_text})
+    assert flag in r.parse_flags
+    assert r.range_qualified is True
+
+
+@pytest.mark.parametrize(
+    "row",
+    [{"Value": "abc 1e400"}, {"Value": "1e400"}, {"Range": "'1-1e400"}, {"Range": "'1e400"}],
+)
+def test_an_overflowing_literal_is_not_a_measurement(row):
+    # float("1e400") returns inf rather than raising, and pydantic writes inf as
+    # JSON null — so it would become an absent number on a record the report
+    # counted as having one, and corpus and manifest would disagree.
+    import math
+
+    r = clean_row({"bion_id": "1", **row})
+    for number in (r.value, r.range_low, r.range_high):
+        assert number is None or math.isfinite(number)
+    assert (r.range_low is None) == (r.range_high is None)  # both or neither
+    assert r.parse_flags, "an unusable number must say so"
+
+
+def test_a_range_cell_holding_only_the_text_marker_is_empty_not_unreadable():
+    # The export writes an empty Range as a bare apostrophe. Reporting it as
+    # unparseable inflates the one count the report presents as a claim about what
+    # could not be read.
+    assert "range_unparsed" not in clean_row({"bion_id": "1", "Range": "'"}).parse_flags
+    assert "range_unparsed" not in clean_row({"bion_id": "1", "Range": ""}).parse_flags
