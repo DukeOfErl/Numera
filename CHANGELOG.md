@@ -16,7 +16,7 @@ any release; `1.0.0` when it stabilizes.
   biological quantities from a supplied JSONL corpus, citing an entry for every
   number and saying it could not find one rather than answering from the model's
   own knowledge.
-- **Two drivers over one agent** — a terminal (`bionumbers-ask`) and a web page
+- **Two drivers over one agent** — a terminal (`scinumbers-ask`) and a web page
   (`streamlit run streamlit_app.py`), both rendering the same events. The agent is
   not told which is calling it.
 - **Entries beside every answer** — cited first, then others the search found and

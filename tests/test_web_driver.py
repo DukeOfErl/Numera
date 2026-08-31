@@ -20,11 +20,11 @@ from conftest import FIXTURE, agent_with
 from streamlit.testing.v1 import AppTest
 
 from agent_doubles import batched_tool_calls, costing, says, scripted, tool_call
-from bionumbers_ask import entries_table, messages, web
-from bionumbers_ask.agent import AskAgent
-from bionumbers_ask.cli import render
-from bionumbers_ask.corpus import load
-from bionumbers_ask.events import (
+from scinumbers_ask import entries_table, messages, web
+from scinumbers_ask.agent import AskAgent
+from scinumbers_ask.cli import render
+from scinumbers_ask.corpus import load
+from scinumbers_ask.events import (
     Answer,
     AnswerEntries,
     CitationWarning,
@@ -36,7 +36,7 @@ from bionumbers_ask.events import (
     Retrieval,
     SpendWarning,
 )
-from bionumbers_ask.repository import CorpusRepository
+from scinumbers_ask.repository import CorpusRepository
 
 APP = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 
@@ -220,12 +220,12 @@ def test_session_state_holds_the_identifier_and_what_was_drawn_and_nothing_else(
     model = scripted(says("an answer"))
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
-    kept = {k for k in at.session_state.filtered_state if k.startswith("bionumbers_ask.")}
+    kept = {k for k in at.session_state.filtered_state if k.startswith("scinumbers_ask.")}
     assert kept == {web.SESSION_KEY, web.TRANSCRIPT_KEY}
 
 
 def test_a_missing_corpus_is_explained_rather_than_raised(monkeypatch):
-    from bionumbers_ask.corpus import CorpusUnavailable
+    from scinumbers_ask.corpus import CorpusUnavailable
 
     def unavailable(corpus=None):
         raise CorpusUnavailable("no corpus was supplied")

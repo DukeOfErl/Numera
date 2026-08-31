@@ -1,7 +1,7 @@
 """Web driver entry point: `streamlit run streamlit_app.py`.
 
 A direct script, which is what Streamlit runs and what its own test harness
-drives. Everything that is not a screen element lives in `bionumbers_ask.web`,
+drives. Everything that is not a screen element lives in `scinumbers_ask.web`,
 so the decisions this page makes can be tested without a browser.
 
 The corpus, the checkpoint store and the trail are read from the environment --
@@ -13,9 +13,9 @@ import os
 
 import streamlit as st
 
-from bionumbers_ask import autobuild, web
-from bionumbers_ask.config import NotConfigured, format_usd
-from bionumbers_ask.corpus import CorpusUnavailable
+from scinumbers_ask import autobuild, web
+from scinumbers_ask.config import NotConfigured, format_usd
+from scinumbers_ask.corpus import CorpusUnavailable
 
 st.set_page_config(page_title="SciNumbers ask", page_icon=":material/biotech:")
 

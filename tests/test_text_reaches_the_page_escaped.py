@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCES = [ROOT / "src" / "bionumbers_ask" / "web.py", ROOT / "streamlit_app.py"]
+SOURCES = [ROOT / "src" / "scinumbers_ask" / "web.py", ROOT / "streamlit_app.py"]
 
 # Streamlit calls whose argument is rendered as markdown.
 RENDERS_MARKDOWN = {"markdown", "caption", "warning", "error", "info", "success", "header"}

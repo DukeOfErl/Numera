@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from bionumbers_ask.corpus import CorpusUnavailable, load
+from scinumbers_ask.corpus import CorpusUnavailable, load
 
 FIXTURE = "tests/fixtures/corpus_sample.jsonl"
 
@@ -107,7 +107,7 @@ def test_keywords_given_as_a_string_are_split_not_exploded(tmp_path):
 
 
 def test_amounts_are_validated_rather_than_misread():
-    from bionumbers_ask.config import usd
+    from scinumbers_ask.config import usd
 
     assert usd("0.50") == 500_000
     for bad in ("", "-0.50", "abc"):

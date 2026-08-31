@@ -32,7 +32,7 @@ description of the code.
 ## Architecture
 
 Three work packages, three packages under `src/`, one dependency extra each, so no two branches edit
-the same source tree: `bionumbers_ingest` (`ingest`), `bionumbers_ask` (`ask`), `bionumbers`
+the same source tree: `bionumbers_ingest` (`ingest`), `scinumbers_ask` (`ask`), `bionumbers`
 (`validator`). The ingester and the ask agent are both here; the validator is not yet.
 
 Diagrams — including the agent's graph generated from the compiled object — are in
@@ -106,7 +106,7 @@ Five things about it that reading one module will not tell you:
   uses `<` as a less-than sign in prose. A tag is recognised only by a real HTML element name.
 - **Records are buffered, not streamed, between cleaning and the writer**, because each carries a
   digest of the whole source, which is unknown until the last byte. Roughly 70 MB; ADR-0240.
-- **Four booleans are the contract with `bionumbers_ask`**, not the flag names: `range_fused`,
+- **Four booleans are the contract with `scinumbers_ask`**, not the flag names: `range_fused`,
   `range_qualified`, `range_one_sided` and `range_approximate`. `parse_flags` is cleaning's own
   vocabulary and may change — the last two became fields because the consumer was reading them out of
   that list by name, where a rename would have turned them silently false. ADR-0230.

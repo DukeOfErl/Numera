@@ -121,7 +121,7 @@ def _questions_from_terminal(out: TextIO) -> Iterable[str]:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        prog="bionumbers-ask",
+        prog="scinumbers-ask",
         description="Ask questions about biological quantities, answered only from a corpus.",
     )
     parser.add_argument(
@@ -164,7 +164,7 @@ def main(argv: list[str] | None = None) -> None:
         repo = CorpusRepository(load(corpus))
         config = Config.from_env()
     except (CorpusUnavailable, NotConfigured) as exc:
-        raise SystemExit(f"bionumbers-ask: {exc}") from exc
+        raise SystemExit(f"scinumbers-ask: {exc}") from exc
     # The store is created on demand by the checkpointer, but its directory is not.
     directory = os.path.dirname(args.checkpoints)
     if directory:

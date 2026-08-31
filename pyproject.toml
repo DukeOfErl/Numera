@@ -37,7 +37,7 @@ ingest = [
 # are absent on a given branch are simply never run there.
 [project.scripts]
 bionumbers = "bionumbers.cli:main"
-bionumbers-ask = "bionumbers_ask.cli:main"
+scinumbers-ask = "scinumbers_ask.cli:main"
 bionumbers-ingest = "bionumbers_ingest.cli:main"
 
 [dependency-groups]
@@ -94,4 +94,4 @@ select = ["E", "F", "I", "UP", "B"]
 # Without this ruff reads the packages as third-party and removes the blank line
 # separating them from real third-party imports, making every test file worse.
 [tool.ruff.lint.isort]
-known-first-party = ["bionumbers", "bionumbers_ask", "bionumbers_ingest", "agent_doubles"]
+known-first-party = ["bionumbers", "scinumbers_ask", "bionumbers_ingest", "agent_doubles"]

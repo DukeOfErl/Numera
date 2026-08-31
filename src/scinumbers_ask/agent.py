@@ -197,6 +197,13 @@ OUR_DEFECT = (
 )
 
 
+#: This package's own directory, so `_origin` recognises our frames without being
+#: told the package's name. It was told once, and the name changed underneath it:
+#: a literal here reports no origin at all rather than failing, which is the kind
+#: of defect that survives a rename because nothing about it looks wrong.
+_PACKAGE_ROOT = str(Path(__file__).resolve().parent)
+
+
 def _origin(exc: BaseException) -> str:
     """Where in this package the exception was raised, for the trail.
 
@@ -207,7 +214,7 @@ def _origin(exc: BaseException) -> str:
     where = ""
     while frame is not None:
         name = frame.tb_frame.f_code.co_filename
-        if "bionumbers_ask" in name:
+        if name.startswith(_PACKAGE_ROOT):
             where = f"{Path(name).name}:{frame.tb_lineno}"
         frame = frame.tb_next
     return where

@@ -21,11 +21,11 @@ import re
 
 import pytest
 
-from bionumbers_ask.agent import AskAgent
-from bionumbers_ask.config import Config
-from bionumbers_ask.corpus import load
-from bionumbers_ask.events import Answer, EndReason, QuestionEnded, Retrieval
-from bionumbers_ask.repository import CorpusRepository
+from scinumbers_ask.agent import AskAgent
+from scinumbers_ask.config import Config
+from scinumbers_ask.corpus import load
+from scinumbers_ask.events import Answer, EndReason, QuestionEnded, Retrieval
+from scinumbers_ask.repository import CorpusRepository
 
 pytestmark = [
     pytest.mark.network,
@@ -92,8 +92,8 @@ def test_the_terminal_driver_answers_from_the_real_corpus_with_a_citation(tmp_pa
     """
     import io
 
-    from bionumbers_ask.cli import run
-    from bionumbers_ask.corpus import load
+    from scinumbers_ask.cli import run
+    from scinumbers_ask.corpus import load
 
     repo = CorpusRepository(load(os.path.expanduser(_corpus_path)))
     agent = AskAgent(repo, Config.from_env(), str(tmp_path / "e2e.sqlite"))
@@ -126,7 +126,7 @@ def test_a_question_the_corpus_does_not_cover_gets_no_number(live_agent):
     lifespan is comprehensively uncovered -- and it is something the model certainly
     knows, which is what makes it a test rather than a formality.
     """
-    from bionumbers_ask.citations import citations
+    from scinumbers_ask.citations import citations
 
     events = list(live_agent.ask("uncovered", "What is the lifespan of a laboratory mouse?"))
     answer = next(e for e in events if isinstance(e, Answer))
@@ -161,7 +161,7 @@ def test_disagreeing_entries_are_reported_with_what_distinguishes_them(live_agen
     tempting wrong answer is "cell diameter ranges from 1 to 5 um", which is a
     spread across two organisms presented as a measurement of one.
     """
-    from bionumbers_ask.citations import citations
+    from scinumbers_ask.citations import citations
 
     events = list(live_agent.ask("disagree", "How wide is a cell, in micrometres?"))
     answer = next(e for e in events if isinstance(e, Answer))
@@ -194,7 +194,7 @@ def test_a_converted_value_is_marked_as_computed_and_cites_its_input(live_agent)
     the question cannot be answered without computing, and the computed figure must
     say that it was computed.
     """
-    from bionumbers_ask.citations import citations
+    from scinumbers_ask.citations import citations
 
     events = list(live_agent.ask("converted", "What is the cell length of E. coli in nanometres?"))
     answer = next(e for e in events if isinstance(e, Answer))

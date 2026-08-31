@@ -13,10 +13,10 @@ import pytest
 from conftest import agent_with
 
 from agent_doubles import says, scripted, tool_call
-from bionumbers_ask import entries_table
-from bionumbers_ask.citations import citations, format_citation
-from bionumbers_ask.cli import render, run
-from bionumbers_ask.events import AnswerEntries, CitationWarning
+from scinumbers_ask import entries_table
+from scinumbers_ask.citations import citations, format_citation
+from scinumbers_ask.cli import render, run
+from scinumbers_ask.events import AnswerEntries, CitationWarning
 
 FIRST, SECOND = 100001, 100002
 
@@ -247,7 +247,7 @@ def test_the_table_is_skipped_when_the_driver_has_no_corpus(repo):
 
 def test_the_search_reports_which_entries_it_returned(repo, config, tmp_path):
     """What makes both the table and the citation check possible."""
-    from bionumbers_ask.events import Retrieval
+    from scinumbers_ask.events import Retrieval
 
     model = scripted(tool_call("search_entries", property="Cell"), says("done"))
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
@@ -258,7 +258,7 @@ def test_the_search_reports_which_entries_it_returned(repo, config, tmp_path):
 
 def test_the_identifiers_are_not_printed_on_the_progress_line(repo, config, tmp_path):
     """Fifty of them would bury what the search was actually for."""
-    from bionumbers_ask.events import Retrieval
+    from scinumbers_ask.events import Retrieval
 
     event = Retrieval(
         question_id="q",
@@ -398,8 +398,8 @@ def test_fetching_an_entry_is_not_counted_as_a_search(repo, config, tmp_path):
 
 def _repo_of(*specs):
     """A repository over entries written for a test, where the fixture has no case."""
-    from bionumbers_ask.corpus import Entry
-    from bionumbers_ask.repository import CorpusRepository
+    from scinumbers_ask.corpus import Entry
+    from scinumbers_ask.repository import CorpusRepository
 
     return CorpusRepository(
         tuple(
@@ -583,7 +583,7 @@ def test_a_number_too_short_to_be_an_identifier_is_refused():
     """34 entries write a cross-reference as "BNID 104 678". Reading the digits up to
     the space turns a citation this parser used to miss into a wrong one it reports
     with confidence, which is the worse of the two failures."""
-    from bionumbers_ask.citations import MIN_DIGITS
+    from scinumbers_ask.citations import MIN_DIGITS
 
     assert citations("see BNID 104 678") == ()
     assert len(str(citations("see BNID 104678")[0])) >= MIN_DIGITS
@@ -592,7 +592,7 @@ def test_a_number_too_short_to_be_an_identifier_is_refused():
 def test_the_corpus_and_the_answers_are_read_by_one_parser(repo):
     """Two parsers for one notation drifted once already: the corpus side read a run
     of identifiers and the answer side read only the first."""
-    from bionumbers_ask import repository
+    from scinumbers_ask import repository
 
     assert not hasattr(repository, "_CITED"), "a second citation parser has reappeared"
     assert repo.get(FIRST).cited_bnids == (102065, 104333)
@@ -734,7 +734,7 @@ def test_a_long_method_is_cut_to_the_table_and_says_so():
 
 
 def an_entry(**kwargs):
-    from bionumbers_ask.corpus import Entry
+    from scinumbers_ask.corpus import Entry
 
     base = dict(
         bnid=1,

@@ -32,9 +32,9 @@ from collections.abc import Callable
 
 import pytest
 
-from bionumbers_ask.corpus import Entry, load
-from bionumbers_ask.entries_table import FUSED, IMPLAUSIBLE, NO_METHOD, NO_SCALAR, QUALIFIED
-from bionumbers_ask.units import dimension
+from scinumbers_ask.corpus import Entry, load
+from scinumbers_ask.entries_table import FUSED, IMPLAUSIBLE, NO_METHOD, NO_SCALAR, QUALIFIED
+from scinumbers_ask.units import dimension
 
 pytestmark = [
     pytest.mark.corpus,

@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-LOGGER_NAME = "bionumbers_ask"
+LOGGER_NAME = "scinumbers_ask"
 
 # Inside the repository but gitignored: the trail is this project's own output, not
 # corpus data, and the records carry search terms, identifiers and token counts --
@@ -92,7 +92,7 @@ class QuestionTrace:
         """
         return {
             "run_name": f"{name}:{self.question_id}",
-            "tags": ["bionumbers-ask", name, f"run:{self.run_label}"],
+            "tags": ["scinumbers-ask", name, f"run:{self.run_label}"],
             "metadata": {"question_id": self.question_id, "run": self.run_label},
         }
 

@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from bionumbers_ask.corpus import load
-from bionumbers_ask.repository import DEFAULT_LIMIT, CorpusRepository
+from scinumbers_ask.corpus import load
+from scinumbers_ask.repository import DEFAULT_LIMIT, CorpusRepository
 
 _path = os.environ.get("BIONUMBERS_ASK_CORPUS", "")
 _corpus = Path(_path).expanduser() if _path else None

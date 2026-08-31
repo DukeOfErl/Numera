@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from bionumbers_ask.config import (
+from scinumbers_ask.config import (
     MICRO_PER_USD,
     Config,
     NotConfigured,

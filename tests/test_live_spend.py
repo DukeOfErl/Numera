@@ -49,11 +49,11 @@ import os
 import pytest
 from langchain_core.callbacks import BaseCallbackHandler
 
-from bionumbers_ask import run_ledger
-from bionumbers_ask.agent import RUN_CALL_LIMIT, AskAgent, default_model
-from bionumbers_ask.config import Config, format_usd, usd
-from bionumbers_ask.events import Answer, EndReason, QuestionEnded, Retrieval
-from bionumbers_ask.trace import LOGGER_NAME
+from scinumbers_ask import run_ledger
+from scinumbers_ask.agent import RUN_CALL_LIMIT, AskAgent, default_model
+from scinumbers_ask.config import Config, format_usd, usd
+from scinumbers_ask.events import Answer, EndReason, QuestionEnded, Retrieval
+from scinumbers_ask.trace import LOGGER_NAME
 
 pytestmark = [
     pytest.mark.network,
@@ -92,7 +92,7 @@ def _real_retry_delay(monkeypatch):
     which is both rude and enough to break the dispatch counts these tests are
     built on.
     """
-    monkeypatch.setattr("bionumbers_ask.agent.RETRY_INITIAL_DELAY", 1.0)
+    monkeypatch.setattr("scinumbers_ask.agent.RETRY_INITIAL_DELAY", 1.0)
 
 
 class Dispatches(BaseCallbackHandler):

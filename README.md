@@ -161,6 +161,6 @@ against expected answers.
   question as a sequence, and which modules may depend on which
 - `openspec/changes/add-ask-agent/proposal.md` — why an agent rather than a search box, what was
   deferred and why
-- `src/bionumbers_ask/events.py` — the port: everything the agent emits and the one command it takes
+- `src/scinumbers_ask/events.py` — the port: everything the agent emits and the one command it takes
 
 To cite BioNumbers itself: Milo et al. *Nucl. Acids Res.* (2010) 38 (suppl 1): D750–D753.

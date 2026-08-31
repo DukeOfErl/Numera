@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-PACKAGE = Path(__file__).resolve().parents[1] / "src" / "bionumbers_ask"
+PACKAGE = Path(__file__).resolve().parents[1] / "src" / "scinumbers_ask"
 
 # The adapters. `messages` and `entries_table` are shared *by* them -- wording and
 # a table both drivers present -- and belong on the presentation side of the line
@@ -81,8 +81,8 @@ def test_only_the_web_driver_knows_the_web_framework():
 
 def test_both_drivers_put_questions_to_the_same_agent():
     """Same class, same method -- not two paths that happen to agree today."""
-    from bionumbers_ask import cli, web
-    from bionumbers_ask.agent import AskAgent
+    from scinumbers_ask import cli, web
+    from scinumbers_ask.agent import AskAgent
 
     assert cli.AskAgent is AskAgent
     assert web.AskAgent is AskAgent
@@ -92,7 +92,7 @@ def test_the_agent_takes_no_parameter_naming_its_caller():
     """It cannot behave one way for a person and another for the evaluation harness."""
     import inspect
 
-    from bionumbers_ask.agent import AskAgent
+    from scinumbers_ask.agent import AskAgent
 
     taken = set(inspect.signature(AskAgent.ask).parameters) | set(
         inspect.signature(AskAgent.__init__).parameters

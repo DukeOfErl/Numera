@@ -13,9 +13,9 @@ import pytest
 from conftest import agent_with
 
 from agent_doubles import costing, says, scripted, tool_call
-from bionumbers_ask.cli import render, run
-from bionumbers_ask.config import Config, usd
-from bionumbers_ask.events import (
+from scinumbers_ask.cli import render, run
+from scinumbers_ask.config import Config, usd
+from scinumbers_ask.events import (
     Answer,
     ConversationWarning,
     CostProjection,
@@ -158,7 +158,7 @@ def test_the_run_stops_when_the_budget_is_spent(repo, config, tmp_path):
 
 
 def test_a_missing_key_exits_non_zero_rather_than_looping(repo, config, tmp_path, monkeypatch):
-    from bionumbers_ask.agent import AskAgent
+    from scinumbers_ask.agent import AskAgent
 
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     out = io.StringIO()
@@ -205,7 +205,7 @@ def test_spend_accumulates_across_calls_to_the_driver(repo, config, tmp_path):
 
 def test_a_missing_corpus_explains_itself_rather_than_raising(tmp_path):
     """The corpus is an external input, so its absence is a condition, not a bug."""
-    from bionumbers_ask.cli import main
+    from scinumbers_ask.cli import main
 
     with pytest.raises(SystemExit) as exit_info:
         main(["--corpus", str(tmp_path / "nowhere.jsonl"), "--ask", "q"])
@@ -213,7 +213,7 @@ def test_a_missing_corpus_explains_itself_rather_than_raising(tmp_path):
 
 
 def test_no_corpus_at_all_says_one_must_be_supplied(monkeypatch):
-    from bionumbers_ask.cli import main
+    from scinumbers_ask.cli import main
 
     monkeypatch.delenv("BIONUMBERS_ASK_CORPUS", raising=False)
     with pytest.raises(SystemExit) as exit_info:
@@ -226,7 +226,7 @@ def test_one_shot_mode_runs_a_single_question_and_exits(tmp_path, monkeypatch, c
     rendered and ended, rather than a traceback or a prompt."""
     from conftest import FIXTURE
 
-    from bionumbers_ask.cli import main
+    from scinumbers_ask.cli import main
 
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     with pytest.raises(SystemExit) as exit_info:
@@ -247,7 +247,7 @@ def test_one_shot_mode_runs_a_single_question_and_exits(tmp_path, monkeypatch, c
 def test_the_checkpoint_directory_is_created_rather_than_assumed(tmp_path, monkeypatch):
     from conftest import FIXTURE
 
-    from bionumbers_ask.cli import main
+    from scinumbers_ask.cli import main
 
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     store = tmp_path / "made" / "up" / "ask.sqlite"
@@ -273,7 +273,7 @@ def feed(monkeypatch, *lines):
 
 
 def test_typed_lines_become_questions(monkeypatch):
-    from bionumbers_ask.cli import _questions_from_terminal
+    from scinumbers_ask.cli import _questions_from_terminal
 
     feed(monkeypatch, "how wide?", "and yeast?")
     assert list(_questions_from_terminal(io.StringIO())) == ["how wide?", "and yeast?"]
@@ -281,7 +281,7 @@ def test_typed_lines_become_questions(monkeypatch):
 
 @pytest.mark.parametrize("word", ["exit", "quit", "  exit  "])
 def test_the_session_can_be_ended_by_typing(monkeypatch, word):
-    from bionumbers_ask.cli import _questions_from_terminal
+    from scinumbers_ask.cli import _questions_from_terminal
 
     feed(monkeypatch, "how wide?", word, "never asked")
     assert list(_questions_from_terminal(io.StringIO())) == ["how wide?"]
@@ -290,7 +290,7 @@ def test_the_session_can_be_ended_by_typing(monkeypatch, word):
 @pytest.mark.parametrize("interrupt", [EOFError, KeyboardInterrupt])
 def test_ending_the_input_stops_cleanly_rather_than_raising(monkeypatch, interrupt):
     """Ctrl-D and Ctrl-C are how a person leaves, not failures to report."""
-    from bionumbers_ask.cli import _questions_from_terminal
+    from scinumbers_ask.cli import _questions_from_terminal
 
     def raises(_prompt=""):
         raise interrupt
@@ -302,7 +302,7 @@ def test_ending_the_input_stops_cleanly_rather_than_raising(monkeypatch, interru
 def test_the_interactive_entry_point_announces_the_session_and_exits(tmp_path, monkeypatch, capsys):
     from conftest import FIXTURE
 
-    from bionumbers_ask.cli import main
+    from scinumbers_ask.cli import main
 
     feed(monkeypatch)  # no input at all: straight to end of input
     with pytest.raises(SystemExit) as exit_info:

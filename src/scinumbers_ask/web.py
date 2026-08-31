@@ -77,8 +77,8 @@ PROTOTYPE_BANNER_CSS = """
 </style>
 """
 
-SESSION_KEY = "bionumbers_ask.session"
-TRANSCRIPT_KEY = "bionumbers_ask.transcript"
+SESSION_KEY = "scinumbers_ask.session"
+TRANSCRIPT_KEY = "scinumbers_ask.transcript"
 
 # The session identifier lives in the URL as well as in session state. Session
 # state dies with the server; the checkpoint it points at does not, so without

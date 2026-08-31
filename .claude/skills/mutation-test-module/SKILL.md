@@ -47,7 +47,7 @@ Append to the copy's `pyproject.toml`, and add `src` to the pytest path:
 ```toml
 # pythonpath must become ["src", "tests"] — see gotcha 3
 [tool.mutmut]
-source_paths = ["src/bionumbers_ask"]
+source_paths = ["src/scinumbers_ask"]
 also_copy = ["tests/", "pyproject.toml"]
 pytest_add_cli_args_test_selection = ["tests/"]
 pytest_add_cli_args = ["--deselect", "tests/test_repository.py::test_the_repository_exposes_no_way_to_change_the_corpus"]
@@ -56,7 +56,7 @@ pytest_add_cli_args = ["--deselect", "tests/test_repository.py::test_the_reposit
 Then run, filtered to one module:
 
 ```bash
-cd "$W" && "$REPO/.venv/bin/mutmut" run 'bionumbers_ask.citations*'
+cd "$W" && "$REPO/.venv/bin/mutmut" run 'scinumbers_ask.citations*'
 "$REPO/.venv/bin/mutmut" results                      # 🎉 killed, 🙁 survived
 "$REPO/.venv/bin/mutmut" show <mutant-name>           # the diff
 ```

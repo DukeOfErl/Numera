@@ -89,11 +89,11 @@ def test_a_different_thread_id_does_not_inherit(tmp_path):
 _ASK_TURN = """
 import sys
 from agent_doubles import costing, says, scripted
-from bionumbers_ask.agent import AskAgent
-from bionumbers_ask.config import Config, usd
-from bionumbers_ask.corpus import load
-from bionumbers_ask.events import QuestionEnded
-from bionumbers_ask.repository import CorpusRepository
+from scinumbers_ask.agent import AskAgent
+from scinumbers_ask.config import Config, usd
+from scinumbers_ask.corpus import load
+from scinumbers_ask.events import QuestionEnded
+from scinumbers_ask.repository import CorpusRepository
 
 db, thread_id, corpus, question, run_label = sys.argv[1:6]
 
