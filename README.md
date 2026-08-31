@@ -78,12 +78,12 @@ export OPENROUTER_API_KEY=...                  # the model is reached through Op
 this repository** — the data's licensing is unresolved, so nothing derived from it may enter a git
 repository, and the build refuses to write anywhere git would track it.
 
-**3. Start the app.** Point `BIONUMBERS_ASK_CORPUS` at where the corpus should go. Finding none
+**3. Start the app.** Point `SCINUMBERS_CORPUS` at where the corpus should go. Finding none
 there and the export beside it, the app says what it is about to do and builds one — about a minute,
 once.
 
 ```bash
-export BIONUMBERS_ASK_CORPUS=~/bionumbers/bionumbers.jsonl   # BioNumbers.xls is in that directory
+export SCINUMBERS_CORPUS=~/bionumbers/bionumbers.jsonl   # BioNumbers.xls is in that directory
 uv run streamlit run streamlit_app.py
 ```
 
@@ -96,13 +96,13 @@ measurement.
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `OPENROUTER_API_KEY` | — | required; a question ends as `not_configured` without it |
-| `BIONUMBERS_ASK_CORPUS` | — | required; path to the JSONL corpus |
-| `BIONUMBERS_ASK_MODEL` | `anthropic/claude-haiku-4.5` | the model, as an OpenRouter slug |
-| `BIONUMBERS_ASK_QUESTION_CEILING_USD` | `0.60` | hard per-question limit; the warning is derived at 80% of it |
-| `BIONUMBERS_ASK_RUN_BUDGET_USD` | `1.20` | total across every question in a run |
-| `BIONUMBERS_ASK_RUN` | `dev` | names the run spend is counted against; a new name starts a fresh budget |
-| `BIONUMBERS_ASK_CHECKPOINTS` | `checkpoints/ask.sqlite` | where sessions persist |
-| `BIONUMBERS_ASK_TRACE` | `logs/trace.jsonl` | the structured trail; `-` for stderr, empty to discard |
+| `SCINUMBERS_CORPUS` | — | required; path to the JSONL corpus |
+| `SCINUMBERS_MODEL` | `anthropic/claude-haiku-4.5` | the model, as an OpenRouter slug |
+| `SCINUMBERS_QUESTION_CEILING_USD` | `0.60` | hard per-question limit; the warning is derived at 80% of it |
+| `SCINUMBERS_RUN_BUDGET_USD` | `1.20` | total across every question in a run |
+| `SCINUMBERS_RUN` | `dev` | names the run spend is counted against; a new name starts a fresh budget |
+| `SCINUMBERS_CHECKPOINTS` | `checkpoints/ask.sqlite` | where sessions persist |
+| `SCINUMBERS_TRACE` | `logs/trace.jsonl` | the structured trail; `-` for stderr, empty to discard |
 
 Spend is enforced, not merely reported: a question stops at its ceiling and presents what it had
 established, marked incomplete, rather than being cut off mid-sentence. A limit is configured where
@@ -120,7 +120,7 @@ middleware, the checkpointer and the tool loop are exercised. Two suites are exc
 because they need something the repository does not carry:
 
 ```bash
-BIONUMBERS_ASK_CORPUS=... uv run pytest -m corpus    # markers checked against a real corpus
+SCINUMBERS_CORPUS=... uv run pytest -m corpus    # markers checked against a real corpus
 OPENROUTER_API_KEY=...    uv run pytest -m network   # real model calls; costs about $0.01
 ```
 

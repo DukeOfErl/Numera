@@ -38,7 +38,7 @@ def _trail_stays_in_the_tmp_dir(tmp_path, monkeypatch):
     Set through the documented environment variable rather than by patching, so the
     path a real run takes is the one under test.
     """
-    monkeypatch.setenv("BIONUMBERS_ASK_TRACE", str(tmp_path / "trace.jsonl"))
+    monkeypatch.setenv("SCINUMBERS_TRACE", str(tmp_path / "trace.jsonl"))
 
 
 @pytest.fixture

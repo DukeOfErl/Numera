@@ -72,9 +72,9 @@ def test_the_run_label_defaults_rather_than_going_missing():
 
 
 def test_a_blank_environment_value_does_not_produce_an_unlabelled_run(monkeypatch):
-    monkeypatch.setenv("BIONUMBERS_ASK_RUN", "   ")
+    monkeypatch.setenv("SCINUMBERS_RUN", "   ")
     assert Config.from_env().run_label == "dev"
-    monkeypatch.setenv("BIONUMBERS_ASK_RUN", "eval-2026-08-24")
+    monkeypatch.setenv("SCINUMBERS_RUN", "eval-2026-08-24")
     assert Config.from_env().run_label == "eval-2026-08-24"
 
 
@@ -217,7 +217,7 @@ def test_the_driver_writes_a_trail_when_it_runs(tmp_path, monkeypatch):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     # This test is about the default path, so it opts out of the autouse fixture
     # that redirects the trail -- and chdirs first, so the default is written here.
-    monkeypatch.delenv("BIONUMBERS_ASK_TRACE", raising=False)
+    monkeypatch.delenv("SCINUMBERS_TRACE", raising=False)
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit):
         main(["--corpus", FIXTURE, "--checkpoints", str(tmp_path / "c.sqlite"), "--ask", "q"])

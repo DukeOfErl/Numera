@@ -72,7 +72,7 @@ markers = [
     # The corpus is an external input kept out of the repository (ADR-0170), so
     # the default suite runs on the six-entry fixture -- which is exactly the
     # blind spot these checks exist to cover.
-    "corpus: needs a real corpus at BIONUMBERS_ASK_CORPUS; run with `pytest -m corpus`",
+    "corpus: needs a real corpus at SCINUMBERS_CORPUS; run with `pytest -m corpus`",
 ]
 
 # Linting and formatting, both from ruff: `ruff check` finds problems, `ruff

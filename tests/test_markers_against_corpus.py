@@ -22,7 +22,7 @@ kept out of the repository (ADR-0170) and the default suite runs on a six-entry
 fixture -- a fixture written to match the same assumptions the markers encode,
 which is precisely why it cannot test them.
 
-    BIONUMBERS_ASK_CORPUS=/path/to/corpus.jsonl uv run pytest -m corpus
+    SCINUMBERS_CORPUS=/path/to/corpus.jsonl uv run pytest -m corpus
 """
 
 from __future__ import annotations
@@ -39,8 +39,8 @@ from scinumbers_ask.units import dimension
 pytestmark = [
     pytest.mark.corpus,
     pytest.mark.skipif(
-        not os.environ.get("BIONUMBERS_ASK_CORPUS"),
-        reason="set BIONUMBERS_ASK_CORPUS to check the markers against a real corpus",
+        not os.environ.get("SCINUMBERS_CORPUS"),
+        reason="set SCINUMBERS_CORPUS to check the markers against a real corpus",
     ),
 ]
 
@@ -80,7 +80,7 @@ MARKERS: dict[str, Callable[[Entry], bool]] = {
 
 @pytest.fixture(scope="module")
 def entries() -> tuple[Entry, ...]:
-    return load(os.environ["BIONUMBERS_ASK_CORPUS"])
+    return load(os.environ["SCINUMBERS_CORPUS"])
 
 
 @pytest.mark.parametrize("description", list(MARKERS))

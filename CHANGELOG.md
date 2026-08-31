@@ -77,6 +77,16 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **Renamed to `scinumbers`.** The package is `scinumbers_ask`, the console script
+  is `scinumbers-ask`, and the environment variables are `SCINUMBERS_*`. The app
+  has called itself SciNumbers on every surface a reader sees since the README was
+  written; the code now agrees ([ADR-0400]). `bionumbers-ingest` keeps its name —
+  it is the BioNumbers adapter, and that is what it is called.
+- A `BIONUMBERS_ASK_*` variable now **stops the run** and names its replacement,
+  rather than being ignored. Ignoring one is configuration that silently stops
+  being read — a ceiling that no longer binds, a run label that quietly becomes
+  `dev` and mixes an evaluation's spend into a person's — and each of those looks
+  like a working run.
 - The whole export is processed by default; a row limit must be asked for and is
   recorded in the manifest. A sampled corpus looks complete and is not.
 - The corpus appears at its destination only after the last record is written, so
@@ -109,6 +119,7 @@ number rather than an error:
 - Three cells wrote an exponent once for both bounds — `1-2×10^9 cells/ml` stored
   as 1 to 2,000,000,000 — now flagged rather than corrected.
 
+[ADR-0400]: docs/decisions/0400-the-package-is-named-for-the-question.md
 [ADR-0200]: docs/decisions/0200-ship-an-ingester-not-a-prepared-corpus.md
 [ADR-0210]: docs/decisions/0210-verifying-a-contract-owned-by-another-branch.md
 [ADR-0220]: docs/decisions/0220-jsonl-only.md

@@ -202,9 +202,9 @@ def test_the_ceiling_a_person_configures_declines_a_real_second_request(
     before dispatching and spend starts at zero, so the first request always goes
     out, and every request after it must not.
     """
-    monkeypatch.setenv("BIONUMBERS_ASK_QUESTION_CEILING_USD", "0.000001")
-    monkeypatch.setenv("BIONUMBERS_ASK_RUN_BUDGET_USD", "0.02")
-    monkeypatch.setenv("BIONUMBERS_ASK_RUN", "live-ceiling")
+    monkeypatch.setenv("SCINUMBERS_QUESTION_CEILING_USD", "0.000001")
+    monkeypatch.setenv("SCINUMBERS_RUN_BUDGET_USD", "0.02")
+    monkeypatch.setenv("SCINUMBERS_RUN", "live-ceiling")
     config = Config.from_env()
     path = str(tmp_path / "ceiling.sqlite")
 

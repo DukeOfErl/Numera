@@ -298,7 +298,7 @@ def counted(monkeypatch, tmp_path):
     monkeypatch.setattr(web, "load", counting_load)
     monkeypatch.setattr(web, "CorpusRepository", counting_repository)
     monkeypatch.setattr(web.trace, "to_file", lambda spec: None)
-    monkeypatch.setenv("BIONUMBERS_ASK_CHECKPOINTS", str(tmp_path / "c.sqlite"))
+    monkeypatch.setenv("SCINUMBERS_CHECKPOINTS", str(tmp_path / "c.sqlite"))
     yield counts
     web.resources.clear()
 
@@ -900,3 +900,22 @@ def test_a_failure_while_drawing_does_not_lose_the_question(repo, config, tmp_pa
     assert agent.conversation_length("s") == 2, "the agent kept the turn"
     assert transcript[0][0] == "a question", "and so did the page"
     assert items, "with whatever had been drawn before the fault"
+
+
+def test_the_page_refuses_a_retired_variable_before_it_looks_for_a_corpus(monkeypatch):
+    """The web path has the same ordering hazard as the terminal one.
+
+    The page resolves the corpus itself, before the cached `resources` runs, so a
+    refusal living only in `resources` would arrive after the corpus lookup had
+    already failed -- and the reader would be told a corpus is missing when what is
+    wrong is the name of the variable holding its path.
+    """
+    monkeypatch.delenv("SCINUMBERS_CORPUS", raising=False)
+    monkeypatch.setenv("BIONUMBERS_ASK_CORPUS", "/somewhere/corpus.jsonl")
+
+    at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+
+    errors = [e.value for e in at.error]
+    assert any("SCINUMBERS_CORPUS" in text for text in errors), errors
+    assert not any("No corpus path supplied" in text for text in errors), errors
+    assert not at.exception, "the page raised instead of explaining"

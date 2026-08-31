@@ -19,7 +19,7 @@ from typing import TextIO
 
 from . import autobuild, entries_table, messages, trace
 from .agent import AskAgent
-from .config import Config, NotConfigured
+from .config import Config, NotConfigured, refuse_retired_env
 from .corpus import CorpusUnavailable, load
 from .events import (
     Answer,
@@ -126,8 +126,8 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--corpus",
-        default=os.environ.get("BIONUMBERS_ASK_CORPUS", ""),
-        help="path to the JSONL corpus (or set BIONUMBERS_ASK_CORPUS)",
+        default=os.environ.get("SCINUMBERS_CORPUS", ""),
+        help="path to the JSONL corpus (or set SCINUMBERS_CORPUS)",
     )
     parser.add_argument(
         "--checkpoints",
@@ -141,7 +141,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--trace",
-        default=os.environ.get("BIONUMBERS_ASK_TRACE", trace.DEFAULT_FILE),
+        default=os.environ.get("SCINUMBERS_TRACE", trace.DEFAULT_FILE),
         help=f"where the structured trail is written (default {trace.DEFAULT_FILE}); "
         "'-' for stderr, empty to discard it",
     )
@@ -155,9 +155,14 @@ def main(argv: list[str] | None = None) -> None:
 
     # Both are misconfiguration a person can fix, not a fault: the message is the
     # whole point of raising them, and a traceback buries it in a stack the reader
-    # did not cause. `NotConfigured` carries the instructions for the retired
-    # BIONUMBERS_ASK_WARN_USD, which arriving as a crash would waste entirely.
+    # did not cause. `NotConfigured` carries the instructions for a retired
+    # variable name, which arriving as a crash would waste entirely.
     try:
+        # Before the corpus is resolved, not after. `--corpus` defaults from the
+        # environment, so a reader who still exports the old name arrives here with
+        # an empty path and would be told "no corpus path supplied" -- true, and
+        # about the wrong thing.
+        refuse_retired_env()
         # Announced on stderr: in one-shot mode stdout carries the answer, and a
         # build notice mixed into it would corrupt whatever reads that.
         corpus = autobuild.corpus_path(args.corpus, lambda text: print(text, file=sys.stderr))

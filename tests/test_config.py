@@ -6,14 +6,19 @@ enforces, and format_usd writes the sentence a user reads when a run stops.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from scinumbers_ask.config import (
     MICRO_PER_USD,
+    RENAMED_ENV,
+    WITHDRAWN_ENV,
     Config,
     NotConfigured,
     format_usd,
     micro_from_provider_cost,
+    refuse_retired_env,
     usd,
 )
 
@@ -76,19 +81,78 @@ def test_the_retired_key_is_refused_rather_than_read_as_a_ceiling(monkeypatch):
     so the old name is rejected with the new one named. ADR-0180.
     """
     monkeypatch.setenv("BIONUMBERS_ASK_WARN_USD", "0.50")
-    monkeypatch.delenv("BIONUMBERS_ASK_QUESTION_CEILING_USD", raising=False)
+    monkeypatch.delenv("SCINUMBERS_QUESTION_CEILING_USD", raising=False)
 
     with pytest.raises(NotConfigured) as raised:
         Config.from_env()
 
-    assert "BIONUMBERS_ASK_QUESTION_CEILING_USD" in str(raised.value)
+    assert "SCINUMBERS_QUESTION_CEILING_USD" in str(raised.value)
 
 
 def test_the_ceiling_comes_from_the_environment(monkeypatch):
     monkeypatch.delenv("BIONUMBERS_ASK_WARN_USD", raising=False)
-    monkeypatch.setenv("BIONUMBERS_ASK_QUESTION_CEILING_USD", "0.25")
+    monkeypatch.setenv("SCINUMBERS_QUESTION_CEILING_USD", "0.25")
 
     config = Config.from_env()
 
     assert config.question_ceiling == usd("0.25")
     assert config.warning_threshold == usd("0.20")
+
+
+@pytest.mark.parametrize(("old", "new"), sorted(RENAMED_ENV.items()))
+def test_a_renamed_variable_is_refused_and_its_replacement_named(monkeypatch, old, new):
+    """Ignoring it would be configuration that silently stops being read.
+
+    Every one of these changes what a run does: a ceiling that no longer binds, a
+    run label that quietly becomes "dev" and mixes an evaluation's spend into a
+    person's, a corpus path that falls back to none. All of them look like a
+    working run, so the old name must stop the run rather than be skipped.
+    """
+    monkeypatch.setenv(old, "anything")
+
+    with pytest.raises(NotConfigured) as raised:
+        refuse_retired_env()
+
+    assert old in str(raised.value)
+    assert new in str(raised.value)
+
+
+@pytest.mark.parametrize("new", sorted(RENAMED_ENV.values()))
+def test_the_replacement_named_is_one_the_code_actually_reads(new):
+    """Otherwise the refusal sends the reader to set a variable nothing reads.
+
+    A typo in the replacement name is invisible from inside the refusal: it raises,
+    the message looks right, and the reader follows it into a run configured by
+    nothing. Checked against the source rather than a second list, because a second
+    list would drift the same way.
+    """
+    source = Path(__file__).resolve().parents[1] / "src" / "scinumbers_ask"
+    read_anywhere = "\n".join(f.read_text(encoding="utf-8") for f in source.glob("*.py"))
+    entry_point = (Path(__file__).resolve().parents[1] / "streamlit_app.py").read_text(
+        encoding="utf-8"
+    )
+    assert f'"{new}"' in read_anywhere + entry_point
+
+
+def test_every_retired_name_shares_the_prefix_that_was_retired():
+    """The refusal is a map, and a map only refuses what someone remembered to add.
+
+    This is the cheap half of that: nothing carrying the old prefix should still be
+    read. `test_a_renamed_variable_is_refused` covers the other direction.
+    """
+    source = Path(__file__).resolve().parents[1] / "src" / "scinumbers_ask"
+    for path in source.glob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        if path.name == "config.py":
+            continue  # where the retired names are listed in order to be refused
+        assert "BIONUMBERS_ASK_" not in text, path.name
+
+
+def test_a_withdrawn_variable_is_refused_without_being_called_a_rename():
+    """"~0.50" as a warning and as a ceiling are different limits.
+
+    A rename message would tell the reader to move the value across, which would
+    tighten their spend limit by 20 per cent while appearing to preserve it.
+    """
+    for old in WITHDRAWN_ENV:
+        assert old not in RENAMED_ENV

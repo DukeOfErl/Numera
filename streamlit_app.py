@@ -5,7 +5,7 @@ drives. Everything that is not a screen element lives in `scinumbers_ask.web`,
 so the decisions this page makes can be tested without a browser.
 
 The corpus, the checkpoint store and the trail are read from the environment --
-BIONUMBERS_ASK_CORPUS, BIONUMBERS_ASK_CHECKPOINTS, BIONUMBERS_ASK_TRACE -- since
+SCINUMBERS_CORPUS, SCINUMBERS_CHECKPOINTS, SCINUMBERS_TRACE -- since
 a Streamlit script is given no arguments of its own.
 """
 
@@ -14,19 +14,23 @@ import os
 import streamlit as st
 
 from scinumbers_ask import autobuild, web
-from scinumbers_ask.config import NotConfigured, format_usd
+from scinumbers_ask.config import NotConfigured, format_usd, refuse_retired_env
 from scinumbers_ask.corpus import CorpusUnavailable
 
 st.set_page_config(page_title="SciNumbers ask", page_icon=":material/biotech:")
 
 try:
+    # Before the corpus is resolved. A reader who still exports the old variable
+    # names would otherwise be told the corpus is missing, which is true and about
+    # the wrong thing.
+    refuse_retired_env()
     # Resolved here rather than inside `resources`, which is cached: Streamlit
     # replays elements drawn inside a cached function on every hit, so a build
     # notice written in there would be redrawn for ever. Announced before the
     # build starts, because a minute of blank page is indistinguishable from a
     # hang.
     corpus = autobuild.corpus_path(
-        os.environ.get("BIONUMBERS_ASK_CORPUS", ""),
+        os.environ.get("SCINUMBERS_CORPUS", ""),
         lambda text: st.info(web.as_text(text), icon=":material/build:"),
     )
     repo, agent = web.resources(corpus)

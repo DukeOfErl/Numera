@@ -76,12 +76,12 @@ def test_the_provider_still_reports_cost_where_the_ledger_reads_it(live_agent):
     assert end.spend < 100_000, f"unexpectedly expensive: {end.spend} micro-dollars"
 
 
-_corpus_path = os.environ.get("BIONUMBERS_ASK_CORPUS", "")
+_corpus_path = os.environ.get("SCINUMBERS_CORPUS", "")
 
 
 @pytest.mark.skipif(
     not (_corpus_path and os.path.isfile(os.path.expanduser(_corpus_path))),
-    reason="set BIONUMBERS_ASK_CORPUS to a JSONL corpus to run the end-to-end check",
+    reason="set SCINUMBERS_CORPUS to a JSONL corpus to run the end-to-end check",
 )
 def test_the_terminal_driver_answers_from_the_real_corpus_with_a_citation(tmp_path):
     """The whole path: driver, agent, tools, real corpus, real model.

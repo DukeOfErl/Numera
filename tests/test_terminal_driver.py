@@ -215,10 +215,33 @@ def test_a_missing_corpus_explains_itself_rather_than_raising(tmp_path):
 def test_no_corpus_at_all_says_one_must_be_supplied(monkeypatch):
     from scinumbers_ask.cli import main
 
-    monkeypatch.delenv("BIONUMBERS_ASK_CORPUS", raising=False)
+    monkeypatch.delenv("SCINUMBERS_CORPUS", raising=False)
     with pytest.raises(SystemExit) as exit_info:
         main(["--ask", "q"])
     assert "No corpus path supplied" in str(exit_info.value)
+
+
+def test_a_retired_variable_is_refused_before_the_corpus_is_looked_for(monkeypatch):
+    """The order is the whole point, and it is not the order the code had.
+
+    `--corpus` defaults from the environment, and the driver resolves the corpus
+    before it builds a config. So a reader whose only stale export is the old
+    corpus variable arrives with an empty path, and the first thing to fail is the
+    corpus lookup -- "No corpus path supplied", which is true, and about the wrong
+    thing. They would go looking for a missing file rather than renaming a
+    variable they have already set.
+    """
+    from scinumbers_ask.cli import main
+
+    monkeypatch.delenv("SCINUMBERS_CORPUS", raising=False)
+    monkeypatch.setenv("BIONUMBERS_ASK_CORPUS", "/somewhere/corpus.jsonl")
+
+    with pytest.raises(SystemExit) as exit_info:
+        main(["--ask", "q"])
+
+    message = str(exit_info.value)
+    assert "SCINUMBERS_CORPUS" in message
+    assert "No corpus path supplied" not in message
 
 
 def test_one_shot_mode_runs_a_single_question_and_exits(tmp_path, monkeypatch, capsys):

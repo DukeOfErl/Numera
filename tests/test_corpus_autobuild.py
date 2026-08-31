@@ -164,8 +164,8 @@ def test_the_page_shows_the_refusal_rather_than_a_traceback(outside_any_repo, mo
 
     (outside_any_repo / "BioNumbers.xls").write_text("not really an export")
     corpus = outside_any_repo / "bionumbers.jsonl"
-    monkeypatch.setenv("BIONUMBERS_ASK_CORPUS", str(corpus))
-    monkeypatch.setenv("BIONUMBERS_ASK_CHECKPOINTS", str(outside_any_repo / "c.sqlite"))
+    monkeypatch.setenv("SCINUMBERS_CORPUS", str(corpus))
+    monkeypatch.setenv("SCINUMBERS_CHECKPOINTS", str(outside_any_repo / "c.sqlite"))
 
     def refuse(plan):
         raise OutputWouldBeCommitted(corpus, "/some/checkout")
@@ -295,7 +295,7 @@ def test_the_guarded_branch_agrees_with_the_resolver_wherever_no_build_happens(
 
 
 def test_a_configured_export_resolves_to_the_corpus_beside_it_either_way(tmp_path, monkeypatch):
-    """`BIONUMBERS_ASK_CORPUS` pointing at the .xls means "here is the export", not
+    """`SCINUMBERS_CORPUS` pointing at the .xls means "here is the export", not
     "here is the corpus". The resolver knows that; the hand copy did not, and
     returned the export -- so `load` was handed 27 MB of HTML and died on line 1.
 
