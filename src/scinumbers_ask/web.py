@@ -33,7 +33,7 @@ import streamlit as st
 from . import entries_table, messages, trace
 from .agent import AskAgent
 from .citations import format_citation
-from .config import Config, refuse_retired_env
+from .config import Config, env_setting, refuse_retired_env
 from .corpus import load
 from .events import Answer, AnswerEntries, Event, QuestionEnded, Retrieval
 from .repository import CorpusRepository
@@ -251,16 +251,16 @@ def resources(corpus: str | None = None) -> tuple[CorpusRepository, AskAgent]:
     script has no argv to read it from.
     """
     refuse_retired_env()
-    trace.to_file(os.environ.get("SCINUMBERS_TRACE", trace.DEFAULT_FILE))
+    trace.to_file(env_setting("SCINUMBERS_TRACE", trace.DEFAULT_FILE))
     # The corpus path is resolved by the caller, outside this function. Anything
     # drawn inside a cached function is recorded and replayed on every cache hit,
     # so an `st.info` announcing a build would be redrawn at the top of the page
     # for the life of the server -- a notice that was true once and false for every
     # rerun after it.
     if corpus is None:
-        corpus = os.environ.get("SCINUMBERS_CORPUS", "")
+        corpus = env_setting("SCINUMBERS_CORPUS")
     repo = CorpusRepository(load(corpus))
-    checkpoints = os.environ.get("SCINUMBERS_CHECKPOINTS", DEFAULT_CHECKPOINTS)
+    checkpoints = env_setting("SCINUMBERS_CHECKPOINTS", DEFAULT_CHECKPOINTS)
     # The store is created on demand by the checkpointer, but its directory is not.
     directory = os.path.dirname(checkpoints)
     if directory:

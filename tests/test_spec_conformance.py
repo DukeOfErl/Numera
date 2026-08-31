@@ -285,6 +285,21 @@ COVERED.update(
     }
 )
 
+# `rename-to-scinumbers`.
+COVERED.update(
+    {
+        "A retired configuration name stops the run and names its replacement": (
+            "test_config.py::test_a_renamed_variable_is_refused_and_its_replacement_named",
+            "test_config.py::test_a_withdrawn_variable_is_refused_without_being_called_a_rename",
+            "test_config.py::test_a_setting_read_without_a_driver_is_still_refused",
+            "test_config.py::test_the_replacement_named_is_one_the_code_actually_reads",
+            "test_config.py::test_no_retired_name_is_still_being_read",
+            "test_terminal_driver.py::test_a_retired_variable_is_refused_before_the_corpus_is_looked_for",
+            "test_web_driver.py::test_the_page_refuses_a_retired_variable_before_it_looks_for_a_corpus",
+        ),
+    }
+)
+
 # Group 9's. Not mappable until the evaluation harness exists, so a different kind
 # of gap from the one above and kept apart from it -- otherwise finishing 10.9
 # would look impossible rather than merely unfinished.

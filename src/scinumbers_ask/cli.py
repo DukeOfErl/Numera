@@ -19,7 +19,7 @@ from typing import TextIO
 
 from . import autobuild, entries_table, messages, trace
 from .agent import AskAgent
-from .config import Config, NotConfigured, refuse_retired_env
+from .config import Config, NotConfigured, env_setting, refuse_retired_env
 from .corpus import CorpusUnavailable, load
 from .events import (
     Answer,
@@ -120,13 +120,22 @@ def _questions_from_terminal(out: TextIO) -> Iterable[str]:
 
 
 def main(argv: list[str] | None = None) -> None:
+    # First, and before the parser exists. Two of this parser's defaults read the
+    # environment, and argparse evaluates a default when the argument is *declared*
+    # -- above the try below, where a raised NotConfigured escapes as a traceback
+    # rather than as the sentence it was written to be.
+    try:
+        refuse_retired_env()
+    except NotConfigured as exc:
+        raise SystemExit(f"scinumbers-ask: {exc}") from exc
+
     parser = argparse.ArgumentParser(
         prog="scinumbers-ask",
         description="Ask questions about biological quantities, answered only from a corpus.",
     )
     parser.add_argument(
         "--corpus",
-        default=os.environ.get("SCINUMBERS_CORPUS", ""),
+        default=env_setting("SCINUMBERS_CORPUS"),
         help="path to the JSONL corpus (or set SCINUMBERS_CORPUS)",
     )
     parser.add_argument(
@@ -141,7 +150,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--trace",
-        default=os.environ.get("SCINUMBERS_TRACE", trace.DEFAULT_FILE),
+        default=env_setting("SCINUMBERS_TRACE", trace.DEFAULT_FILE),
         help=f"where the structured trail is written (default {trace.DEFAULT_FILE}); "
         "'-' for stderr, empty to discard it",
     )
@@ -158,11 +167,6 @@ def main(argv: list[str] | None = None) -> None:
     # did not cause. `NotConfigured` carries the instructions for a retired
     # variable name, which arriving as a crash would waste entirely.
     try:
-        # Before the corpus is resolved, not after. `--corpus` defaults from the
-        # environment, so a reader who still exports the old name arrives here with
-        # an empty path and would be told "no corpus path supplied" -- true, and
-        # about the wrong thing.
-        refuse_retired_env()
         # Announced on stderr: in one-shot mode stdout carries the answer, and a
         # build notice mixed into it would corrupt whatever reads that.
         corpus = autobuild.corpus_path(args.corpus, lambda text: print(text, file=sys.stderr))

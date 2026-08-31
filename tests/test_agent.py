@@ -264,6 +264,34 @@ def test_the_trail_says_where_our_own_defect_was_raised(repo):
         assert _origin(exc) == "", "nothing of ours is on that traceback"
 
 
+def test_the_trail_finds_our_frames_by_module_rather_than_by_path(repo):
+    """Two versions of this returned no origin at all, silently, and this is why.
+
+    The first matched a hardcoded package name, which the rename falsified. The
+    second compared each frame's filename against the package directory resolved
+    from `__file__` -- and `co_filename` is *not* resolved, so an install or a
+    checkout reached through a symlink made every origin blank. Both failures look
+    identical from outside: an internal error that says the fault is ours without
+    saying where, with nothing raising.
+
+    Asserting the mechanism rather than the outcome, because the outcome under a
+    symlink is only reproducible by building one, and the property that actually
+    holds is that no filesystem path is consulted at all.
+    """
+    import inspect
+
+    from scinumbers_ask import agent as agent_module
+
+    # The docstring is stripped first: it explains the two failures by name, so a
+    # check against the raw source matches the explanation rather than the code.
+    body = inspect.getsource(agent_module._origin).replace(agent_module._origin.__doc__, "")
+    assert "f_globals" in body and "__package__" in body
+    assert "__file__" not in body, "the origin check is back on the filesystem"
+
+    # And a sibling package sharing our prefix is not ours.
+    assert not "scinumbers_ask_helpers".startswith(f"{agent_module.__package__}.")
+
+
 def test_the_tool_error_message_names_the_type_not_the_exception_text(config):
     from scinumbers_ask.agent import _tool_error_message
 

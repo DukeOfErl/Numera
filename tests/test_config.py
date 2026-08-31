@@ -16,6 +16,7 @@ from scinumbers_ask.config import (
     WITHDRAWN_ENV,
     Config,
     NotConfigured,
+    env_setting,
     format_usd,
     micro_from_provider_cost,
     refuse_retired_env,
@@ -117,42 +118,88 @@ def test_a_renamed_variable_is_refused_and_its_replacement_named(monkeypatch, ol
     assert new in str(raised.value)
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _env_reads() -> str:
+    """Every environment *read* in the package and the entry point, as text.
+
+    The call sites, not the whole file. Matching a bare quoted name against the
+    source cannot fail: `config.py` holds every replacement name as a value in
+    `RENAMED_ENV`, so the map would satisfy a check on itself and a typo in a
+    replacement would pass. That is a check that reports a verdict it can only
+    ever give one way, which is worse than no check -- it retires the suspicion
+    that would otherwise have found the bug.
+    """
+    files = [*(ROOT / "src" / "scinumbers_ask").glob("*.py"), ROOT / "streamlit_app.py"]
+    text = "\n".join(f.read_text(encoding="utf-8") for f in files)
+    return "\n".join(
+        line
+        for line in text.splitlines()
+        if "os.environ" in line or "env_setting(" in line
+    )
+
+
 @pytest.mark.parametrize("new", sorted(RENAMED_ENV.values()))
 def test_the_replacement_named_is_one_the_code_actually_reads(new):
     """Otherwise the refusal sends the reader to set a variable nothing reads.
 
     A typo in the replacement name is invisible from inside the refusal: it raises,
     the message looks right, and the reader follows it into a run configured by
-    nothing. Checked against the source rather than a second list, because a second
-    list would drift the same way.
+    nothing.
     """
-    source = Path(__file__).resolve().parents[1] / "src" / "scinumbers_ask"
-    read_anywhere = "\n".join(f.read_text(encoding="utf-8") for f in source.glob("*.py"))
-    entry_point = (Path(__file__).resolve().parents[1] / "streamlit_app.py").read_text(
-        encoding="utf-8"
-    )
-    assert f'"{new}"' in read_anywhere + entry_point
+    assert new in _env_reads()
 
 
-def test_every_retired_name_shares_the_prefix_that_was_retired():
-    """The refusal is a map, and a map only refuses what someone remembered to add.
+def test_no_retired_name_is_still_being_read():
+    """The other direction, and the one the first version of this exempted.
 
-    This is the cheap half of that: nothing carrying the old prefix should still be
-    read. `test_a_renamed_variable_is_refused` covers the other direction.
+    `config.py` was skipped wholesale because it lists the retired names in order
+    to refuse them -- which also skipped almost every environment read in the
+    package. A read left on the old name there is refused by `refuse_retired_env`
+    *and* ignored by the reader, so the setting becomes unconfigurable and its
+    default is used for ever: a run that looks like it is working.
+
+    Scanning the read lines rather than whole files distinguishes the two.
     """
-    source = Path(__file__).resolve().parents[1] / "src" / "scinumbers_ask"
-    for path in source.glob("*.py"):
-        text = path.read_text(encoding="utf-8")
-        if path.name == "config.py":
-            continue  # where the retired names are listed in order to be refused
-        assert "BIONUMBERS_ASK_" not in text, path.name
+    reads = _env_reads()
+    for old in [*RENAMED_ENV, *WITHDRAWN_ENV]:
+        assert old not in reads, old
 
 
-def test_a_withdrawn_variable_is_refused_without_being_called_a_rename():
-    """"~0.50" as a warning and as a ceiling are different limits.
+@pytest.mark.parametrize("old", sorted(WITHDRAWN_ENV))
+def test_a_withdrawn_variable_is_refused_without_being_called_a_rename(monkeypatch, old):
+    """"0.50" as a warning and as a ceiling are different limits.
 
     A rename message would tell the reader to move the value across, which would
-    tighten their spend limit by 20 per cent while appearing to preserve it.
+    tighten their spend limit by 20 per cent while appearing to preserve it. So
+    these are refused, like a rename, but never *described* as one.
     """
-    for old in WITHDRAWN_ENV:
-        assert old not in RENAMED_ENV
+    assert old not in RENAMED_ENV
+    monkeypatch.setenv(old, "0.50")
+
+    with pytest.raises(NotConfigured) as raised:
+        refuse_retired_env()
+
+    message = str(raised.value)
+    assert old in message
+    assert "no longer exists" in message
+    assert "Rename it" not in message
+
+
+def test_a_setting_read_without_a_driver_is_still_refused(monkeypatch):
+    """The second-caller audit, which is what put the guard here rather than in main.
+
+    The corpus, the trail and the checkpoint store never pass through `Config`, so
+    a refusal living in the two drivers protected exactly the two callers that
+    existed. The architecture note says the evaluation harness will be a third
+    adapter -- and a harness reading the trail path directly would have written its
+    trail to the default while a stale name sat exported, with nothing reporting a
+    fault.
+    """
+    monkeypatch.setenv("BIONUMBERS_ASK_TRACE", "/somewhere/trace.jsonl")
+
+    with pytest.raises(NotConfigured) as raised:
+        env_setting("SCINUMBERS_TRACE", "logs/trace.jsonl")
+
+    assert "SCINUMBERS_TRACE" in str(raised.value)

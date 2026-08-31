@@ -197,25 +197,30 @@ OUR_DEFECT = (
 )
 
 
-#: This package's own directory, so `_origin` recognises our frames without being
-#: told the package's name. It was told once, and the name changed underneath it:
-#: a literal here reports no origin at all rather than failing, which is the kind
-#: of defect that survives a rename because nothing about it looks wrong.
-_PACKAGE_ROOT = str(Path(__file__).resolve().parent)
-
-
 def _origin(exc: BaseException) -> str:
     """Where in this package the exception was raised, for the trail.
 
     The innermost of our own frames, so a defect surfacing deep inside a library
     still points at the line of ours that led there.
+
+    Our frames are recognised by the module name each one was compiled in, not by
+    its filename. Two earlier versions of this got it wrong in the same silent
+    direction -- returning no origin at all, so an internal error says the fault is
+    ours without saying where, and nothing raises. First a hardcoded package name,
+    which a rename falsified; then the package directory from `__file__`, which
+    compares a resolved path against an *unresolved* `co_filename` and so fails
+    for every exception whenever the checkout or the editable install is reached
+    through a symlink. `__package__` is computed, involves no filesystem, and
+    survives both.
     """
     frame = exc.__traceback__
     where = ""
     while frame is not None:
-        name = frame.tb_frame.f_code.co_filename
-        if name.startswith(_PACKAGE_ROOT):
-            where = f"{Path(name).name}:{frame.tb_lineno}"
+        # The dot matters: without it a sibling `scinumbers_ask_helpers` would read
+        # as ours.
+        module = frame.tb_frame.f_globals.get("__name__", "")
+        if module == __package__ or module.startswith(f"{__package__}."):
+            where = f"{Path(frame.tb_frame.f_code.co_filename).name}:{frame.tb_lineno}"
         frame = frame.tb_next
     return where
 

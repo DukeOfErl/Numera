@@ -1,8 +1,8 @@
 # Tasks
 
 ADR block for this change: `0400`–`0450`. The table in `CLAUDE.md` is the authority and has been
-reconciled. `0350`–`0390` is left as headroom for `add-corpus-autobuild`, which holds `0300`–`0340`
-and has written none of them.
+reconciled. `0350`–`0390` is deliberately left unallocated -- reserving it here and nowhere else
+would be exactly the drift `CLAUDE.md` describes, since no other branch can read this file.
 
 Two branches, sequential. The rename is mechanical and has no behaviour change; keeping it separate
 stops a 40-file diff from swamping the review of the citation work.
@@ -11,29 +11,29 @@ stops a 40-file diff from swamping the review of the citation work.
 
 ### 1. The package rename
 
-- [ ] 1.1 `git mv src/bionumbers_ask src/scinumbers_ask`; update imports across `src/`, `tests/`,
+- [x] 1.1 `git mv src/bionumbers_ask src/scinumbers_ask`; update imports across `src/`, `tests/`,
       `streamlit_app.py`, `pyproject.toml` (script and `known-first-party`), `README.md`,
       `CLAUDE.md`, `docs/diagrams/architecture.md`. Scope every substitution to an explicit path
       list — `src/bionumbers/`, `pyproject.toml`'s `bionumbers` script and `docs/decisions/0040`–`0090`
       belong to another branch
-- [ ] 1.2 `agent.py`'s `_origin` frame filter matches the package root computed from `__file__`, not
+- [x] 1.2 `agent.py`'s `_origin` frame filter matches the package root computed from `__file__`, not
       a hardcoded string, so it cannot drift again
-- [ ] 1.3 The hyphenated forms: `cli.py`'s `prog=` and its `SystemExit` prefix, `trace.py`'s
+- [x] 1.3 The hyphenated forms: `cli.py`'s `prog=` and its `SystemExit` prefix, `trace.py`'s
       `LOGGER_NAME` and its tag list
-- [ ] 1.4 **Assert the trace tag.** Nothing covers `trace.py`'s tag list today; the rename is silent
+- [x] 1.4 **Assert the trace tag.** Nothing covers `trace.py`'s tag list today; the rename is silent
       without a new assertion
-- [ ] 1.5 `web.py`'s session-state keys. Renaming drops in-flight sessions — intended, but noted
+- [x] 1.5 `web.py`'s session-state keys. Renaming drops in-flight sessions — intended, but noted
 
 ### 2. The environment prefix
 
-- [ ] 2.1 The seven `BIONUMBERS_ASK_*` reads become `SCINUMBERS_*`
-- [ ] 2.2 A retired name raises `NotConfigured` naming its replacement, for all seven plus the
+- [x] 2.1 The seven `BIONUMBERS_ASK_*` reads become `SCINUMBERS_*`
+- [x] 2.2 A retired name raises `NotConfigured` naming its replacement, for all seven plus the
       already-retired `WARN_USD`
-- [ ] 2.3 The refusal is called from both driver entry points, not from `Config.from_env` alone —
+- [x] 2.3 The refusal is called from both driver entry points, not from `Config.from_env` alone —
       three of the seven never pass through `Config`
-- [ ] 2.4 `tests/conftest.py`'s autouse fixture, the eight test files setting old names, the pytest
+- [x] 2.4 `tests/conftest.py`'s autouse fixture, the eight test files setting old names, the pytest
       marker help text, the README config table, `CLAUDE.md`, ADR-0170 and ADR-0180
-- [ ] 2.5 ADR-0400: the package is named for the question, not for one source
+- [x] 2.5 ADR-0400: the package is named for the question, not for one source
 
 ## Branch 2 — `feat/scinumbers-citation-form`
 

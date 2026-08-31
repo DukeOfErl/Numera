@@ -110,6 +110,23 @@ def refuse_retired_env() -> None:
             raise NotConfigured(f"{old} no longer exists. {guidance}.")
 
 
+def env_setting(name: str, default: str = "") -> str:
+    """Read one setting from the environment, refusing a retired name first.
+
+    The guard belongs here rather than in whoever calls it. Three settings -- the
+    corpus, the trail and the checkpoint store -- never pass through `Config`, so
+    a refusal living only in the two drivers protects exactly the two callers that
+    exist today. The architecture note says the evaluation harness will be a third
+    adapter; a harness that reads the trail path and builds an `AskAgent` directly
+    would get no refusal at all and would quietly write its trail to the default
+    path with a stale name exported.
+
+    Cheap enough to call on every read, and calling it on every read is the point.
+    """
+    refuse_retired_env()
+    return os.environ.get(name, default)
+
+
 @dataclass(frozen=True)
 class ModelPrices:
     """Per-million-token prices, in micro-dollars. Only a fallback.
