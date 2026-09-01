@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 
-from .citations import citations
+from .bionumbers import cross_references
 from .corpus import Entry
 from .trace import QuestionTrace
 
@@ -230,7 +230,7 @@ class CorpusRepository:
         # one notation drifted: this one read the run and the answer parser did not.
         # It also hardcoded identifiers as six digits beginning with 1, which is a
         # fact about this corpus rather than about a citation.
-        cited = tuple(sorted(set(citations(entry.quotation_text))))
+        cited = tuple(sorted(set(cross_references(entry.quotation_text))))
         if trace is not None:
             trace.record("entry.retrieved", bnid=bnid, cited_bnids=list(cited))
         return FullEntry(entry=entry, cited_bnids=cited)
