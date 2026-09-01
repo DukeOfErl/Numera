@@ -29,7 +29,7 @@ def test_every_record_carries_the_run_label():
     configure(buf)
     trace = start_question("eval-2026-08-24")
     trace.record("search", matched=3)
-    trace.record("entry.retrieved", bnid=100002)
+    trace.record("entry.retrieved", entry_id=100002)
 
     written = records(buf)
     assert [r["run"] for r in written] == ["eval-2026-08-24"] * 2

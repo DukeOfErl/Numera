@@ -184,7 +184,7 @@ def test_the_warning_fires_past_the_threshold_and_work_continues(repo, tight, tm
 def test_the_warning_is_emitted_once_per_question(repo, tight, tmp_path):
     model = scripted(
         costing(tool_call("search_entries", property="Cell"), 0.000_110),
-        costing(tool_call("get_entry", bnid=100002), 0.000_002),
+        costing(tool_call("get_entry", entry_id=100002), 0.000_002),
         costing(says("about 1 micrometre (BNID 100002)"), 0.000_002),
     )
     events = list(agent_with(repo, tight, tmp_path, model).ask("s", "q"))

@@ -27,7 +27,7 @@ COLUMNS: tuple[tuple[str, str, int], ...] = (
     ("organism", "Organism", 17),
     ("value", "Value", 13),
     ("units", "Units", 12),
-    ("bnid", "ID", 7),
+    ("entry_id", "ID", 7),
     ("reference", "Reference", 18),
 )
 LINES_PER_ROW = 2
@@ -115,7 +115,7 @@ def _topic_words(text: str) -> frozenset[str]:
 
 @dataclass(frozen=True)
 class Row:
-    bnid: int
+    entry_id: int
     property: str
     organism: str
     value: str
@@ -169,13 +169,13 @@ def _relevance(repo: CorpusRepository, cited: tuple[int, ...], question: str):
     a cell, because no amount of string overlap knows any biology.
     """
     vocabulary = _topic_words(question)
-    for bnid in cited:
-        found = repo.get(bnid)
+    for entry_id in cited:
+        found = repo.get(entry_id)
         if found is not None:
             vocabulary |= _topic_words(found.entry.property)
 
-    def score(bnid: int) -> int:
-        found = repo.get(bnid)
+    def score(entry_id: int) -> int:
+        found = repo.get(entry_id)
         if found is None:  # pragma: no cover - filtered before scoring
             return 0
         entry = found.entry
@@ -201,35 +201,35 @@ def rows_for(
     ordered: list[int] = [b for b in cited if repo.get(b) is not None]
     seen = set(ordered)
     rest = []
-    for bnid in retrieved:
-        if bnid not in seen and repo.get(bnid) is not None:
-            rest.append(bnid)
-            seen.add(bnid)
+    for entry_id in retrieved:
+        if entry_id not in seen and repo.get(entry_id) is not None:
+            rest.append(entry_id)
+            seen.add(entry_id)
     score = _relevance(repo, cited, question)
     # Stable, so entries the score cannot separate stay in the order they were met.
-    rest.sort(key=lambda bnid: -score(bnid))
+    rest.sort(key=lambda entry_id: -score(entry_id))
     ordered += rest
 
     out = []
-    for bnid in ordered:
-        found = repo.get(bnid)
+    for entry_id in ordered:
+        found = repo.get(entry_id)
         if found is None:  # pragma: no cover - filtered above
             continue
         entry = found.entry
         out.append(
             Row(
-                bnid=entry.bnid,
+                entry_id=entry.entry_id,
                 property=entry.property,
                 organism=entry.organism,
                 value=entry.value_display,
                 units=entry.units,
                 reference=entry.reference,
-                cited=bnid in cited,
+                cited=entry_id in cited,
                 method_recorded=bool(entry.measurement_method.strip()),
                 has_scalar=entry.value is not None
                 or entry.range_low is not None
                 or entry.range_high is not None,
-                retrieved=bnid in retrieved,
+                retrieved=entry_id in retrieved,
                 method=" ".join(entry.measurement_method.split()),
                 comments=entry.comments,
                 keywords=tuple(_without_markup(k) for k in entry.keywords),
@@ -332,7 +332,7 @@ def _methods_block(shown: tuple[Row, ...], width: int) -> list[str]:
         return []
     out = ["how the cited entries were measured:"]
     for row in cited:
-        prefix = f"  {bionumbers.label(row.bnid)}  "
+        prefix = f"  {bionumbers.label(row.entry_id)}  "
         out.append(prefix + _clamp(row.method, width - len(prefix)))
     return out
 

@@ -83,7 +83,7 @@ def warning_text(event: Event) -> str | None:
 
 # Carried for the entries table and the citation check, not for a person to read:
 # fifty identifiers on a progress line would bury what the search was for.
-UNRENDERED_DETAIL = {"bnids"}
+UNRENDERED_DETAIL = {"entry_ids"}
 
 
 def retrieval_text(event: Retrieval) -> str:

@@ -137,7 +137,7 @@ def test_the_corpus_keeps_the_sources_words_and_the_model_gets_ours(repo):
     assert "BNID 102065" in stored.comments, "the corpus must keep the source's words"
 
     tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), lambda _e: None)}
-    rendered = tools["get_entry"].invoke({"bnid": 100001})
+    rendered = tools["get_entry"].invoke({"entry_id": 100001})
     assert "[[102065]]" in rendered
     assert "BNID" not in rendered, "the model must not be shown a notation it is not asked to write"
 

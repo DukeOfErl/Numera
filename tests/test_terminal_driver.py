@@ -56,9 +56,9 @@ def test_a_retrieval_shows_the_tool_and_what_it_was_asked():
 
 def test_a_retrieval_omits_absent_detail_rather_than_showing_none():
     line = render(
-        Retrieval(question_id="q", tool="get_entry", detail={"bnid": 100002, "organism": None})
+        Retrieval(question_id="q", tool="get_entry", detail={"entry_id": 100002, "organism": None})
     )
-    assert "bnid=100002" in line
+    assert "entry_id=100002" in line
     assert "None" not in line
 
 

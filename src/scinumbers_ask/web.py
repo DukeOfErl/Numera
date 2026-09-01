@@ -285,7 +285,7 @@ def as_text(text: str) -> str:
 def _row_label(row: entries_table.Row) -> str:
     """One line identifying an entry, for the side panel's collapsed rows."""
     value = "" if not row.has_scalar else f"{row.value} {row.units}".strip()
-    parts = [row.property, row.organism, value, bionumbers.label(row.bnid)]
+    parts = [row.property, row.organism, value, bionumbers.label(row.entry_id)]
     label = " · ".join(part for part in parts if part)
     marks = _markers(row)
     return f"{marks} {label}" if marks else label
@@ -330,7 +330,7 @@ def _frame(rows: tuple[entries_table.Row, ...]) -> list[dict[str, Any]]:
             "Units": row.units,
             # A string, not a number: an identifier formatted as a quantity picks
             # up a thousands separator and stops matching the citation in the prose.
-            "ID": str(row.bnid),
+            "ID": str(row.entry_id),
             "Reference": row.reference,
         }
         for row in rows

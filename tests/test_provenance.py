@@ -260,9 +260,9 @@ def test_no_scalar_means_neither_a_value_nor_a_range():
     from bionumbers_ingest.validation import report_for
 
     records = [
-        BioNumberRecord(bnid=1, value=1.5),  # value only
-        BioNumberRecord(bnid=2, range_low=1.0, range_high=2.0),  # range only
-        BioNumberRecord(bnid=3),  # neither
+        BioNumberRecord(entry_id=1, value=1.5),  # value only
+        BioNumberRecord(entry_id=2, range_low=1.0, range_high=2.0),  # range only
+        BioNumberRecord(entry_id=3),  # neither
     ]
     assert report_for(records, rows_read=3, rows_skipped_non_data=0).records_with_no_scalar == 1
 
@@ -294,10 +294,10 @@ def test_the_predicate_counts_count_records_not_something_doubled():
     from bionumbers_ingest.validation import report_for
 
     records = [
-        BioNumberRecord(bnid=1, range_fused=True),
-        BioNumberRecord(bnid=2, range_fused=True, range_qualified=True),
-        BioNumberRecord(bnid=3, range_qualified=True),
-        BioNumberRecord(bnid=4),
+        BioNumberRecord(entry_id=1, range_fused=True),
+        BioNumberRecord(entry_id=2, range_fused=True, range_qualified=True),
+        BioNumberRecord(entry_id=3, range_qualified=True),
+        BioNumberRecord(entry_id=4),
     ]
     report = report_for(records, rows_read=4, rows_skipped_non_data=0)
     assert report.range_fused_count == 2

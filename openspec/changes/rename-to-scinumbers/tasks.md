@@ -64,13 +64,13 @@ stops a 40-file diff from swamping the review of the citation work.
 
 ### 5. `entry_id`
 
-- [ ] 5.1 The field, the indexes, the events, the table column and the trace keys
-- [ ] 5.2 The corpus key, at both ends of the contract, hand-edited independently
-- [ ] 5.3 A corpus built by an older ingester is refused with a sentence saying what to do, not a
+- [x] 5.1 The field, the indexes, the events, the table column and the trace keys
+- [x] 5.2 The corpus key, at both ends of the contract, hand-edited independently
+- [x] 5.3 A corpus built by an older ingester is refused with a sentence saying what to do, not a
       `KeyError` repr. The app cannot rebuild it: an existing corpus is never rebuilt
-- [ ] 5.4 The ingester's internal vocabulary is left alone — those are BioNumbers' own words inside
+- [x] 5.4 The ingester's internal vocabulary is left alone — those are BioNumbers' own words inside
       the BioNumbers adapter
-- [ ] 5.5 ADR-0430: why an integer, what the corpus key change costs, and the four places a widening
+- [x] 5.5 ADR-0430: why an integer, what the corpus key change costs, and the four places a widening
       to a string would touch
 
 ### 6. Specs and docs

@@ -380,18 +380,19 @@ def test_padding_rows_are_not_data_rows(bion_id, expected):
 # --- over the fixture --------------------------------------------------------
 
 
-def _by_bnid(sample_html):
+def _by_entry_id(sample_html):
     return {
-        r.bnid: r for r in (clean_row(raw) for raw in iter_rows(sample_html) if is_data_row(raw))
+        r.entry_id: r
+        for r in (clean_row(raw) for raw in iter_rows(sample_html) if is_data_row(raw))
     }
 
 
 def test_the_fixture_yields_six_records(sample_html):
-    assert sorted(_by_bnid(sample_html)) == [900001, 900002, 900003, 900004, 900005, 900006]
+    assert sorted(_by_entry_id(sample_html)) == [900001, 900002, 900003, 900004, 900005, 900006]
 
 
 def test_range_to_form_over_the_fixture(sample_html):
-    r = _by_bnid(sample_html)[900001]
+    r = _by_entry_id(sample_html)[900001]
     assert r.range_low == pytest.approx(1.94)
     assert r.range_high == pytest.approx(2.72)
     assert r.value is None
@@ -401,7 +402,7 @@ def test_range_to_form_over_the_fixture(sample_html):
 
 
 def test_number_plus_hyphen_range_over_the_fixture(sample_html):
-    r = _by_bnid(sample_html)[900002]
+    r = _by_entry_id(sample_html)[900002]
     assert r.value == pytest.approx(1.1)
     assert r.range_low == pytest.approx(0.44)
     assert r.range_high == pytest.approx(1.79)
@@ -410,7 +411,7 @@ def test_number_plus_hyphen_range_over_the_fixture(sample_html):
 
 
 def test_link_only_row_over_the_fixture(sample_html):
-    r = _by_bnid(sample_html)[900003]
+    r = _by_entry_id(sample_html)[900003]
     assert r.table_link == "http://example.invalid/files/synthetic%20file%2012.pdf"
     assert r.range_low is None and r.range_high is None
     assert "range_is_link" in r.parse_flags
@@ -710,7 +711,7 @@ def test_each_column_reaches_its_own_field(column, field):
 
 def test_the_numeric_columns_reach_their_own_fields():
     r = clean_row({"bion_id": "900002", "Value": "1.5", "Range": "'2-3"})
-    assert r.bnid == 900002
+    assert r.entry_id == 900002
     assert r.value == pytest.approx(1.5)
     assert r.range_low == pytest.approx(2.0)
     assert r.range_high == pytest.approx(3.0)

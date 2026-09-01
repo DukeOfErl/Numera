@@ -45,7 +45,7 @@ def test_a_search_matching_nothing_returns_nothing_invented(repo):
 
 def test_compact_rows_carry_enough_to_choose_between_entries(repo):
     row = repo.search(property="Cell diameter", organism="cerevisiae").rows[0]
-    assert (row.bnid, row.value, row.units) == (100010, "5.0", "μm")
+    assert (row.entry_id, row.value, row.units) == (100010, "5.0", "μm")
     assert "Saccharomyces" in row.organism
 
 
@@ -98,21 +98,21 @@ def test_a_keyword_matches_an_entrys_keywords(repo):
     whole suite. Keyword search is a retrieval path -- matching the wrong entries
     silently changes what the model is allowed to answer from."""
     # "radius" appears only in an entry's keywords, never in a property.
-    assert [row.bnid for row in repo.search(keyword="radius").rows] == [SECOND]
+    assert [row.entry_id for row in repo.search(keyword="radius").rows] == [SECOND]
 
 
 def test_a_keyword_matches_a_property_the_keywords_do_not_carry(repo):
     """The second half of the same condition: "ribosomes" is in the property and
     not in the keywords, which are stored singular. Joining the two checks with
     `and` instead of `or` also survived."""
-    assert [row.bnid for row in repo.search(keyword="ribosomes").rows] == [COUNT]
+    assert [row.entry_id for row in repo.search(keyword="ribosomes").rows] == [COUNT]
 
 
 @pytest.mark.parametrize("keyword", ["RADIUS", "Radius"])
 def test_keyword_matching_ignores_case_on_both_sides(repo, keyword):
     """The model writes the question's wording, not the curator's. Case-folding
     either side away survived every test."""
-    assert [row.bnid for row in repo.search(keyword=keyword).rows] == [SECOND]
+    assert [row.entry_id for row in repo.search(keyword=keyword).rows] == [SECOND]
 
 
 def test_vocabulary_lists_properties_as_well_as_organisms(repo):
@@ -147,11 +147,11 @@ def test_vocabulary_leads_with_the_commonest_value(repo):
 
 
 def test_a_full_entry_exposes_its_cited_identifiers(repo):
-    assert repo.get(100001).cited_bnids == (102065, 104333)
+    assert repo.get(100001).cited_ids == (102065, 104333)
 
 
 def test_an_entry_citing_nothing_has_an_empty_list(repo):
-    assert repo.get(100003).cited_bnids == ()
+    assert repo.get(100003).cited_ids == ()
 
 
 def test_an_unknown_identifier_returns_nothing(repo):
@@ -232,7 +232,7 @@ def test_repeated_identifiers_are_refused_rather_than_collapsed(tmp_path):
     path = tmp_path / "dupe.jsonl"
     path.write_text(
         "\n".join(
-            json.dumps({"bnid": 7, "property": p, "units": "u", "value": 1.0})
+            json.dumps({"entry_id": 7, "property": p, "units": "u", "value": 1.0})
             for p in ("first", "second")
         )
         + "\n",

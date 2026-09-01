@@ -31,19 +31,19 @@ def test_the_file_ends_with_a_newline(tmp_path, sample_html):
 
 def test_absent_scalars_are_null_and_never_empty_strings(tmp_path):
     out = tmp_path / "corpus.jsonl"
-    write_corpus([BioNumberRecord(bnid=1)], out)
+    write_corpus([BioNumberRecord(entry_id=1)], out)
     obj = json.loads(out.read_text(encoding="utf-8"))
     for key in ("value", "range_low", "range_high"):
         assert obj[key] is None, f"{key} must be null"
     assert '""' not in out.read_text(encoding="utf-8")
 
 
-def test_keywords_is_an_array_and_bnid_is_a_number(tmp_path):
+def test_keywords_is_an_array_and_entry_id_is_a_number(tmp_path):
     out = tmp_path / "corpus.jsonl"
-    write_corpus([BioNumberRecord(bnid=900001, keywords=["a", "b"])], out)
+    write_corpus([BioNumberRecord(entry_id=900001, keywords=["a", "b"])], out)
     obj = json.loads(out.read_text(encoding="utf-8"))
     assert obj["keywords"] == ["a", "b"]
-    assert isinstance(obj["bnid"], int)
+    assert isinstance(obj["entry_id"], int)
 
 
 def test_the_predicate_and_the_flags_are_on_every_line(tmp_path, sample_html):
@@ -59,8 +59,8 @@ def test_a_run_that_raises_partway_leaves_no_file(tmp_path):
     out = tmp_path / "corpus.jsonl"
 
     def records():
-        yield BioNumberRecord(bnid=1)
-        yield BioNumberRecord(bnid=2)
+        yield BioNumberRecord(entry_id=1)
+        yield BioNumberRecord(entry_id=2)
         raise RuntimeError("source went away")
 
     with pytest.raises(RuntimeError, match="source went away"):
@@ -71,11 +71,11 @@ def test_a_run_that_raises_partway_leaves_no_file(tmp_path):
 
 def test_a_failed_run_leaves_a_previous_corpus_untouched(tmp_path):
     out = tmp_path / "corpus.jsonl"
-    write_corpus([BioNumberRecord(bnid=1)], out)
+    write_corpus([BioNumberRecord(entry_id=1)], out)
     before = out.read_text(encoding="utf-8")
 
     def records():
-        yield BioNumberRecord(bnid=2)
+        yield BioNumberRecord(entry_id=2)
         raise RuntimeError("boom")
 
     with pytest.raises(RuntimeError):
@@ -85,7 +85,7 @@ def test_a_failed_run_leaves_a_previous_corpus_untouched(tmp_path):
 
 def test_the_destination_directory_is_created(tmp_path):
     out = tmp_path / "nested" / "deeper" / "corpus.jsonl"
-    write_corpus([BioNumberRecord(bnid=1)], out)
+    write_corpus([BioNumberRecord(entry_id=1)], out)
     assert out.exists()
 
 

@@ -52,7 +52,7 @@ def test_a_live_question_is_answered_with_a_citation(live_agent):
 
     assert any(isinstance(e, Retrieval) for e in events), "no tool was used"
     answer = next(e for e in events if isinstance(e, Answer)).text
-    # A quantity without a bnid beside it is the failure this project exists to
+    # A quantity without an identifier beside it is the failure this project exists to
     # prevent. Asserting a citation is present is a harness property; whether the
     # right one was chosen is answer-evaluation's job, not this test's.
     assert re.search(r"\b10000\d\b", answer), f"no entry cited in: {answer[:200]}"
@@ -105,7 +105,7 @@ def test_the_terminal_driver_answers_from_the_real_corpus_with_a_citation(tmp_pa
     assert "answered" in text, text[-400:]
 
     # The citation must be in the answer, not merely somewhere in the output: the
-    # rendered retrieval lines carry bnids too, so asserting over the whole text
+    # rendered retrieval lines carry identifiers too, so asserting over the whole text
     # would pass on an answer that cited nothing.
     body = text.split("\n  — ")[0]
     answer = "\n".join(line for line in body.splitlines() if not line.startswith("  · "))
