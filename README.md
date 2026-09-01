@@ -10,7 +10,8 @@ model's own knowledge. It is for people who need a figure they can defend.
 
 Three commitments shape the design:
 
-- **Provenance.** Every figure carries the identifier of the entry it came from, and those entries
+- **Provenance.** Every figure carries the identifier of the entry it came from, written `[[100002]]`
+  so a citation can never be confused with a quantity, and those entries
   are shown beside the answer. A number the answer used but the corpus never returned is flagged as
   unsupported rather than quietly printed.
 - **Precision.** Units are compared by dimension, so a length is never silently reconciled with a
@@ -112,7 +113,7 @@ it binds — the number you set is the one that stops work
 ## Tests
 
 ```bash
-uv run pytest                                  # 850 tests on a six-entry fixture; no API key needed
+uv run pytest                                  # 891 tests on a six-entry fixture; no API key needed
 ```
 
 The suite drives the real agent with scripted models rather than mocking the framework, so the
@@ -142,6 +143,7 @@ documentation. Those are covered above. Where the project went past the brief:
 | Beyond the brief | Where |
 |---|---|
 | Provenance as a hard requirement, not a prompt instruction — citations are checked against what was actually retrieved, and unsupported ones flagged | `citations.py`, `entries_table.py` |
+| The source's own notation restated only where the model reads it, never in the corpus — so the stored entry stays quotable | ADR-0420, `bionumbers.py` |
 | Agentic retrieval over a 14,294-entry corpus: capped summaries with an honest total, then full entries on demand | ADR-0150, `tools.py` |
 | Spend enforced in middleware — a per-question ceiling and a run budget that stop the next call rather than reporting after the fact | ADR-0120, ADR-0180, `spend.py` |
 | The agent separated from its drivers, so a web page and an evaluation harness run the identical agent with no mode flag | ADR-0110, `test_driver_independence.py` |

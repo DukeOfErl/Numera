@@ -75,9 +75,9 @@ stops a 40-file diff from swamping the review of the citation work.
 
 ### 6. Specs and docs
 
-- [ ] 6.1 Spec deltas, body-only — no requirement heading is renamed, so the conformance map is
+- [x] 6.1 Spec deltas, body-only — no requirement heading is renamed, so the conformance map is
       unchanged
-- [ ] 6.2 README, the two coupled architecture diagrams, the `CLAUDE.md` module table, CHANGELOG
+- [x] 6.2 README, the two coupled architecture diagrams, the `CLAUDE.md` module table, CHANGELOG
 
 ## Verification
 

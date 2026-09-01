@@ -62,7 +62,8 @@ why a rule both the table and the model need (the implausible-span test) lives o
 | `corpus.py` | `Entry`, the loader, and the judgements that belong to a value |
 | `repository.py` | Indexes, search, vocabulary, the alias index (ADR-0130) |
 | `units.py` | Three-valued dimensional compatibility (ADR-0160) |
-| `citations.py` | Parsing and formatting `BNID nnnnnn` |
+| `citations.py` | The delimited citation form `[[nnnnnn]]`, written and parsed (ADR-0410) |
+| `bionumbers.py` | The only module that names BioNumbers: its `BNID` notation, read and restated (ADR-0420) |
 | `entries_table.py` | Rows, marks and legends — shared by both drivers |
 | `messages.py` | Wording both drivers use, and `STOP_THE_RUN` |
 | `cli.py` / `web.py` | The two adapters |

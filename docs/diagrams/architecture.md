@@ -177,7 +177,7 @@ Two things the boxes cannot show:
 ```mermaid
 flowchart LR
     line[/"one corpus line"/]
-    twelve["<b>twelve keys</b><br/>bnid, property, organism,<br/>units, value, range_low/high,<br/>reference(+pmid), method,<br/>comments, keywords"]
+    twelve["<b>twelve keys</b><br/>entry_id, property, organism,<br/>units, value, range_low/high,<br/>reference(+pmid), method,<br/>comments, keywords"]
     predicates["<b>four booleans</b><br/>range_fused, range_qualified,<br/>range_one_sided, range_approximate"]
     internal["<b>ours to change</b><br/>parse_flags, range_raw,<br/>table_link, source_digest,<br/>primary_source, entered_by"]
     loader["ask agent's loader"]
