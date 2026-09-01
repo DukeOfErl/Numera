@@ -71,6 +71,27 @@ against.
 
 One module is about four minutes.
 
+## Narrow what each mutant runs — hard
+
+Every mutant pays for the whole suite, so the suite's slow tail is multiplied by the
+mutant count. Here five subprocess-spawning tests are **30 per cent of the runtime**, and
+nothing a parser mutant changes can reach a process boundary. Unlike fault seeding,
+narrowing costs mutation testing no information: it does not report entanglement as a
+finding, and mutmut already tracks which tests cover which mutants.
+
+```toml
+pytest_add_cli_args = [
+    "-m", "not network and not corpus and not slow",
+    # ... the deselects above
+]
+```
+
+**A second `-m` replaces `addopts`, it does not AND with it.** `-m "not slow"` alone
+re-selects the `network` and `corpus` markers that `addopts` was excluding — so the run
+makes real API calls, needs a corpus, and gets *slower*. Measured here: 63s default,
+1m41s with `-m "not slow"`, 34s with the full expression. The failure is silent; it
+looks like the exclusion simply did not help.
+
 ## Four things that break first
 
 1. **`source_paths`, not `paths_to_mutate`.** The latter is deprecated in 3.7.0. Published docs and
