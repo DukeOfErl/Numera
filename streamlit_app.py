@@ -9,12 +9,16 @@ SCINUMBERS_CORPUS, SCINUMBERS_CHECKPOINTS, SCINUMBERS_TRACE -- since
 a Streamlit script is given no arguments of its own.
 """
 
-import os
 
 import streamlit as st
 
 from scinumbers_ask import autobuild, web
-from scinumbers_ask.config import NotConfigured, format_usd, refuse_retired_env
+from scinumbers_ask.config import (
+    NotConfigured,
+    env_setting,
+    format_usd,
+    refuse_retired_env,
+)
 from scinumbers_ask.corpus import CorpusUnavailable
 
 st.set_page_config(page_title="SciNumbers ask", page_icon=":material/biotech:")
@@ -30,7 +34,7 @@ try:
     # build starts, because a minute of blank page is indistinguishable from a
     # hang.
     corpus = autobuild.corpus_path(
-        os.environ.get("SCINUMBERS_CORPUS", ""),
+        env_setting("SCINUMBERS_CORPUS"),
         lambda text: st.info(web.as_text(text), icon=":material/build:"),
     )
     repo, agent = web.resources(corpus)
