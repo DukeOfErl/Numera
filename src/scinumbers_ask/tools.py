@@ -246,7 +246,10 @@ def build_tools(
             )
         )
         if not values:
-            return f"No {field} values contain {contains!r}. The corpus has nothing under that wording."
+            return (
+                f"No {field} values contain {contains!r}. "
+                "The corpus has nothing under that wording."
+            )
         return "\n".join(f"{value}\t{count} entries" for value, count in values)
 
     return [
@@ -265,7 +268,8 @@ def build_tools(
             func=get_entry,
             name="get_entry",
             description=(
-                "Read one entry in full, by its bnid. Call this for every entry you intend to cite, "
+                "Read one entry in full, by its bnid. "
+                "Call this for every entry you intend to cite, "
                 "and whenever you need the conditions, measurement method, reference or "
                 "cross-references behind a value. An entry may cite others; those are worth "
                 "following when they bear on the question."

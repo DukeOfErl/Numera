@@ -83,7 +83,10 @@ def _abbreviated_binomials(organism: str) -> set[str]:
     """
     tokens = organism.split()
     out = set()
-    for index, (first, second) in enumerate(zip(tokens, tokens[1:])):
+    # strict=False is the point, not an oversight: the two sequences are meant to
+    # differ in length by one -- that is what makes the pairs adjacent -- so strict=True
+    # would raise on every organism with more than one word.
+    for index, (first, second) in enumerate(zip(tokens, tokens[1:], strict=False)):
         if not (
             first[:1].isupper()
             and first.isalpha()

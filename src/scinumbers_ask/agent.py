@@ -500,7 +500,8 @@ class AskAgent:
                     question_id=trace.question_id,
                     text=(
                         "This conversation has reached its length limit, so I cannot take another "
-                        "question in it without dropping earlier context. Please start a new session."
+                        "question in it without dropping earlier context. "
+                        "Please start a new session."
                     ),
                 )
                 yield QuestionEnded(
