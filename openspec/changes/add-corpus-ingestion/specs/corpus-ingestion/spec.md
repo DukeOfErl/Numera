@@ -30,11 +30,11 @@ pre-processing it.
 
 ### Requirement: The output satisfies the ask agent's corpus contract
 
-Every emitted line SHALL carry the keys the ask agent's corpus loader requires: `bnid`, `property`,
+Every emitted line SHALL carry the keys the ask agent's corpus loader requires: `entry_id`, `property`,
 `organism`, `units`, `value`, `range_low`, `range_high`, `reference`, `reference_pubmed_id`,
 `measurement_method`, `comments`, `keywords`.
 
-`bnid` SHALL be a number. `value`, `range_low` and `range_high` SHALL each be a number or JSON
+`entry_id` SHALL be a number. `value`, `range_low` and `range_high` SHALL each be a number or JSON
 `null` — never a string, and never `""`, which the loader reads as a present value and would use to
 blank out every range-only entry. `keywords` SHALL be a JSON array of strings. The remaining keys
 SHALL be a string or `null`.

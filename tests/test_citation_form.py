@@ -104,3 +104,44 @@ def test_one_implementation_reads_the_source_form():
     from scinumbers_ask import citations as citations_module
 
     assert citations_module.cross_references is bionumbers.cross_references
+
+
+# -- a group that holds a list, and one that holds nothing ----------------
+
+
+def test_several_identifiers_in_one_pair_of_brackets_are_all_read():
+    """A model listing entries writes this without being asked, and the retired
+    notation read exactly that shape on exactly that ground. Read as nothing, a
+    well-cited answer is scored as having no citations at all."""
+    assert citations("[[100002, 100003]]") == (100002, 100003)
+    assert citations("[[100002 and 100003]]") == (100002, 100003)
+    assert citations("[[BNID 100002, 100003]]") == (100002, 100003)
+
+
+def test_a_group_written_for_a_person_is_refused_rather_than_split():
+    """ "100,002" is one number with a thousands separator and "100002, 100003" is two
+    identifiers; only the whitespace after the separator tells them apart. Splitting
+    the first would report entries 100 and 2 -- a citation invented from punctuation,
+    which is worse than the one it fails to read."""
+    assert citations("[[100,002]]") == ()
+
+
+def test_a_group_that_is_not_a_citation_attempt_invents_nothing():
+    """A footnote or a wiki-style link is not a citation. Reading the digits out of
+    it would report the answer as citing an entry the corpus does not hold, which
+    presents a correct answer as having invented a source."""
+    assert citations("[[Table 1]]") == ()
+    assert citations("[[a 1 b 2]]") == ()
+
+
+def test_a_short_identifier_is_still_an_identifier():
+    """The direction that knowingly absorbs the uncertainty. No width floor applies,
+    so a corpus numbering below one still works; the cost is that a footnote written
+    `[[2]]` is reported as an identifier the corpus does not hold -- visible and
+    truthful about what the answer wrote, where the opposite choice would discard
+    real citations invisibly."""
+    assert citations("as in [[2]]") == (2,)
+
+
+def test_a_list_keeps_its_place_among_the_citations_around_it():
+    assert citations("x [[100005, 100006]] y [[100001]]") == (100005, 100006, 100001)

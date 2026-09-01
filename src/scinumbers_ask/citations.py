@@ -40,7 +40,7 @@ __all__ = ["FORM", "citations", "cross_references", "format_citation"]
 # corpus with wider, padded or non-numeric identifiers would change is the
 # coercion in `_identifier`, not the pattern.
 _DELIMITED = re.compile(r"\[\[([^\[\]]+)\]\]")
-_DIGITS = re.compile(r"\d+")
+
 
 def format_citation(entry_id: int) -> str:
     """The form the model is asked to write, and the only form this file promises."""
@@ -52,22 +52,47 @@ def format_citation(entry_id: int) -> str:
 FORM = format_citation(100002)
 
 
-def _identifier(inner: str) -> int | None:
-    """The identifier inside a pair of delimiters, or None if it does not hold one.
+# A list separator, which must be followed by whitespace. That is what tells a list
+# from a thousands separator: "100002, 100003" is two identifiers and "100,002" is
+# one number written for a human, and no rule about an identifier's own shape can
+# separate the two. Where it cannot tell, this file refuses and records rather than
+# guessing -- see `_identifiers`.
+_LIST = re.compile(r"\s*(?:,|;|&|\band\b)\s+")
 
-    Tolerant of a model that brackets more than the number -- `[[BNID 100002]]` is
-    a plausible hedge from a model that has been shown the source's form -- because
-    the alternative is dropping a citation the reader can plainly see. Refuses only
-    what is genuinely ambiguous: no digits at all, or several runs of them, where
-    picking one would be a guess presented as a reading.
+
+def _identifiers(inner: str) -> tuple[int, ...] | None:
+    """The identifiers inside one pair of delimiters, or None if it holds none.
+
+    Plural, because a model listing entries writes `[[100002, 100003]]` without
+    being asked -- the retired notation read exactly that shape on exactly that
+    ground, and reading it as nothing scores a well-cited answer as uncited.
+
+    Tolerant of a model that brackets the source's marker along with the number
+    (`[[BNID 100002]]`), which is a plausible hedge from one shown that form in an
+    entry's prose. That case is handed to `bionumbers.py` rather than guessed at
+    here: it already knows how to read a run in that notation, and it is the only
+    place that should.
+
+    **Which direction absorbs the uncertainty, and why.** A group holding one run of
+    digits is accepted whatever its width -- `[[2]]` becomes a citation of entry 2.
+    That is deliberate: this file promises no rule about an identifier's shape, so a
+    corpus with short identifiers must work, and a footnote written `[[2]]` is
+    reported honestly as an identifier the corpus does not hold rather than silently
+    dropped. The opposite choice -- a width floor -- would discard real citations
+    from any corpus numbering below it, and that failure is invisible.
+
+    A group it cannot read is refused, not resolved: several digit runs with no
+    separator, or no digits at all. `[[Table 1]]` is not a citation attempt, and
+    reading the 1 out of it would invent one.
     """
     text = inner.strip()
     if text.isdigit():
-        return int(text)
-    digits = _DIGITS.findall(text)
-    if len(digits) == 1:
-        return int(digits[0])
-    return None
+        return (int(text),)
+    parts = [part.strip() for part in _LIST.split(text)]
+    if len(parts) > 1 and all(part.isdigit() for part in parts):
+        return tuple(int(part) for part in parts)
+    marked = cross_references(text)
+    return marked or None
 
 
 def citations(text: str, *, trace: QuestionTrace | None = None) -> tuple[int, ...]:
@@ -81,8 +106,8 @@ def citations(text: str, *, trace: QuestionTrace | None = None) -> tuple[int, ..
     text = text or ""
     found: list[tuple[int, int]] = []
     for match in _DELIMITED.finditer(text):
-        entry_id = _identifier(match.group(1))
-        if entry_id is None:
+        group = _identifiers(match.group(1))
+        if group is None:
             # Recorded, not dropped in silence. A bracket group that holds no
             # identifier is the model trying to cite and failing, which is worth
             # knowing about and is invisible otherwise -- the answer simply reads
@@ -90,7 +115,9 @@ def citations(text: str, *, trace: QuestionTrace | None = None) -> tuple[int, ..
             if trace is not None:
                 trace.record("citations.unparsable", inside=match.group(1)[:80])
             continue
-        found.append((match.start(), entry_id))
+        # Offset within the group, so several identifiers in one pair of brackets keep
+        # their written order among the citations around them.
+        found.extend((match.start() + offset, entry_id) for offset, entry_id in enumerate(group))
     found.extend(occurrences(text))
     seen: dict[int, None] = {}
     for _, entry_id in sorted(found, key=lambda pair: pair[0]):

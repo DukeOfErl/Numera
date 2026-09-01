@@ -139,7 +139,12 @@ def test_the_corpus_keeps_the_sources_words_and_the_model_gets_ours(repo):
     tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), lambda _e: None)}
     rendered = tools["get_entry"].invoke({"entry_id": 100001})
     assert "[[102065]]" in rendered
-    assert "BNID" not in rendered, "the model must not be shown a notation it is not asked to write"
+    # No *readable* cross-reference survives -- not "the marker is absent". 101 real
+    # entries write one as "BNID 100 004", which the width floor refuses and which
+    # therefore passes through as the source's words, correctly. Asserting the marker
+    # is gone would be asserting something the real corpus does not satisfy, which the
+    # six-entry fixture was hiding.
+    assert cross_references(rendered) == (), "no citation in the source's form may remain"
 
 
 def test_a_person_is_told_which_database_the_identifier_belongs_to():
@@ -151,7 +156,7 @@ def test_a_person_is_told_which_database_the_identifier_belongs_to():
 
 
 def test_the_source_marker_appears_in_no_other_module():
-    """"Not everywhere -- only where BioNumbers is the one speaking." Comments and
+    """ "Not everywhere -- only where BioNumbers is the one speaking." Comments and
     docstrings may cite real entries as evidence; what must not spread is the marker in
     a string the program actually uses, because that is a second place the notation
     would have to be changed and the first place it would be forgotten.
@@ -179,3 +184,45 @@ def test_the_source_marker_appears_in_no_other_module():
                 offenders.setdefault(path.name, []).append(node.value[:60])
 
     assert set(offenders) <= {"bionumbers.py"}, offenders
+
+
+def test_every_field_handed_to_the_model_is_restated_not_just_the_obvious_two(tmp_path):
+    """`comments` and `method` are not the only fields carrying the marker.
+
+    In the real corpus 8 entries cite others inside `property` and 2 inside
+    `reference`, and `property` reaches the model through `search_entries` as well.
+    Restating field by field is a list someone has to keep complete; this asserts the
+    boundary instead, so a field added later cannot quietly escape.
+    """
+    import json
+
+    from scinumbers_ask.corpus import load
+    from scinumbers_ask.repository import CorpusRepository
+    from scinumbers_ask.tools import build_tools
+    from scinumbers_ask.trace import QuestionTrace
+
+    record = {
+        "entry_id": 101734,
+        "property": "Number of skin cells (for total number of cells, see BNIDS 113005, 113006)",
+        "organism": "Human",
+        "units": "cells",
+        "value": 1.0,
+        "range_low": None,
+        "range_high": None,
+        "reference": "Calculated using Human genome size (BNID 101484)",
+        "reference_pubmed_id": None,
+        "measurement_method": "",
+        "comments": "",
+        "keywords": [],
+    }
+    path = tmp_path / "corpus.jsonl"
+    path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    repo = CorpusRepository(load(path))
+    tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), lambda _e: None)}
+
+    entry = tools["get_entry"].invoke({"entry_id": 101734})
+    assert cross_references(entry) == (), f"the source's form survived in:\n{entry}"
+    assert "[[113005]]" in entry and "[[101484]]" in entry
+
+    listing = tools["search_entries"].invoke({"property": "skin cells"})
+    assert cross_references(listing) == (), f"the source's form survived in:\n{listing}"

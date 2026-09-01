@@ -130,6 +130,8 @@ def build_tools(
             if result.truncated
             else f"{result.total_matched} entries matched; all shown."
         )
+        # Same boundary, same reason: `property` is a column here (ADR-0420).
+        lines = [rewrite(line, format_citation) for line in lines]
         out = [header, "entry_id\tproperty\torganism\tvalue", *lines]
         spanned = dimensions_of([row.units for row in result.rows])
         if len(spanned) > 1:
@@ -178,22 +180,25 @@ def build_tools(
             parts.append(f"caution: {caveat}")
         if e.reference_pubmed_id:
             parts.append(f"pubmed: {e.reference_pubmed_id}")
-        # The source's own cross-references, restated in the notation the model is
-        # asked to write. An entry's prose saying "See BNID 102065" is the likeliest
-        # reason for a model to answer in a form the parser was not told to expect,
-        # and it is the corpus that puts it there. A rendering only: the stored entry
-        # and everything shown to a person keep the source's words (ADR-0420).
         if e.measurement_method:
-            parts.append(f"method: {rewrite(e.measurement_method, format_citation)}")
+            parts.append(f"method: {e.measurement_method}")
         if e.comments:
-            parts.append(f"comments: {rewrite(e.comments, format_citation)}")
+            parts.append(f"comments: {e.comments}")
         if found.cited_ids:
             # Bare numbers here were citations in no notation at all -- unusable by a
             # model told to cite in one, and unparsable if it copied them.
-            parts.append(
-                "cites: " + ", ".join(format_citation(i) for i in found.cited_ids)
-            )
-        return "\n".join(parts)
+            parts.append("cites: " + ", ".join(format_citation(i) for i in found.cited_ids))
+        # Restated once, where the text leaves for the model, rather than field by
+        # field. An entry's prose saying "See BNID 102065" is the likeliest reason for
+        # a model to answer in a form the parser was not told to expect, and it is the
+        # corpus that puts it there -- but `comments` and `method` are not the only
+        # fields carrying it: 8 entries cite others inside `property` and 2 inside
+        # `reference`. A per-field list is a list to keep complete; one call at the
+        # boundary cannot miss a field, now or when a field is added.
+        #
+        # A rendering only: the stored entry and every surface a person sees keep the
+        # source's words (ADR-0420).
+        return rewrite("\n".join(parts), format_citation)
 
     def _caveats(e) -> list[str]:
         """What the source did not claim about this value, in words the model reads.
@@ -280,7 +285,8 @@ def build_tools(
                 "Call this for every entry you intend to cite, "
                 "and whenever you need the conditions, measurement method, reference or "
                 "cross-references behind a value. An entry may cite others; those are worth "
-                "following when they bear on the question."
+                "following when they bear on the question -- retrieve one before you "
+                "cite it, because a cross-reference you have not read is not evidence."
             ),
         ),
         StructuredTool.from_function(
