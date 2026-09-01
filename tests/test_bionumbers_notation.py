@@ -62,7 +62,9 @@ def test_a_spaced_group_of_digits_does_not_contribute_an_identifier():
     four-digit citation is accepted, which is not behaviour worth guaranteeing.
 
     So mutation testing's survivor here (`<` widened to `<=`) is knowingly left
-    alive. Killing it would mean testing the tuning rather than the requirement.
+    alive -- in `occurrences` and, since the notation grew a second reader, in
+    `rewrite` too. Killing either would mean testing the tuning rather than the
+    requirement.
     """
     assert cross_references("see BNID 104 678") == ()
     assert cross_references("see BNID 104 678, then BNID 100003") == (100003,)
@@ -226,3 +228,18 @@ def test_every_field_handed_to_the_model_is_restated_not_just_the_obvious_two(tm
 
     listing = tools["search_entries"].invoke({"property": "skin cells"})
     assert cross_references(listing) == (), f"the source's form survived in:\n{listing}"
+
+
+def test_a_lone_citation_is_restated_and_nothing_else_changes():
+    """Found by mutation testing: with no run after the identifier the trailing group
+    is empty, and a mutant replacing that empty string with a sentinel appended it to
+    the output -- surviving every test, because each one asserted the identifier was
+    *present* rather than asserting the whole string.
+
+    2 real entries carry a lone cross-reference in `reference`, so this is the shape
+    that reaches the model unasserted. Exact equality, since ADR-0420's claim is that
+    the citation is restated and the source's other words are not touched.
+    """
+    assert rewrite("(BNID 101484)", format_citation) == "([[101484]])"
+    assert rewrite("BNID 100002", format_citation) == "[[100002]]"
+    assert rewrite("as reported in BNID 100002.", format_citation) == "as reported in [[100002]]."

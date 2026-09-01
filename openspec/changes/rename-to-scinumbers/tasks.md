@@ -81,7 +81,7 @@ stops a 40-file diff from swamping the review of the citation work.
 
 ## Verification
 
-- [ ] V.1 Green at every group boundary; `-m corpus` against a rebuilt corpus and the old-corpus
+- [x] V.1 Green at every group boundary; `-m corpus` against a rebuilt corpus and the old-corpus
       refusal exercised by hand
-- [ ] V.2 Fault seeding over `citations.py` and the render-time rewrite, into a copy
-- [ ] V.3 Mutation testing over `citations.py` and `bionumbers.py` only
+- [x] V.2 Fault seeding over `citations.py` and the render-time rewrite, into a copy
+- [x] V.3 Mutation testing over `citations.py` and `bionumbers.py` only

@@ -145,3 +145,41 @@ def test_a_short_identifier_is_still_an_identifier():
 
 def test_a_list_keeps_its_place_among_the_citations_around_it():
     assert citations("x [[100005, 100006]] y [[100001]]") == (100005, 100006, 100001)
+
+
+# -- what mutation testing found -----------------------------------------
+
+
+def test_a_group_that_cannot_be_read_does_not_stop_the_ones_after_it():
+    """Found by mutation testing: `continue` widened to `break` survived every test.
+
+    The same defect class this project has already had once, on the retired notation
+    (`test_bionumbers_notation.py` records it). It loses every citation after the
+    first unreadable group, so an answer that did cite its entries is reported as
+    citing none -- `grounded-answering` requires a delimited group holding no
+    identifier to be skipped and recorded, not to end the reading.
+    """
+    assert citations("[[Table 1]] and then [[100002]]") == (100002,)
+    assert citations("[[a b]] [[100002]] [[c d]] [[100003]]") == (100002, 100003)
+
+
+def test_a_group_holding_a_readable_citation_is_not_recorded_as_unparsable():
+    """The tolerance union would find `[[BNID 100002]]`'s identifier regardless, so
+    what the marker branch actually prevents is a trace line claiming a citation could
+    not be read, sitting next to the citation. `grounded-answering` records the group
+    that holds *no* identifier; this one holds one."""
+    buf = io.StringIO()
+    configure(buf)
+    trace = start_question("dev")
+
+    assert citations("[[BNID 100002]]", trace=trace) == (100002,)
+
+    assert [r for r in records(buf) if r["event"] == "citations.unparsable"] == []
+
+
+def test_a_run_of_three_keeps_its_written_order():
+    """Found by mutation testing: the run member's position is `base + offset`, and
+    `base - offset` survived. With three members the order reverses, and
+    `grounded-answering` requires identifiers ordered by where they appear."""
+    assert citations("BNIDs 100002, 100003 & 100004") == (100002, 100003, 100004)
+    assert citations("see BNIDs 100001, 100002, 100003") == (100001, 100002, 100003)

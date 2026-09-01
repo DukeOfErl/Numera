@@ -78,6 +78,9 @@ def occurrences(text: str) -> tuple[tuple[int, int], ...]:
         first = match.group(1)
         if len(first) < MIN_DIGITS:
             continue
+        # Only the relative order of these positions is ever read, so the exact group
+        # they are measured from does not matter -- a mutant using group 2's start
+        # survives, correctly, because the sequence stays monotonic either way.
         out.append((match.start(1), int(first)))
         tail = match.group(2) or ""
         base = match.start(2)
@@ -122,6 +125,8 @@ def rewrite(text: str, format_id: Callable[[int], str]) -> str:
             return match.group(0)
         out = [format_id(int(first))]
         tail = match.group(2) or ""
+        # 0 rather than None only for readability: `tail[None:n]` is `tail[0:n]`, so a
+        # mutant setting None here survives and is equivalent.
         pos = 0
         for run in _RUN.finditer(tail):
             if len(run.group(0)) != len(first):

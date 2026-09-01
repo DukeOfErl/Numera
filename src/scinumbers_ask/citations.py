@@ -89,8 +89,14 @@ def _identifiers(inner: str) -> tuple[int, ...] | None:
     if text.isdigit():
         return (int(text),)
     parts = [part.strip() for part in _LIST.split(text)]
+    # `> 1` cannot fail here -- a single all-digit part would have returned above --
+    # but it states what a list is, and a reader should not have to prove that.
     if len(parts) > 1 and all(part.isdigit() for part in parts):
         return tuple(int(part) for part in parts)
+    # Not redundant with the tolerance in `citations`, though it looks it: that union
+    # would find this identifier anyway. What this prevents is the group being
+    # *recorded as unparsable* while its identifier is counted -- a trace line saying
+    # a citation could not be read, next to the citation.
     marked = cross_references(text)
     return marked or None
 
@@ -120,6 +126,9 @@ def citations(text: str, *, trace: QuestionTrace | None = None) -> tuple[int, ..
         found.extend((match.start() + offset, entry_id) for offset, entry_id in enumerate(group))
     found.extend(occurrences(text))
     seen: dict[int, None] = {}
-    for _, entry_id in sorted(found, key=lambda pair: pair[0]):
+    # Plain tuple order: position first, and the identifier only where two share a
+    # position, which cannot happen. An explicit key here was equivalent, and
+    # mutation testing could not tell the two apart -- which is the finding.
+    for _, entry_id in sorted(found):
         seen.setdefault(entry_id, None)
     return tuple(seen)
