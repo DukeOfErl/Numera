@@ -13,7 +13,7 @@ import re
 import textwrap
 from dataclasses import dataclass
 
-from .citations import format_citation
+from . import bionumbers
 from .repository import CorpusRepository
 from .units import dimensions_of
 
@@ -332,7 +332,7 @@ def _methods_block(shown: tuple[Row, ...], width: int) -> list[str]:
         return []
     out = ["how the cited entries were measured:"]
     for row in cited:
-        prefix = f"  {format_citation(row.bnid)}  "
+        prefix = f"  {bionumbers.label(row.bnid)}  "
         out.append(prefix + _clamp(row.method, width - len(prefix)))
     return out
 

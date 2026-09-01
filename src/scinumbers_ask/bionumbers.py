@@ -19,6 +19,7 @@ and an `import streamlit` in here would pass every test in that file.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 # The marker is required. A bare six-digit number is indistinguishable from a
 # six-digit quantity -- "100000 molecules per cell" is not a citation -- and the
@@ -49,6 +50,44 @@ PATTERN = re.compile(r"(?i)\bbnids?[\s:#\-=]*(\d+)((?:\s*(?:,|and|&)\s*\d+)*)")
 _RUN = re.compile(r"\d+")
 
 
+def label(entry_id: int) -> str:
+    """How an entry from this source is named to a person.
+
+    Deliberately not the citation form. A reader is looking at BioNumbers entries,
+    and their identifiers are BNIDs -- saying so is the attribution that makes a
+    number traceable back to the database it came from, and it is what a raw-entry
+    view would show. The form the model is asked to write (`citations.FORM`) is a
+    different thing with a different job: it exists to be parsed unambiguously out
+    of prose, and it says nothing about which database an entry came from.
+
+    They were one function once, and the machine notation leaked into the table the
+    moment the model's form changed.
+    """
+    return f"BNID {entry_id}"
+
+
+def occurrences(text: str) -> tuple[tuple[int, int], ...]:
+    """Every identifier in BioNumbers' notation, as (position, identifier).
+
+    Positions are carried because a caller merging these with citations written in
+    another notation has to order them the way a reader meets them, and neither
+    notation's matches alone say where they sit relative to the other's.
+    """
+    out: list[tuple[int, int]] = []
+    for match in PATTERN.finditer(text or ""):
+        first = match.group(1)
+        if len(first) < MIN_DIGITS:
+            continue
+        out.append((match.start(1), int(first)))
+        tail = match.group(2) or ""
+        base = match.start(2)
+        for run in _RUN.finditer(tail):
+            if len(run.group(0)) != len(first):
+                break
+            out.append((base + run.start(), int(run.group(0))))
+    return tuple(out)
+
+
 def cross_references(text: str) -> tuple[int, ...]:
     """Identifiers written in BioNumbers' notation, in order, without repeats.
 
@@ -56,13 +95,41 @@ def cross_references(text: str) -> tuple[int, ...]:
     order the entries table shows them in.
     """
     seen: dict[int, None] = {}
-    for match in PATTERN.finditer(text or ""):
+    for _, entry_id in occurrences(text):
+        seen.setdefault(entry_id, None)
+    return tuple(seen)
+
+
+def rewrite(text: str, format_id: Callable[[int], str]) -> str:
+    """The source's cross-references, restated in the caller's notation.
+
+    For handing an entry to the model, which is asked to write one notation and
+    should not be shown another in the same breath -- an entry's prose saying "See
+    BNID 102065" is the likeliest reason for a model to answer in a form the
+    answer parser was not told to expect.
+
+    A rendering, never a repair: the corpus keeps the source's words, and so does
+    everything shown to a person. Only the copy handed to the model is restated.
+
+    What is not an identifier is left exactly as the source wrote it. "BNID 104 678"
+    fails the width floor, so it passes through untouched rather than being
+    half-converted into a citation the source never made.
+    """
+
+    def one(match: re.Match[str]) -> str:
         first = match.group(1)
         if len(first) < MIN_DIGITS:
-            continue
-        seen.setdefault(int(first), None)
-        for following in _RUN.findall(match.group(2) or ""):
-            if len(following) != len(first):
+            return match.group(0)
+        out = [format_id(int(first))]
+        tail = match.group(2) or ""
+        pos = 0
+        for run in _RUN.finditer(tail):
+            if len(run.group(0)) != len(first):
                 break
-            seen.setdefault(int(following), None)
-    return tuple(seen)
+            out.append(tail[pos : run.start()])
+            out.append(format_id(int(run.group(0))))
+            pos = run.end()
+        out.append(tail[pos:])
+        return "".join(out)
+
+    return PATTERN.sub(one, text or "")

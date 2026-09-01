@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import pytest
 
-from scinumbers_ask.bionumbers import MIN_DIGITS, cross_references
+from scinumbers_ask import bionumbers
+from scinumbers_ask.bionumbers import MIN_DIGITS, cross_references, label, rewrite
+from scinumbers_ask.citations import format_citation
 
 
 def test_the_plural_marker_parses():
@@ -98,3 +100,82 @@ def test_identifiers_keep_their_order_without_repeating():
         100003,
         100001,
     )
+
+
+# -- restating the notation when the model is handed an entry -------------
+
+
+def test_a_run_is_restated_with_every_identifier_delimited():
+    """The whole reason this exists: "See BNID 102065, 104333" shown to a model that
+    was asked for one identifier per pair of brackets."""
+    assert rewrite("See BNID 102065, 104333", format_citation) == "See [[102065]], [[104333]]"
+    assert rewrite("BNIDs 100002, 100003 & 100004", format_citation) == (
+        "[[100002]], [[100003]] & [[100004]]"
+    )
+
+
+def test_what_is_not_an_identifier_is_left_exactly_as_the_source_wrote_it():
+    """A rendering, never a repair. "BNID 104 678" fails the width floor, so it passes
+    through untouched rather than being half-converted into a citation the source never
+    made -- and the trailing number in a run is left alone for the same reason."""
+    assert rewrite("see BNID 104 678", format_citation) == "see BNID 104 678"
+    assert rewrite("BNID 100002 and 3 other entries", format_citation) == (
+        "[[100002]] and 3 other entries"
+    )
+    assert rewrite("no citation here", format_citation) == "no citation here"
+    assert rewrite("", format_citation) == ""
+
+
+def test_the_corpus_keeps_the_sources_words_and_the_model_gets_ours(repo):
+    """ADR-0420. Three surfaces, and only the model's is restated: the stored entry is
+    the source's evidence, the reader is owed the attribution, and the model is owed one
+    notation. Normalising at ingest would have collapsed all three into ours."""
+    from scinumbers_ask.tools import build_tools
+    from scinumbers_ask.trace import QuestionTrace
+
+    stored = repo.get(100001).entry
+    assert "BNID 102065" in stored.comments, "the corpus must keep the source's words"
+
+    tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), lambda _e: None)}
+    rendered = tools["get_entry"].invoke({"bnid": 100001})
+    assert "[[102065]]" in rendered
+    assert "BNID" not in rendered, "the model must not be shown a notation it is not asked to write"
+
+
+def test_a_person_is_told_which_database_the_identifier_belongs_to():
+    """The display is attribution, not a citation protocol. A reader looking at a
+    BioNumbers entry is told it is a BNID; the model's form says nothing about which
+    database an entry came from, and would be the wrong thing to show."""
+    assert label(100002) == "BNID 100002"
+    assert format_citation(100002) != label(100002)
+
+
+def test_the_source_marker_appears_in_no_other_module():
+    """"Not everywhere -- only where BioNumbers is the one speaking." Comments and
+    docstrings may cite real entries as evidence; what must not spread is the marker in
+    a string the program actually uses, because that is a second place the notation
+    would have to be changed and the first place it would be forgotten.
+    """
+    import ast
+    import pathlib
+
+    package = pathlib.Path(bionumbers.__file__).parent
+    offenders = {}
+    for path in sorted(package.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        docstrings = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+                first = node.body[0] if node.body else None
+                if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant):
+                    docstrings.add(id(first.value))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and id(node) not in docstrings
+                and "BNID" in node.value
+            ):
+                offenders.setdefault(path.name, []).append(node.value[:60])
+
+    assert set(offenders) <= {"bionumbers.py"}, offenders

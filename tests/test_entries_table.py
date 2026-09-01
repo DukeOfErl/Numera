@@ -638,7 +638,7 @@ def test_an_entry_recording_no_method_is_left_out_but_still_marked():
     block = text.split("how the cited entries were measured:")[1].splitlines()
     listed = [line for line in block if line.startswith("  BNID")]
     assert len(listed) == 2, "the entry with no method should not be listed"
-    assert entries_table.format_citation(3) not in text
+    assert entries_table.bionumbers.label(3) not in text
     assert entries_table.NO_METHOD_LEGEND in text
 
 

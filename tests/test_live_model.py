@@ -247,3 +247,21 @@ def test_a_retrieval_miss_is_not_reported_as_an_absence(live_agent):
     assert overclaimed is None, (
         f"asserted an absence it did not establish: {overclaimed.group(0)!r}"
     )
+
+
+def test_a_live_model_writes_the_delimited_form(live_agent):
+    """The probe behind the notation change.
+
+    The form is asked for in the prompt, which makes it a preference rather than a
+    control: nothing in the harness can make a model comply. The previous notation
+    had years of observation behind it and this one has none, so a form asserted
+    here and never seen from a real model would be a change made on faith.
+
+    Deliberately not asserting the *absence* of the source's form -- the parser
+    accepts both on purpose, and a model that wrote one of each would still be
+    scored correctly. What must hold is that the form the prompt asks for is a form
+    the model will actually produce.
+    """
+    events = list(live_agent.ask("live-form", "How wide is an E. coli cell?"))
+    answer = next(e for e in events if isinstance(e, Answer)).text
+    assert re.search(r"\[\[\d+\]\]", answer), f"no delimited citation in: {answer[:300]}"

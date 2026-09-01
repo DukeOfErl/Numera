@@ -11,6 +11,8 @@ from collections.abc import Callable
 
 from langchain_core.tools import StructuredTool
 
+from .bionumbers import rewrite
+from .citations import format_citation
 from .events import Retrieval
 from .repository import DEFAULT_LIMIT, CorpusRepository
 from .trace import QuestionTrace
@@ -176,12 +178,21 @@ def build_tools(
             parts.append(f"caution: {caveat}")
         if e.reference_pubmed_id:
             parts.append(f"pubmed: {e.reference_pubmed_id}")
+        # The source's own cross-references, restated in the notation the model is
+        # asked to write. An entry's prose saying "See BNID 102065" is the likeliest
+        # reason for a model to answer in a form the parser was not told to expect,
+        # and it is the corpus that puts it there. A rendering only: the stored entry
+        # and everything shown to a person keep the source's words (ADR-0420).
         if e.measurement_method:
-            parts.append(f"method: {e.measurement_method}")
+            parts.append(f"method: {rewrite(e.measurement_method, format_citation)}")
         if e.comments:
-            parts.append(f"comments: {e.comments}")
+            parts.append(f"comments: {rewrite(e.comments, format_citation)}")
         if found.cited_bnids:
-            parts.append("cites: " + ", ".join(str(i) for i in found.cited_bnids))
+            # Bare numbers here were citations in no notation at all -- unusable by a
+            # model told to cite in one, and unparsable if it copied them.
+            parts.append(
+                "cites: " + ", ".join(format_citation(i) for i in found.cited_bnids)
+            )
         return "\n".join(parts)
 
     def _caveats(e) -> list[str]:

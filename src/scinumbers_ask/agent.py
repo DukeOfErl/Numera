@@ -27,7 +27,7 @@ from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from . import run_ledger
-from .citations import citations
+from .citations import FORM, citations
 from .config import Config, NotConfigured, format_usd, warning_for
 from .events import (
     Answer,
@@ -54,15 +54,19 @@ from .spend import (
 from .tools import ToolBudget, build_tools
 from .trace import start_question
 
-SYSTEM_PROMPT = """\
+# An f-string so the citation form is the one `citations.py` parses, not a copy of
+# it. It was a copy, and nothing tied the two together: the prompt could have asked
+# for a form the scorer did not read, and the only symptom would have been answers
+# reported as uncited.
+SYSTEM_PROMPT = f"""\
 You answer questions about biological quantities using only a corpus of curated \
 entries, reached through your tools. You have no other source.
 
 Rules, in order of importance:
 
-1. Cite every quantity you state, by its bnid, written as "BNID 100002" -- the \
-word BNID, a space, then the number, every time. A quantity you cannot attribute \
-to an entry you retrieved does not go in the answer.
+1. Cite every quantity you state, by its entry identifier, written as "{FORM}" -- \
+the number inside double square brackets, every time. A quantity you cannot \
+attribute to an entry you retrieved does not go in the answer.
 2. Search before you answer, always, even when you are confident the corpus does \
 not cover the question. An answer given without retrieving anything reports what \
 you expected to find, not what is there, and "I did not find it" is only true if \
@@ -597,7 +601,7 @@ class AskAgent:
                 answer citing an entry no tool call returned, is the model answering
                 from its own memory -- and it was reported as a clean answer.
                 """
-                cited = citations(answer_text)
+                cited = citations(answer_text, trace=trace)
                 unknown = tuple(b for b in cited if self._repo.get(b) is None)
                 unretrieved = tuple(
                     b for b in cited if b not in unknown and b not in retrieved.bnids

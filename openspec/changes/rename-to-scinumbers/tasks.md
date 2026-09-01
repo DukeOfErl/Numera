@@ -39,27 +39,27 @@ stops a 40-file diff from swamping the review of the citation work.
 
 ### 3. `bionumbers.py` owns the miner
 
-- [ ] 3.1 New `src/scinumbers_ask/bionumbers.py` carrying today's `PATTERN`, `MIN_DIGITS` and run
+- [x] 3.1 New `src/scinumbers_ask/bionumbers.py` carrying today's `PATTERN`, `MIN_DIGITS` and run
       logic **verbatim**, exposing `cross_references(text)` and `rewrite(text)`
-- [ ] 3.2 `repository.py` mines cross-references through it; `citations.py` is untouched in this group
-- [ ] 3.3 Relocate the mining assertions with byte-identical expectations, and update
+- [x] 3.2 `repository.py` mines cross-references through it; `citations.py` is untouched in this group
+- [x] 3.3 Relocate the mining assertions with byte-identical expectations, and update
       `test_spec_conformance.py`'s `COVERED` in the same commit
-- [ ] 3.4 A single module, not a `sources/` package — `test_driver_independence.py` builds its list
+- [x] 3.4 A single module, not a `sources/` package — `test_driver_independence.py` builds its list
       from a top-level glob, so a subpackage would escape the dependency check entirely
 
 ### 4. The delimited form
 
-- [ ] 4.1 `citations()` parses `[[nnnnnn]]`, with no shape rules, and returns identifiers in order
-- [ ] 4.2 It also accepts BioNumbers' form, because a user's own question introduces it and a
+- [x] 4.1 `citations()` parses `[[nnnnnn]]`, with no shape rules, and returns identifiers in order
+- [x] 4.2 It also accepts BioNumbers' form, because a user's own question introduces it and a
       session's follow-ups inherit the conversation
-- [ ] 4.3 An unparsable bracket group is recorded to the trace, never dropped in silence
-- [ ] 4.4 The system prompt interpolates the form rather than restating it, and a test asserts it —
+- [x] 4.3 An unparsable bracket group is recorded to the trace, never dropped in silence
+- [x] 4.4 The system prompt interpolates the form rather than restating it, and a test asserts it —
       the two have already drifted once
-- [ ] 4.5 An entry rendered to the model carries the delimited form in its prose and its `cites:`
+- [x] 4.5 An entry rendered to the model carries the delimited form in its prose and its `cites:`
       line; the corpus and the entries table keep BioNumbers' own words
-- [ ] 4.6 A real model emits the delimited form — a `-m network` probe, run **before** the old path
+- [x] 4.6 A real model emits the delimited form — a `-m network` probe, run **before** the old path
       is deleted
-- [ ] 4.7 ADR-0410 (the form, and why both are tolerated) and ADR-0420 (rewrite at render time,
+- [x] 4.7 ADR-0410 (the form, and why both are tolerated) and ADR-0420 (rewrite at render time,
       never in the corpus — argued against ADR-0230 and ADR-0190)
 
 ### 5. `entry_id`

@@ -225,11 +225,12 @@ class CorpusRepository:
             if trace is not None:
                 trace.record("entry.missing", bnid=bnid)
             return None
-        # The same parser the answers use. Entry text cites other entries in exactly
-        # the form a model does -- "See BNID 102065, 104333" -- and two parsers for
-        # one notation drifted: this one read the run and the answer parser did not.
-        # It also hardcoded identifiers as six digits beginning with 1, which is a
-        # fact about this corpus rather than about a citation.
+        # The source's own notation, read by the one implementation of it. Entry text
+        # cites other entries as "See BNID 102065, 104333"; the answer path reads the
+        # same function (ADR-0410), because two parsers for one notation drifted once
+        # already -- this one read the run and the answer parser did not. An earlier
+        # version also hardcoded identifiers as six digits beginning with 1, which is
+        # a fact about this corpus rather than about a citation.
         cited = tuple(sorted(set(cross_references(entry.quotation_text))))
         if trace is not None:
             trace.record("entry.retrieved", bnid=bnid, cited_bnids=list(cited))
