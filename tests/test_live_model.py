@@ -52,7 +52,7 @@ def test_a_live_question_is_answered_with_a_citation(live_agent):
 
     assert any(isinstance(e, Retrieval) for e in events), "no tool was used"
     answer = next(e for e in events if isinstance(e, Answer)).text
-    # A quantity without a bnid beside it is the failure this project exists to
+    # A quantity without an identifier beside it is the failure this project exists to
     # prevent. Asserting a citation is present is a harness property; whether the
     # right one was chosen is answer-evaluation's job, not this test's.
     assert re.search(r"\b10000\d\b", answer), f"no entry cited in: {answer[:200]}"
@@ -105,7 +105,7 @@ def test_the_terminal_driver_answers_from_the_real_corpus_with_a_citation(tmp_pa
     assert "answered" in text, text[-400:]
 
     # The citation must be in the answer, not merely somewhere in the output: the
-    # rendered retrieval lines carry bnids too, so asserting over the whole text
+    # rendered retrieval lines carry identifiers too, so asserting over the whole text
     # would pass on an answer that cited nothing.
     body = text.split("\n  — ")[0]
     answer = "\n".join(line for line in body.splitlines() if not line.startswith("  · "))
@@ -247,3 +247,21 @@ def test_a_retrieval_miss_is_not_reported_as_an_absence(live_agent):
     assert overclaimed is None, (
         f"asserted an absence it did not establish: {overclaimed.group(0)!r}"
     )
+
+
+def test_a_live_model_writes_the_delimited_form(live_agent):
+    """The probe behind the notation change.
+
+    The form is asked for in the prompt, which makes it a preference rather than a
+    control: nothing in the harness can make a model comply. The previous notation
+    had years of observation behind it and this one has none, so a form asserted
+    here and never seen from a real model would be a change made on faith.
+
+    Deliberately not asserting the *absence* of the source's form -- the parser
+    accepts both on purpose, and a model that wrote one of each would still be
+    scored correctly. What must hold is that the form the prompt asks for is a form
+    the model will actually produce.
+    """
+    events = list(live_agent.ask("live-form", "How wide is an E. coli cell?"))
+    answer = next(e for e in events if isinstance(e, Answer)).text
+    assert re.search(r"\[\[\d+\]\]", answer), f"no delimited citation in: {answer[:300]}"

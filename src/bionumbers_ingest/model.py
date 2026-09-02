@@ -1,7 +1,7 @@
 """The canonical record: one cleaned row of the published export.
 
 Twelve of these fields are a contract with `add-ask-agent`, whose loader models
-them and ignores every other key — `bnid`, `property`, `organism`, `units`,
+them and ignores every other key — `entry_id`, `property`, `organism`, `units`,
 `value`, `range_low`, `range_high`, `reference`, `reference_pubmed_id`,
 `measurement_method`, `comments`, `keywords`. The scalars are typed
 number-or-absent so an empty string cannot be constructed: the consumer coerces
@@ -51,7 +51,7 @@ class BioNumberRecord(BaseModel):
     reader can reason about it.
     """
 
-    bnid: int
+    entry_id: int
     property: str | None = None
     organism: str | None = None
     value: float | None = None

@@ -39,7 +39,10 @@ Work in a throwaway copy so the repo is never touched:
 
 ```bash
 REPO="$PWD"; W="$TMPDIR/mut"; rm -rf "$W"; mkdir -p "$W"
-cp -r "$REPO/src" "$REPO/tests" "$REPO/pyproject.toml" "$W/"
+# Everything the suite reads, not only source and tests: a conformance test walks
+# openspec/, a driver test asserts against README.md, and one imports streamlit_app.py.
+cp -r "$REPO/src" "$REPO/tests" "$REPO/openspec" "$REPO/docs" \
+      "$REPO/pyproject.toml" "$REPO/README.md" "$REPO/streamlit_app.py" "$W/"
 ```
 
 Append to the copy's `pyproject.toml`, and add `src` to the pytest path:
@@ -48,7 +51,7 @@ Append to the copy's `pyproject.toml`, and add `src` to the pytest path:
 # pythonpath must become ["src", "tests"] — see gotcha 3
 [tool.mutmut]
 source_paths = ["src/scinumbers_ask"]
-also_copy = ["tests/", "pyproject.toml"]
+also_copy = ["tests/", "openspec/", "docs/", "pyproject.toml", "README.md", "streamlit_app.py"]
 pytest_add_cli_args_test_selection = ["tests/"]
 pytest_add_cli_args = ["--deselect", "tests/test_repository.py::test_the_repository_exposes_no_way_to_change_the_corpus"]
 ```
@@ -57,13 +60,39 @@ Then run, filtered to one module:
 
 ```bash
 cd "$W" && "$REPO/.venv/bin/mutmut" run 'scinumbers_ask.citations*'
-"$REPO/.venv/bin/mutmut" results                      # 🎉 killed, 🙁 survived
+"$REPO/.venv/bin/mutmut" results | grep survived      # the run log uses 🎉/🙁; results says "survived"
 "$REPO/.venv/bin/mutmut" show <mutant-name>           # the diff
 ```
 
+**Grep `results` for the word, not the emoji.** The progress log prints 🎉/🙁 per mutant;
+`results` prints `name: survived`. A `grep 🙁 results` returns nothing and reads as a clean
+run — a false all-clear from a harness, which is the one failure mode worth engineering
+against.
+
 One module is about four minutes.
 
-## Three things that break first
+## Narrow what each mutant runs — hard
+
+Every mutant pays for the whole suite, so the suite's slow tail is multiplied by the
+mutant count. Here five subprocess-spawning tests are **30 per cent of the runtime**, and
+nothing a parser mutant changes can reach a process boundary. Unlike fault seeding,
+narrowing costs mutation testing no information: it does not report entanglement as a
+finding, and mutmut already tracks which tests cover which mutants.
+
+```toml
+pytest_add_cli_args = [
+    "-m", "not network and not corpus and not slow",
+    # ... the deselects above
+]
+```
+
+**A second `-m` replaces `addopts`, it does not AND with it.** `-m "not slow"` alone
+re-selects the `network` and `corpus` markers that `addopts` was excluding — so the run
+makes real API calls, needs a corpus, and gets *slower*. Measured here: 63s default,
+1m41s with `-m "not slow"`, 34s with the full expression. The failure is silent; it
+looks like the exclusion simply did not help.
+
+## Four things that break first
 
 1. **`source_paths`, not `paths_to_mutate`.** The latter is deprecated in 3.7.0. Published docs and
    search results still say otherwise — check the installed source, not the web.
@@ -71,7 +100,27 @@ One module is about four minutes.
    Mutmut adds ~169 variant attributes to the class (`xǁCorpusRepositoryǁ__init____mutmut_1`), that
    test asserts the public surface is exactly four names, the baseline fails, and mutmut aborts. Any
    introspection test needs the same treatment.
-3. **Mutate the whole package, and set `pythonpath = ["src", "tests"]`.** With a `src/` layout and an
+3. **Any test that reads source text must be deselected — not just introspection tests.**
+   Mutmut's rewritten module holds *every* mutant simultaneously (one variant function per
+   mutant), and its operators include upper-casing string literals. So a test that greps the
+   source sees text no single mutant produces: a guard asserting `"BNID"` appears in no module
+   but one fails because mutmut wrote `'bnid'` as `'BNID'` somewhere. This is gotcha 2
+   generalised, and it aborts the stats phase rather than one mutant, so the whole run dies.
+   In this repo that means:
+
+   ```toml
+   pytest_add_cli_args = [
+       "--deselect", "tests/test_repository.py::test_the_repository_exposes_no_way_to_change_the_corpus",
+       "--deselect", "tests/test_bionumbers_notation.py::test_the_source_marker_appears_in_no_other_module",
+       "--ignore", "tests/test_text_reaches_the_page_escaped.py",
+       "--ignore", "tests/test_driver_independence.py",
+   ]
+   ```
+
+   The tell is a baseline failure whose message quotes source text, or an `AssertionError`
+   naming a line number far past the end of the real file (`web.py:8091`).
+
+4. **Mutate the whole package, and set `pythonpath = ["src", "tests"]`.** With a `src/` layout and an
    editable install, mutating a single file leaves an incomplete namespace package that loses to the
    real one, and the tests silently run against unmutated source. Mutmut catches this and says *"no
    test covers any mutant"* rather than reporting a fake score — if you see that, this is why.

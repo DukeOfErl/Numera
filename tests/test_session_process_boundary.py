@@ -15,6 +15,14 @@ import subprocess
 import sys
 import textwrap
 
+import pytest
+
+# Every test here spawns a real interpreter, which is the point -- a process
+# boundary cannot be faked. It is also why they are five tests and 30 per cent of
+# the suite's runtime, so a harness that re-runs the suite per mutant can skip
+# them: nothing it perturbs in a parser reaches a subprocess.
+pytestmark = pytest.mark.slow
+
 # Each turn runs in its own interpreter. The only thing carried between them is
 # the checkpoint file and the thread id -- the same two things a redeployed web
 # app would have.

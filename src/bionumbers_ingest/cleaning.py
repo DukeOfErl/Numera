@@ -758,8 +758,8 @@ def clean_row(raw: dict[str, str]) -> BioNumberRecord:
     if any(_clean_text(v)[1] for v in raw.values()):
         flags.append("injected_html_removed")
 
-    bnid_text, _ = _clean_text(raw.get("bion_id", ""))
-    bnid = int(bnid_text)
+    entry_id_text, _ = _clean_text(raw.get("bion_id", ""))
+    entry_id = int(entry_id_text)
 
     value = _parse_value(raw.get("Value", ""), flags)
     units = _normalize_units(_text_or_none(raw.get("Units")))
@@ -771,7 +771,7 @@ def clean_row(raw: dict[str, str]) -> BioNumberRecord:
         flags.append("no_scalar")
 
     return BioNumberRecord(
-        bnid=bnid,
+        entry_id=entry_id,
         property=_text_or_none(raw.get("Properties")),
         organism=_text_or_none(raw.get("Organism")),
         value=value,

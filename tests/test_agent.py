@@ -362,7 +362,7 @@ def test_an_answer_produced_with_no_calls_left_is_marked(repo, config, tmp_path,
     monkeypatch.setattr("scinumbers_ask.agent.RUN_CALL_LIMIT", 3)
     model = scripted(
         tool_call("search_entries", property="Cell"),
-        tool_call("get_entry", bnid=100001),
+        tool_call("get_entry", entry_id=100001),
         says("Cell length is 1.94-2.72 um (BNID 100001)."),
     )
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
@@ -697,11 +697,11 @@ def test_get_entry_returns_the_detail_an_answer_needs_to_cite(repo, config, tmp_
     It is the one that produces every citation: the live test ran it, so it worked,
     but nothing offline would have noticed it breaking.
     """
-    model = scripted(tool_call("get_entry", bnid=100001), says("cited it"))
+    model = scripted(tool_call("get_entry", entry_id=100001), says("cited it"))
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
     retrieval = next(e for e in events if isinstance(e, Retrieval))
     assert retrieval.tool == "get_entry"
-    assert retrieval.detail == {"bnid": 100001, "found": True}
+    assert retrieval.detail == {"entry_id": 100001, "found": True}
 
 
 def test_get_entry_text_carries_value_units_reference_and_cross_references(repo, config, tmp_path):
@@ -709,20 +709,20 @@ def test_get_entry_text_carries_value_units_reference_and_cross_references(repo,
     from scinumbers_ask.trace import QuestionTrace
 
     tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), lambda _e: None)}
-    text = tools["get_entry"].invoke({"bnid": 100001})
-    for expected in ("bnid: 100001", "Cell length", "1.94–2.72", "μm", "reference:", "cites:"):
+    text = tools["get_entry"].invoke({"entry_id": 100001})
+    for expected in ("entry_id: 100001", "Cell length", "1.94–2.72", "μm", "reference:", "cites:"):
         assert expected in text, f"{expected!r} missing from:\n{text}"
     assert "102065" in text, "cross-referenced identifiers must be listed"
 
 
-def test_an_unknown_bnid_says_so_rather_than_inventing(repo, config, tmp_path):
+def test_an_unknown_entry_id_says_so_rather_than_inventing(repo, config, tmp_path):
     from scinumbers_ask.tools import build_tools
     from scinumbers_ask.trace import QuestionTrace
 
     seen: list = []
     tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), seen.append)}
-    assert "No entry 999999" in tools["get_entry"].invoke({"bnid": 999999})
-    assert seen[0].detail == {"bnid": 999999, "found": False}
+    assert "No entry 999999" in tools["get_entry"].invoke({"entry_id": 999999})
+    assert seen[0].detail == {"entry_id": 999999, "found": False}
 
 
 def test_an_empty_search_points_the_agent_at_vocabulary_discovery(repo):
@@ -844,7 +844,7 @@ def hedged_repo():
     return CorpusRepository(
         (
             Entry(
-                bnid=1,
+                entry_id=1,
                 property="Minimal inhibitory concentration",
                 organism="E. coli",
                 units="mg/L",
@@ -871,7 +871,7 @@ def fused_repo():
     return CorpusRepository(
         (
             Entry(
-                bnid=2,
+                entry_id=2,
                 property="Cell width",
                 organism="E. coli",
                 units="um",
@@ -889,14 +889,14 @@ def fused_repo():
     )
 
 
-def entry_text(repo, bnid: int) -> str:
+def entry_text(repo, entry_id: int) -> str:
     """What `get_entry` actually hands the model."""
     from scinumbers_ask.tools import build_tools
     from scinumbers_ask.trace import QuestionTrace
 
     tools = build_tools(repo, emit=lambda _e: None, trace=QuestionTrace("q", "run"))
     get_entry = next(t for t in tools if t.name == "get_entry")
-    return get_entry.invoke({"bnid": bnid})
+    return get_entry.invoke({"entry_id": entry_id})
 
 
 def test_the_model_is_told_when_the_source_stated_a_bound(hedged_repo):
@@ -915,7 +915,7 @@ def test_the_model_is_told_when_the_source_stated_a_bound(hedged_repo):
     assert "do not report this number as a measured quantity" in text
     # Still returned in full and still citable: a citation claims provenance, and
     # that stays true of an entry whose value the source hedged.
-    assert "bnid: 1" in text and "reference:" in text
+    assert "entry_id: 1" in text and "reference:" in text
 
 
 def test_the_model_is_told_separately_about_a_fused_range(fused_repo):

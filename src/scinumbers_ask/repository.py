@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 
-from .citations import citations
+from .bionumbers import cross_references
 from .corpus import Entry
 from .trace import QuestionTrace
 
@@ -28,7 +28,7 @@ MAX_LIMIT = 200
 class CompactRow:
     """What search returns: enough to choose, not enough to answer from."""
 
-    bnid: int
+    entry_id: int
     property: str
     organism: str
     value: str
@@ -48,12 +48,12 @@ class SearchResult:
 @dataclass(frozen=True)
 class FullEntry:
     entry: Entry
-    cited_bnids: tuple[int, ...]
+    cited_ids: tuple[int, ...]
 
 
 def _compact(entry: Entry) -> CompactRow:
     return CompactRow(
-        bnid=entry.bnid,
+        entry_id=entry.entry_id,
         property=entry.property,
         organism=entry.organism,
         value=entry.value_display,
@@ -111,13 +111,15 @@ def _abbreviated_binomials(organism: str) -> set[str]:
 class CorpusRepository:
     def __init__(self, entries: tuple[Entry, ...]) -> None:
         self._entries = entries
-        self._by_id = {e.bnid: e for e in entries}
+        self._by_id = {e.entry_id: e for e in entries}
         if len(self._by_id) != len(entries):
             # Otherwise search would show two rows for one identifier while get()
             # returned only the last, so the agent would cite one entry and read
             # another's data.
             seen: set[int] = set()
-            repeated = sorted({e.bnid for e in entries if e.bnid in seen or seen.add(e.bnid)})
+            repeated = sorted(
+                {e.entry_id for e in entries if e.entry_id in seen or seen.add(e.entry_id)}
+            )
             raise ValueError(f"corpus contains repeated identifiers: {repeated[:5]}")
         self._organisms = Counter(e.organism for e in entries if e.organism)
         self._properties = Counter(e.property for e in entries if e.property)
@@ -177,7 +179,7 @@ class CorpusRepository:
                 keyword=keyword,
                 matched=result.total_matched,
                 returned=len(rows),
-                bnids=[row.bnid for row in rows],
+                entry_ids=[row.entry_id for row in rows],
                 truncated=result.truncated,
                 organism_resolved_to=sorted(resolved) if resolved else None,
             )
@@ -222,18 +224,19 @@ class CorpusRepository:
 
     # -- retrieval --------------------------------------------------------
 
-    def get(self, bnid: int, *, trace: QuestionTrace | None = None) -> FullEntry | None:
-        entry = self._by_id.get(bnid)
+    def get(self, entry_id: int, *, trace: QuestionTrace | None = None) -> FullEntry | None:
+        entry = self._by_id.get(entry_id)
         if entry is None:
             if trace is not None:
-                trace.record("entry.missing", bnid=bnid)
+                trace.record("entry.missing", entry_id=entry_id)
             return None
-        # The same parser the answers use. Entry text cites other entries in exactly
-        # the form a model does -- "See BNID 102065, 104333" -- and two parsers for
-        # one notation drifted: this one read the run and the answer parser did not.
-        # It also hardcoded identifiers as six digits beginning with 1, which is a
-        # fact about this corpus rather than about a citation.
-        cited = tuple(sorted(set(citations(entry.quotation_text))))
+        # The source's own notation, read by the one implementation of it. Entry text
+        # cites other entries as "See BNID 102065, 104333"; the answer path reads the
+        # same function (ADR-0410), because two parsers for one notation drifted once
+        # already -- this one read the run and the answer parser did not. An earlier
+        # version also hardcoded identifiers as six digits beginning with 1, which is
+        # a fact about this corpus rather than about a citation.
+        cited = tuple(sorted(set(cross_references(entry.quotation_text))))
         if trace is not None:
-            trace.record("entry.retrieved", bnid=bnid, cited_bnids=list(cited))
-        return FullEntry(entry=entry, cited_bnids=cited)
+            trace.record("entry.retrieved", entry_id=entry_id, cited_ids=list(cited))
+        return FullEntry(entry=entry, cited_ids=cited)

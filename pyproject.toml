@@ -73,6 +73,18 @@ markers = [
     # the default suite runs on the six-entry fixture -- which is exactly the
     # blind spot these checks exist to cover.
     "corpus: needs a real corpus at SCINUMBERS_CORPUS; run with `pytest -m corpus`",
+    # Spawns a real subprocess. Five such tests are 30 per cent of the suite's
+    # runtime, and a fault-seeding or mutation run pays that for every mutant --
+    # neither can reach a subprocess boundary from a parser change. NOT deselected by
+    # default: a person running the suite once must still execute them. It is there so
+    # a harness re-running it hundreds of times can say `-m "not slow"`.
+    #
+    # **A second `-m` replaces this file's `addopts` expression, it does not AND with
+    # it.** `-m "not slow"` re-selects `network` and `corpus`, which then make real API
+    # calls and need a corpus -- the run gets slower, which is the opposite of the
+    # intent and looks like nothing is wrong. Write the whole expression:
+    #     pytest -m "not network and not corpus and not slow"    # 34s, vs 63s
+    "slow: spawns a subprocess; kept in the default run, excluded by repeated-run harnesses",
 ]
 
 # Linting and formatting, both from ruff: `ruff check` finds problems, `ruff

@@ -297,6 +297,26 @@ COVERED.update(
             "test_terminal_driver.py::test_a_retired_variable_is_refused_before_the_corpus_is_looked_for",
             "test_web_driver.py::test_the_page_refuses_a_retired_variable_before_it_looks_for_a_corpus",
         ),
+        "Citations use one stated format": (
+            "test_citation_form.py::test_the_written_form_is_the_form_that_parses",
+            "test_citation_form.py::test_the_prompt_asks_for_the_form_this_module_parses",
+            "test_citation_form.py::test_a_bare_number_is_not_a_citation",
+            "test_citation_form.py::test_no_width_floor_and_no_run_rule_apply_to_this_form",
+            "test_citation_form.py::test_a_bracket_group_holding_no_identifier_is_recorded_not_dropped",
+            "test_citation_form.py::test_the_source_form_is_accepted_in_an_answer",
+            "test_citation_form.py::test_the_two_notations_are_ordered_by_where_they_appear",
+        ),
+        "An entry handed to the model carries one citation notation": (
+            "test_bionumbers_notation.py::test_the_corpus_keeps_the_sources_words_and_the_model_gets_ours",
+            "test_bionumbers_notation.py::test_a_run_is_restated_with_every_identifier_delimited",
+            "test_bionumbers_notation.py::test_what_is_not_an_identifier_is_left_exactly_as_the_source_wrote_it",
+            "test_bionumbers_notation.py::test_a_person_is_told_which_database_the_identifier_belongs_to",
+        ),
+        "A corpus written to a superseded contract is refused by name": (
+            "test_corpus.py::test_a_corpus_from_an_older_ingester_is_refused_by_name",
+            "test_corpus.py::test_the_refusal_is_reported_the_way_every_other_corpus_failure_is",
+            "test_corpus.py::test_a_line_with_no_identifier_at_all_is_still_the_general_failure",
+        ),
     }
 )
 

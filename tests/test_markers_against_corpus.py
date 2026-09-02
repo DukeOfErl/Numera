@@ -130,3 +130,98 @@ def test_the_counts_are_reported_so_drift_is_visible(entries, capsys):
         for description, holds in MARKERS.items():
             count = sum(1 for entry in entries if holds(entry))
             print(f"  {count:>6}  {count / len(entries):6.1%}  {description}")
+
+
+# -- which fields actually carry the source's notation -------------------
+
+
+# Every text field of an entry that reaches the model. Listed here rather than
+# derived, so adding a field to `Entry` without deciding whether it is restated is
+# a visible omission -- the same reason MARKERS above is a literal table.
+TEXT_FIELDS = (
+    "property",
+    "organism",
+    "units",
+    "reference",
+    "reference_pubmed_id",
+    "measurement_method",
+    "comments",
+)
+
+
+def _fields_carrying_the_notation(entries) -> dict[str, int]:
+    from scinumbers_ask.bionumbers import cross_references
+
+    counts: dict[str, int] = {}
+    for entry in entries:
+        for field in TEXT_FIELDS:
+            if cross_references(getattr(entry, field) or ""):
+                counts[field] = counts.get(field, 0) + 1
+    return counts
+
+
+def test_the_notation_is_carried_by_fields_the_fixture_does_not_cover(entries):
+    """Which fields really hold a cross-reference — measured, not assumed.
+
+    This exists because a code review found what the suite could not: `rewrite` was
+    applied to `comments` and `measurement_method`, and the six-entry fixture carries
+    the marker only in `comments`. In the real corpus 8 entries cite others inside
+    `property` and 2 inside `reference`, and `property` also reaches the model through
+    `search_entries`. Every offline test passed.
+
+    The fixture cannot answer this. It is six hand-picked entries, and ADR-0170 caps
+    it deliberately, so it will never hold the distribution of shapes the source
+    actually contains. Only counting against real data says which fields matter.
+
+    Reported rather than asserted field by field: a new field appearing here is
+    information, and the next test is what turns it into a failure.
+    """
+    counts = _fields_carrying_the_notation(entries)
+    print("\nfields carrying the source's notation:")
+    for field, n in sorted(counts.items(), key=lambda kv: -kv[1]):
+        print(f"  {n:>6}  {field}")
+
+    assert counts, "no entry cites another -- this check cannot fire, so it proves nothing"
+    unexpected = set(counts) - {"comments", "measurement_method"}
+    assert unexpected, (
+        "only the two fields the fixture already covers carry the notation, so this "
+        "check adds nothing over the offline suite -- verify against a full corpus"
+    )
+
+
+def test_no_field_hands_the_model_a_notation_it_is_not_asked_to_write(entries):
+    """The requirement, over every entry that actually carries a cross-reference.
+
+    `corpus-query`: the copy handed to the model restates the source's citations. The
+    offline test asserts this on one entry; this asserts it on all of them, which is
+    what catches a field nobody remembered to cover.
+
+    Not "the marker is absent" — 40 entries write `BNID 100 004`, which the width
+    floor refuses and which therefore passes through as the source's words, correctly.
+    The claim is that no *readable* citation in the source's form survives.
+    """
+    from scinumbers_ask.bionumbers import cross_references
+    from scinumbers_ask.repository import CorpusRepository
+    from scinumbers_ask.tools import build_tools
+    from scinumbers_ask.trace import QuestionTrace
+
+    repo = CorpusRepository(entries)
+    tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), lambda _e: None)}
+
+    carrying = [
+        e
+        for e in entries
+        if any(cross_references(getattr(e, f) or "") for f in TEXT_FIELDS)
+    ]
+    assert carrying, "no entry cites another -- this check cannot fire"
+
+    leaked = []
+    for entry in carrying:
+        rendered = tools["get_entry"].invoke({"entry_id": entry.entry_id})
+        if cross_references(rendered):
+            leaked.append((entry.entry_id, cross_references(rendered)))
+
+    assert not leaked, (
+        f"{len(leaked)} of {len(carrying)} entries hand the model a citation in the "
+        f"source's form; first few: {leaked[:5]}"
+    )
