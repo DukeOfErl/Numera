@@ -85,3 +85,13 @@ stops a 40-file diff from swamping the review of the citation work.
       refusal exercised by hand
 - [x] V.2 Fault seeding over `citations.py` and the render-time rewrite, into a copy
 - [x] V.3 Mutation testing over `citations.py` and `bionumbers.py` only
+
+## Archiving
+
+- [ ] A.1 **Blocked on `add-ask-agent`, which has 16 open tasks.** Two of this change's deltas are
+      `MODIFIED`, and openspec refuses a `MODIFIED` block whose target is not yet in
+      `openspec/specs/`. `corpus-ingestion` was unblocked by archiving `add-corpus-ingestion` and
+      `add-corpus-autobuild` (both complete); `grounded-answering` is added by `add-ask-agent` and
+      so cannot be promoted before it. Do **not** reach for `--skip-specs`: that archives the change
+      without promoting anything, which is the whole reason for archiving. Retry after
+      `add-ask-agent` archives.

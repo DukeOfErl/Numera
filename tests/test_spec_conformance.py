@@ -35,7 +35,19 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent
-SPECS = sorted((ROOT.parent / "openspec" / "changes").rglob("specs/**/spec.md"))
+OPENSPEC = ROOT.parent / "openspec"
+
+#: The promoted spec, plus the deltas of changes still open. Deliberately **not**
+#: `changes/` recursively, which is what this read until the project's first archive:
+#: archiving moves a change under `changes/archive/` and promotes its requirements
+#: into `specs/`, so a recursive read would count both -- and, once a second change
+#: modifies a requirement, would keep finding the superseded wording next to the name
+#: of the test asserting the current one. Comparing those two is the only thing this
+#: file buys, so it has to read the version that is in force. The `*/specs/` glob is
+#: one level deep and so cannot reach `archive/<change>/specs/`.
+SPECS = sorted(OPENSPEC.joinpath("specs").rglob("spec.md")) + sorted(
+    OPENSPEC.joinpath("changes").glob("*/specs/**/spec.md")
+)
 
 # requirement name -> the tests that assert it.
 COVERED: dict[str, tuple[str, ...]] = {
