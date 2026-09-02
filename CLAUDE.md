@@ -141,6 +141,37 @@ What it buys is that the requirement's words sit next to the name of the test
 asserting them, where a reader comparing the two can see the mismatch. A review
 aid, not a proof.
 
+It reads `openspec/specs/` plus the deltas of changes still **open** — not
+`changes/` recursively, which is what it read until the project's first archive.
+An archived change keeps its deltas under `changes/archive/`, so a recursive read
+counts every promoted requirement twice, and once a second change modifies one it
+keeps finding the *superseded* wording next to the name of the test asserting the
+current one. Comparing those two is the whole point, so it has to read the version
+in force.
+
+### A spec delta is the requirement's full new text
+
+A `MODIFIED` block is the **entire requirement as it will now read**, not the part
+being changed. Write it by copying the current requirement out of
+`openspec/specs/` and editing that copy. Writing out the paragraphs the change
+cares about produces a deletion of everything else, and the delta file has no
+baseline to diff against, so the diff looks like an addition.
+
+`openspec archive` refuses a `MODIFIED` block that drops a **scenario**, and that
+refusal is the only thing between a hand-written delta and a silent deletion — it
+says nothing about dropped **prose**. `rename-to-scinumbers`'s own delta for the
+corpus contract was caught dropping three scenarios; the same block also dropped
+three paragraphs of requirement text (the range-`null` prohibition, the
+string-or-`null` rule for the remaining keys, the paragraph licensing extra
+fields) and nothing would have reported that.
+
+`MODIFIED` also requires its target to be in `openspec/specs/` already, so a
+change cannot be archived before the change that *added* the requirement it
+modifies. **Archive each change as it completes.** Letting several pile up turns
+that ordering into a blocker found at the end: `rename-to-scinumbers` cannot
+archive until `add-ask-agent` does, and `--skip-specs` is not the way out — it
+archives the change while promoting nothing, which is the only reason to archive.
+
 ## Running the tests
 
 A repeated-run harness -- fault seeding, mutation testing -- should exclude the `slow` marker as well, and must write the **whole** expression: `pytest -m "not network and not corpus and not slow"`. A second `-m` replaces `addopts` rather than ANDing with it, so `-m "not slow"` alone re-selects `network` and `corpus` and the run gets *slower* -- silently. 63s becomes 34s written correctly.
