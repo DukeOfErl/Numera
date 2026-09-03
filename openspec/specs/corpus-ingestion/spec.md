@@ -38,6 +38,11 @@ Every emitted line SHALL carry the keys the ask agent's corpus loader requires: 
 blank out every range-only entry. `keywords` SHALL be a JSON array of strings. The remaining keys
 SHALL be a string or `null`.
 
+The identifier key SHALL NOT name the source's own vocabulary for it. The consumer is not named for
+one database, and a corpus produced from a second source SHALL satisfy this same contract without
+carrying the first source's terminology in its keys. The ingester's internal names and its run report
+MAY keep the source's vocabulary: those describe what was read, and are not a contract with a reader.
+
 Emitting keys beyond that set is permitted: the loader ignores what it does not model. The fields
 carried alongside — the per-record source stamp and the `range_fused` predicate required by
 `ingestion-integrity`, and the parse flags required by `measurement-cleaning` — rely on that, and
@@ -60,6 +65,12 @@ SHALL NOT require any change in the consumer for a corpus to load. A consumer th
 
 - **WHEN** a line carries fields outside the required set
 - **THEN** the loader accepts the line and ignores them
+
+#### Scenario: The identifier key
+
+- **WHEN** a record is emitted
+- **THEN** its identifier is carried under `entry_id` as a number
+- **AND** under no key naming the source it came from
 
 ### Requirement: The same source produces the same corpus
 

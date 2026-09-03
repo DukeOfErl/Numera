@@ -88,7 +88,7 @@ stops a 40-file diff from swamping the review of the citation work.
 
 ## Archiving
 
-- [ ] A.1 **Blocked on `add-ask-agent`, which has 16 open tasks.** Two of this change's deltas are
+- [x] A.1 **Was blocked on `add-ask-agent`; it archived on 2026-09-03 and this followed.** Two of this change's deltas are
       `MODIFIED`, and openspec refuses a `MODIFIED` block whose target is not yet in
       `openspec/specs/`. `corpus-ingestion` was unblocked by archiving `add-corpus-ingestion` and
       `add-corpus-autobuild` (both complete); `grounded-answering` is added by `add-ask-agent` and
