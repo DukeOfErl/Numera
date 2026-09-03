@@ -335,7 +335,7 @@ COVERED.update(
 # `add-answer-evaluation`'s (formerly `add-ask-agent`'s group 9). Not mappable until
 # the evaluation harness exists, so a different kind of gap from the one above and
 # kept apart from it -- otherwise finishing 10.9 would look impossible rather than
-# merely unfinished. The last six are the judged layer that change added.
+# merely unfinished. The last three are what the review of 2026-09-03 added.
 AWAITING_THE_HARNESS = (
     "The question set is explicit and versioned with its answers",
     "Scoring is based on cited entries, not answer text",
@@ -345,13 +345,11 @@ AWAITING_THE_HARNESS = (
     "An interrupted run resumes without repeating work",
     "A report can be produced from a partial results file",
     "Recorded results are usable by external evaluation tools",
-    "Every result records the model that produced it",
+    "Every result records what produced it",
     "Cost and effort are reported",
     "The context shown to the agent is recorded verbatim",
-    "Faithfulness is judged per claim, with a reason",
-    "The judged layer is secondary and optional",
-    "A judge is trusted only after measured agreement",
-    "Every judgement records the judge model and its cost",
+    "A cited value is checked against its entry",
+    "The agent's own grounding warnings are scored",
 )
 
 UNMAPPED: dict[str, str] = {
