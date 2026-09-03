@@ -151,45 +151,11 @@
 
 ## 9. Evaluation
 
-- [ ] 9.1 Read up before building: LangGraph persistence and store semantics, and the LangSmith evaluation documentation — both post-date the design and may replace parts of what follows
-- [ ] 9.2 Define the question set format, including questions the corpus cannot answer, and require one to be supplied
-  - Include questions that separate an object from its measure — a volume asked of two different objects, a size asked where only a diameter exists, E. coli's nucleus. The proposal's Deferred section, *Faceting the property field into object and measure*, turns on the failure rate these measure.
-- [ ] 9.3 Implement the evaluation driver, recording outcomes from emitted events
-- [ ] 9.4 Score by comparing cited entries against expected entries, reporting unexpected citations separately
-- [ ] 9.5 Score refusals on unsupported questions, and report a quantity given for one as a fabrication
-- [ ] 9.5b Include follow-up questions in the set, and score whether their answers cite in full rather than referring back to an earlier answer
-- [ ] 9.6 Append each result as its question completes, carrying the question, answer, cited entries, expected entries, and model, in a shape external evaluation tooling can read
-- [ ] 9.7 Implement resumption against an existing results file, attempting only what is missing
-- [ ] 9.8 Support repeated runs of each question and report the variation across them
-  - Repeated runs are also the baseline a cost-drift alert would need. That alert is out of scope here — see the proposal's Deferred section, *Alerting on cost drift* — and this task's output is what makes it possible, so revisit it once this lands.
-- [ ] 9.9 Produce the report from the results file, stating coverage when partial, breaking figures down per model, and distinguishing a run stopped on budget from a completed one
-- [ ] 9.10 Report cost and tool calls per question and in aggregate, and separate spend in this session from total spend across a resumed run
-- [ ] 9.11 Assemble a first question set from the corpus and record a baseline on the development model
-- [ ] 9.10a Measure the two retrieval bounds rather than defending them. `TOOL_CALL_LIMIT` (20) and
-  `RUN_CALL_LIMIT` (12) were both chosen from a handful of observations -- answers that satisfied
-  their question used about five retrievals, one runaway used twenty-nine -- and neither has been
-  reached in live use since. Report, per question, retrievals and model calls used, and how often
-  each ending carries `at_tool_bound` or `at_retrieval_bound`. What the run should settle: whether
-  either bound ever binds; whether the questions that reach one are the hard questions or the badly
-  worded ones; and whether an answer produced at a bound scores worse than one produced with room to
-  spare. A bound that never fires costs nothing and proves nothing, and a bound that fires on good
-  questions is cutting answers short -- the distribution tells them apart and no amount of argument
-  does. See ADR-0260, which records both numbers as chosen rather than derived.
-- [ ] 9.11a Record what fraction of the corpus is clean, beside the answer baseline, so a citation
-  rate is read against the base rate rather than as a failure: measurement method recorded, scalar
-  value recorded, unit classified, range not fused. Report the four separately and the conjunction,
-  and report it twice — once counting an unclassified unit as dirty and once as unknown — because
-  that condition measures our dimension table's coverage, not the corpus's quality, and it is the
-  largest single filter (19.4% against 34.6% at the time of writing, of 14,294 entries). Extend the
-  `corpus`-marked reporting test rather than writing a script, so the figures are re-derived by a
-  command that already exists.
-  - **Recompute once `range_fused` ships.** The 19.4%/34.6% pair used a fused-range population of
-    1,222; `add-corpus-ingestion` has since corrected its number lexer (a caret exponent, a `×10^`
-    mantissa and a thousands separator each read as several numbers, inflating every flag built on
-    the count) and the population is now **1,445 records — 10.1% of the corpus, 23.5% of the 6,146
-    entries carrying a parsed range**. Do not carry the old figures forward. The lesson they
-    recorded is worth keeping in the report: this population has been measured three times, 1,716 →
-    1,222 → 1,445, and a flag is only ever as good as the tokenizer under it.
+Moved, with its spec, to the change `add-answer-evaluation` on 2026-09-03: this change had
+everything else complete and could not archive while group 9 sat unbuilt inside it, and
+`rename-to-scinumbers` modifies this change's specs and could not archive until it did. The tasks
+carry over with their notes, renumbered as that change's groups 2–5; the ADR numbering note in
+group 10 below no longer applies to them, since that change has its own block.
 
 ## 10. Documentation
 
@@ -204,9 +170,10 @@ practice this note exists to stop repeating.
 
 - [x] 10.1a Write a reviewer-facing `README.md` covering the ask agent only: what it does, the corpus and
       why it is not committed, how to run each driver, configuration, and what is not built yet
-- [ ] 10.1 Extend `README.md` with how to run an evaluation. **Deferred with group 9**, which builds
-      the harness; everything else this task asked for is covered by 10.1a, and documenting a way to
-      run something that does not exist is the one part that cannot be written honestly yet
+- [x] 10.1 Extend `README.md` with how to run an evaluation. **Moved with group 9** to
+      `add-answer-evaluation` (its task 7.1); everything else this task asked for is covered by 10.1a,
+      and documenting a way to run something that does not exist is the one part that cannot be
+      written honestly yet
 - [x] 10.2 Add a diagram of the agent, its middleware, and the drivers to `docs/diagrams/`, following the principles already in `docs/diagrams/DIAGRAMS.md`
 - [x] 10.2a ADR-0100: the web driver decides in items and draws from them, since Streamlit
       composes successive writes to one screen location into the last of them (written with 8.1)
@@ -222,7 +189,7 @@ practice this note exists to stop repeating.
 - [x] 10.7 Add the agent's entries under `## [Unreleased]` in the existing `CHANGELOG.md`
 - [ ] 10.9 Finish the requirement-to-test mapping in `tests/test_spec_conformance.py`. 10 of 49
       requirements name the tests that assert them; 39 are recorded as gaps -- 10 of those are
-      group 9's and cannot be mapped until the harness exists, and 29 are tested by something whose
+      group 9's and moved with it to `add-answer-evaluation`, and 29 are tested by something whose
       name nobody has written down. The check already refuses a requirement that is neither mapped
       nor listed, so the list can only shrink deliberately. Work through it a capability at a time;
       the reward is not the number but the reading: putting a requirement's words beside the test

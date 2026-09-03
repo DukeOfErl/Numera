@@ -1,7 +1,8 @@
 ## Context
 
 See `proposal.md` — Why. The requirements are in `specs/corpus-query/`, `specs/grounded-answering/`,
-`specs/agent-session/`, `specs/spend-control/`, and `specs/answer-evaluation/`.
+`specs/agent-session/`, and `specs/spend-control/`; `specs/answer-evaluation/` moved to the
+change `add-answer-evaluation` on 2026-09-03.
 
 Constraints that shape everything below:
 

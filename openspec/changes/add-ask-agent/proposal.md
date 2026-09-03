@@ -95,6 +95,9 @@ validator's retrieval layer and to a future discovery capability), and web acces
 - `answer-evaluation`: Score answers against a held-out question set with known answering entries.
   Covers the question set, citation-based scoring, unsupported questions, run-to-run variation,
   incremental recording and resumption, and a record shape external evaluation tooling can read.
+  **Moved to the change `add-answer-evaluation` on 2026-09-03**, with task group 9, so this change
+  could archive; it is extended there with a judged faithfulness layer, gated as the Deferred section
+  below requires.
 
 ### Modified Capabilities
 <!-- None. -->
