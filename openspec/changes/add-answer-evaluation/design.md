@@ -16,8 +16,17 @@ What is already there and shapes the approach:
   drivers (ADR-0410), so the harness's notion of "what was cited" is the same as the page's.
 - **Unit compatibility is three-valued** (`units.py`, ADR-0160): compatible, incompatible, unknown.
   The value-and-unit check inherits that shape rather than inventing a binary one.
-- **The corpus holds the figures.** `Entry` carries `value`, `range_low`, `range_high` and `units`,
-  so a cited value can be checked against the corpus without the question set recording it.
+- **The corpus holds the figures, and most entries are incomplete.** `Entry` carries `value`,
+  `range_low`, `range_high` and `units`, plus the flags that describe its shape (`range_fused`,
+  `range_approximate`, `range_one_sided`) and a `hedge` reading, so a cited value can be checked
+  against the corpus without the question set recording it — and what "correct" means for a citation
+  depends on that shape. Roughly two thirds of the corpus lacks at least one of a scalar value, a
+  classified unit, an unfused range or a measurement method (the clean-fraction figures in task 5.4),
+  so the incomplete shapes are the common case, not the edge.
+- **The repository resolves organisms.** `CorpusRepository` turns an organism term into the stored
+  organism values it refers to — abbreviated binomials via an alias index (ADR-0130), then substrings
+  — and matches a property by substring. Whether the agent searched for the asked organism has to be
+  judged with the same resolution, or "E. coli" would be scored as not "Escherichia coli".
 - **Spend is already a run-level figure.** `run_ledger` keys spend on the configured run label, so a
   driver opening a session per question is bounded by one budget, and `QuestionEnded.reason ==
   RUN_BUDGET` is how the harness learns the run must stop.
@@ -91,31 +100,68 @@ and the scores derived from it, so a reporter can recompute a score from the raw
 scoring rule changes without re-asking. Judgements, when they come, go to a sibling file keyed by
 question, repeat and judge model; the record does not reserve a field for them.
 
-### The quantity beside a citation is read from a window before the marker
+### Every quantity in the window before a citation is read, and the entry's shape sets the expectation
 
-The value check needs "the quantity stated beside this citation". The reader takes the text between
-the previous citation marker (or sentence start) and this one, and extracts numerals with an
-optional unit token: a number, an optional `×10^n` or `e` exponent, an optional range written with
-a dash or "to", and the word or symbol that follows. The **last** quantity in the window is the one
-attributed to the citation, since the prompt asks for the identifier after the quantity it
-supports.
+The value check needs "the quantities stated beside this citation". The reader takes the text between
+the previous citation marker (or the sentence start) and this one, and extracts **every** numeral
+with an optional unit token: a number, an optional `×10^n` or `e` exponent, an optional range written
+with a dash or "to", a qualification word or symbol before it ("about", "~", "up to", "at least"),
+and the word or symbol that follows. A run of consecutive markers shares one window, since
+"2 µm [[1]][[2]]" cites both for the same figure.
 
-Comparison against the entry: a scalar within a relative tolerance of `value` (rounding to two or
-three significant figures is normal), or within `[range_low, range_high]`; a stated range matching
-the entry's endpoints within the same tolerance. If no match, retry at each power-of-ten rescaling
-from 10⁻¹² to 10¹²; a hit there is "matches under rescaling", listed and not counted — the design's
-statement of which error direction is cheap. Units compared with `units.py`'s three-valued check
-between the token read and the entry's unit string.
+*Why every quantity and not the last.* The prompt asks for the identifier after the quantity it
+supports, which made the last one the obvious candidate, but real answers put several figures before
+one marker: a value and its conversion ("0.8 µm, i.e. 800 nm [[1]]"), where the last is a rescaled
+match and the first is the real one; a range and a typical value; a diameter and a length. Reading
+only the last would score the first case as a rescaling and miss a wrong figure in the second.
+Reading all of them and reporting the window as all-match, mixed, rescaled, none or bare keeps the
+information and keeps the cheap direction: a mixed window is a list to read, never a pass.
+
+*What a match is depends on the entry.* Scalar present: a quantity within a relative tolerance of
+`value` (rounding to two or three significant figures is normal). Range and no scalar: a stated range
+whose endpoints match within tolerance, or a quantity inside the range. No number at all: **bare is
+correct**, and a quantity in the window is reported as a value attributed to an entry that gives
+none — the one shape where finding a number is the failure. Hedged range (`range_approximate` or
+`range_one_sided`): the quantity must carry a qualification token, else "hedge dropped". Unit
+unclassifiable: the unit token must equal the entry's unit string as written. If no match, retry at
+each power-of-ten rescaling from 10⁻¹² to 10¹²; a hit there is "matches under rescaling", listed and
+not counted. Units compared with `units.py`'s three-valued check between the token read and the
+entry's unit string.
 
 *Alternatives rejected:* asking the question set to record the expected value (the corpus already
 has it, and a second copy drifts); a windowless "any number in the answer" match (attributes a
 neighbour's figure to the wrong citation and passes an answer that states the right number beside
-the wrong entry); converting units with `pint` (in the validator's extra, not `ask`'s, and a
-correct conversion is exactly what the rescaling tier reports without needing to be right about it).
+the wrong entry); the last quantity only (above); converting units with `pint` (in the validator's
+extra, not `ask`'s, and a correct conversion is exactly what the rescaling tier reports without
+needing to be right about it).
 
 This reader is a parser whose wrong output looks right, so it gets fault seeding and a mutation pass
 before the baseline is recorded, and its two directions are both measured on the first run: how
-many bare citations and mismatches it reports, read against the answers.
+many bare citations, mixed windows and mismatches it reports, read against the answers.
+
+### The asked organism and property are checked against the search and against what was cited
+
+The question set records the property and organism asked, in the corpus's vocabulary. Two scores
+per question, kept apart because they fail differently. *What the agent asked for:* whether any
+`Retrieval`'s `organism` argument resolves — through a public resolution method on the repository,
+the same one `search` uses — to the asked organism, and whether any `property` or `keyword`
+argument matches the asked property the way `search` matches one. *What it settled on:* the
+fraction of cited entries whose `organism` and `property` fields carry the asked ones. An agent can
+search correctly and cite a neighbour, or never search for the organism and still cite the right
+entry through a keyword; the two scores tell those apart.
+
+*Alternative rejected:* a judge for relevancy. It is in the deferred list for the prose; but whether
+the search named the organism and whether the cited entries carry it are facts on record, and a
+judge would be a weaker instrument for a question that has an exact answer.
+
+### The question set is composed by entry shape
+
+Each expected entry's shape is derived from the corpus at evaluation time, never hand-recorded:
+complete, or lacking a scalar, a classified unit, an unfused range, a method, or carrying a hedged
+range. The set's validation requires every shape to be present, and the report gives every value
+figure per shape. Happy-path questions target complete entries; the others score the behaviour the
+prompt's rules ask for on incomplete ones — a bare citation where the entry gives no number, a
+qualified figure where the range is hedged, the unit carried verbatim where it is unclassified.
 
 ### Stating a quantity is detected from two cheap signals, flagged on either
 
@@ -156,9 +202,13 @@ baseline is recorded, per the project's testing conventions.
 
 ## Risks / Trade-offs
 
-- **The quantity reader is a heuristic over free prose.** It will attribute the wrong number to a
-  citation in some sentence shapes. → Listed per citation with the window text, both directions
-  counted on the first run, and the rule changed only with both measured.
+- **The quantity reader is a heuristic over free prose.** It will attribute a neighbouring number to
+  a citation in some sentence shapes, and a window with several figures will be "mixed" more often
+  than it is wrong. → Listed per citation with the window text, both directions counted on the first
+  run, and the rule changed only with both measured.
+- **Organism resolution is the repository's, not the biologist's.** A question asking about "yeast"
+  resolves to whatever organism strings contain it. → The set records the organism in the corpus's
+  own vocabulary, and the listed misses show where the resolution, not the agent, is at fault.
 - **Rescaling hides a real error.** A ×1000 mistake looks like a µm→nm conversion. → Rescaled
   matches are never counted as matches; they are a list to read.
 - **Over-flagged declines.** The two-signal quantity rule marks some genuine refusals as
@@ -176,6 +226,6 @@ baseline is recorded, per the project's testing conventions.
 
 - The relative tolerance for a value match. Start at 5 per cent and read the mismatches on the
   first run; a tolerance set before any answer has been read is a guess either way.
-- Whether the question set should also record, per question, the property and organism asked, so
-  the deferred relevancy metric has a reference. Cheap to add to the format now; decided when the
-  first set is assembled (task 5.1).
+- The qualification vocabulary for a hedged range — which words and symbols count as "about" or "up
+  to". Start from the ones the drivers' own marks use, extend from what the first run's hedge-dropped
+  list shows.

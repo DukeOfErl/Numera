@@ -12,9 +12,17 @@ The evaluation SHALL read a question set in which each question records the entr
 should support its answer, and SHALL fail with an explanatory message when no question set is
 supplied. Question sets SHALL NOT be generated at evaluation time by the system under test.
 
-Each question MAY carry tags naming what it exercises — a comparison across entries, a conversion,
-an unsupported question, a follow-up — and the report SHALL be able to give its figures per tag, so
-that a change which helps one kind of question and harms another is visible as both.
+Each question SHALL record the property and the organism it asks about, in the corpus's own
+vocabulary, so that whether the agent looked for them can be scored. Each question MAY carry tags
+naming what it exercises — a comparison across entries, a conversion, an unsupported question, a
+follow-up — and the report SHALL be able to give its figures per tag, so that a change which helps
+one kind of question and harms another is visible as both.
+
+The set SHALL include questions whose expected entries are complete — a scalar value, a classified
+unit, a range that is not fused, a measurement method — and questions whose expected entries lack
+each of those or carry a hedged range, and the report SHALL give its figures per entry shape. Most of
+the corpus is incomplete in at least one of these ways, so a set drawn only from complete entries
+measures the happy path and says nothing about the behaviour most questions will meet.
 
 #### Scenario: Question set supplied
 - **WHEN** the evaluation runs with a question set
@@ -27,6 +35,15 @@ that a change which helps one kind of question and harms another is visible as b
 #### Scenario: Figures per tag
 - **WHEN** questions in the set carry tags
 - **THEN** the report can give every figure for the questions carrying a given tag
+
+#### Scenario: A question records what it asks
+- **WHEN** a question is read from the set
+- **THEN** it names the property and the organism asked
+
+#### Scenario: Incomplete entries are in the set
+- **WHEN** the set is validated
+- **THEN** it holds questions whose expected entries have no scalar value, an unclassified unit, a fused range, no measurement method, and a hedged range
+- **AND** the report gives its figures for each of those shapes apart from the complete ones
 
 ### Requirement: Scoring is based on cited entries, not answer text
 
@@ -52,46 +69,103 @@ of selection, one of search — and a single "missed" count would hide which is 
 
 ### Requirement: A cited value is checked against its entry
 
-For every citation in an answer, the evaluation SHALL look for a quantity stated beside it and
-compare that quantity with the cited entry's value or range as the corpus records it, and SHALL
-compare the unit stated beside it with the entry's unit. Per citation it SHALL report one of: the
-value matches the entry as written; the value matches only under a rescaling; the value does not
-match; no quantity was found beside the citation. The unit comparison SHALL report compatible,
-incompatible, or unknown, and SHALL NOT count unknown as either.
+For every citation in an answer, the evaluation SHALL read every quantity stated in the text before
+it, back to the previous citation or the start of the sentence, and compare each with the cited
+entry as the corpus records it. A run of consecutive citations SHALL share one such window. Per
+citation it SHALL report one of: every quantity matches the entry as written; some match and some do
+not; a quantity matches only under a rescaling and none as written; no quantity matches; no quantity
+was found. The unit beside each quantity SHALL be compared with the entry's unit, reporting
+compatible, incompatible, or unknown, and SHALL NOT count unknown as either.
+
+What counts as a match SHALL depend on what the entry records. An entry with a scalar value is
+matched by a quantity within a stated tolerance of it. An entry with a range and no scalar is
+matched by a range whose endpoints match the entry's, or by a quantity within it. An entry with no
+number at all is correctly cited **bare**, and a quantity beside its citation SHALL be reported as a
+value attributed to an entry that gives none. An entry whose range is hedged — approximate or
+one-sided — SHALL have the quantity beside it qualified as such, and an unqualified figure SHALL be
+reported as a hedge dropped. An entry whose unit cannot be classified SHALL have its unit carried
+as the corpus writes it, and a different unit token SHALL be reported.
 
 A match only under rescaling SHALL be listed for reading and SHALL NOT be counted as a match. A
 genuine conversion and a thousandfold error look identical to this check, and the second is the
 failure the project exists to prevent, so the cheap direction absorbs the doubt: a correct
-conversion costs a line someone reads.
+conversion costs a line someone reads. A window where some quantities match and some do not SHALL
+be listed for the same reason.
 
 An entry identifier with no quantity beside it, or with the wrong one, is a right citation and a
 useless answer; identifier scoring alone cannot see either.
 
-#### Scenario: The value matches as written
-- **WHEN** the quantity beside a citation equals the cited entry's value, or lies within its range, in the entry's unit
+#### Scenario: Every quantity matches as written
+- **WHEN** every quantity in the window before a citation equals the cited entry's value within tolerance, or lies within its range, in the entry's unit
 - **THEN** the citation is scored as a value match
 
-#### Scenario: The value matches only under rescaling
-- **WHEN** the quantity beside a citation equals the entry's value only after a power-of-ten rescaling
+#### Scenario: Some quantities match and some do not
+- **WHEN** the window before a citation holds a quantity that matches and one that does not
+- **THEN** the citation is listed as mixed with every quantity and its outcome
+- **AND** it is not counted as a match
+
+#### Scenario: A quantity matches only under rescaling
+- **WHEN** no quantity in the window matches as written and one equals the entry's value after a power-of-ten rescaling
 - **THEN** the citation is listed as matching under rescaling
 - **AND** it is not counted as a match
 
-#### Scenario: The value does not match
-- **WHEN** the quantity beside a citation matches the entry's value or range under no rescaling
-- **THEN** the citation is scored as a value mismatch and listed with both figures
+#### Scenario: No quantity matches
+- **WHEN** no quantity in the window matches the entry's value or range under any rescaling
+- **THEN** the citation is scored as a value mismatch and listed with every figure
+
+#### Scenario: Consecutive citations share a window
+- **WHEN** two citation markers follow one another with no quantity between them
+- **THEN** both are checked against the quantities before the first
+- **AND** neither is reported as bare on that account
 
 #### Scenario: No quantity beside the citation
-- **WHEN** no quantity is found beside a citation
+- **WHEN** no quantity is found in the window before a citation
+- **AND** the entry records a number
 - **THEN** the citation is reported as bare
 
+#### Scenario: The entry gives no number
+- **WHEN** the cited entry records neither a scalar value nor a range
+- **THEN** a bare citation is scored as correct
+- **AND** a quantity in its window is reported as a value attributed to an entry that gives none
+
+#### Scenario: The entry's range is hedged
+- **WHEN** the cited entry's range is approximate or one-sided
+- **AND** the quantity beside it carries no qualification
+- **THEN** the citation is reported as a hedge dropped
+
 #### Scenario: The unit is incompatible
-- **WHEN** the unit beside a citation measures a different kind of thing from the entry's unit
+- **WHEN** the unit beside a quantity measures a different kind of thing from the entry's unit
 - **THEN** the citation is scored as a unit mismatch
 
 #### Scenario: The unit is unknown
 - **WHEN** either unit cannot be classified
 - **THEN** the citation's unit comparison is reported as unknown
 - **AND** it counts as neither a match nor a mismatch
+- **AND** a unit token that differs from the entry's unit string is reported
+
+### Requirement: The asked property and organism are recognised
+
+The evaluation SHALL score, per question, whether any retrieval the agent made named the asked
+organism — resolved the way the corpus's own search resolves an organism term, so an abbreviated
+binomial counts — and whether any named the asked property, as a property or a keyword argument; and
+SHALL report what fraction of the cited entries carry the asked organism and the asked property in
+their own fields. The two are reported apart: what the agent asked for and what it settled on.
+
+A right number for the wrong organism, or for a neighbouring property the search happened to return,
+cites correctly and answers a different question. The retrieval arguments and the entries' fields
+are both on record, so this needs no judge.
+
+#### Scenario: The agent searched for what was asked
+- **WHEN** a retrieval during the question names the asked organism and one names the asked property
+- **THEN** the question is scored as having searched for both
+
+#### Scenario: The agent never searched for the asked organism
+- **WHEN** no retrieval during the question names the asked organism
+- **THEN** the question is scored as not having searched for it, and listed with the terms it did search
+
+#### Scenario: Cited entries belong to another organism
+- **WHEN** a cited entry's organism field is not the asked organism
+- **THEN** it is counted against the fraction of cited entries carrying the asked organism, and listed
 
 ### Requirement: Unsupported questions are part of the set
 

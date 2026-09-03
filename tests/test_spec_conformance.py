@@ -335,7 +335,7 @@ COVERED.update(
 # `add-answer-evaluation`'s (formerly `add-ask-agent`'s group 9). Not mappable until
 # the evaluation harness exists, so a different kind of gap from the one above and
 # kept apart from it -- otherwise finishing 10.9 would look impossible rather than
-# merely unfinished. The last three are what the review of 2026-09-03 added.
+# merely unfinished. The last four are what the review of 2026-09-03 added.
 AWAITING_THE_HARNESS = (
     "The question set is explicit and versioned with its answers",
     "Scoring is based on cited entries, not answer text",
@@ -349,6 +349,7 @@ AWAITING_THE_HARNESS = (
     "Cost and effort are reported",
     "The context shown to the agent is recorded verbatim",
     "A cited value is checked against its entry",
+    "The asked property and organism are recognised",
     "The agent's own grounding warnings are scored",
 )
 
