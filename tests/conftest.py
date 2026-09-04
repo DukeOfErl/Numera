@@ -7,6 +7,7 @@ fixture supplies a synthetic export in the published file's shape.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -72,3 +73,32 @@ def sample_html() -> Path:
     against a locally-fetched export, never from a committed copy of it.
     """
     return Path(__file__).parent / "fixtures" / "sample_table.html"
+
+
+def write_all_shapes_corpus(tmp_path) -> str:
+    """A six-entry corpus carrying all six of `question_set`'s entry shapes.
+
+    `corpus_sample.jsonl` cannot serve here: it holds two of the six and no
+    complete entry, so a question set that satisfies the shape rule cannot be
+    written against it. Both the question-set suite and the evaluation command's
+    suite need this, which is why it lives here.
+    """
+    base = dict(
+        property="Cell volume",
+        organism="Bacteria Escherichia coli",
+        units="um^3",
+        value=1.0,
+        reference="r",
+        measurement_method="electron microscopy",
+    )
+    records = [
+        {**base, "entry_id": 1},
+        {**base, "entry_id": 2, "value": None, "range_low": 1.0, "range_high": 2.0},
+        {**base, "entry_id": 3, "units": "wibbles"},
+        {**base, "entry_id": 4, "range_fused": True},
+        {**base, "entry_id": 5, "measurement_method": ""},
+        {**base, "entry_id": 6, "range_approximate": True},
+    ]
+    path = tmp_path / "corpus.jsonl"
+    path.write_text("\n".join(json.dumps(record) for record in records) + "\n")
+    return str(path)

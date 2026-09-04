@@ -19,6 +19,12 @@ person editing one line; the cost of the lenient one is a figure nobody can trus
 Entry identifiers are integers here because they are integers everywhere else --
 `Entry.entry_id`, `citations()` and `AnswerEntries.cited` all carry `int` -- and a
 set that recorded them as strings would compare unequal to every citation.
+
+**The invariants live on `Question`, not only in the reader.** Groups 3 to 6 build
+`Question` objects in tests and fixtures, and one built with neither an unsupported
+flag nor expected entries scores as "cited 0 of 0 expected", which reads as a pass.
+So the type refuses it too. The reader's own checks stay because they can say which
+line and which key; the type's exist because the reader is not the only caller.
 """
 
 from __future__ import annotations
@@ -42,16 +48,21 @@ class Question:
 
     question_id: str
     question: str
-    # In the corpus's own vocabulary, so that whether the agent looked for them can
-    # be scored against the repository's own resolution rather than against a
-    # paraphrase. Required even for an unsupported question: the terms are what the
-    # question asks about, and that they resolve to nothing is the point of it.
-    asked_property: str
-    asked_organism: str
+    # Plural because a comparison asks about more than one. "Is an E. coli cell
+    # bigger than a yeast cell?" is one question about two organisms; the spec
+    # names a comparison across entries as a tag the set carries, and task 2.1 asks
+    # for a volume asked of two different objects. With one term per question, a
+    # perfect answer to such a question would score at most half on "the fraction
+    # of cited entries carrying the asked organism".
+    #
+    # In the corpus's own vocabulary, so the score uses the repository's resolution
+    # and not a paraphrase. Required even for an unsupported question: the terms are
+    # what it asks about, and that they resolve to nothing is the point of it.
+    asked_properties: tuple[str, ...]
+    asked_organisms: tuple[str, ...]
     expected_entries: tuple[int, ...] = ()
     unsupported: bool = False
-    # The question this one follows, asked in that question's session. A chain, not
-    # a tree of arbitrary depth in practice, but nothing here limits the depth.
+    # The question this one follows, asked in that question's session.
     follows: str | None = None
     # What the question exercises -- a comparison, a conversion, an unsupported ask.
     # Free-form on purpose: the report gives its figures per tag, and a fixed
@@ -59,6 +70,26 @@ class Question:
     # question, which is the moment they are least likely to touch this file.
     tags: tuple[str, ...] = ()
     notes: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.question_id or not self.question:
+            raise QuestionSetError("A question needs an identifier and a question.")
+        if not self.asked_properties or not self.asked_organisms:
+            raise QuestionSetError(
+                f"{self.question_id!r} records no asked property or organism; "
+                f"whether the agent looked for them could not be scored."
+            )
+        if self.unsupported and self.expected_entries:
+            raise QuestionSetError(
+                f"{self.question_id!r} is marked unsupported and names expected entries."
+            )
+        if not self.unsupported and not self.expected_entries:
+            raise QuestionSetError(
+                f"{self.question_id!r} names no expected entries and is not marked "
+                f"unsupported; it would score as citing 0 of 0, which reads as a pass."
+            )
+        if self.follows == self.question_id:
+            raise QuestionSetError(f"{self.question_id!r} follows itself.")
 
 
 class EntryShape(StrEnum):
@@ -97,13 +128,28 @@ def shapes_of(entry: Entry) -> frozenset[EntryShape]:
         lacking.add(EntryShape.FUSED_RANGE)
     if not entry.measurement_method.strip():
         lacking.add(EntryShape.NO_METHOD)
-    if entry.range_qualified:
+    # All three flags, not `range_qualified` alone. `corpus.py` reads the three as
+    # independent booleans defaulting to False, and it is the *ingester* that
+    # derives the general flag from the two specific ones -- so a corpus carrying
+    # `range_approximate` without `range_qualified` loads perfectly well, and
+    # reading only the general flag files a value of "~20" as a complete entry with
+    # an exact number. That is the expensive direction: `COMPLETE` is the claim a
+    # value check would be strict about.
+    if entry.range_qualified or entry.range_approximate or entry.range_one_sided:
         lacking.add(EntryShape.HEDGED_RANGE)
     return frozenset(lacking) if lacking else frozenset({EntryShape.COMPLETE})
 
 
-def load_question_set(path: str | Path | None) -> tuple[Question, ...]:
-    """Read and validate a question set. Structure only; see `check_against_corpus`.
+def load_question_set(
+    path: str | Path | None, entries: tuple[Entry, ...] | None
+) -> tuple[Question, ...]:
+    """Read and validate a question set, against the corpus when one is supplied.
+
+    `entries` has no default, deliberately. The evaluation driver always has a
+    corpus -- the agent cannot answer without one -- so it must not be able to skip
+    the corpus checks by leaving an argument off. Passing `None` is a
+    structure-only read and a decision the caller makes out loud; the command that
+    does it says in its output what it did not check.
 
     The refusal to run without a set lives here rather than in the command, so a
     harness, a test or a later driver calling this gets it too.
@@ -123,10 +169,13 @@ def load_question_set(path: str | Path | None) -> tuple[Question, ...]:
     # whole set can still point at a line. Counting questions instead would name the
     # third question as "3" in a file whose third question is on line 5.
     located: list[tuple[str, Question]] = []
-    # Explicit, not the locale default: a question set holds organism names and
-    # units, and "μm" read under a non-UTF-8 locale fails on a colleague's machine
-    # and not on ours.
-    with file.open(encoding="utf-8") as handle:
+    # `utf-8-sig` rather than `utf-8`: a set is edited by hand, and the commonest
+    # editors on Windows write a byte-order mark. It reads plain UTF-8 identically,
+    # so this costs nothing and stops "Unexpected UTF-8 BOM" from being the first
+    # thing a colleague sees. Explicit rather than the locale default because a set
+    # holds organism names and units, and a micro sign read under a non-UTF-8
+    # locale fails on their machine and not on ours.
+    with file.open(encoding="utf-8-sig") as handle:
         for number, line in enumerate(handle, start=1):
             line = line.strip()
             if not line:
@@ -141,10 +190,16 @@ def load_question_set(path: str | Path | None) -> tuple[Question, ...]:
     if not located:
         raise QuestionSetError(f"{file} holds no questions.")
     _check_the_set(located)
-    return tuple(question for _, question in located)
+    questions = tuple(question for _, question in located)
+    if entries is not None:
+        check_against_corpus(questions, entries)
+    return questions
 
 
-_REQUIRED = ("question_id", "question", "asked_property", "asked_organism")
+# Plural, matching the field names on `Question`: the value may be a string or a
+# list, and a key that differs from the attribute it fills is how a later author
+# comes to write one and read the other.
+_REQUIRED = ("question_id", "question", "asked_properties", "asked_organisms")
 _OPTIONAL = ("expected_entries", "unsupported", "follows", "tags", "notes")
 
 
@@ -163,12 +218,13 @@ def _question(raw: object, where: str) -> Question:
     if missing:
         raise QuestionSetError(f"{where} is missing {missing}.")
 
-    values = {key: _text(raw[key], key, where) for key in _REQUIRED}
+    identifier = _text(raw["question_id"], "question_id", where)
     expected = _entry_identifiers(raw.get("expected_entries", []), where)
     unsupported = _boolean(raw.get("unsupported", False), "unsupported", where)
 
     # Each direction of the disagreement is its own sentence: they are different
-    # mistakes and the fix for one is not the fix for the other.
+    # mistakes and the fix for one is not the fix for the other. `Question` refuses
+    # both as well; these run first because they can name the line and the flag.
     if unsupported and expected:
         raise QuestionSetError(
             f"{where} is marked unsupported but names expected entries {list(expected)}. "
@@ -185,14 +241,14 @@ def _question(raw: object, where: str) -> Question:
     follows = raw.get("follows")
     if follows is not None:
         follows = _text(follows, "follows", where)
-        if follows == values["question_id"]:
+        if follows == identifier:
             raise QuestionSetError(f"{where} follows itself.")
 
     return Question(
-        question_id=values["question_id"],
-        question=values["question"],
-        asked_property=values["asked_property"],
-        asked_organism=values["asked_organism"],
+        question_id=identifier,
+        question=_text(raw["question"], "question", where),
+        asked_properties=_terms(raw["asked_properties"], "asked_properties", where),
+        asked_organisms=_terms(raw["asked_organisms"], "asked_organisms", where),
         expected_entries=expected,
         unsupported=unsupported,
         follows=follows,
@@ -204,9 +260,24 @@ def _question(raw: object, where: str) -> Question:
 def _text(value: object, key: str, where: str, *, allow_empty: bool = False) -> str:
     if not isinstance(value, str):
         raise QuestionSetError(f"{where}: {key} must be a string, not {type(value).__name__}.")
-    if not allow_empty and not value.strip():
+    # Stripped, so a padded identifier matches the `follows` naming it and a padded
+    # organism term reaches the repository's resolution as itself.
+    text = value.strip()
+    if not allow_empty and not text:
         raise QuestionSetError(f"{where}: {key} is empty.")
-    return value
+    return text
+
+
+def _terms(value: object, key: str, where: str) -> tuple[str, ...]:
+    """One term or several: a string, or a list of them for a comparison."""
+    items = value if isinstance(value, list) else [value]
+    if not items:
+        raise QuestionSetError(f"{where}: {key} is empty.")
+    terms = tuple(_text(item, key, where) for item in items)
+    repeated = sorted({term for term in terms if terms.count(term) > 1})
+    if repeated:
+        raise QuestionSetError(f"{where}: {key} repeats {repeated}.")
+    return terms
 
 
 def _boolean(value: object, key: str, where: str) -> bool:
@@ -236,9 +307,32 @@ def _entry_identifiers(value: object, where: str) -> tuple[int, ...]:
 
 
 def _tags(value: object, where: str) -> tuple[str, ...]:
+    """Tags, stripped and distinct, because the report groups its figures by them.
+
+    A repeat counts one question twice in its own bucket, and two tags differing
+    only in case make two buckets a reader then compares against each other -- the
+    same reasoning that deduplicates expected entries. The vocabulary is free-form,
+    so there is nothing to check a tag *against*; being distinct needs no
+    vocabulary.
+    """
     if not isinstance(value, list):
         raise QuestionSetError(f"{where}: tags must be a list.")
-    return tuple(_text(tag, "tag", where) for tag in value)
+    kept: list[str] = []
+    seen: dict[str, str] = {}
+    for tag in value:
+        text = _text(tag, "tag", where)
+        folded = text.casefold()
+        if folded in seen:
+            if seen[folded] == text:
+                raise QuestionSetError(f"{where}: tags repeat {text!r}.")
+            raise QuestionSetError(
+                f"{where}: tags {seen[folded]!r} and {text!r} differ only in case. The "
+                f"report groups by tag, so these would be two buckets nobody meant; "
+                f"pick one spelling."
+            )
+        seen[folded] = text
+        kept.append(text)
+    return tuple(kept)
 
 
 def _check_the_set(located: list[tuple[str, Question]]) -> None:
@@ -254,26 +348,36 @@ def _check_the_set(located: list[tuple[str, Question]]) -> None:
         seen[question.question_id] = where
 
     by_id = {question.question_id: question for _, question in located}
+    # Every parent is checked to exist before any chain is walked. Checking each
+    # question's own parent as the walk reached it left the walk free to step
+    # through a *grandparent* nobody had checked: a set whose second question
+    # followed something absent raised `KeyError` from the first question's walk,
+    # and the command reported that as a traceback rather than as a sentence.
+    # Whether it happened at all depended on the order of the lines.
     for where, question in located:
-        if question.follows is None:
-            continue
-        if question.follows not in by_id:
+        if question.follows is not None and question.follows not in by_id:
             raise QuestionSetError(
                 f"{where}: {question.question_id!r} follows {question.follows!r}, which "
                 f"the set does not contain. A follow-up is asked in its parent's "
                 f"session, and there would be no session to ask it in."
             )
+
+    for where, question in located:
         # A cycle would have no session to start from either, and walking the chain
         # to find the parent's result on resumption would not terminate.
-        walked = {question.question_id}
+        walked = [question.question_id]
         parent = question.follows
         while parent is not None:
             if parent in walked:
+                # From the repeated identifier onward, not the whole walk: where A
+                # follows B follows C follows B, the cycle is B and C, and naming A
+                # in it sends the reader to the one question that is fine.
+                cycle = walked[walked.index(parent) :]
                 raise QuestionSetError(
-                    f"{where}: {question.question_id!r} is in a cycle of follow-ups "
-                    f"({sorted(walked)}). No question in it could be asked first."
+                    f"{where}: {question.question_id!r} leads into a cycle of "
+                    f"follow-ups ({cycle}). No question in it could be asked first."
                 )
-            walked.add(parent)
+            walked.append(parent)
             parent = by_id[parent].follows
 
 

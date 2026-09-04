@@ -62,17 +62,26 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_session_process_boundary.py::test_a_session_continues_in_a_process_that_did_not_create_it",
     ),
     "Sessions are isolated from one another": ("test_agent.py::test_two_sessions_share_nothing",),
-    # Partly. The format, the refusal without a set, the recorded property and
-    # organism, and the shape coverage are asserted here. The two scenarios about
-    # *figures* -- per tag and per shape -- need the report, which is group 4 of
-    # `add-answer-evaluation`; nothing below claims them, and this comment is the
-    # only thing that says so.
+    # Partly, and the part matters: of the requirement's five scenarios, these
+    # tests hold two -- "A question records what it asks" and "Incomplete entries
+    # are in the set" -- plus the sentence about failing without a set. **Three are
+    # not held.** "Question set supplied -> each question is asked and scored" needs
+    # the driver (group 3); "Figures per tag" and the per-shape figures need the
+    # report (group 4). Nor does anything assert that question sets are not
+    # generated at evaluation time; that one is structural rather than testable, and
+    # saying so here is better than implying a test covers it.
+    #
+    # An earlier version of this entry also named a test asserting the *command's*
+    # structure-only wording, which appears in no clause of the requirement. A
+    # mapping that names a test checking something else is exactly the failure this
+    # file admits it cannot detect, so it is worth not making by hand.
     "The question set is explicit and versioned with its answers": (
         "test_question_set.py::test_a_supported_question_reads_back_as_it_was_written",
         "test_question_set.py::test_no_question_set_is_refused_with_an_explanation",
         "test_question_set.py::test_a_question_records_the_property_and_organism_it_asks",
+        "test_question_set.py::test_a_comparison_question_records_every_organism_it_asks_about",
         "test_question_set.py::test_a_set_of_complete_entries_alone_is_refused",
-        "test_eval_command.py::test_a_check_without_a_corpus_says_what_it_did_not_check",
+        "test_question_set.py::test_a_set_read_from_a_file_can_satisfy_the_corpus_check",
     ),
     "The corpus is read-only": ("test_repository.py::test_entries_cannot_be_mutated",),
     "Retrieval effort is bounded and reported": (

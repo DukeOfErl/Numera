@@ -66,6 +66,36 @@ recorded there rather than here.
     `encoding="utf-8"` pair, recorded as accepted in the test module's docstring. Seeding could not
     have found either: both were things nobody had a belief about.
 
+**What the branch review of groups 1-2 left open** (2026-09-04). Everything else it found was
+fixed on that branch; these were deferred deliberately, each to where the material for it exists:
+
+- **Nothing validates `unsupported: true` against the corpus.** The corpus check refuses a stale
+  *supported* identifier and says nothing about a question wrongly marked unsupported. That is the
+  expensive direction: the corpus answers it, the agent answers it correctly and cites, and the spec's
+  own scenario scores that as a **fabrication** -- the evaluation's headline figure, wrong for the one
+  reason no reader would suspect. Deferred to **4.11** rather than done in group 2, because deciding
+  "the corpus cannot answer this" needs the repository's organism and property resolution, which 4.2
+  wires up anyway; doing it earlier would mean a second, hand-rolled resolution.
+- **`NO_METHOD` reads a field that also holds quotations.** `measurement_method` is half of
+  `Entry.quotation_text` ("where curator quotations live"), and fixture entry 100001's method field
+  holds a page reference, so `COMPLETE` includes entries whose method field carries a quotation and no
+  method. This over-passes in the expensive direction. The fix wants a discriminator taken from real
+  data, which is a measurement over a real corpus rather than a rule reasoned out here -- fold it into
+  5.4, which already measures the clean fraction.
+- **`spans_implausibly` is not a shape.** `Entry` already judges an entry unusable and
+  `entries_table` marks it, yet an entry with a scalar value and an implausible span is `COMPLETE`.
+  The spec lists five deficiencies and this is not one of them; raise it if 5.4 or the baseline shows
+  such entries among the expected ones.
+- **Shapes are derived per run and not recorded per result.** `units.dimension`'s table grows
+  (`kDalton` was added on 2026-09-04), so the same entry can be `NO_CLASSIFIED_UNIT` one week and
+  `COMPLETE` the next, and 4.8's per-shape breakdown would mix the two. 3.4's code version covers it
+  in a checkout but not in an installed wheel.
+- **Nothing requires a parent to precede its child in the file.** The format permits any order, so
+  3.2 must order the set itself rather than trusting the file's order.
+- **`-p no:deepeval` in `addopts` is global**, so group 6's DeepEval pytest integration
+  (`assert_test`, its marker) is off for the whole suite. If 6.3 wants it, override `addopts` in that
+  run and write the *whole* expression -- the same trap as `-m`.
+
 ## 3. The driver and its records
 
 - [ ] 3.1 Add one public read on `AskAgent` returning the tool results a session was shown, as plain text
@@ -124,6 +154,11 @@ reads a number out of the answer's prose, except 4.3, which only asks whether a 
       `at_retrieval_bound` or `at_spend_ceiling`
 - [ ] 4.9 Fault-seed and mutation-test the scoring module before the baseline is recorded; it is where a
       wrong figure looks right
+- [ ] 4.11 Validate `unsupported: true` against the corpus, with the same resolution 4.2 uses: a
+      question claiming the corpus cannot answer it, which the corpus can, scores a correct cited answer
+      as a fabrication and becomes the evaluation's most-read number. Refuse rather than warn — a
+      wrongly refused unsupported question costs one line of the set, a wrongly accepted one costs the
+      headline figure — and count both directions. See the review note above group 3
 - [ ] 4.10 On the first run, count both directions of every classifying rule (flagged declines, outlier
       flags, organism misses) and read them against the answers before trusting any figure
 

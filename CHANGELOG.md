@@ -14,9 +14,10 @@ any release; `1.0.0` when it stabilizes.
 
 - **A question set for evaluating answers**, and `scinumbers-eval check` to
   validate one. Each question records what it asks — the property and the
-  organism, in the corpus's own vocabulary — the entry identifiers that should
-  support its answer, whether the corpus can answer it at all, the question it
-  follows, and tags for what it exercises. The check refuses a set that could
+  organisms, in the corpus's own vocabulary, and more than one of each where the
+  question is a comparison — the entry identifiers that should support its
+  answer, whether the corpus can answer it at all, the question it follows, and
+  tags for what it exercises. The check refuses a set that could
   only produce misleading figures: a misspelled key, a quoted identifier, a
   repeated question id, a follow-up whose parent is absent, an expected entry
   the corpus does not hold, or a set whose expected entries are all complete

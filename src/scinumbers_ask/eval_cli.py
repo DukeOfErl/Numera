@@ -10,10 +10,12 @@ nobody remembers writing.
 from __future__ import annotations
 
 import argparse
+import sys
 
+from . import autobuild
 from .config import NotConfigured, env_setting, refuse_retired_env
 from .corpus import CorpusUnavailable, load
-from .question_set import QuestionSetError, check_against_corpus, load_question_set
+from .question_set import QuestionSetError, load_question_set
 
 PROG = "scinumbers-eval"
 
@@ -43,10 +45,20 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     try:
-        questions = load_question_set(args.question_set)
-        if args.corpus:
-            check_against_corpus(questions, load(args.corpus))
-    except (QuestionSetError, CorpusUnavailable) as exc:
+        # Through `autobuild`, as `cli.main` does, so a configured export resolves
+        # to the corpus beside it. Calling `load` on the configured path directly
+        # reported the export as a corrupt corpus -- "line 1 is not a usable entry"
+        # over HTML -- in the same environment where `scinumbers-ask` works.
+        # Announced on stderr because stdout carries what a person reads.
+        corpus = (
+            autobuild.corpus_path(args.corpus, lambda text: print(text, file=sys.stderr))
+            if args.corpus
+            else ""
+        )
+        # `None` says "structure only" out loud. The parameter has no default, so a
+        # later driver cannot skip the corpus checks by leaving it off.
+        questions = load_question_set(args.question_set, load(corpus) if corpus else None)
+    except (QuestionSetError, CorpusUnavailable, NotConfigured) as exc:
         raise SystemExit(f"{PROG}: {exc}") from exc
 
     followups = sum(1 for question in questions if question.follows is not None)

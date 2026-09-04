@@ -26,11 +26,12 @@ PACKAGE = Path(__file__).resolve().parents[1] / "src" / "scinumbers_ask"
 DRIVERS = {"cli", "web"}
 # The evaluation harness is the third adapter, and it is on this side for the same
 # reason the other two are: it drives the agent through the port and the agent must
-# not be able to reach it. Listed apart from `DRIVERS` only so a failure says which
-# kind of adapter was reached; the assertions treat the two identically. Names are
-# added here as each module lands, and `test_every_named_adapter_exists` refuses a
-# name with no file -- a guard listing a module that was renamed protects nothing,
-# and nothing else would say so.
+# not be able to reach it. Listed apart from `DRIVERS` so a failure can say which
+# kind of adapter was reached, and so the harness can be held to the extra rule
+# below -- it may not reach for an interactive driver either. Names are added here
+# as each module lands, and `test_every_named_adapter_exists` refuses a name with no
+# file: a guard listing a module that was renamed protects nothing, and nothing else
+# would say so.
 HARNESS = {"question_set", "eval_cli"}
 ADAPTERS = DRIVERS | HARNESS
 # `autobuild` joins them: it decides whether to build a corpus, which is a driver's
@@ -81,9 +82,26 @@ def test_every_named_adapter_exists():
 @pytest.mark.parametrize("module", AGENT_CORE)
 def test_no_agent_module_reaches_for_a_driver(module):
     reached = imports_of(module) & ADAPTERS
+    kind = "the evaluation harness" if reached <= HARNESS else "a driver"
     assert not reached, (
-        f"{module} imports {sorted(reached)}; the agent would no longer be "
-        f"replaceable under one driver"
+        f"{module} imports {sorted(reached)} -- {kind}. The agent would no longer "
+        f"be replaceable under one driver"
+    )
+
+
+@pytest.mark.parametrize("module", sorted(HARNESS))
+def test_no_harness_module_reaches_for_an_interactive_driver(module):
+    """The harness is an adapter, not a caller of the other adapters.
+
+    Nothing above says this: the core is checked against every adapter, and the
+    adapters are checked against `streamlit` only. So `question_set` could import
+    `cli`, or the evaluation command could import `web`, and no test would fail --
+    while the harness is the side about to grow four more modules.
+    """
+    reached = imports_of(module) & DRIVERS
+    assert not reached, (
+        f"{module} imports {sorted(reached)}; the harness would then need a "
+        f"terminal or a web framework to run unattended"
     )
 
 

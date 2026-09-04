@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from conftest import write_all_shapes_corpus
 
 from scinumbers_ask.eval_cli import main
 
@@ -18,8 +19,8 @@ FIXTURE_CORPUS = "tests/fixtures/corpus_sample.jsonl"
 SUPPORTED = {
     "question_id": "q1",
     "question": "How long is an E. coli cell?",
-    "asked_property": "Cell length",
-    "asked_organism": "Bacteria Escherichia coli",
+    "asked_properties": "Cell length",
+    "asked_organisms": "Bacteria Escherichia coli",
     "expected_entries": [100001],
 }
 
@@ -46,8 +47,8 @@ def test_a_valid_set_is_reported_with_its_composition(tmp_path, capsys):
     unsupported = {
         "question_id": "q2",
         "question": "How many neoblasts does a planarian have?",
-        "asked_property": "Number of neoblasts",
-        "asked_organism": "Planarian",
+        "asked_properties": "Number of neoblasts",
+        "asked_organisms": "Planarian",
         "unsupported": True,
     }
     main(["check", write_set(tmp_path, SUPPORTED, followup, unsupported)])
@@ -113,3 +114,64 @@ def test_a_retired_variable_is_refused_before_anything_is_read(monkeypatch):
     with pytest.raises(SystemExit) as exit_info:
         main(["check", "does-not-matter.jsonl"])
     assert "SCINUMBERS_CORPUS" in str(exit_info.value)
+
+
+def test_a_set_that_satisfies_the_corpus_is_reported_as_checked(tmp_path, capsys):
+    """The passing path through the command, which no test executed before.
+
+    Both corpus tests here refused, so the line saying the set *is* checked ran in
+    no test at all -- the shape of gap the project's coverage note calls a path
+    hidden behind a double.
+    """
+    corpus = write_all_shapes_corpus(tmp_path)
+    questions = [
+        {
+            "question_id": f"q{identifier}",
+            "question": "How big is an E. coli cell?",
+            "asked_properties": "Cell volume",
+            "asked_organisms": "Bacteria Escherichia coli",
+            "expected_entries": [identifier],
+        }
+        for identifier in range(1, 7)
+    ]
+    main(["check", write_set(tmp_path, *questions), "--corpus", corpus])
+    out = capsys.readouterr().out
+    assert "6 questions, 0 unsupported, 0 follow-ups." in out
+    assert "every entry shape is exercised" in out
+    assert "Structure only" not in out
+
+
+def test_a_shape_no_question_exercises_is_refused_at_the_command(tmp_path):
+    """The other direction of the same check, through the command."""
+    corpus = write_all_shapes_corpus(tmp_path)
+    only_complete = {**SUPPORTED, "expected_entries": [1]}
+    with pytest.raises(SystemExit) as exit_info:
+        main(["check", write_set(tmp_path, only_complete), "--corpus", corpus])
+    assert "No question's expected entries carry these shapes" in str(exit_info.value)
+
+
+def test_the_corpus_is_resolved_the_way_the_ask_command_resolves_it(tmp_path, monkeypatch, capsys):
+    """A configured export used to be read as a corpus and reported as corrupt.
+
+    `scinumbers-ask` goes through `autobuild.corpus_path`, which resolves an `.xls`
+    to the corpus beside it; this command called `load` on the configured path, so
+    the same environment gave one command a working corpus and the other a JSON
+    parse error over HTML. Asserted by watching the resolution, because building a
+    real corpus from an export is not something a unit test should do.
+    """
+    seen = []
+
+    def resolve(configured, announce):
+        seen.append(configured)
+        announce("resolving")
+        return write_all_shapes_corpus(tmp_path)
+
+    monkeypatch.setattr("scinumbers_ask.autobuild.corpus_path", resolve)
+    questions = [
+        {**SUPPORTED, "question_id": f"q{i}", "expected_entries": [i]} for i in range(1, 7)
+    ]
+    main(["check", write_set(tmp_path, *questions), "--corpus", "/somewhere/BioNumbers.xls"])
+    assert seen == ["/somewhere/BioNumbers.xls"]
+    # On stderr, because stdout carries what a person or a script reads.
+    captured = capsys.readouterr()
+    assert "resolving" in captured.err and "resolving" not in captured.out
