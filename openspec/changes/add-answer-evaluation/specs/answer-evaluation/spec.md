@@ -67,82 +67,6 @@ of selection, one of search — and a single "missed" count would hide which is 
 - **WHEN** an expected entry was returned by a retrieval during the question and the answer did not cite it
 - **THEN** it is reported as passed over, apart from expected entries that were never retrieved
 
-### Requirement: A cited value is checked against its entry
-
-For every citation in an answer, the evaluation SHALL read every quantity stated in the text before
-it, back to the previous citation or the start of the sentence, and compare each with the cited
-entry as the corpus records it. A run of consecutive citations SHALL share one such window. Per
-citation it SHALL report one of: every quantity matches the entry as written; some match and some do
-not; a quantity matches only under a rescaling and none as written; no quantity matches; no quantity
-was found. The unit beside each quantity SHALL be compared with the entry's unit, reporting
-compatible, incompatible, or unknown, and SHALL NOT count unknown as either.
-
-What counts as a match SHALL depend on what the entry records. An entry with a scalar value is
-matched by a quantity within a stated tolerance of it. An entry with a range and no scalar is
-matched by a range whose endpoints match the entry's, or by a quantity within it. An entry with no
-number at all is correctly cited **bare**, and a quantity beside its citation SHALL be reported as a
-value attributed to an entry that gives none. An entry whose range is hedged — approximate or
-one-sided — SHALL have the quantity beside it qualified as such, and an unqualified figure SHALL be
-reported as a hedge dropped. An entry whose unit cannot be classified SHALL have its unit carried
-as the corpus writes it, and a different unit token SHALL be reported.
-
-A match only under rescaling SHALL be listed for reading and SHALL NOT be counted as a match. A
-genuine conversion and a thousandfold error look identical to this check, and the second is the
-failure the project exists to prevent, so the cheap direction absorbs the doubt: a correct
-conversion costs a line someone reads. A window where some quantities match and some do not SHALL
-be listed for the same reason.
-
-An entry identifier with no quantity beside it, or with the wrong one, is a right citation and a
-useless answer; identifier scoring alone cannot see either.
-
-#### Scenario: Every quantity matches as written
-- **WHEN** every quantity in the window before a citation equals the cited entry's value within tolerance, or lies within its range, in the entry's unit
-- **THEN** the citation is scored as a value match
-
-#### Scenario: Some quantities match and some do not
-- **WHEN** the window before a citation holds a quantity that matches and one that does not
-- **THEN** the citation is listed as mixed with every quantity and its outcome
-- **AND** it is not counted as a match
-
-#### Scenario: A quantity matches only under rescaling
-- **WHEN** no quantity in the window matches as written and one equals the entry's value after a power-of-ten rescaling
-- **THEN** the citation is listed as matching under rescaling
-- **AND** it is not counted as a match
-
-#### Scenario: No quantity matches
-- **WHEN** no quantity in the window matches the entry's value or range under any rescaling
-- **THEN** the citation is scored as a value mismatch and listed with every figure
-
-#### Scenario: Consecutive citations share a window
-- **WHEN** two citation markers follow one another with no quantity between them
-- **THEN** both are checked against the quantities before the first
-- **AND** neither is reported as bare on that account
-
-#### Scenario: No quantity beside the citation
-- **WHEN** no quantity is found in the window before a citation
-- **AND** the entry records a number
-- **THEN** the citation is reported as bare
-
-#### Scenario: The entry gives no number
-- **WHEN** the cited entry records neither a scalar value nor a range
-- **THEN** a bare citation is scored as correct
-- **AND** a quantity in its window is reported as a value attributed to an entry that gives none
-
-#### Scenario: The entry's range is hedged
-- **WHEN** the cited entry's range is approximate or one-sided
-- **AND** the quantity beside it carries no qualification
-- **THEN** the citation is reported as a hedge dropped
-
-#### Scenario: The unit is incompatible
-- **WHEN** the unit beside a quantity measures a different kind of thing from the entry's unit
-- **THEN** the citation is scored as a unit mismatch
-
-#### Scenario: The unit is unknown
-- **WHEN** either unit cannot be classified
-- **THEN** the citation's unit comparison is reported as unknown
-- **AND** it counts as neither a match nor a mismatch
-- **AND** a unit token that differs from the entry's unit string is reported
-
 ### Requirement: The asked property and organism are recognised
 
 The evaluation SHALL score, per question, whether any retrieval the agent made named the asked
@@ -166,6 +90,35 @@ are both on record, so this needs no judge.
 #### Scenario: Cited entries belong to another organism
 - **WHEN** a cited entry's organism field is not the asked organism
 - **THEN** it is counted against the fraction of cited entries carrying the asked organism, and listed
+
+### Requirement: A cited entry at odds with its peers is flagged
+
+The evaluation SHALL compare each cited entry's recorded value against the values recorded by the
+other entries for the same property and organism, and SHALL flag a citation whose entry is a distant
+outlier among them. The flag SHALL name the entry, its value, and the interval the other entries
+occupy, and SHALL NOT be counted as an error.
+
+This asks only which entries were cited and what the corpus records for their neighbours, so it
+needs no reading of the answer's prose. An answer can cite an entry that exists, attribute its number
+correctly, and still lead with the one figure in the corpus that disagrees with every other
+measurement of the same quantity. Every check that compares an answer against its own citations
+passes such an answer, because nothing about it is internally wrong.
+
+An outlier is a fact about the corpus rather than about the answer, so it is reported for reading
+rather than scored against the answer: the entry may be measuring something its neighbours do not.
+
+#### Scenario: A cited entry is an outlier
+- **WHEN** a cited entry's value is a distant outlier among the entries for the same property and organism
+- **THEN** the citation is flagged with that entry's value and the interval the other entries occupy
+
+#### Scenario: Every cited entry sits with its peers
+- **WHEN** no cited entry's value is an outlier among its peers
+- **THEN** no outlier is reported for the answer
+
+#### Scenario: Too few peers to judge
+- **WHEN** a property has fewer entries than the comparison needs
+- **THEN** no outlier is reported for it
+- **AND** the report states that the comparison could not be made
 
 ### Requirement: Unsupported questions are part of the set
 
@@ -352,3 +305,88 @@ that a change improving accuracy at several times the cost is visible as such.
 - **WHEN** a run finishes
 - **THEN** the report states the model cost and the total tool calls
 - **AND** states them per question as well as in aggregate
+
+### Requirement: Faithfulness is judged per claim, with a reason
+
+When a judge is configured, the evaluation SHALL judge each answer that states a quantity by
+separating it into claims and judging each claim against the recorded context, and SHALL record for
+each claim its verdict and the judge's reason. A faithfulness score for the answer SHALL be derived
+from the claim verdicts. An answer that states no quantity SHALL be recorded as not judged rather
+than given a score.
+
+The reason is the point of this layer, not the score: the identifier scoring already says that an
+answer cited the wrong entry, and what it cannot say is that a right citation sits beside a wrong
+number. A reason names the claim, which is what a user can be warned with and what a developer can
+fix from.
+
+#### Scenario: A claim is not supported by the context
+- **WHEN** a judged answer contains a claim the recorded context does not support
+- **THEN** the result records that claim, an unsupported verdict, and the judge's reason
+
+#### Scenario: Every claim is supported
+- **WHEN** every claim in a judged answer is supported by the recorded context
+- **THEN** the answer's faithfulness score is the maximum
+- **AND** no claim is reported as unsupported
+
+#### Scenario: A refusal is not judged
+- **WHEN** an answer states no quantity
+- **THEN** it is recorded as not judged for faithfulness
+- **AND** it does not contribute to the faithfulness aggregate
+
+### Requirement: The judged layer is secondary and optional
+
+The evaluation SHALL run and produce its full report with no judge configured. When a judge is
+configured, the identifier and refusal scores SHALL be reported unchanged, and the judged figures
+SHALL be reported beside them and SHALL NOT be combined with them into a single figure.
+
+#### Scenario: No judge configured
+- **WHEN** the evaluation runs without a judge
+- **THEN** every result is recorded and the report is produced from the identifier and refusal scores
+
+#### Scenario: A judge is configured
+- **WHEN** the evaluation runs with a judge
+- **THEN** the report gives the identifier and refusal figures as it would without one
+- **AND** gives the judged figures separately
+
+### Requirement: A judge is trusted only after measured agreement
+
+The evaluation SHALL measure the agreement between the judge's verdicts and the identifier and
+refusal scoring on every result where both can speak, SHALL list each disagreement for reading, and
+SHALL mark the judged figures as not yet validated while the agreement is below a stated floor. A
+judge finding an answer faithful where the refusal scoring recorded a fabrication SHALL be reported
+as a judge miss.
+
+The deterministic scoring is the reference against which the judge is validated, not the other way
+round; a judge's verdicts are known to move under pushback and a disagreement is only informative
+once the judge has been shown to agree where it must.
+
+#### Scenario: Agreement below the floor
+- **WHEN** the measured agreement is below the stated floor
+- **THEN** the report marks the judged figures as not yet validated
+- **AND** lists every disagreement
+
+#### Scenario: The judge misses a fabrication
+- **WHEN** the refusal scoring records a fabrication and the judge finds the same answer faithful
+- **THEN** that result is reported as a judge miss
+
+#### Scenario: The judge disagrees where it adds information
+- **WHEN** the identifier scoring finds every cited entry expected and the judge finds a claim unsupported
+- **THEN** that result is listed as a disagreement with the claim and reason, not counted as a judge miss
+
+### Requirement: Every judgement records the judge model and its cost
+
+Each recorded judgement SHALL name the model that produced it, the report SHALL break judged figures
+down per judge model, and the judge's spend SHALL be reported separately from the agent's spend.
+
+#### Scenario: A judgement is recorded
+- **WHEN** a claim's verdict is written
+- **THEN** it names the judge model that produced it
+
+#### Scenario: Judgements from several judge models
+- **WHEN** a report covers judgements from more than one judge model
+- **THEN** the judged figures are reported per judge model
+- **AND** no judged figure combines them
+
+#### Scenario: A run with a judge completes
+- **WHEN** a run with a judge configured finishes
+- **THEN** the report states the judge's spend apart from the agent's

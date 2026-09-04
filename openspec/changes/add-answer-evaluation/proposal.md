@@ -8,14 +8,19 @@ and never built. Now is the moment because the thing to be measured has stopped 
 both drivers and the corpus pipeline are complete, and `add-ask-agent` could not archive while group
 9 sat unimplemented inside it (it has since archived, once this change took the group over).
 
-This change builds the layer that needs no model to score: exact comparisons between what an answer
-cited and stated and what the corpus and the question set record. A right entry identifier beside
-no quantity, or beside the wrong one, is a useless answer, so the identifier check is extended to
-the value and the unit beside each citation; and the agent's own grounding warnings — a cited entry
-it never retrieved, a refusal reached without searching — become scores rather than notes. The
-judged layer (faithfulness with per-claim reasons, and the softer qualities below) is drafted in
-the Deferred section and follows once this baseline exists, because a judge is validated against
-this layer and cannot be trusted before it (ADR-0510).
+This change is scoped by what each check costs to build rather than by whether it uses a model. The
+recording layer — ask, record, resume, report — is needed by every measure and has no parser in it.
+On top of it sit the checks that read only events, the citation set, the corpus and the question set:
+which entries were cited against which were expected, whether the search named the organism and
+property asked, the agent's own grounding warnings, refusals on questions the corpus cannot answer,
+and whether a cited entry is a distant outlier among its peers. All of those are exact and cheap.
+
+Two things are deliberately out. The **value and unit beside each citation** needs a parser over free
+prose, and this project's record says that is where silent defects live; it is deferred with its text
+drafted and a correction attached. The **judged faithfulness layer** is in, because reading the first
+baseline's answers by hand is a cheaper and better calibration reference than a checker that does not
+exist yet — which is the ordering ADR-0510 asks for, with the reference supplied by a person instead
+of by the deferred parser.
 
 ## What Changes
 
@@ -27,9 +32,11 @@ this layer and cannot be trusted before it (ADR-0510).
   the agent; scoring by cited entry identifiers against expected ones; refusal scoring; repeats with
   the spread reported; results appended as each question completes, resumable, reported per model,
   with cost and effort.
-- **Extend the identifier check to the value and unit beside each citation**, against the corpus's
-  own figures, reporting per citation whether the value matched as written, only under a rescaling,
-  not at all, or was absent, and whether the unit was compatible, incompatible or unclassifiable.
+- **Flag a cited entry that disagrees with its peers** — a distant outlier among the entries for the
+  same property and organism — reported for reading rather than scored. This needs no reading of the
+  answer's prose, and it catches the one failure every citation-checking measure passes: an answer
+  whose numbers are all correct and correctly attributed, leading with the one figure in the corpus
+  that contradicts every other measurement of the same quantity.
 - **Separate a selection failure from a search failure**: of the expected entries an answer did not
   cite, report those the agent retrieved and passed over apart from those it never retrieved.
 - **Score the agent's own grounding warnings**: citations of unretrieved or unknown entries, and
@@ -43,11 +50,18 @@ this layer and cannot be trusted before it (ADR-0510).
 - **Tag questions** by what they exercise, so figures can be read per kind.
 - Measure, not defend, the two retrieval bounds and the corpus's clean fraction — the two
   measurement tasks group 9 carried, unchanged.
+- **Add the judged layer**: faithfulness scored per claim by an LLM judge through DeepEval, each
+  claim carrying a verdict and a reason, recorded in a second file beside the deterministic results
+  and never combined with them. Gated on measured agreement with the deterministic scoring, and with
+  the first calibration coming from reading the baseline's answers by hand rather than from a
+  checker that does not exist yet (ADR-0500, ADR-0510).
 
-Not in scope: the judged layer and every metric that needs a model (deferred below, drafted);
-alerting on cost drift between runs (this change produces the baseline it needs); faceting the
-property field; and any change to the agent's prompt or tools in response to what the evaluation
-finds.
+Not in scope, and deferred below with its text drafted: **the value and unit beside each citation**,
+which needs a parser over free prose and is the most defect-prone thing this change could contain.
+Also out of scope: alerting on cost drift between runs (this change produces the baseline it needs);
+faceting the property field; the unit-table gaps found during review, which are a defect in
+`units.py` and are being fixed on their own branch; and the shape of the answers themselves, which
+belongs to the system prompt in `grounded-answering` and has its own change.
 
 ## Capabilities
 
@@ -55,11 +69,11 @@ finds.
 
 - `answer-evaluation`: Score answers against a held-out question set with known answering entries.
   Covers the question set and its tags, citation-set scoring with passed-over entries separated from
-  unretrieved ones, the value and unit beside each citation, unsupported questions, the agent's own
-  grounding warnings, run-to-run variation, incremental recording and resumption, per-model
-  reporting, cost and effort, the recorded context as shown to the agent, and the provenance of
-  every result. Moved from `add-ask-agent`, where it was `ADDED` and never promoted, and extended
-  here.
+  unretrieved ones, unsupported questions, the agent's own grounding warnings, a cited entry at odds with its peers, run-to-run variation, incremental
+  recording and resumption, per-model reporting, cost and effort, the recorded context as shown to
+  the agent, the provenance of every result, and a judged faithfulness layer with per-claim reasons
+  that is gated on agreement with the deterministic scoring. Moved from `add-ask-agent`, where it was
+  `ADDED` and never promoted, and extended here.
 
 ### Modified Capabilities
 
@@ -68,13 +82,15 @@ finds.
 ## Impact
 
 - **`src/scinumbers_ask/`**: new modules for the question set, the evaluation driver and its
-  records, the deterministic scoring (pure functions, including the quantity-beside-a-citation
-  parser), and the report and command. One public read on `AskAgent` for a session's transcript,
+  records, the deterministic scoring (pure functions over events, citations and the corpus — no prose
+  parser in this change), the judge wrapper, and the report and command. One public read on `AskAgent` for a session's transcript,
   beside the existing `conversation_length` and `conversation_tokens`, so the driver can record what
   the model was shown without reaching into the checkpointer.
-- **`pyproject.toml`**: a `scinumbers-eval` console script. No new dependency: the deterministic
-  layer needs nothing beyond the `ask` extra. (The judged layer, when it comes, adds `deepeval`
-  under its own extra; ADR-0500 records that choice and why RAGAS was rejected.)
+- **`pyproject.toml`**: a `scinumbers-eval` console script, and a new `eval` extra carrying
+  `deepeval` for the judged layer only — the deterministic layer needs nothing beyond `ask`.
+  Verified 2026-09-03 against the current lock: `deepeval` 4.2.1 resolves, `ragas` 0.4.3 was rejected
+  (unmaintained since February 2026, import failure against `langchain-community` 0.4, per-statement
+  verdicts computed and discarded, and a pin of `openai<3`). ADR-0500 records the choice.
 - **`tests/`**: the harness's own tests on doubles; fault seeding and mutation testing over the
   scoring module; the requirement-to-test mapping in `tests/test_spec_conformance.py`, which lists
   this capability's requirements as gaps until the harness exists.
@@ -88,47 +104,59 @@ finds.
 Recorded here so the follow-up starts from a draft rather than a memory. Each item says what would
 trigger raising it again.
 
-### The judged layer: faithfulness with per-claim reasons
+### The value and unit beside each citation
 
-Drafted as six requirements, ready to become a follow-up change's delta on `answer-evaluation`
-(their full text is in this repository's history at the commit that carved this change out,
-`d768db2`, in this spec file). In summary:
+Drafted in full, and the text is in this repository's history at commit `75d8767` in this change's
+spec file. In summary: read every quantity in the window before each citation marker, compare it with
+what the cited entry records, and report per citation whether all match, some match, one matches only
+under a power-of-ten rescaling, none match, or none was found — with what counts as a match depending
+on the entry's shape, and with the unit beside each quantity checked through the three-valued
+dimensional comparison.
 
-- **Faithfulness is judged per claim, with a reason.** An answer stating a quantity is separated into
-  claims, each judged against the recorded context, with verdict and reason recorded; a refusal is
-  recorded as not judged. The reason is the product: it names the claim a user can be warned about
-  and a developer can fix.
-- **The judged layer is secondary and optional.** The report is produced in full with no judge;
-  judged figures sit beside the deterministic ones and are never combined into one number.
-- **A judge is trusted only after measured agreement** with the deterministic layer where both
-  speak; a judged-faithful fabrication is a judge miss; disagreements are listed for reading, and
-  judged figures carry an unvalidated mark below a stated floor (ADR-0510).
-- **Every judgement records the judge model and its cost**, apart from the agent's.
-- Built on DeepEval's `FaithfulnessMetric` behind a thin wrapper over the project's `ChatOpenAI`
-  through OpenRouter, in its own `eval` extra, with telemetry switched off before the import
-  (ADR-0500). Judgements go to a second JSONL keyed by question, repeat and judge model, so a judge
-  can be re-run or swapped for judge spend only.
+**Why it is deferred.** It is a parser over free prose, and `cleaning.py` is this project's standing
+lesson about that class of code: seven review passes, fault seeding and mutation testing each found
+more defects, and every one produced a plausible number rather than an error. Building it before a
+single real answer has been read means designing for failures nobody has seen. The first baseline
+will say how often a stated value is actually wrong, which is the evidence this check should be sized
+against.
 
-**Raise this again once the deterministic baseline is recorded (task 5.3)** — the floor the judge is
-validated against does not exist before then.
+**A correction to carry into it, not into a later task.** The drafted text counts any quantity inside
+an entry's recorded range as a match. Review on 2026-09-04 showed that is too generous, because a
+range in this corpus means at least three different things and nothing in the record distinguishes
+them: genuine variation with growth rate or cell-cycle phase (*E. coli* ribosome counts, 6,800 to
+72,000); a standard deviation rather than a minimum and maximum (yeast nuclear volume, whose interval
+of 2.0 to 3.8 is an SD, said so only in the entry's free text); and ordinary measurement uncertainty.
+Containment also let a specimen answer pass by quoting a mean that appears in an entry's free-text
+note and in none of its value fields. Settle what a range means before implementing this, and prefer
+an endpoint match over containment wherever the kind of range is unknown.
+
+**Raise this again once the first baseline has been read by hand** — that reading, not a date, is
+what says whether wrong values are common enough to justify the parser.
 
 ### Further metrics, and which need a judge
 
 Asked for during review, sorted by what can score them. The deterministic ones could join this change
-cheaply if the first baseline shows a need; the judged ones wait for the layer above.
+cheaply if the first baseline shows a need. The judged ones are additional rubrics over the judge this
+change does build, and each one multiplies judge spend, so they wait until the faithfulness judge has
+passed its agreement gate.
 
 Scorable without a model:
 
 - **Declared computation.** A number in the answer matching no cited entry's value or range (and not
   a rescaling of one) must sit beside wording that says it was computed or converted, and its inputs
   must be cited — rule 5 of the system prompt. A lexical check that over-flags; listed for reading.
-- **Unit uniformity.** Whether every quantity of one kind in an answer is stated in one unit. Parsed
-  from the same quantity-beside-a-citation reader this change builds.
+- **Unit uniformity.** Whether every quantity of one kind in an answer is stated in one unit. Needs
+  the deferred quantity reader above.
 - **Conciseness, as a distribution.** Words per answer and words per cited entry, reported as a
   spread rather than thresholded; a change that doubles answer length shows up without anyone
   having decided what "too long" is.
 - **Length of the search.** Retrievals and model calls per question, already recorded; the
-  measurement task 5.2 reads them.
+  bound-measurement task reads them.
+- **Corpus coverage for the question asked.** Review turned up a field the corpus does not cover at
+  all: no planarian appears among its 841 organisms, and "neoblast" appears in no entry. A question
+  set cannot test what the corpus lacks, so reporting coverage per organism and property would say
+  where a refusal is the only correct answer — and would stop a future set being read as
+  representative when whole fields are missing.
 
 Needing a judge, each a rubric over the answer with the cited entries' fields as context:
 

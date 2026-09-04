@@ -15,7 +15,10 @@ What is already there and shapes the approach:
 - **The citation parser is shared.** `citations.py` is the one parser of `[[nnnnnn]]`, used by both
   drivers (ADR-0410), so the harness's notion of "what was cited" is the same as the page's.
 - **Unit compatibility is three-valued** (`units.py`, ADR-0160): compatible, incompatible, unknown.
-  The value-and-unit check inherits that shape rather than inventing a binary one.
+  Review on 2026-09-04 found real gaps in its table — `kDalton` and `ribosomes/cell` are unclassified,
+  so a mass compared against a length returns unknown rather than incompatible. Those are a defect in
+  `units.py` and are being fixed on their own branch, not here; this change does not depend on them,
+  since it no longer compares units beside quantities.
 - **The corpus holds the figures, and most entries are incomplete.** `Entry` carries `value`,
   `range_low`, `range_high` and `units`, plus the flags that describe its shape (`range_fused`,
   `range_approximate`, `range_one_sided`) and a `hedge` reading, so a cited value can be checked
@@ -44,14 +47,18 @@ What is already there and shapes the approach:
 
 - A third adapter over the unchanged agent, runnable unattended, that leaves a readable record
   after any interruption and can be reported on at any point.
-- Every score in this change exact and model-free, with the cheap error direction chosen and
-  stated wherever a rule classifies.
-- A record that already carries what the judged layer will need — the verbatim context, the full
-  answer, the provenance — so that layer costs judge spend only.
+- Every deterministic score exact and free of prose parsing, with the cheap error direction chosen
+  and stated wherever a rule classifies.
+- A judged faithfulness layer whose per-claim reasons are the product, kept structurally apart from
+  the deterministic figures, and validated against hand labels before its numbers are read.
+- A record shaped so the judge, and any later judged metric, costs judge spend only.
 
 **Non-Goals:**
 
-- Anything a model scores. Drafted in the proposal's Deferred section; follows this baseline.
+- **Reading numbers out of the answer's prose.** The value-and-unit check is deferred with its text
+  drafted and a correction attached; see the proposal.
+- Judged metrics beyond faithfulness. Available in the same framework and listed in the proposal;
+  each multiplies judge spend, so they wait for the agreement gate.
 - Changing the agent in response to findings. The baseline this produces is the input to those
   changes; they are their own work packages.
 - A general evaluation platform, dashboards, or comparison between runs beyond what the report
@@ -100,44 +107,29 @@ and the scores derived from it, so a reporter can recompute a score from the raw
 scoring rule changes without re-asking. Judgements, when they come, go to a sibling file keyed by
 question, repeat and judge model; the record does not reserve a field for them.
 
-### Every quantity in the window before a citation is read, and the entry's shape sets the expectation
+### The value-and-unit check is deferred, and why the reasoning is kept
 
-The value check needs "the quantities stated beside this citation". The reader takes the text between
-the previous citation marker (or the sentence start) and this one, and extracts **every** numeral
-with an optional unit token: a number, an optional `×10^n` or `e` exponent, an optional range written
-with a dash or "to", a qualification word or symbol before it ("about", "~", "up to", "at least"),
-and the word or symbol that follows. A run of consecutive markers shares one window, since
-"2 µm [[1]][[2]]" cites both for the same figure.
+The design for it was worked out in full and is in this repository's history at commit `75d8767`:
+read every quantity in the window before a citation marker rather than only the last one, because
+real answers put a value and its conversion, or a range and a typical value, before one marker; let a
+run of consecutive markers share a window; and let what counts as a match depend on the cited entry's
+shape, since bare is correct where the entry records no number at all.
 
-*Why every quantity and not the last.* The prompt asks for the identifier after the quantity it
-supports, which made the last one the obvious candidate, but real answers put several figures before
-one marker: a value and its conversion ("0.8 µm, i.e. 800 nm [[1]]"), where the last is a rescaled
-match and the first is the real one; a range and a typical value; a diameter and a length. Reading
-only the last would score the first case as a rescaling and miss a wrong figure in the second.
-Reading all of them and reporting the window as all-match, mixed, rescaled, none or bare keeps the
-information and keeps the cheap direction: a mixed window is a list to read, never a pass.
+It is out of this change because it is a parser over free prose. `cleaning.py` is the standing lesson:
+seven review passes plus fault seeding plus mutation testing each found more defects, and every one
+produced a plausible number rather than an error. Designing a second such parser before any real
+answer has been read means designing for failures nobody has observed.
 
-*What a match is depends on the entry.* Scalar present: a quantity within a relative tolerance of
-`value` (rounding to two or three significant figures is normal). Range and no scalar: a stated range
-whose endpoints match within tolerance, or a quantity inside the range. No number at all: **bare is
-correct**, and a quantity in the window is reported as a value attributed to an entry that gives
-none — the one shape where finding a number is the failure. Hedged range (`range_approximate` or
-`range_one_sided`): the quantity must carry a qualification token, else "hedge dropped". Unit
-unclassifiable: the unit token must equal the entry's unit string as written. If no match, retry at
-each power-of-ten rescaling from 10⁻¹² to 10¹²; a hit there is "matches under rescaling", listed and
-not counted. Units compared with `units.py`'s three-valued check between the token read and the
-entry's unit string.
+**What replaces it here is not a weaker version of it but a different question.** The outlier check
+below asks whether a *cited entry* disagrees with its peers, which needs no prose at all, and it
+catches the specimen that every value check would have passed. The hand-labelling task in group 5
+covers the rest, and produces the count that says whether the parser is worth building.
 
-*Alternatives rejected:* asking the question set to record the expected value (the corpus already
-has it, and a second copy drifts); a windowless "any number in the answer" match (attributes a
-neighbour's figure to the wrong citation and passes an answer that states the right number beside
-the wrong entry); the last quantity only (above); converting units with `pint` (in the validator's
-extra, not `ask`'s, and a correct conversion is exactly what the rescaling tier reports without
-needing to be right about it).
-
-This reader is a parser whose wrong output looks right, so it gets fault seeding and a mutation pass
-before the baseline is recorded, and its two directions are both measured on the first run: how
-many bare citations, mixed windows and mismatches it reports, read against the answers.
+The correction that must travel with the deferred design — that containment inside a recorded range
+is too generous, because a range in this corpus is sometimes real variation, sometimes a standard
+deviation, and sometimes measurement uncertainty, with nothing distinguishing them — is recorded in
+the proposal beside the deferred item rather than here, so whoever picks it up reads it before
+copying the draft.
 
 ### The asked organism and property are checked against the search and against what was cited
 
@@ -154,6 +146,24 @@ entry through a keyword; the two scores tell those apart.
 the search named the organism and whether the cited entries carry it are facts on record, and a
 judge would be a weaker instrument for a question that has an exact answer.
 
+### The outlier check compares entries, never prose
+
+For each cited entry, gather the other entries sharing its property and organism, and ask whether the
+cited one's value sits far outside them. Inputs are the citation set and the corpus; the answer's text
+is never read. That is what makes it cheap, and it is why it survives in a change that has no parser.
+
+Comparison over a spread rather than a mean, and reported rather than scored. These populations are
+small — nine entries for yeast nuclear volume — and skewed, so a standard-deviation test would be
+driven by the outlier it is meant to find. A ratio against the median of the peers is the starting
+form, with the threshold an open question below. Where a property has fewer than a stated number of
+peers, nothing is reported and the report says the comparison could not be made, rather than staying
+silent in a way that reads as a pass.
+
+Not scored against the answer, because an outlier is a fact about the corpus: the entry may be
+measuring something its neighbours are not, which is exactly the yeast case where one entry gives
+10.3 μm³ against eight others between 1.76 and 3.3. What the check buys is that the figure appears
+in a list a person reads, next to the interval its peers occupy.
+
 ### The question set is composed by entry shape
 
 Each expected entry's shape is derived from the corpus at evaluation time, never hand-recorded:
@@ -166,7 +176,8 @@ qualified figure where the range is hedged, the unit carried verbatim where it i
 ### Stating a quantity is detected from two cheap signals, flagged on either
 
 Refusal scoring needs to know whether an answer stated a quantity. Two signals: a citation parsed
-by `citations.py`, and a numeral in the prose, read by the same reader as above. An answer is
+by `citations.py`, and **any digit** in the prose — a character test, not a number parser, which is
+what keeps this group free of the deferred reader. An answer is
 "declined" only when neither is present; either one marks a quantity stated. The rule over-flags —
 a refusal that says "I searched for 2 wordings" would be marked — and that is the cheap direction: a
 wrongly flagged decline is a line in a list someone reads; a wrongly passed fabrication is the
@@ -193,6 +204,37 @@ prompt digest and corpus digest and refuses to combine across any of them.
 a corpus rebuild or a prompt edit, and per-result provenance is what makes that visible rather than
 silently mixed.
 
+### The judge is DeepEval's faithfulness metric behind a thin wrapper
+
+`FaithfulnessMetric` is used as shipped: claims extracted from the answer, truths from the recorded
+context, one verdict and reason per claim. The wrapper subclasses DeepEval's model base to hand it the
+project's `ChatOpenAI` through OpenRouter — the same provider path as the agent — honouring the
+metric's structured-output schema argument, and reads the provider's cost figure the way `spend.py`
+does so judge spend is real and separate. Telemetry is switched off in that module before the import,
+because a guard in a README protects only the reader who saw it. The judge model is configuration and
+is recorded on every judgement, defaulting to a model other than the one under test.
+
+Judgements go to a second JSONL keyed by question, repeat and judge model, written by a pass that
+reads the results file. That is what makes replacing or re-running a judge cost judge spend only, and
+it makes "never combined into one figure" structural rather than a reporting convention.
+
+*Alternatives considered:* openevals with autoevals' `Faithfulness` (two small packages, a LangChain
+model as judge directly, per-statement verdicts) — a real option, rejected for wanting a hand-written
+harness where DeepEval has one; RAGAS, rejected on maintenance and compatibility. ADR-0500 records it.
+
+### The judge is calibrated against hand labels, not against the deferred parser
+
+ADR-0510 requires the judge be validated against something before its figures are read. The reference
+was going to be the deterministic value check. With that deferred, the reference is the hand labels
+from group 5.4: every answer in the first baseline read and marked by a person.
+
+This is better rather than merely available. Twenty answers can be read in an hour, which is cheaper
+than the parser; a person catches faults nobody specified, which is the whole reason for the reviewer
+exercise; and it removes the circularity of validating one automated instrument against another whose
+own error rate is unmeasured. What the deterministic layer still supplies is the hard cases where it
+cannot be wrong: a fabrication on an unsupported question must be judged unfaithful, and a
+judged-faithful fabrication is a judge miss.
+
 ### Scoring functions are pure and mutation-tested
 
 Identifier comparison, the quantity reader and value comparison, quantity detection, spread across
@@ -202,13 +244,23 @@ baseline is recorded, per the project's testing conventions.
 
 ## Risks / Trade-offs
 
-- **The quantity reader is a heuristic over free prose.** It will attribute a neighbouring number to
-  a citation in some sentence shapes, and a window with several figures will be "mixed" more often
-  than it is wrong. → Listed per citation with the window text, both directions counted on the first
-  run, and the rule changed only with both measured.
+- **No check reads the numbers in the answer.** A wrong value beside a right citation passes every
+  deterministic measure in this change. → The judge sees it, the hand labels in 5.4 count it, and that
+  count decides whether the deferred parser gets built.
+- **DeepEval's API moves, and its prompts are its own.** The surface was read from source and docs on
+  2026-09-03, not exercised, and a release can shift judged figures with no change here. → Task 6.2
+  verifies it against the installed version; the wrapper is tested against a scripted judge; every
+  judgement records the judge model.
+- **The outlier threshold is a tuning knob.** Set too tight it flags every legitimate
+  method-dependent difference. → Reported and never scored, so a false flag costs a line someone
+  reads; both directions counted in 4.10.
 - **Organism resolution is the repository's, not the biologist's.** A question asking about "yeast"
   resolves to whatever organism strings contain it. → The set records the organism in the corpus's
   own vocabulary, and the listed misses show where the resolution, not the agent, is at fault.
+- **The organism check flags a deliberate contrast as a mistake.** An answer that cites a
+  different-organism entry precisely to rule it out is indistinguishable, to this check, from one that
+  substituted it. Seen twice in the reviewer specimens. → Reported with the entry named so a reader
+  can tell; a candidate for the judge rather than for a tighter rule.
 - **Rescaling hides a real error.** A ×1000 mistake looks like a µm→nm conversion. → Rescaled
   matches are never counted as matches; they are a list to read.
 - **Over-flagged declines.** The two-signal quantity rule marks some genuine refusals as
@@ -224,8 +276,11 @@ baseline is recorded, per the project's testing conventions.
 
 ## Open Questions
 
-- The relative tolerance for a value match. Start at 5 per cent and read the mismatches on the
-  first run; a tolerance set before any answer has been read is a guess either way.
-- The qualification vocabulary for a hedged range — which words and symbols count as "about" or "up
-  to". Start from the ones the drivers' own marks use, extend from what the first run's hedge-dropped
-  list shows.
+- The outlier threshold and its comparison form. A ratio against the peer median is the starting
+  point; the value comes from running 4.5 over the first question set and reading both directions, not
+  from a figure chosen now.
+- How few peers is too few to judge an outlier at all.
+- The agreement floor for the judge. Start at 0.9 against the hand labels and revise once 6.7 shows
+  what a competent judge actually achieves; a floor set before any measurement is a guess either way.
+- The default judge model. Any capable model reachable through OpenRouter other than the one under
+  test; chosen when the first judged run is configured, recorded on every judgement regardless.
