@@ -28,7 +28,15 @@ _BY_DIMENSION: dict[str, str] = {
     "length": "m, cm, mm, um, nm, pm, km, angstrom, å",
     "area": "m^2, cm^2, mm^2, um^2, nm^2",
     "volume": "m^3, cm^3, mm^3, um^3, nm^3, l, ml, ul, nl, pl, fl, liter",
-    "mass": "g, kg, mg, ug, ng, pg, fg, da, kda, mda, amu, dalton",
+    "mass": (
+        "g, kg, mg, ug, ng, pg, fg, da, kda, mda, amu, dalton, daltons, "
+        # The spelled-out forms of the four symbols above. `kda` was in the table
+        # and `kDalton` was not, so a molecular mass compared against a length
+        # returned unknown instead of incompatible -- found on the reviewer page
+        # of 2026-09-04, where an answer presented 2,700 kDa as the top of a range
+        # of nanometres and nothing could say so.
+        "kdalton, mdalton, kilodalton, megadalton"
+    ),
     "time": (
         "s, sec, secs, second, seconds, ms, us, ns, min, mins, minute, minutes, "
         "h, hr, hrs, hour, hours, day, days, week, weeks, month, months, "
@@ -38,10 +46,27 @@ _BY_DIMENSION: dict[str, str] = {
     "count": (
         "copies/cell, copies per cell, molecules/cell, molecules per cell, "
         "molecules, copies, cells, genes, proteins, atoms, ribosomes, "
-        "nucleotides, nucleotide, bp, kb, mb, gb, base pairs, amino acids"
+        "nucleotides, nucleotide, bp, kb, mb, gb, base pairs, amino acids, "
+        # Per-cell counts of a thing this row already classifies. Enumerated, not
+        # matched by a rule -- see the note below on why.
+        "ribosomes/cell, proteins/cell, atoms/cell, atoms per cell, amino acids/cell"
     ),
     "dimensionless": "unitless, %, percent, fold, ratio, fraction, dimensionless",
 }
+
+# **`<X>/cell` is enumerated and deliberately not a rule.** A rule reading "anything
+# per cell is a count" is the obvious generalisation and it is wrong. Measured over
+# the reference corpus, the 103 distinct `<X>/cell` strings whose `X` this table does
+# not classify are mostly countable (`mRNAs/cell`, `virions/cell`), but 38 entries
+# across `pg/cell`, `fg/cell` and `g/cell` are a *mass* per cell, and one is a volume
+# per cell. Under such a rule a mass per cell would compare compatible with a ribosome
+# count -- an arithmetic error dressed as a range, which is the one thing this module
+# exists to catch. The 62 entries whose `X` is already a known count are listed above;
+# the rest stay unrecognised, which is the honest answer and the safe direction, since
+# an unrecognised unit yields no comparison rather than a wrong one.
+#
+# The same reasoning rules out a rate: `ATP/cell/sec` and `mol/cell/sec` are per-cell
+# per-second, and nothing here should file them beside a count.
 
 # "mM" is millimolar and "mm" is millimetres; "M" is molar and "m" is metres. The
 # corpus distinguishes them only by case, so case cannot be folded away for these.

@@ -121,6 +121,16 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **A molecular mass no longer compares as unknown against a length.** The unit
+  table classified the symbol `kDa` but not the spelled-out `kDalton`, and
+  `Copies/cell` but not `ribosomes/cell`, so the check that exists to refuse a
+  comparison between two kinds of quantity stayed silent on exactly the case it
+  was written for. Eleven unit spellings across 73 entries now classify;
+  no previously classified unit changed dimension. The per-cell family is
+  enumerated rather than matched by a rule, because "anything per cell is a
+  count" would file `pg/cell`, `fg/cell` and `g/cell` — 38 entries — as counts,
+  and a mass per cell would then read as compatible with a ribosome count.
+
 Defects in the ported first-pass ingester, each of which produced a plausible
 number rather than an error:
 
