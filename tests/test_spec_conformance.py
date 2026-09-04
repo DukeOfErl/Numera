@@ -75,6 +75,57 @@ COVERED: dict[str, tuple[str, ...]] = {
     # structure-only wording, which appears in no clause of the requirement. A
     # mapping that names a test checking something else is exactly the failure this
     # file admits it cannot detect, so it is worth not making by hand.
+    "Scoring is based on cited entries, not answer text": (
+        "test_scoring.py::test_an_answer_citing_every_expected_entry_scores_as_such",
+        "test_scoring.py::test_an_unexpected_citation_is_reported_and_is_not_an_error",
+        "test_scoring.py::test_a_missed_entry_is_split_by_whether_it_was_ever_retrieved",
+        "test_report.py::test_the_two_kinds_of_missed_entry_are_reported_apart",
+    ),
+    "The asked property and organism are recognised": (
+        "test_scoring.py::test_an_abbreviated_search_counts_as_searching_for_the_organism",
+        "test_scoring.py::test_searching_for_another_organism_does_not_count",
+        "test_scoring.py::test_a_keyword_counts_as_looking_for_the_property",
+        "test_scoring.py::test_what_the_agent_settled_on_is_counted_apart_from_what_it_searched",
+        "test_repository.py::test_resolution_is_what_search_uses_not_a_copy_of_it",
+    ),
+    # The scoring half. That the *set* must contain unsupported questions is
+    # checked by `test_question_set.py`'s flag validation; that the corpus cannot
+    # answer them is 4.11's check, listed here because a set whose flag is wrong
+    # makes this requirement's figures meaningless.
+    "Unsupported questions are part of the set": (
+        "test_scoring.py::test_an_unsupported_question_answered_with_a_figure_is_a_fabrication",
+        "test_scoring.py::test_an_unsupported_question_declined_in_words_alone_is_a_decline",
+        "test_scoring.py::test_the_quantity_rule_over_flags_and_that_is_the_direction_chosen",
+        "test_question_set.py::test_an_unsupported_question_the_corpus_can_answer_is_refused",
+        "test_report.py::test_a_fabrication_on_an_unsupported_question_is_listed_with_its_answer",
+    ),
+    "The agent's own grounding warnings are scored": (
+        "test_scoring.py::test_the_agents_warnings_are_counted_not_recomputed",
+        "test_scoring.py::test_a_refusal_with_no_search_behind_it_is_never_a_correct_decline",
+        "test_scoring.py::test_a_refusal_that_searched_first_is_a_correct_decline",
+    ),
+    "A cited entry at odds with its peers is flagged": (
+        "test_scoring.py::test_the_entry_that_motivated_the_check_is_flagged",
+        "test_scoring.py::test_an_entry_inside_its_peers_interval_is_not_flagged",
+        "test_scoring.py::test_a_property_with_too_few_peers_is_not_judged_and_says_so",
+        "test_report.py::test_an_outlier_is_listed_with_the_interval_its_peers_occupy",
+        "test_report.py::test_a_comparison_that_could_not_be_made_is_said_rather_than_omitted",
+    ),
+    "Run-to-run variation is measured, not averaged away": (
+        "test_evaluation.py::test_each_question_is_asked_once_per_repeat_in_its_own_session",
+        "test_scoring.py::test_a_question_citing_different_entries_across_repeats_is_unstable",
+        "test_scoring.py::test_a_spread_over_no_values_is_unknown_rather_than_zero",
+    ),
+    "A report can be produced from a partial results file": (
+        "test_report.py::test_a_partial_run_says_so_before_any_figure",
+        "test_report.py::test_an_empty_results_file_is_reported_as_empty_not_as_zeros",
+        "test_report.py::test_a_run_stopped_on_its_budget_is_distinguished_from_a_completed_one",
+        "test_report.py::test_figures_are_never_combined_across_a_different_prompt_or_corpus",
+    ),
+    "Cost and effort are reported": (
+        "test_report.py::test_spend_in_this_session_is_reported_apart_from_the_runs_total",
+        "test_report.py::test_how_often_each_bound_was_reached_is_reported",
+    ),
     "Results are recorded as each question completes": (
         "test_evaluation.py::test_each_result_is_on_disk_before_the_next_question_is_asked",
         "test_evaluation.py::test_a_question_that_raises_is_recorded_as_a_failure_and_the_run_goes_on",
@@ -383,22 +434,12 @@ COVERED.update(
     }
 )
 
-# `add-answer-evaluation`'s (formerly `add-ask-agent`'s group 9). Not mappable until
-# the evaluation harness exists, so a different kind of gap from the one above and
-# kept apart from it -- otherwise finishing 10.9 would look impossible rather than
-# merely unfinished. The last seven cover the outlier check and the judged layer.
-# Left this list as it was built: the question set (group 2), and recording,
-# resumption, provenance and the recorded context (group 3). What remains needs
-# either the scoring functions or the report.
+# `add-answer-evaluation`'s (formerly `add-ask-agent`'s group 9). What is left here
+# is the judged layer alone: groups 2, 3 and 4 built everything else, and each
+# requirement left this list as its tests landed. A different kind of gap from the
+# one above and kept apart from it -- otherwise finishing 10.9 would look
+# impossible rather than merely unfinished.
 AWAITING_THE_HARNESS = (
-    "Scoring is based on cited entries, not answer text",
-    "Unsupported questions are part of the set",
-    "Run-to-run variation is measured, not averaged away",
-    "A report can be produced from a partial results file",
-    "Cost and effort are reported",
-    "The asked property and organism are recognised",
-    "The agent's own grounding warnings are scored",
-    "A cited entry at odds with its peers is flagged",
     "Faithfulness is judged per claim, with a reason",
     "The judged layer is secondary and optional",
     "A judge is trusted only after measured agreement",

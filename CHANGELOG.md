@@ -12,6 +12,18 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **`scinumbers-eval report`** — reads a results file and gives its figures:
+  expected entries cited, and the two ways an expected entry can be missed
+  (retrieved and passed over, or never retrieved) reported apart; whether the
+  agent searched for the asked organism and property, kept separate from what it
+  settled on citing; whether unsupported questions were declined, with every
+  answer flagged as stating a quantity listed for reading; the agent's own
+  grounding warnings; cited entries whose value sits far outside the interval
+  their peers occupy; how often each limit was reached; and cost, with this
+  session's spend apart from the run's total. Figures are never combined across a
+  different model, prompt or corpus, a partial file says so before any figure,
+  and a comparison that could not be made is said rather than left as a silence.
+  Figures per question tag and per entry shape on request.
 - **`scinumbers-eval run`** — asks a question set and appends one record per
   question as it completes, so an interrupted run keeps everything it finished.
   Each record carries the question, the answer, the entries cited, retrieved and

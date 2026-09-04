@@ -162,8 +162,24 @@ def test_an_unknown_identifier_returns_nothing(repo):
 
 
 def test_the_repository_exposes_no_way_to_change_the_corpus(repo):
+    """An exact list, so a new public name has to be justified rather than noticed.
+
+    Every name here is a read. `resolve_organism` and `resolve_property` were made
+    public for the evaluation, which has to judge "did the agent search for the
+    asked organism" with the same resolution `search` uses -- comparing the strings
+    instead would score a search for "E. coli" as not a search for "Escherichia
+    coli", reporting the resolution's success as the agent's failure. Neither
+    touches the corpus.
+    """
     public = [n for n in dir(repo) if not n.startswith("_")]
-    assert sorted(public) == ["aliases", "get", "search", "vocabulary"]
+    assert sorted(public) == [
+        "aliases",
+        "get",
+        "resolve_organism",
+        "resolve_property",
+        "search",
+        "vocabulary",
+    ]
 
 
 def test_entries_cannot_be_mutated(repo):
@@ -296,3 +312,38 @@ def test_the_readable_alias_index_keeps_its_punctuation(repo):
     the form a person would write; the punctuation-insensitive lookup sits beside
     it rather than replacing it."""
     assert "e. coli" in repo.aliases()
+
+
+# -- resolution, made public for the evaluation ---------------------------
+
+
+def test_an_abbreviated_binomial_resolves_to_the_stored_organism(repo):
+    """The reason this is public: the evaluation has to agree with `search` about
+    what "E. coli" means, or it would report the alias index's success as the
+    agent's failure."""
+    assert repo.resolve_organism("E. coli") == repo.resolve_organism("Escherichia coli")
+    assert "Bacteria Escherichia coli" in repo.resolve_organism("E. coli")
+
+
+def test_an_organism_the_corpus_does_not_hold_resolves_to_nothing(repo):
+    assert repo.resolve_organism("Planarian") == frozenset()
+
+
+def test_a_property_term_resolves_to_the_stored_values_it_selects(repo):
+    """Search matches a property by substring, and this is that rule read through
+    the corpus: "volume" and "Cell volume" agree because both select the same
+    stored value, where comparing the two strings would not."""
+    assert repo.resolve_property("volume") & repo.resolve_property("Cell volume")
+
+
+def test_a_property_the_corpus_does_not_hold_resolves_to_nothing(repo):
+    assert repo.resolve_property("Number of neoblasts") == frozenset()
+
+
+def test_resolution_is_what_search_uses_not_a_copy_of_it(repo):
+    """A second implementation would drift from `search` silently, and the drift
+    would look like the agent searching for the wrong thing."""
+    for term in ("E. coli", "Escherichia"):
+        found = repo.search(organism=term)
+        stored = {row.organism for row in found.rows}
+        assert stored <= repo.resolve_organism(term)
