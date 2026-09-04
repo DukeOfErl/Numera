@@ -7,7 +7,7 @@
 ## Context
 
 The evaluation specified in `answer-evaluation` scores by entry identifiers and needs no model.
-This change adds a second layer that judges an answer's claims against the context the agent was
+A follow-up to `add-answer-evaluation` (deferred there, drafted, triggered by its baseline) adds a second layer that judges an answer's claims against the context the agent was
 shown, and the product of that layer is not the score but the per-claim verdict and reason: which
 claim was unsupported and why, so a user can be warned and a developer can fix the cause. That
 needs an LLM judge, and the question was which framework to build it on rather than whether to

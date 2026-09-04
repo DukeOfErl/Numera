@@ -12,6 +12,18 @@ The evaluation SHALL read a question set in which each question records the entr
 should support its answer, and SHALL fail with an explanatory message when no question set is
 supplied. Question sets SHALL NOT be generated at evaluation time by the system under test.
 
+Each question SHALL record the property and the organism it asks about, in the corpus's own
+vocabulary, so that whether the agent looked for them can be scored. Each question MAY carry tags
+naming what it exercises — a comparison across entries, a conversion, an unsupported question, a
+follow-up — and the report SHALL be able to give its figures per tag, so that a change which helps
+one kind of question and harms another is visible as both.
+
+The set SHALL include questions whose expected entries are complete — a scalar value, a classified
+unit, a range that is not fused, a measurement method — and questions whose expected entries lack
+each of those or carry a hedged range, and the report SHALL give its figures per entry shape. Most of
+the corpus is incomplete in at least one of these ways, so a set drawn only from complete entries
+measures the happy path and says nothing about the behaviour most questions will meet.
+
 #### Scenario: Question set supplied
 - **WHEN** the evaluation runs with a question set
 - **THEN** each question is asked and scored against its recorded supporting entries
@@ -20,11 +32,28 @@ supplied. Question sets SHALL NOT be generated at evaluation time by the system 
 - **WHEN** the evaluation runs without one
 - **THEN** it stops with a message explaining that a question set is required
 
+#### Scenario: Figures per tag
+- **WHEN** questions in the set carry tags
+- **THEN** the report can give every figure for the questions carrying a given tag
+
+#### Scenario: A question records what it asks
+- **WHEN** a question is read from the set
+- **THEN** it names the property and the organism asked
+
+#### Scenario: Incomplete entries are in the set
+- **WHEN** the set is validated
+- **THEN** it holds questions whose expected entries have no scalar value, an unclassified unit, a fused range, no measurement method, and a hedged range
+- **AND** the report gives its figures for each of those shapes apart from the complete ones
+
 ### Requirement: Scoring is based on cited entries, not answer text
 
 The evaluation SHALL score an answer by comparing the entry identifiers it cited against those
 recorded for the question, reporting how many expected entries were cited and how many cited
 entries were not expected. It SHALL NOT score by string comparison of the answer prose.
+
+Of the expected entries an answer did not cite, the evaluation SHALL report separately those the
+agent retrieved and passed over from those it never retrieved. The two are different failures — one
+of selection, one of search — and a single "missed" count would hide which is happening.
 
 #### Scenario: Answer cites the expected entries
 - **WHEN** an answer cites every entry recorded for the question
@@ -33,6 +62,63 @@ entries were not expected. It SHALL NOT score by string comparison of the answer
 #### Scenario: Answer cites unexpected entries
 - **WHEN** an answer cites entries not recorded for the question
 - **THEN** those are reported separately rather than counted as errors, since the corpus may support the answer through entries the question set does not list
+
+#### Scenario: An expected entry was retrieved and passed over
+- **WHEN** an expected entry was returned by a retrieval during the question and the answer did not cite it
+- **THEN** it is reported as passed over, apart from expected entries that were never retrieved
+
+### Requirement: The asked property and organism are recognised
+
+The evaluation SHALL score, per question, whether any retrieval the agent made named the asked
+organism — resolved the way the corpus's own search resolves an organism term, so an abbreviated
+binomial counts — and whether any named the asked property, as a property or a keyword argument; and
+SHALL report what fraction of the cited entries carry the asked organism and the asked property in
+their own fields. The two are reported apart: what the agent asked for and what it settled on.
+
+A right number for the wrong organism, or for a neighbouring property the search happened to return,
+cites correctly and answers a different question. The retrieval arguments and the entries' fields
+are both on record, so this needs no judge.
+
+#### Scenario: The agent searched for what was asked
+- **WHEN** a retrieval during the question names the asked organism and one names the asked property
+- **THEN** the question is scored as having searched for both
+
+#### Scenario: The agent never searched for the asked organism
+- **WHEN** no retrieval during the question names the asked organism
+- **THEN** the question is scored as not having searched for it, and listed with the terms it did search
+
+#### Scenario: Cited entries belong to another organism
+- **WHEN** a cited entry's organism field is not the asked organism
+- **THEN** it is counted against the fraction of cited entries carrying the asked organism, and listed
+
+### Requirement: A cited entry at odds with its peers is flagged
+
+The evaluation SHALL compare each cited entry's recorded value against the values recorded by the
+other entries for the same property and organism, and SHALL flag a citation whose entry is a distant
+outlier among them. The flag SHALL name the entry, its value, and the interval the other entries
+occupy, and SHALL NOT be counted as an error.
+
+This asks only which entries were cited and what the corpus records for their neighbours, so it
+needs no reading of the answer's prose. An answer can cite an entry that exists, attribute its number
+correctly, and still lead with the one figure in the corpus that disagrees with every other
+measurement of the same quantity. Every check that compares an answer against its own citations
+passes such an answer, because nothing about it is internally wrong.
+
+An outlier is a fact about the corpus rather than about the answer, so it is reported for reading
+rather than scored against the answer: the entry may be measuring something its neighbours do not.
+
+#### Scenario: A cited entry is an outlier
+- **WHEN** a cited entry's value is a distant outlier among the entries for the same property and organism
+- **THEN** the citation is flagged with that entry's value and the interval the other entries occupy
+
+#### Scenario: Every cited entry sits with its peers
+- **WHEN** no cited entry's value is an outlier among its peers
+- **THEN** no outlier is reported for the answer
+
+#### Scenario: Too few peers to judge
+- **WHEN** a property has fewer entries than the comparison needs
+- **THEN** no outlier is reported for it
+- **AND** the report states that the comparison could not be made
 
 ### Requirement: Unsupported questions are part of the set
 
@@ -51,6 +137,29 @@ practice; the refusal behaviour is a capability under test, not an edge case.
 - **WHEN** a question recorded as unsupported is asked
 - **AND** the answer states a quantity
 - **THEN** it is scored as a fabrication and reported separately from citation failures
+
+### Requirement: The agent's own grounding warnings are scored
+
+The evaluation SHALL score, from what the agent reports about each question, a citation of an entry
+not retrieved during the question, a citation of an identifier not in the corpus, and an answer
+reached without any retrieval — including one whose prose claims a search was made — as grounding
+failures, reported apart from citation-set, value and refusal scoring.
+
+These are facts the agent already establishes about its own run, without judging the answer. A
+refusal reached without searching is not a correct decline, and a cited entry the agent never saw
+came from the model's memory; both would otherwise be scored as successes.
+
+#### Scenario: An answer cites an entry it never retrieved
+- **WHEN** an answer cites an entry that no retrieval during the question returned
+- **THEN** it is scored as a grounding failure and listed
+
+#### Scenario: A refusal without retrieval
+- **WHEN** an unsupported question is declined and no retrieval was made
+- **THEN** it is scored as an ungrounded refusal, apart from correctly declined
+
+#### Scenario: The prose claims a search that did not happen
+- **WHEN** an answer reached without retrieval describes having searched
+- **THEN** that is counted separately from a plain ungrounded answer
 
 ### Requirement: Run-to-run variation is measured, not averaged away
 
@@ -118,53 +227,19 @@ covers.
 ### Requirement: Recorded results are usable by external evaluation tools
 
 Each recorded result SHALL carry the question as asked, the answer produced, the entries cited, the
-entries expected, and the context shown to the agent, in a form that can be read by evaluation
-tooling other than this project's own reporter.
+entries retrieved, the entries expected, and the context shown to the agent, in a form that can be
+read by evaluation tooling other than this project's own reporter.
 
 Retrofitting this shape later would mean re-running the evaluation to regenerate every record, so
 the cost of adopting an external tool would be paid in model spend rather than in code.
 
 #### Scenario: A result is recorded
 - **WHEN** a question's result is written
-- **THEN** it carries the question, the answer, the cited entries, the expected entries, the context shown to the agent, and the model used
+- **THEN** it carries the question, the answer, the cited, retrieved and expected entries, the context shown to the agent, and what produced it
 
 #### Scenario: Results are read by another tool
 - **WHEN** a results file is read by evaluation tooling that is not this project's reporter
 - **THEN** each record supplies the question, the answer, the retrieved context, and the expected result without transformation
-
-### Requirement: Every result records the model that produced it
-
-Each recorded result SHALL name the model that produced the answer, and every report SHALL state the
-model or models its figures came from. A report covering results from more than one model SHALL
-break its figures down by model rather than combining them.
-
-Without this, a baseline taken on a cheap development model is silently compared against one taken on
-a capable model, and a change of model reads as a change in quality. It also separates the two
-explanations for a failed citation requirement — a defective harness, or a model not strong enough to
-follow it — which are otherwise indistinguishable from the score alone.
-
-#### Scenario: A result is recorded
-- **WHEN** a question's result is written
-- **THEN** it names the model that produced the answer
-
-#### Scenario: A report covers one model
-- **WHEN** every result in a report came from the same model
-- **THEN** the report names that model alongside its figures
-
-#### Scenario: A report covers several models
-- **WHEN** results from more than one model are present
-- **THEN** the figures are reported per model
-- **AND** no figure combines results across models
-
-### Requirement: Cost and effort are reported
-
-Each evaluation run SHALL report the model cost it incurred and the number of tool calls made, so
-that a change improving accuracy at several times the cost is visible as such.
-
-#### Scenario: An evaluation run completes
-- **WHEN** a run finishes
-- **THEN** the report states the model cost and the total tool calls
-- **AND** states them per question as well as in aggregate
 
 ### Requirement: The context shown to the agent is recorded verbatim
 
@@ -185,6 +260,51 @@ score groundedness against material the agent never had.
 - **WHEN** a result is written for a question during which no retrieval was made
 - **THEN** the result records that the context was empty
 - **AND** that is distinguishable from a result whose context is absent
+
+### Requirement: Every result records what produced it
+
+Each recorded result SHALL name the model that produced the answer and every model setting that
+shapes an answer — the reasoning effort where one is configured, and any sampling setting — together
+with the identity of the instructions given to the model, the identity of the corpus asked (a digest
+of its content and its entry count), the version of the code, and the time the question was asked.
+Every report SHALL state the model or models its figures came from. A report covering results from
+more than one model, more than one set of instructions, or more than one corpus SHALL break its
+figures down rather than combine them.
+
+Without this, a baseline taken on a cheap development model is silently compared against one taken on
+a capable model, and a change of model reads as a change in quality. The same holds for a reworded
+prompt and for a corpus that gained entries between two runs: each moves the figures, and a result
+that does not say which corpus it was asked of cannot be compared with one asked of another. It also
+separates the two explanations for a failed citation requirement — a defective harness, or a model
+not strong enough to follow it — which are otherwise indistinguishable from the score alone.
+
+#### Scenario: A result is recorded
+- **WHEN** a question's result is written
+- **THEN** it names the model and its settings, the instructions' identity, the corpus's identity, the code version, and the time
+
+#### Scenario: A report covers one model
+- **WHEN** every result in a report came from the same model
+- **THEN** the report names that model alongside its figures
+
+#### Scenario: A report covers several models
+- **WHEN** results from more than one model are present
+- **THEN** the figures are reported per model
+- **AND** no figure combines results across models
+
+#### Scenario: The corpus changed between runs
+- **WHEN** results in a report were produced against corpora with different identities
+- **THEN** the figures are reported per corpus
+- **AND** the report says the corpus differed
+
+### Requirement: Cost and effort are reported
+
+Each evaluation run SHALL report the model cost it incurred and the number of tool calls made, so
+that a change improving accuracy at several times the cost is visible as such.
+
+#### Scenario: An evaluation run completes
+- **WHEN** a run finishes
+- **THEN** the report states the model cost and the total tool calls
+- **AND** states them per question as well as in aggregate
 
 ### Requirement: Faithfulness is judged per claim, with a reason
 
