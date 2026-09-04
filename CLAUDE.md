@@ -37,14 +37,20 @@ Three work packages, three packages under `src/`, one dependency extra each, so 
 the same source tree: `bionumbers_ingest` (`ingest`), `scinumbers_ask` (`ask`), `bionumbers`
 (`validator`). The ingester and the ask agent are both here; the validator is not yet.
 
+A fourth extra, `eval`, is **additive to `ask` rather than a package of its own**: the evaluation
+harness lives in `scinumbers_ask` because it is an adapter over that agent, and the extra carries only
+what is new (`deepeval`, for the judged layer alone). Install both: `uv sync --extra ask --extra eval`.
+A deterministic evaluation run needs none of DeepEval, which is why it is separable at all.
+
 Diagrams — including the agent's graph generated from the compiled object — are in
 `docs/diagrams/architecture.md`. Regenerate that graph whenever middleware changes.
 
 **Ports and adapters.** `agent.py` emits events (`events.py`) and accepts a
 question; it never touches an interface and never blocks for input. `cli.py` and
-`web.py` are adapters over it, and the evaluation harness will be a third. The
-agent takes no parameter naming its caller, so it cannot behave one way for a
-person and another for a harness (ADR-0110).
+`web.py` are adapters over it, and the evaluation harness is the third — begun,
+and so far only able to read and check a question set. The agent takes no
+parameter naming its caller, so it cannot behave one way for a person and another
+for a harness (ADR-0110).
 
 **The dependency direction is the one rule with teeth.** Adapters may reach into
 the core; the core may not reach back. Nothing in Python enforces this — an
@@ -53,6 +59,12 @@ the core; the core may not reach back. Nothing in Python enforces this — an
 and `messages.py` are shared *by* the drivers and count as presentation, which is
 why a rule both the table and the model need (the implausible-span test) lives on
 `Entry` rather than in the table.
+
+The harness modules are named in that test's `HARNESS` set and carry one extra
+rule: they may not reach for an interactive driver either, or the thing meant to
+run unattended would need a terminal. **Add a new harness module to that set as it
+lands** — the set also decides, by subtraction, which modules count as the agent's
+core, and a test there refuses a name with no file behind it.
 
 | Module | Holds |
 |---|---|
@@ -68,7 +80,9 @@ why a rule both the table and the model need (the implausible-span test) lives o
 | `bionumbers.py` | The only module that names BioNumbers: its `BNID` notation, read and restated (ADR-0420) |
 | `entries_table.py` | Rows, marks and legends — shared by both drivers |
 | `messages.py` | Wording both drivers use, and `STOP_THE_RUN` |
-| `cli.py` / `web.py` | The two adapters |
+| `cli.py` / `web.py` | The two interactive adapters |
+| `question_set.py` | The evaluation's question set: the format, its reader, and the entry shapes derived from the corpus |
+| `eval_cli.py` | The evaluation command (`scinumbers-eval`), so far `check` alone |
 | `trace.py` | The structured trail, one question id throughout |
 
 **Patterns, named where they are used.** Ports and adapters (above). Repository
@@ -178,7 +192,9 @@ archives the change while promoting nothing, which is the only reason to archive
 
 A repeated-run harness -- fault seeding, mutation testing -- should exclude the `slow` marker as well, and must write the **whole** expression: `pytest -m "not network and not corpus and not slow"`. A second `-m` replaces `addopts` rather than ANDing with it, so `-m "not slow"` alone re-selects `network` and `corpus` and the run gets *slower* -- silently. 63s becomes 34s written correctly.
 
-`pytest` is offline by default and runs on the six-entry fixture: `addopts = "-m 'not network and not corpus'"` deselects both markers, so a green run may never have executed the tests that hit a real service or the ones that check a marker can fire against a real corpus. Run those explicitly with `pytest -m network` and `SCINUMBERS_CORPUS=... pytest -m corpus`.
+`pytest` is offline by default and runs on the six-entry fixture: `addopts = "-m 'not network and not corpus' -p no:deepeval"` deselects both markers, so a green run may never have executed the tests that hit a real service or the ones that check a marker can fire against a real corpus. Run those explicitly with `pytest -m network` and `SCINUMBERS_CORPUS=... pytest -m corpus`.
+
+`-p no:deepeval` is there because the `eval` extra installs DeepEval, which registers a pytest plugin that prints a teardown line after every run — including runs that touch none of its code. Collection is unaffected; it is the output that moved, and "the suite output is unchanged" is not checkable if it depends on which extras a developer installed. Harmless where DeepEval is absent, since `-p no:<name>` for an uninstalled plugin is not an error — which matters because this file is shared by all three work packages. Group 6 of `add-answer-evaluation` may want DeepEval's own pytest integration back; that means overriding `addopts` in that run, and the whole expression has to be written out, exactly as with `-m`.
 
 ## Testing the tests
 
