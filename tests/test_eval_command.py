@@ -51,7 +51,17 @@ def test_a_valid_set_is_reported_with_its_composition(tmp_path, capsys):
         "unsupported": True,
     }
     main(["check", write_set(tmp_path, SUPPORTED, followup, unsupported)])
-    assert "3 questions, 1 unsupported, 1 follow-ups." in capsys.readouterr().out
+    assert "3 questions, 1 unsupported, 1 follow-up." in capsys.readouterr().out
+
+
+def test_the_composition_line_counts_more_than_one_follow_up(tmp_path, capsys):
+    """Only here to hold the plural: "1 follow-ups" was in the first output."""
+    followups = [
+        {**SUPPORTED, "question_id": "q1b", "follows": "q1"},
+        {**SUPPORTED, "question_id": "q1c", "follows": "q1"},
+    ]
+    main(["check", write_set(tmp_path, SUPPORTED, *followups)])
+    assert "2 follow-ups." in capsys.readouterr().out
 
 
 def test_a_check_without_a_corpus_says_what_it_did_not_check(tmp_path, capsys):

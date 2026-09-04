@@ -51,7 +51,10 @@ def main(argv: list[str] | None = None) -> None:
 
     followups = sum(1 for question in questions if question.follows is not None)
     unsupported = sum(1 for question in questions if question.unsupported)
-    print(f"{len(questions)} questions, {unsupported} unsupported, {followups} follow-ups.")
+    print(
+        f"{len(questions)} questions, {unsupported} unsupported, "
+        f"{followups} follow-up{'' if followups == 1 else 's'}."
+    )
     if args.corpus:
         print("Every expected entry is in the corpus, and every entry shape is exercised.")
     else:
