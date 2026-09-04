@@ -84,6 +84,95 @@ def test_a_new_session_does_not_inherit(repo, config, tmp_path):
     assert agent2.conversation_length("s2") == 2
 
 
+def test_the_context_a_session_was_shown_is_readable_from_it(repo, config, tmp_path):
+    """The evaluation records what the agent was shown, and this is the only source
+    that is that by construction: a search for "Cell diameter" against the fixture
+    corpus must have put entry 100002 in front of the model, so the recorded text
+    has to carry it."""
+    model = scripted(tool_call("search_entries", property="Cell diameter"), says("done"))
+    agent = agent_with(repo, config, tmp_path, model)
+    run(agent, "s1", "How wide is E. coli?")
+    (shown,) = agent.tool_results("s1")
+    assert "100002" in shown
+
+
+def test_a_session_shown_nothing_records_nothing(repo, config, tmp_path):
+    agent = agent_with(repo, config, tmp_path, scripted(says("from memory")))
+    run(agent, "s1", "How wide is E. coli?")
+    assert agent.tool_results("s1") == ()
+
+
+def test_every_tool_result_is_recorded_in_order_not_only_the_last(repo, config, tmp_path):
+    """A question makes several retrievals, and the context is all of them.
+
+    Keeping only the last would misreport the evidence of exactly the questions
+    that took the most work to answer.
+    """
+    model = scripted(
+        tool_call("search_entries", property="Cell diameter"),
+        tool_call("search_entries", property="Cell length"),
+        says("done"),
+    )
+    agent = agent_with(repo, config, tmp_path, model)
+    run(agent, "s1", "How big is E. coli?")
+    first, second = agent.tool_results("s1")
+    assert "100002" in first
+    assert "100001" in second
+
+
+def test_a_search_that_matched_nothing_is_recorded_rather_than_dropped(repo, config, tmp_path):
+    """It is what the model was shown, and it is why a refusal was right.
+
+    A record that held only fruitful retrievals would make a correct refusal look
+    like a refusal with no search behind it.
+    """
+    model = scripted(tool_call("search_entries", property="Number of neoblasts"), says("no"))
+    agent = agent_with(repo, config, tmp_path, model)
+    run(agent, "s1", "How many neoblasts?")
+    (shown,) = agent.tool_results("s1")
+    assert "No entries matched" in shown
+
+
+def test_each_session_records_only_its_own_context(repo, config, tmp_path):
+    a = agent_with(
+        repo,
+        config,
+        tmp_path,
+        scripted(tool_call("search_entries", property="Cell diameter"), says("a")),
+    )
+    run(a, "alpha", "question one")
+    b = agent_with(
+        repo,
+        config,
+        tmp_path,
+        scripted(tool_call("search_entries", property="Cell length"), says("b")),
+    )
+    run(b, "beta", "question two")
+    assert "100002" in a.tool_results("alpha")[0]
+    assert "100002" not in b.tool_results("beta")[0]
+
+
+def test_a_follow_up_sees_its_parent_context_too(repo, config, tmp_path):
+    """A follow-up shares its parent's session, so the context recorded for it is
+    the whole session's -- which is what the harness needs, since a follow-up's
+    answer may rest on an entry retrieved for the question before it."""
+    first = agent_with(
+        repo,
+        config,
+        tmp_path,
+        scripted(tool_call("search_entries", property="Cell diameter"), says("a")),
+    )
+    run(first, "s1", "How wide is E. coli?")
+    second = agent_with(
+        repo,
+        config,
+        tmp_path,
+        scripted(tool_call("search_entries", property="Cell length"), says("b")),
+    )
+    run(second, "s1", "And how long?")
+    assert len(second.tool_results("s1")) == 2
+
+
 def test_two_sessions_share_nothing(repo, config, tmp_path):
     a = agent_with(repo, config, tmp_path, scripted(says("one")))
     run(a, "alpha", "question one")

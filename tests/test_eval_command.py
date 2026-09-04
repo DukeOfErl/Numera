@@ -175,3 +175,19 @@ def test_the_corpus_is_resolved_the_way_the_ask_command_resolves_it(tmp_path, mo
     # On stderr, because stdout carries what a person or a script reads.
     captured = capsys.readouterr()
     assert "resolving" in captured.err and "resolving" not in captured.out
+
+
+def test_a_run_without_a_corpus_is_refused_before_a_model_is_built(tmp_path):
+    """`check` can work without a corpus and `run` cannot, so the refusal is on the
+    subcommand rather than on the loader -- and it comes before the agent is
+    constructed, which is what stops "no corpus" arriving as a missing API key."""
+    with pytest.raises(SystemExit) as exit_info:
+        main(["run", write_set(tmp_path, SUPPORTED), "--results", str(tmp_path / "r.jsonl")])
+    assert "A run needs a corpus" in str(exit_info.value)
+
+
+def test_both_subcommands_are_offered(capsys):
+    with pytest.raises(SystemExit):
+        main(["--help"])
+    out = capsys.readouterr().out
+    assert "check" in out and "run" in out

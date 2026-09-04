@@ -47,8 +47,8 @@ Diagrams — including the agent's graph generated from the compiled object — 
 
 **Ports and adapters.** `agent.py` emits events (`events.py`) and accepts a
 question; it never touches an interface and never blocks for input. `cli.py` and
-`web.py` are adapters over it, and the evaluation harness is the third — begun,
-and so far only able to read and check a question set. The agent takes no
+`web.py` are adapters over it, and the evaluation harness is the third — it can
+ask a question set and record what came back, but not yet score it. The agent takes no
 parameter naming its caller, so it cannot behave one way for a person and another
 for a harness (ADR-0110).
 
@@ -82,7 +82,8 @@ core, and a test there refuses a name with no file behind it.
 | `messages.py` | Wording both drivers use, and `STOP_THE_RUN` |
 | `cli.py` / `web.py` | The two interactive adapters |
 | `question_set.py` | The evaluation's question set: the format, its reader, and the entry shapes derived from the corpus |
-| `eval_cli.py` | The evaluation command (`scinumbers-eval`), so far `check` alone |
+| `evaluation.py` | The evaluation driver: asks, records one line per result, resumes, and fingerprints what produced each |
+| `eval_cli.py` | The evaluation command (`scinumbers-eval`): `check` and `run` |
 | `trace.py` | The structured trail, one question id throughout |
 
 **Patterns, named where they are used.** Ports and adapters (above). Repository
