@@ -15,29 +15,89 @@ recorded there rather than here.
 
 ## 1. Ground
 
-- [ ] 1.1 Add the `scinumbers-eval` console script and the `eval` extra (`deepeval`, for group 6 only)
+- [x] 1.1 Add the `scinumbers-eval` console script and the `eval` extra (`deepeval`, for group 6 only)
       to `pyproject.toml`; review the `uv.lock` diff for what moved, `openai` in particular
-- [ ] 1.2 Add the harness's modules to the driver-independence test so the core is asserted never to
+- [x] 1.2 Add the harness's modules to the driver-independence test so the core is asserted never to
       import them
-- [ ] 1.3 Read `openspec/specs/agent-session/` as promoted, not the archived delta: it is the port the
+- [x] 1.3 Read `openspec/specs/agent-session/` as promoted, not the archived delta: it is the port the
       harness drives
-- [ ] 1.4 Confirm the default `pytest` run is unchanged after `uv sync --extra eval` — DeepEval registers
+- [x] 1.4 Confirm the default `pytest` run is unchanged after `uv sync --extra eval` — DeepEval registers
       pytest plugins — and disable its plugin in `addopts` if collection or output moves
+  - **What the lock review found.** 93 → 129 packages, nothing removed, and exactly one version
+    moved: `click` 8.4.2 → 8.3.3, pinned down by `typer` (which `deepeval` brings). `openai` stayed
+    at 3.2.0 and so did every LangChain package, `pydantic` and `httpx` — the agent's stack is
+    untouched, which is what task 1.1 was asking.
+  - **Five pytest plugins arrive with DeepEval**: its own, plus `xdist`, `asyncio`, `repeat` and
+    `rerunfailures`. Only its own changed anything — a "Running teardown with pytest
+    sessionfinish..." line after every run, including runs that touch none of its code — and
+    `-p no:deepeval` in `addopts` restores the output exactly. Collection was never affected: 919
+    selected and 35 deselected before and after.
+  - **`uv sync` pruned `mutmut`, `textual` and `setproctitle` from the venv**, because they were
+    installed ad hoc and are in no extra or group. Nothing here needs them, but a mutation run does:
+    reinstall before reaching for the `mutation-test-module` skill.
 
 ## 2. The question set
 
-- [ ] 2.1 Define the question set format (JSONL, ADR-0220): identifier, question, the property and
+- [x] 2.1 Define the question set format (JSONL, ADR-0220): identifier, question, the property and
       organism asked in the corpus's vocabulary, expected entry identifiers, unsupported flag, the
       identifier of the question it follows, tags, and free notes. Require one to be supplied and fail
       with an explanatory message without one
   - Include questions that separate an object from its measure — a volume asked of two different objects,
     a size asked where only a diameter exists, E. coli's nucleus. `add-ask-agent`'s Deferred section,
     *Faceting the property field into object and measure*, turns on the failure rate these measure.
-- [ ] 2.2 Validate unsupported and follow-up questions in the format, and reject a follow-up naming a
+- [x] 2.2 Validate unsupported and follow-up questions in the format, and reject a follow-up naming a
       parent the set does not contain
-- [ ] 2.3 Derive each expected entry's shape from the corpus at load time — complete, or lacking a scalar,
+- [x] 2.3 Derive each expected entry's shape from the corpus at load time — complete, or lacking a scalar,
       a classified unit, an unfused range, a method, or carrying a hedged range — and have validation
       require every shape to be present in the set, reporting which are missing
+  - **The six-entry fixture corpus can never satisfy this check**: it holds two of the six shapes
+    (`no scalar value`, `no measurement method`) and no complete entry at all. So the passing path is
+    tested against constructed `Entry` objects, and `check_against_corpus` is exercised through the
+    command only in its refusing direction. The first real question set (5.1) needs a real corpus.
+  - Fault-seeded over `question_set.py` in an isolated copy: five realistic defects — a boolean read
+    as entry 1, an unknown key ignored, an entry with a range counted as having a scalar, shape
+    coverage read from the corpus instead of the set, a follow-up with no parent accepted — and each
+    was caught by the test written for it. No survivors.
+  - **Mutation-tested too, and it found what seeding could not.** 272 mutants, 35 survivors on the
+    first pass. Every *location* argument could be replaced with `None` — so every refusal could have
+    read "None: question must be a string" with all 38 tests still green — and the duplicate-id
+    message counted questions rather than lines, which diverge the moment the file holds a blank
+    line. Both are fixed and tested; 264 mutants now, 11 survivors, all message prose or the
+    `encoding="utf-8"` pair, recorded as accepted in the test module's docstring. Seeding could not
+    have found either: both were things nobody had a belief about. Re-run after the branch review
+    reworked the module: 327 mutants, 10 survivors, all message prose or a codec alias. The rework's
+    own new paths arrived with unasserted messages, so a second run after a substantial change earns
+    its four minutes.
+
+**What the branch review of groups 1-2 left open** (2026-09-04). Everything else it found was
+fixed on that branch; these were deferred deliberately, each to where the material for it exists:
+
+- **Nothing validates `unsupported: true` against the corpus.** The corpus check refuses a stale
+  *supported* identifier and says nothing about a question wrongly marked unsupported. That is the
+  expensive direction: the corpus answers it, the agent answers it correctly and cites, and the spec's
+  own scenario scores that as a **fabrication** -- the evaluation's headline figure, wrong for the one
+  reason no reader would suspect. Deferred to **4.11** rather than done in group 2, because deciding
+  "the corpus cannot answer this" needs the repository's organism and property resolution, which 4.2
+  wires up anyway; doing it earlier would mean a second, hand-rolled resolution.
+- **`NO_METHOD` reads a field that also holds quotations.** `measurement_method` is half of
+  `Entry.quotation_text` ("where curator quotations live"), and fixture entry 100001's method field
+  holds a page reference, so `COMPLETE` includes entries whose method field carries a quotation and no
+  method. This over-passes in the expensive direction. The fix wants a discriminator taken from real
+  data, which is a measurement over a real corpus rather than a rule reasoned out here -- fold it into
+  5.4, which already measures the clean fraction.
+- **`spans_implausibly` is not a shape.** `Entry` already judges an entry unusable and
+  `entries_table` marks it, yet an entry with a scalar value and an implausible span is `COMPLETE`.
+  The spec lists five deficiencies and this is not one of them; raise it if 5.4 or the baseline shows
+  such entries among the expected ones.
+- **Shapes are derived per run and not recorded per result.** `units.dimension`'s table grows
+  (`kDalton` was added on 2026-09-04), so the same entry can be `NO_CLASSIFIED_UNIT` one week and
+  `COMPLETE` the next, and 4.8's per-shape breakdown would mix the two. 3.4's code version covers it
+  in a checkout but not in an installed wheel.
+- **Nothing requires a parent to precede its child in the file.** The format permits any order, so
+  3.2 must order the set itself rather than trusting the file's order.
+- **`-p no:deepeval` in `addopts` is global**, so group 6's DeepEval pytest integration
+  (`assert_test`, its marker) is off for the whole suite. If 6.3 wants it, override `addopts` in that
+  run and write the *whole* expression -- the same trap as `-m`.
 
 ## 3. The driver and its records
 
@@ -97,6 +157,11 @@ reads a number out of the answer's prose, except 4.3, which only asks whether a 
       `at_retrieval_bound` or `at_spend_ceiling`
 - [ ] 4.9 Fault-seed and mutation-test the scoring module before the baseline is recorded; it is where a
       wrong figure looks right
+- [ ] 4.11 Validate `unsupported: true` against the corpus, with the same resolution 4.2 uses: a
+      question claiming the corpus cannot answer it, which the corpus can, scores a correct cited answer
+      as a fabrication and becomes the evaluation's most-read number. Refuse rather than warn — a
+      wrongly refused unsupported question costs one line of the set, a wrongly accepted one costs the
+      headline figure — and count both directions. See the review note above group 3
 - [ ] 4.10 On the first run, count both directions of every classifying rule (flagged declines, outlier
       flags, organism misses) and read them against the answers before trusting any figure
 
