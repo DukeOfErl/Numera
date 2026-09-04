@@ -5,20 +5,20 @@ worst failure available here: every figure the evaluation reports afterwards is
 wrong in a way that looks ordinary, and the run costs money before anyone reads it.
 Each refusal below names the wrong figure it prevents.
 
-**Eleven mutants are knowingly left alive**, out of 264 over `question_set.py`
-(2026-09-04). Nine rewrite the prose inside an error message -- upper-casing a
-sentence, wrapping it in sentinels, changing the `"; "` that joins a list. Killing
-them would mean asserting every sentence in full, which pins wording as contract
-and makes the messages unimprovable. Two rewrite `encoding="utf-8"`: `"UTF-8"` is
-the same codec, and `None` is the same thing on any UTF-8 locale, so no test on
-this machine can tell them apart -- the source says why the encoding is explicit
-instead.
+**Ten mutants are knowingly left alive**, out of 327 over `question_set.py`
+(2026-09-04, after the branch review). Nine rewrite the prose inside an error
+message -- upper-casing a sentence, wrapping it in sentinels, changing the `"; "`
+that joins a list. Killing them would mean asserting every sentence in full, which
+pins wording as contract and makes the messages unimprovable. The tenth spells the
+encoding `"UTF-8-SIG"`, which is the same codec.
 
-The run also found two things that were real, and both are tested below: every
-location argument could be replaced with `None`, so every refusal could have said
-"None: ..." with the suite still green; and the duplicate-id message counted
-questions rather than lines, which sends a reader to the wrong line the moment the
-file has a blank one in it.
+What the runs found that was real, all tested below: every location argument could
+be replaced with `None`, so every refusal could have said "None: ..." with the
+suite still green; the duplicate-id message counted questions rather than lines,
+which sends a reader to the wrong line the moment the file holds a blank one; and
+each path the review's fixes added arrived with its own message unasserted, which
+is worth expecting -- new code brings new mutants, so a second run after a rework
+is not a formality.
 """
 
 from __future__ import annotations
@@ -224,6 +224,9 @@ def test_a_repeated_expected_entry_is_refused(tmp_path):
         {"asked_organisms": ""},
         {"follows": 4},
         {"nonsense": 1},
+        {"question_id": 7},
+        {"asked_properties": [4]},
+        {"asked_properties": []},
     ],
     ids=[
         "question",
@@ -234,6 +237,9 @@ def test_a_repeated_expected_entry_is_refused(tmp_path):
         "asked_organisms",
         "follows",
         "unknown key",
+        "question_id",
+        "a term of the wrong type",
+        "no terms at all",
     ],
 )
 def test_every_refusal_names_the_file_and_the_line_it_is_on(tmp_path, broken):
@@ -261,6 +267,12 @@ def test_a_key_named_in_a_refusal_is_the_key_that_was_wrong(tmp_path):
         load_question_set(write_set(tmp_path, {**SUPPORTED, "notes": 4}), None)
     with pytest.raises(QuestionSetError, match="tag is empty"):
         load_question_set(write_set(tmp_path, {**SUPPORTED, "tags": [""]}), None)
+    with pytest.raises(QuestionSetError, match="question_id must be a string"):
+        load_question_set(write_set(tmp_path, {**SUPPORTED, "question_id": 7}), None)
+    with pytest.raises(QuestionSetError, match="asked_properties must be a string"):
+        load_question_set(write_set(tmp_path, {**SUPPORTED, "asked_properties": [4]}), None)
+    with pytest.raises(QuestionSetError, match="asked_organisms is empty"):
+        load_question_set(write_set(tmp_path, {**SUPPORTED, "asked_organisms": []}), None)
 
 
 def test_a_repeated_question_id_is_refused_and_both_lines_are_named(tmp_path):

@@ -64,7 +64,10 @@ recorded there rather than here.
     message counted questions rather than lines, which diverge the moment the file holds a blank
     line. Both are fixed and tested; 264 mutants now, 11 survivors, all message prose or the
     `encoding="utf-8"` pair, recorded as accepted in the test module's docstring. Seeding could not
-    have found either: both were things nobody had a belief about.
+    have found either: both were things nobody had a belief about. Re-run after the branch review
+    reworked the module: 327 mutants, 10 survivors, all message prose or a codec alias. The rework's
+    own new paths arrived with unasserted messages, so a second run after a substantial change earns
+    its four minutes.
 
 **What the branch review of groups 1-2 left open** (2026-09-04). Everything else it found was
 fixed on that branch; these were deferred deliberately, each to where the material for it exists:
