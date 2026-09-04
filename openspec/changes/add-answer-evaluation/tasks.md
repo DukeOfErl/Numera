@@ -58,6 +58,13 @@ recorded there rather than here.
     as entry 1, an unknown key ignored, an entry with a range counted as having a scalar, shape
     coverage read from the corpus instead of the set, a follow-up with no parent accepted — and each
     was caught by the test written for it. No survivors.
+  - **Mutation-tested too, and it found what seeding could not.** 272 mutants, 35 survivors on the
+    first pass. Every *location* argument could be replaced with `None` — so every refusal could have
+    read "None: question must be a string" with all 38 tests still green — and the duplicate-id
+    message counted questions rather than lines, which diverge the moment the file holds a blank
+    line. Both are fixed and tested; 264 mutants now, 11 survivors, all message prose or the
+    `encoding="utf-8"` pair, recorded as accepted in the test module's docstring. Seeding could not
+    have found either: both were things nobody had a belief about.
 
 ## 3. The driver and its records
 

@@ -119,7 +119,13 @@ def load_question_set(path: str | Path | None) -> tuple[Question, ...]:
     if not file.is_file():
         raise QuestionSetError(f"No question set file at {file}.")
 
-    questions: list[Question] = []
+    # Each question is kept beside where it was read from, so a rule that needs the
+    # whole set can still point at a line. Counting questions instead would name the
+    # third question as "3" in a file whose third question is on line 5.
+    located: list[tuple[str, Question]] = []
+    # Explicit, not the locale default: a question set holds organism names and
+    # units, and "μm" read under a non-UTF-8 locale fails on a colleague's machine
+    # and not on ours.
     with file.open(encoding="utf-8") as handle:
         for number, line in enumerate(handle, start=1):
             line = line.strip()
@@ -130,12 +136,12 @@ def load_question_set(path: str | Path | None) -> tuple[Question, ...]:
                 raw = json.loads(line)
             except json.JSONDecodeError as exc:
                 raise QuestionSetError(f"{where} is not valid JSON: {exc}") from exc
-            questions.append(_question(raw, where))
+            located.append((where, _question(raw, where)))
 
-    if not questions:
+    if not located:
         raise QuestionSetError(f"{file} holds no questions.")
-    _check_the_set(questions, file)
-    return tuple(questions)
+    _check_the_set(located)
+    return tuple(question for _, question in located)
 
 
 _REQUIRED = ("question_id", "question", "asked_property", "asked_organism")
@@ -235,25 +241,25 @@ def _tags(value: object, where: str) -> tuple[str, ...]:
     return tuple(_text(tag, "tag", where) for tag in value)
 
 
-def _check_the_set(questions: list[Question], file: Path) -> None:
+def _check_the_set(located: list[tuple[str, Question]]) -> None:
     """The rules that need the whole set: unique identifiers, and real parents."""
-    seen: dict[str, int] = {}
-    for position, question in enumerate(questions, start=1):
+    seen: dict[str, str] = {}
+    for where, question in located:
         if question.question_id in seen:
             raise QuestionSetError(
-                f"{file}: question id {question.question_id!r} appears twice "
-                f"(questions {seen[question.question_id]} and {position}). Results are "
-                f"keyed by it, so a repeat would overwrite a result on resumption."
+                f"Question id {question.question_id!r} appears twice, at "
+                f"{seen[question.question_id]} and {where}. Results are keyed by it, "
+                f"so a repeat would overwrite a result on resumption."
             )
-        seen[question.question_id] = position
+        seen[question.question_id] = where
 
-    by_id = {question.question_id: question for question in questions}
-    for question in questions:
+    by_id = {question.question_id: question for _, question in located}
+    for where, question in located:
         if question.follows is None:
             continue
         if question.follows not in by_id:
             raise QuestionSetError(
-                f"{file}: {question.question_id!r} follows {question.follows!r}, which "
+                f"{where}: {question.question_id!r} follows {question.follows!r}, which "
                 f"the set does not contain. A follow-up is asked in its parent's "
                 f"session, and there would be no session to ask it in."
             )
@@ -264,7 +270,7 @@ def _check_the_set(questions: list[Question], file: Path) -> None:
         while parent is not None:
             if parent in walked:
                 raise QuestionSetError(
-                    f"{file}: {question.question_id!r} is in a cycle of follow-ups "
+                    f"{where}: {question.question_id!r} is in a cycle of follow-ups "
                     f"({sorted(walked)}). No question in it could be asked first."
                 )
             walked.add(parent)

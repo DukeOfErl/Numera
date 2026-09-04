@@ -4,6 +4,21 @@ So the tests are mostly about refusals. A set that loads when it should not is t
 worst failure available here: every figure the evaluation reports afterwards is
 wrong in a way that looks ordinary, and the run costs money before anyone reads it.
 Each refusal below names the wrong figure it prevents.
+
+**Eleven mutants are knowingly left alive**, out of 264 over `question_set.py`
+(2026-09-04). Nine rewrite the prose inside an error message -- upper-casing a
+sentence, wrapping it in sentinels, changing the `"; "` that joins a list. Killing
+them would mean asserting every sentence in full, which pins wording as contract
+and makes the messages unimprovable. Two rewrite `encoding="utf-8"`: `"UTF-8"` is
+the same codec, and `None` is the same thing on any UTF-8 locale, so no test on
+this machine can tell them apart -- the source says why the encoding is explicit
+instead.
+
+The run also found two things that were real, and both are tested below: every
+location argument could be replaced with `None`, so every refusal could have said
+"None: ..." with the suite still green; and the duplicate-id message counted
+questions rather than lines, which sends a reader to the wrong line the moment the
+file has a blank one in it.
 """
 
 from __future__ import annotations
@@ -127,6 +142,23 @@ def test_a_missing_or_empty_file_is_refused(tmp_path):
         load_question_set(empty)
 
 
+def test_a_line_that_is_json_but_not_an_object_is_refused(tmp_path):
+    """A set written as one JSON array, or a stray string, reaches here as a valid
+    line that is not a question. Without this the reader would fail later, on a
+    missing key, and blame the question rather than the shape of the file."""
+    path = tmp_path / "questions.jsonl"
+    path.write_text("[1, 2]\n")
+    with pytest.raises(QuestionSetError, match="is not a JSON object"):
+        load_question_set(path)
+
+
+def test_the_type_a_field_was_given_is_named_in_the_refusal(tmp_path):
+    """ "must be a string" says what was wanted; the reader also needs what they
+    wrote, or a `7` and a `"7"` produce the same message."""
+    with pytest.raises(QuestionSetError, match="must be a string, not int"):
+        load_question_set(write_set(tmp_path, {**SUPPORTED, "question": 7}))
+
+
 def test_a_line_that_is_not_json_names_its_line_number(tmp_path):
     path = tmp_path / "questions.jsonl"
     path.write_text(json.dumps(SUPPORTED) + "\n{not json\n")
@@ -170,10 +202,72 @@ def test_a_repeated_expected_entry_is_refused(tmp_path):
         load_question_set(write_set(tmp_path, {**SUPPORTED, "expected_entries": [100003, 100003]}))
 
 
-def test_a_repeated_question_id_is_refused(tmp_path):
-    """Results are keyed by it, so a repeat overwrites a result on resumption."""
-    with pytest.raises(QuestionSetError, match="appears twice"):
-        load_question_set(write_set(tmp_path, SUPPORTED, {**SUPPORTED, "question": "again?"}))
+@pytest.mark.parametrize(
+    "broken",
+    [
+        {"question": 7},
+        {"expected_entries": "100003"},
+        {"unsupported": "yes"},
+        {"tags": [""]},
+        {"notes": 3},
+        {"asked_organism": ""},
+        {"follows": 4},
+        {"nonsense": 1},
+    ],
+    ids=[
+        "question",
+        "expected_entries",
+        "unsupported",
+        "tags",
+        "notes",
+        "asked_organism",
+        "follows",
+        "unknown key",
+    ],
+)
+def test_every_refusal_names_the_file_and_the_line_it_is_on(tmp_path, broken):
+    """A set is a file a person edits, and a refusal it cannot be acted on is half a
+    refusal. This module's own docstring promises "a message naming the line and the
+    fix", and until mutation testing asked, nothing held the first half: every
+    location argument could be replaced with `None` -- turning every message into
+    "None: ..." -- and all 38 tests still passed.
+
+    The bad question is deliberately the second line, so a message that named the
+    first line by accident would fail this too.
+    """
+    path = write_set(tmp_path, SUPPORTED, {**SUPPORTED, "question_id": "q2", **broken})
+    with pytest.raises(QuestionSetError) as raised:
+        load_question_set(path)
+    assert f"{path}:2" in str(raised.value)
+
+
+def test_a_key_named_in_a_refusal_is_the_key_that_was_wrong(tmp_path):
+    """`follows` and `notes` are reported through the same helper as every other
+    field, so the key it is given is what tells the reader which one to fix."""
+    with pytest.raises(QuestionSetError, match="follows must be a string"):
+        load_question_set(write_set(tmp_path, {**SUPPORTED, "follows": 4}))
+    with pytest.raises(QuestionSetError, match="notes must be a string"):
+        load_question_set(write_set(tmp_path, {**SUPPORTED, "notes": 4}))
+    with pytest.raises(QuestionSetError, match="tag is empty"):
+        load_question_set(write_set(tmp_path, {**SUPPORTED, "tags": [""]}))
+
+
+def test_a_repeated_question_id_is_refused_and_both_lines_are_named(tmp_path):
+    """Results are keyed by it, so a repeat overwrites a result on resumption.
+
+    Both locations, and as lines rather than as ordinals among the questions. The
+    two diverge the moment the file has a blank line in it, and a message saying
+    "questions 1 and 2" sends the reader to the wrong pair of lines -- which is
+    what this said until an `enumerate(start=1)` mutant survived and raised it.
+    """
+    path = tmp_path / "questions.jsonl"
+    path.write_text(
+        "\n".join(["", json.dumps(SUPPORTED), "", json.dumps({**SUPPORTED, "question": "again?"})])
+        + "\n"
+    )
+    with pytest.raises(QuestionSetError) as raised:
+        load_question_set(path)
+    assert f"at {path}:2 and {path}:4" in str(raised.value)
 
 
 def test_a_field_of_the_wrong_type_is_refused(tmp_path):
@@ -223,8 +317,11 @@ def test_a_follow_up_records_the_question_it_follows(tmp_path):
 def test_a_follow_up_naming_a_parent_the_set_does_not_hold_is_refused(tmp_path):
     """There would be no session to ask it in: a follow-up runs in its parent's."""
     followup = {**SUPPORTED, "question_id": "q1b", "follows": "q0"}
-    with pytest.raises(QuestionSetError, match="follows 'q0', which the set does not"):
-        load_question_set(write_set(tmp_path, SUPPORTED, followup))
+    path = write_set(tmp_path, SUPPORTED, followup)
+    with pytest.raises(QuestionSetError) as raised:
+        load_question_set(path)
+    assert "follows 'q0', which the set does not" in str(raised.value)
+    assert f"{path}:2" in str(raised.value)
 
 
 def test_a_question_following_itself_is_refused(tmp_path):
@@ -236,8 +333,11 @@ def test_a_cycle_of_follow_ups_is_refused(tmp_path):
     """No question in it could be asked first, and walking the chain would not end."""
     a = {**SUPPORTED, "question_id": "qa", "follows": "qb"}
     b = {**SUPPORTED, "question_id": "qb", "follows": "qa"}
-    with pytest.raises(QuestionSetError, match="cycle of follow-ups"):
-        load_question_set(write_set(tmp_path, a, b))
+    path = write_set(tmp_path, a, b)
+    with pytest.raises(QuestionSetError) as raised:
+        load_question_set(path)
+    assert "cycle of follow-ups" in str(raised.value)
+    assert f"{path}:1" in str(raised.value)
 
 
 def test_a_chain_of_follow_ups_is_allowed(tmp_path):
