@@ -354,9 +354,19 @@ AWAITING_THE_HARNESS = (
     "Every judgement records the judge model and its cost",
 )
 
+# `add-answer-shape`'s. A third kind of gap again: these await a change to the
+# system prompt, not a harness, and the live-model check can only ever assert the
+# weak form of them -- that an opening is quantitative and attributed, not that it
+# carries the right conclusion. Kept apart so the list says which gap is which.
+AWAITING_THE_PROMPT = (
+    "An answer leads with its quantitative conclusion",
+    "Leading with a figure does not displace what qualifies it",
+)
+
 UNMAPPED: dict[str, str] = {
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_HARNESS, "add-answer-evaluation is unbuilt; no harness yet"),
+    **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),
 }
 
 
