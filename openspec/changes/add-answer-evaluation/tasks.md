@@ -15,29 +15,49 @@ recorded there rather than here.
 
 ## 1. Ground
 
-- [ ] 1.1 Add the `scinumbers-eval` console script and the `eval` extra (`deepeval`, for group 6 only)
+- [x] 1.1 Add the `scinumbers-eval` console script and the `eval` extra (`deepeval`, for group 6 only)
       to `pyproject.toml`; review the `uv.lock` diff for what moved, `openai` in particular
-- [ ] 1.2 Add the harness's modules to the driver-independence test so the core is asserted never to
+- [x] 1.2 Add the harness's modules to the driver-independence test so the core is asserted never to
       import them
-- [ ] 1.3 Read `openspec/specs/agent-session/` as promoted, not the archived delta: it is the port the
+- [x] 1.3 Read `openspec/specs/agent-session/` as promoted, not the archived delta: it is the port the
       harness drives
-- [ ] 1.4 Confirm the default `pytest` run is unchanged after `uv sync --extra eval` — DeepEval registers
+- [x] 1.4 Confirm the default `pytest` run is unchanged after `uv sync --extra eval` — DeepEval registers
       pytest plugins — and disable its plugin in `addopts` if collection or output moves
+  - **What the lock review found.** 93 → 129 packages, nothing removed, and exactly one version
+    moved: `click` 8.4.2 → 8.3.3, pinned down by `typer` (which `deepeval` brings). `openai` stayed
+    at 3.2.0 and so did every LangChain package, `pydantic` and `httpx` — the agent's stack is
+    untouched, which is what task 1.1 was asking.
+  - **Five pytest plugins arrive with DeepEval**: its own, plus `xdist`, `asyncio`, `repeat` and
+    `rerunfailures`. Only its own changed anything — a "Running teardown with pytest
+    sessionfinish..." line after every run, including runs that touch none of its code — and
+    `-p no:deepeval` in `addopts` restores the output exactly. Collection was never affected: 919
+    selected and 35 deselected before and after.
+  - **`uv sync` pruned `mutmut`, `textual` and `setproctitle` from the venv**, because they were
+    installed ad hoc and are in no extra or group. Nothing here needs them, but a mutation run does:
+    reinstall before reaching for the `mutation-test-module` skill.
 
 ## 2. The question set
 
-- [ ] 2.1 Define the question set format (JSONL, ADR-0220): identifier, question, the property and
+- [x] 2.1 Define the question set format (JSONL, ADR-0220): identifier, question, the property and
       organism asked in the corpus's vocabulary, expected entry identifiers, unsupported flag, the
       identifier of the question it follows, tags, and free notes. Require one to be supplied and fail
       with an explanatory message without one
   - Include questions that separate an object from its measure — a volume asked of two different objects,
     a size asked where only a diameter exists, E. coli's nucleus. `add-ask-agent`'s Deferred section,
     *Faceting the property field into object and measure*, turns on the failure rate these measure.
-- [ ] 2.2 Validate unsupported and follow-up questions in the format, and reject a follow-up naming a
+- [x] 2.2 Validate unsupported and follow-up questions in the format, and reject a follow-up naming a
       parent the set does not contain
-- [ ] 2.3 Derive each expected entry's shape from the corpus at load time — complete, or lacking a scalar,
+- [x] 2.3 Derive each expected entry's shape from the corpus at load time — complete, or lacking a scalar,
       a classified unit, an unfused range, a method, or carrying a hedged range — and have validation
       require every shape to be present in the set, reporting which are missing
+  - **The six-entry fixture corpus can never satisfy this check**: it holds two of the six shapes
+    (`no scalar value`, `no measurement method`) and no complete entry at all. So the passing path is
+    tested against constructed `Entry` objects, and `check_against_corpus` is exercised through the
+    command only in its refusing direction. The first real question set (5.1) needs a real corpus.
+  - Fault-seeded over `question_set.py` in an isolated copy: five realistic defects — a boolean read
+    as entry 1, an unknown key ignored, an entry with a range counted as having a scalar, shape
+    coverage read from the corpus instead of the set, a follow-up with no parent accepted — and each
+    was caught by the test written for it. No survivors.
 
 ## 3. The driver and its records
 

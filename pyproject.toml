@@ -31,6 +31,15 @@ ask = [
 ingest = [
     "pydantic>=2.6",
 ]
+# Additive to `ask`, not a replacement for it: the evaluation harness is a third
+# adapter over the same agent, so it needs the `ask` stack to run at all, and this
+# extra carries only what is new. Install both:
+#   uv sync --extra ask --extra eval
+# `deepeval` is used by one module, for the judged layer alone (ADR-0500). A
+# deterministic evaluation run needs none of it, which is why it is separable.
+eval = [
+    "deepeval>=4.2",
+]
 
 # All three entry points are declared here so no branch has to edit this table.
 # Console scripts are metadata resolved when invoked, so the ones whose modules
@@ -39,6 +48,7 @@ ingest = [
 bionumbers = "bionumbers.cli:main"
 scinumbers-ask = "scinumbers_ask.cli:main"
 bionumbers-ingest = "bionumbers_ingest.cli:main"
+scinumbers-eval = "scinumbers_ask.eval_cli:main"
 
 [dependency-groups]
 dev = [
@@ -66,7 +76,14 @@ only-include = ["src"]
 testpaths = ["tests"]
 # Tests import the doubles in tests/ directly, and default to offline.
 pythonpath = ["tests"]
-addopts = "-m 'not network and not corpus'"
+# `-p no:deepeval` because the `eval` extra installs DeepEval, which registers a
+# pytest plugin that prints "Running teardown with pytest sessionfinish..." after
+# every run -- including runs that touch none of its code. Collection is unchanged;
+# it is the output that moved, and a line that appears only for developers who
+# installed one extra makes "the suite output is unchanged" unverifiable. Harmless
+# where deepeval is absent: `-p no:<name>` for an uninstalled plugin is not an error,
+# which matters because this file is shared by all three work packages.
+addopts = "-m 'not network and not corpus' -p no:deepeval"
 markers = [
     "network: hits a real external service; run with `pytest -m network`",
     # The corpus is an external input kept out of the repository (ADR-0170), so

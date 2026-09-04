@@ -12,6 +12,15 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **A question set for evaluating answers**, and `scinumbers-eval check` to
+  validate one. Each question records what it asks — the property and the
+  organism, in the corpus's own vocabulary — the entry identifiers that should
+  support its answer, whether the corpus can answer it at all, the question it
+  follows, and tags for what it exercises. The check refuses a set that could
+  only produce misleading figures: a misspelled key, a quoted identifier, a
+  repeated question id, a follow-up whose parent is absent, an expected entry
+  the corpus does not hold, or a set whose expected entries are all complete
+  and so measure the happy path alone.
 - **SciNumbers ask** — an agent answering natural-language questions about
   biological quantities from a supplied JSONL corpus, citing an entry for every
   number and saying it could not find one rather than answering from the model's
