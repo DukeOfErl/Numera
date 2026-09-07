@@ -89,6 +89,13 @@ wheels = [
 name = "bionumbers"
 version = "0.1.0"
 source = { editable = "." }
+dependencies = [
+    { name = "langchain" },
+    { name = "langchain-openai" },
+    { name = "langgraph" },
+    { name = "langgraph-checkpoint-sqlite" },
+    { name = "streamlit" },
+]
 
 [package.optional-dependencies]
 ask = [
@@ -120,13 +127,18 @@ dev = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'validator'", specifier = ">=0.40" },
     { name = "httpx", marker = "extra == 'validator'", specifier = ">=0.27" },
+    { name = "langchain", specifier = ">=1.1" },
     { name = "langchain", marker = "extra == 'ask'", specifier = ">=1.1" },
+    { name = "langchain-openai" },
     { name = "langchain-openai", marker = "extra == 'ask'" },
+    { name = "langgraph" },
     { name = "langgraph", marker = "extra == 'ask'" },
+    { name = "langgraph-checkpoint-sqlite" },
     { name = "langgraph-checkpoint-sqlite", marker = "extra == 'ask'" },
     { name = "lxml", marker = "extra == 'validator'", specifier = ">=5.2" },
     { name = "pint", marker = "extra == 'validator'", specifier = ">=0.24" },
     { name = "pydantic", marker = "extra == 'ingest'", specifier = ">=2.6" },
+    { name = "streamlit" },
     { name = "streamlit", marker = "extra == 'ask'" },
 ]
 provides-extras = ["validator", "ask", "ingest"]

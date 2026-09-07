@@ -4,7 +4,30 @@ version = "0.1.0"
 description = "A database of useful biological numbers assembled from the literature, with provenance"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+
+# DEPLOYMENT BRANCH ONLY, and the reason this branch is never merged back.
+#
+# On `main` this list is empty and every work package declares its stack as an
+# extra, so no two branches edit the same table. Streamlit Community Cloud cannot
+# express that: it picks a dependency file by precedence -- `uv.lock` first, ahead
+# of Pipfile, environment.yml, requirements.txt and pyproject -- and runs `uv sync`,
+# which does not install extras. There is no `tool.uv.default-extras` (astral-sh/uv
+# #16380 is still open) and no way to pass `--extra` from the platform, so a deploy
+# from `main` would come up without Streamlit itself installed.
+#
+# Keeping `uv.lock` and moving the ask stack here is the option that needs no other
+# assumption: uv installs the project too, so `scinumbers_ask` imports without a
+# sys.path shim and without depending on which directory the installer runs in. The
+# ingester is deliberately *not* here -- the corpus arrives prebuilt (see
+# `hosted.py`), and `autobuild` degrades correctly when `bionumbers_ingest` is
+# absent, so the container does not carry a stack it never uses.
+dependencies = [
+    "langchain>=1.1",
+    "langgraph",
+    "langgraph-checkpoint-sqlite",
+    "langchain-openai",
+    "streamlit",
+]
 
 # Each work package declares its own dependencies as an extra, so installing one
 # does not pull in the other's stack, and so the two branches edit different

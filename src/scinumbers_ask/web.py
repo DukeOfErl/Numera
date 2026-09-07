@@ -52,6 +52,16 @@ PROTOTYPE_NOTE = (
 )
 PROTOTYPE_SHORT = "Prototype — verify numbers against the original source."
 
+# Whose data this is, wherever the app runs. Not deployment wording -- every answer
+# rests on someone else's decades of curation, and the citation belongs beside the
+# numbers whether one person is reading them locally or a hundred are online. The
+# licensing of the underlying export is unresolved (ADR-0170), which is a reason to
+# be scrupulous about attribution rather than an excuse to omit it.
+DATA_CREDIT = (
+    "Data: BioNumbers (Milo et al., Nucl. Acids Res. 2010;38:D750–D753) — "
+    "verify each figure at its source."
+)
+
 # Pinned to the viewport rather than written into the page. Drawn as an ordinary
 # element it sat above the conversation and scrolled away with the first answer --
 # so the reader who has read several answers, and is therefore most likely to have

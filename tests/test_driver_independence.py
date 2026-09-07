@@ -27,7 +27,12 @@ DRIVERS = {"cli", "web"}
 # `autobuild` joins them: it decides whether to build a corpus, which is a driver's
 # policy and not the agent's, and it is the one module allowed to import the
 # ingester. Putting it on this side is what keeps that dependency out of the core.
-PRESENTATION = DRIVERS | {"messages", "entries_table", "autobuild"}
+#
+# `hosted` joins them on this deployment branch, for the same reason: where a hosted
+# container gets its corpus is policy about running the app, not something the agent
+# should know. It is also the only module in the package that opens a network
+# connection, and the core is precisely where that must not appear.
+PRESENTATION = DRIVERS | {"messages", "entries_table", "autobuild", "hosted"}
 
 AGENT_CORE = sorted(
     path.stem

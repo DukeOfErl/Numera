@@ -110,6 +110,54 @@ established, marked incomplete, rather than being cut off mid-sentence. A limit 
 it binds — the number you set is the one that stops work
 ([ADR-0180](docs/decisions/0180-limits-named-where-they-bind.md)).
 
+## This branch: hosted deployment
+
+**`deploy/streamlit-cloud` is never merged back.** It carries four changes `main` must
+not have, and it is rebased onto `main` rather than merged into it.
+
+1. **The `ask` extra's packages are `[project].dependencies`.** Community Cloud picks
+   a dependency file by precedence — `uv.lock` first — and runs `uv sync`, which does
+   not install extras, and neither the platform nor `pyproject` can ask it to
+   ([astral-sh/uv#16380](https://github.com/astral-sh/uv/issues/16380) is open). A
+   deploy from `main` would start without Streamlit installed. The ingester stays an
+   extra: the corpus arrives prebuilt, and `autobuild` degrades correctly without it.
+2. **Secrets are copied into the environment** at the top of `streamlit_app.py`.
+   Root-level secrets do become environment variables, but on first access, and the
+   agent reads `os.environ` deep inside itself.
+3. **The corpus is fetched into the container** by `scinumbers_ask/hosted.py` when
+   `CORPUS_URL` is set, verified against `CORPUS_SHA256`, and renamed into place only
+   once whole. A truncated download is valid JSONL that answers plausibly from
+   whatever arrived, so an unverified corpus is refused — including when no digest is
+   configured at all.
+4. **The run budget shows as a figure, not a bar**, because the cap is set far above
+   what a visitor will spend; the API key's own limit is the real ceiling.
+
+### Configuration this branch adds
+
+| Secret | What it is |
+| --- | --- |
+| `CORPUS_URL` | the release asset's **API** URL: `https://api.github.com/repos/OWNER/REPO/releases/assets/<id>`. `browser_download_url` needs a session, not a token. |
+| `CORPUS_TOKEN` | a fine-grained token, **Contents: Read-only on that one repository**, nothing else |
+| `CORPUS_SHA256` | `sha256sum` of the corpus. Without it the app refuses to start rather than serving an unverified copy. |
+
+Check the URL and token from a terminal before pasting them into the app's secrets:
+
+```bash
+curl -L -H "Authorization: Bearer $TOKEN" -H "Accept: application/octet-stream" \
+  -o /tmp/corpus-check.jsonl "$CORPUS_URL"
+sha256sum /tmp/corpus-check.jsonl && wc -l /tmp/corpus-check.jsonl   # expect 14294 lines
+```
+
+`curl -L` drops credentials on a cross-host redirect; urllib does not, and the signed
+storage URL rejects a request still carrying an `Authorization` header — which is why
+`hosted.py` strips it in a redirect handler. That path is the one thing the tests
+cannot reach, so this curl is the check for it.
+
+**Deploying**: Community Cloud, main file `streamlit_app.py`, branch
+`deploy/streamlit-cloud`, and **Python 3.12 chosen in Advanced settings before the
+first deploy** — it cannot be changed afterwards without deleting the app. A push to
+this branch redeploys, whether or not the checks pass.
+
 ## Tests
 
 ```bash
