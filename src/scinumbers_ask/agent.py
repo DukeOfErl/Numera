@@ -726,7 +726,7 @@ class AskAgent:
                                 "could cite, so there is no partial answer to give."
                             ),
                         )
-                        yield from evidence()
+                        yield from evidence(judge_the_prose=bool(answer_text.strip()))
                         yield QuestionEnded(
                             question_id=trace.question_id,
                             reason=limit.reason,
@@ -747,7 +747,10 @@ class AskAgent:
                         # control: stop rather than continue blind.
                         trace.record("spend.unpriceable", detail=str(exc))
                         yield Answer(question_id=trace.question_id, text=str(exc))
-                        yield from evidence()
+                        # Never the model's text on this branch: the answer shown is
+                        # always this exception's sentence, whatever the model had
+                        # said. So the prose judgements never apply here.
+                        yield from evidence(judge_the_prose=False)
                         yield QuestionEnded(
                             question_id=trace.question_id,
                             reason=EndReason.NOT_CONFIGURED,
@@ -788,7 +791,7 @@ class AskAgent:
                                 "there is no partial answer to give."
                             ),
                         )
-                        yield from evidence()
+                        yield from evidence(judge_the_prose=bool(answer_text.strip()))
                         yield QuestionEnded(
                             question_id=trace.question_id,
                             reason=EndReason.RETRIEVAL_BOUND,
@@ -897,7 +900,12 @@ class AskAgent:
             # answered question would hand the driver a blank answer marked
             # complete, which is the silent failure this project cannot afford.
             trace.record("question.no_answer", tool_calls=tool_calls)
-            yield from evidence()
+            # No answer at all, so there is no answer to call ungrounded. Saying
+            # "this answer is not grounded in the corpus" where the reader was shown
+            # nothing describes something that does not exist, and `NO_ANSWER`
+            # already reports what happened. Found while fixing the branches above:
+            # same defect, one line further down.
+            yield from evidence(judge_the_prose=False)
             yield QuestionEnded(
                 question_id=trace.question_id,
                 reason=EndReason.NO_ANSWER,

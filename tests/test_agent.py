@@ -183,6 +183,19 @@ def test_a_key_out_of_credit_keeps_the_answer_it_had_already_paid_for(repo, conf
     assert any(isinstance(e, AnswerEntries) for e in events)
 
 
+def test_a_question_with_no_answer_is_not_told_its_answer_is_ungrounded(repo, config, tmp_path):
+    """There is no answer, so "this answer is not grounded in the corpus" describes
+    something that does not exist -- and `NO_ANSWER` already says what happened.
+
+    A fourth instance of the same defect, found while fixing the three branches that
+    substitute a sentence: this one does not even substitute, it shows nothing.
+    """
+    model = scripted(AIMessage(content=""))
+    events = run(agent_with(repo, config, tmp_path, model), "s1", "q")
+    assert events[-1].reason is EndReason.NO_ANSWER
+    assert not any(isinstance(e, UngroundedRefusal) for e in events)
+
+
 def test_what_retrieval_found_before_the_refusal_is_still_shown(repo, config, tmp_path):
     """A 402 after a search but before any prose: the entries survive the substitute.
 

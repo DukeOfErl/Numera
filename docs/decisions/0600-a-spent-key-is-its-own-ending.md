@@ -76,8 +76,13 @@ remedy without a second person — "the limit has to be raised by whoever funds 
 reads correctly to a visitor and to the funder alike, and the spec now requires that
 rather than leaving it to whoever next edits the string.
 
-**Judgements about prose apply only to prose the reader saw.** `evidence()` takes
-`judge_the_prose=False` where the answer shown is the agent's substitute. Run over
+**Judgements about prose apply only to prose the reader saw**, on every branch that
+substitutes rather than only the new one. `evidence()` takes `judge_the_prose=False`
+where the answer shown is the agent's own sentence — the spend ceiling, an
+unpriceable response, the retrieval bound, and a question that produced no answer at
+all, which was telling readers their non-existent answer was ungrounded. Fixing the
+one branch this change introduced would have left the same defect in four places
+beside a parameter documented as preventing it. Run over
 a substitute it reported on writing that was never on screen: a citation warning
 naming an entry the discarded text had cited, or "this answer is not grounded in
 the corpus — it says only what the model expected to find" about a system notice,

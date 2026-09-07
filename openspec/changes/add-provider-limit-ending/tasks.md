@@ -59,13 +59,25 @@ cut before the evaluation work, and this behaviour has to reach the deployed app
 - [x] 1c.4 `NOT_CONFIGURED` gained an entry: it is in `STOP_THE_RUN`, so the page was advising a new
       session for a missing credential too. Wrong before this change; the table was one entry short of
       its own reasoning.
-- [ ] 1c.5 **Not done, and it is a defect this change only fixed one branch of.** `SpendLimitReached`,
-      `Unpriceable` and `ModelCallLimitExceededError` all substitute a sentence the same way and all
-      still call `evidence()` with judging on, so each can tell a reader "this answer is not grounded
-      in the corpus" about the agent's own notice, with `answer.ungrounded` in the trail. Verified
-      live on the spend-ceiling path. The one-line fix per branch is
-      `evidence(judge_the_prose=bool(answer_text.strip()))` plus a test each — deliberately left for
-      the user to schedule, since it widens this work package rather than completing it.
+- [x] 1c.5 **The same misreport in the sibling branches**, fixed here on the user's decision, which
+      widens this work package from "the provider-limit ending" to "a substituted answer is not
+      judged as one". `SpendLimitReached` and `ModelCallLimitExceededError` take
+      `judge_the_prose=bool(answer_text.strip())`; `Unpriceable` takes `False` unconditionally,
+      because that branch shows the exception's sentence whatever the model said.
+- [x] 1c.6 **A fourth instance, found while fixing those three**: the `NO_ANSWER` path called
+      `evidence()` too, so a question that produced no answer at all was told its answer was not
+      grounded in the corpus. Same one-line fix.
+- [x] 1c.7 The first version of the ceiling test was **vacuous** and only seeding the old behaviour
+      back in revealed it: a `search_entries` call that crosses the ceiling still emits its
+      `Retrieval` first, so something *was* retrieved and the ungrounded report could not fire either
+      way. It needed a call that never reaches the corpus. Reverting all four fixes now fails exactly
+      the three tests written for them.
+- [ ] 1c.8 **`ModelCallLimitExceededError` is fixed but untested, deliberately.** For the ungrounded
+      report to fire, nothing may have been retrieved — and that bound is reached by *making* model
+      calls, which in every reachable configuration means retrievals happened; with no prose there are
+      no citations to misreport either. Testing it would mean a `TOOL_CALL_LIMIT` of zero, a
+      configuration nobody sets. The call site is made uniform so the next reader does not have to
+      work out which branches are safe, and this note says why one of the four has no test.
 
 - [ ] 1b.6 **When `main` merges into `dev`:** `evaluation.py:492` stops on
       `EndReason.RUN_BUDGET` alone, not on `STOP_THE_RUN`. A key spent mid-run would otherwise leave

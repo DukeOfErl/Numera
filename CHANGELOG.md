@@ -21,6 +21,17 @@ any release; `1.0.0` when it stabilizes.
   request is no longer retried, because a key acquires no balance during a backoff.
   Whatever the answer had established before the refusal is kept rather than replaced
   by the notice ([ADR-0600]).
+
+### Fixed
+
+- **An ending that speaks for the agent is no longer reported as a bad answer.** Where
+  a question stops on its spend ceiling, on an unpriceable response, on the retrieval
+  bound, or with no answer at all, the sentence the reader sees is the agent's own —
+  and it was being run through the citation and grounding checks, so a reader could be
+  told "this answer is not grounded in the corpus" about a system notice, with
+  `answer.ungrounded` written to the trail for a question the model never answered.
+  What retrieval found is still reported: that is evidence, not a judgement about
+  prose.
 - **SciNumbers ask** — an agent answering natural-language questions about
   biological quantities from a supplied JSONL corpus, citing an entry for every
   number and saying it could not find one rather than answering from the model's
