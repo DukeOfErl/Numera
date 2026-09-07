@@ -35,10 +35,19 @@ st.set_page_config(page_title="SciNumbers ask", page_icon=":material/biotech:")
 # the agent. Copied explicitly so the configuration does not depend on when the
 # secrets happen to be loaded. `setdefault`, so a real environment variable still
 # wins: that is what lets this branch be run locally without a secrets file.
+#
+# Numbers are coerced rather than skipped, and that is the whole point of this
+# branch of the condition. Every setting here is a *string* in TOML, and a value
+# pasted without quotes -- `SCINUMBERS_QUESTION_CEILING_USD = 0.20` -- arrives as a
+# float. Skipping it left the variable unset and the run silently on the 0.60
+# default: three times the intended per-question ceiling, from one missing pair of
+# quotes, with nothing on the page to say so. `str(0.2)` is "0.2", which the parser
+# reads as the amount that was meant; anything genuinely unparseable now fails
+# loudly in `usd()` instead of disappearing.
 try:
     for _name, _value in st.secrets.items():
-        if isinstance(_value, str):
-            os.environ.setdefault(_name, _value)
+        if isinstance(_value, str | int | float):
+            os.environ.setdefault(_name, str(_value))
 except Exception:
     # No secrets file at all, which is the ordinary case when this branch is run on
     # a laptop. Not a condition to report: the environment is then the only source,

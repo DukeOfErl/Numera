@@ -153,6 +153,29 @@ def test_no_corpus_url_leaves_the_page_behaving_as_it_does_on_main(fresh_caches,
     assert at.chat_input
 
 
+def test_a_secret_pasted_without_quotes_still_configures_the_run(fresh_caches, monkeypatch, repo):
+    """Every setting here is a string in TOML, and a number pasted without its quotes
+    arrives as a float. Skipped, it left the variable unset and the run on its own
+    default -- a per-question ceiling three times the configured one, from a missing
+    pair of quotes, with nothing on the page to say so."""
+    import os
+
+    from streamlit.testing.v1 import AppTest
+
+    from scinumbers_ask import web
+
+    monkeypatch.delenv("CORPUS_URL", raising=False)
+    monkeypatch.delenv("SCINUMBERS_QUESTION_CEILING_USD", raising=False)
+    monkeypatch.setattr(web, "resources", lambda corpus=None: (repo, _NoAgent()))
+
+    at = AppTest.from_file(APP, default_timeout=30)
+    at.secrets["SCINUMBERS_QUESTION_CEILING_USD"] = 0.20  # a TOML float, not a string
+    at.run()
+
+    assert not at.exception
+    assert os.environ["SCINUMBERS_QUESTION_CEILING_USD"] == "0.2"
+
+
 class _NoAgent:
     """Enough agent for the page to draw: it is never asked anything here."""
 
