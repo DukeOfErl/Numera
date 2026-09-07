@@ -268,7 +268,7 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     a retired identifier, a shape it no longer exercises, an unsupported question the corpus has since
     learned to answer — and all three are silent, because the run still completes and the figures are
     simply about something else.
-- [ ] 5.2 Measure the two retrieval bounds rather than defending them. `TOOL_CALL_LIMIT` (20) and
+- [~] 5.2 Measure the two retrieval bounds rather than defending them. `TOOL_CALL_LIMIT` (20) and
       `RUN_CALL_LIMIT` (12) were both chosen from a handful of observations — answers that satisfied their
       question used about five retrievals, one runaway used twenty-nine — and neither has been reached in
       live use since. What the run should settle: whether either bound ever binds; whether the questions
@@ -277,8 +277,32 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
       proves nothing, and a bound that fires on good questions is cutting answers short — the distribution
       tells them apart and no amount of argument does. See ADR-0260, which records both numbers as chosen
       rather than derived
+  - **First reading, from the smoke run: neither bound is close to binding.** 5.7 retrievals per
+    question against a limit of 20; the most model calls any question used was 3 against 12. The
+    second half of the question — whether an answer produced *at* a bound scores worse — cannot be
+    answered yet, because no answer was produced at one. Repeats may change that; a harder set would.
 - [ ] 5.3 Record a baseline on the development model, with repeats, and keep the report beside the ADRs
       that the figures bear on
+  - **A smoke run came first: ten questions, one repeat, $0.13, all answered, no failures.** Findings
+    in `docs/evaluations/2026-09-07-smoke.md`. It proved the harness end to end and found four things,
+    two of which must be settled before a baseline is worth recording:
+  - **The outlier check cannot fire on this corpus, and never could.** Peers were the corpus's other
+    entries with an *identical* property string for the same organism. Measured: 10,846 (property,
+    organism) pairs carry a usable value, **zero** hold five or more entries, and 10,753 hold exactly
+    one. `property` is free text, not a controlled vocabulary — `resolve_property("Nuclear volume")`
+    alone returns 14 spellings. So the comparison form is wrong, not the factor, and **ADR-0520 needs
+    superseding**. The measured alternative is the entries the question's property terms select,
+    restricted to the cited entry's organism (pools of 4 to 44 here); the organism restriction is not
+    optional, since one question's pool spans two organisms differing by an order of magnitude.
+  - **The set's expected lists are too narrow, for the same vocabulary reason**, and this must be
+    fixed *before* a baseline: expected entries are frozen into each record at run time, unlike a
+    scoring rule, which the raw material lets us recompute. Fix it from the corpus vocabulary and
+    **not from what the agent cited** — widening a set to what the system found is how a set becomes
+    one the system passes by construction.
+  - Two smaller findings, both real: `ecoli-nucleus` refused a question entry 100013 answers, having
+    searched the organism and never a matching property; and a correct follow-up is reported as a
+    grounding failure, because the agent's `unretrieved` warning means "not retrieved in *this*
+    question" and a follow-up legitimately retrieves nothing.
 - [ ] 5.4 **Read every answer in the baseline by hand and label it.** This is a task, not a review step:
       the labels are the reference the judge in group 6 is measured against, and they are also the only
       instrument that finds a fault nobody specified. Record, per answer, whether it is sound and what is
