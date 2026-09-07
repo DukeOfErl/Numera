@@ -5,7 +5,16 @@ from __future__ import annotations
 import pytest
 from conftest import agent_with, run
 
-from agent_doubles import batched_tool_calls, costing, says, scripted, tool_call
+from agent_doubles import (
+    OutOfCreditModel,
+    batched_tool_calls,
+    costing,
+    out_of_credit_error,
+    says,
+    scripted,
+    tool_call,
+)
+from scinumbers_ask import messages
 from scinumbers_ask.agent import CONVERSATION_BOUND, SYSTEM_PROMPT, AskAgent
 from scinumbers_ask.config import Config, usd
 from scinumbers_ask.events import (
@@ -112,6 +121,51 @@ def test_exhausted_retries_end_the_question_as_a_provider_failure(repo, config, 
     assert end.reason is EndReason.PROVIDER_FAILURE
     assert end.incomplete is True
     assert not any(isinstance(e, Answer) for e in events)
+    # The other direction of the same rule, and the one that costs more: an outage
+    # must not be reported as a spent key, which would shut the run for everyone on
+    # a reason that was not true.
+    assert end.reason not in messages.STOP_THE_RUN
+
+
+def test_a_key_out_of_credit_says_what_happened_and_stops_the_run(repo, config, tmp_path):
+    """A shared deployment's key hits its cap while somebody is using it.
+
+    The terse ending line was all a reader got: "provider_failure · $0.00 · ...",
+    which reads as a fault in the app or in their question, and left the input live
+    so the next question failed the same way. Both parts are the point -- the
+    sentence, and the door closing.
+    """
+    model = OutOfCreditModel(responses=[says("never reached")])
+    events = run(agent_with(repo, config, tmp_path, model), "s1", "q")
+    end = events[-1]
+    assert isinstance(end, QuestionEnded)
+    assert end.reason is EndReason.PROVIDER_LIMIT
+    assert end.incomplete is True
+    # Asking again cannot come out differently until somebody pays.
+    assert end.reason in messages.STOP_THE_RUN
+    answer = next(e for e in events if isinstance(e, Answer))
+    assert "usage limit" in answer.text
+    assert "nothing is wrong with your question" in answer.text
+    # Not retried: the key does not acquire a balance during the backoff, and the
+    # reader would wait out the full delay for the same sentence.
+    assert model.attempts == 1
+
+
+def test_the_attribute_this_rule_reads_is_on_the_provider_s_own_error(repo, config, tmp_path):
+    """`_is_out_of_credit` reads `status_code`, so this asserts the real type has one.
+
+    Against `openai.APIStatusError` rather than a stand-in with the attribute
+    bolted on, which would pass whether or not the provider's error still carried
+    it -- and the failure that mattered would be silent: every spent key reported
+    as an ordinary outage, with the door left open.
+    """
+    from scinumbers_ask.agent import _is_out_of_credit
+
+    assert _is_out_of_credit(out_of_credit_error())
+    # Conservative in the direction that matters: anything not unambiguously a 402
+    # stays an ordinary provider failure.
+    assert not _is_out_of_credit(RuntimeError("upstream unavailable"))
+    assert not _is_out_of_credit(TimeoutError())
 
 
 # -- unattended operation is a driver, not a mode -------------------------

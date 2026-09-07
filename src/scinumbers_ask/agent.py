@@ -200,6 +200,29 @@ OUR_DEFECT = (
     AssertionError,
 )
 
+#: The provider's answer when there is no money left. OpenRouter returns 402 both
+#: for an account out of credits and for a key over its own spending limit, and
+#: documents them in one sentence -- so one code covers both, which is what we
+#: want: the remedy is the same, and the reader cannot tell the two apart anyway.
+OUT_OF_CREDIT_STATUS = 402
+
+
+def _is_out_of_credit(exc: BaseException) -> bool:
+    """Whether this failure means the money ran out rather than the call went wrong.
+
+    Reads the status code and nothing else. Not the message text: the wording is
+    the provider's to change, and a rule matching on prose would go quietly false
+    the day it did.
+
+    **Conservative on purpose, because the two directions do not cost the same.**
+    A transient failure misread as "out of credit" tells the reader the run is over
+    when it is not, and closes the door for everyone on a reason that was not true.
+    A limit misread as a transient failure costs one pointless retry and then says
+    the same thing again. So only an unambiguous 402 counts, and everything else
+    stays an ordinary provider failure.
+    """
+    return getattr(exc, "status_code", None) == OUT_OF_CREDIT_STATUS
+
 
 def _origin(exc: BaseException) -> str:
     """Where in this package the exception was raised, for the trail.
@@ -276,8 +299,12 @@ def _retry_on(exc: Exception) -> bool:
     question stopped on its ceiling would take seconds longer to say so. Retrying
     an unpriceable response is equally futile -- a provider that reports no cost
     will not start reporting one on the second attempt.
+
+    A provider out of credit is the same futility from the other side of the wire:
+    the key does not acquire a balance during the backoff, so retrying only makes
+    the reader wait longer for the same sentence.
     """
-    return not isinstance(exc, (SpendLimitReached, Unpriceable))
+    return not isinstance(exc, (SpendLimitReached, Unpriceable)) and not _is_out_of_credit(exc)
 
 
 def _middleware(gate: SpendGate) -> list:
@@ -766,18 +793,39 @@ class AskAgent:
                         # sees it to look in the wrong place -- or to blame a
                         # service that did nothing wrong.
                         ours = isinstance(exc, (*OUR_DEFECT, LedgerUnavailable))
+                        if ours:
+                            reason = EndReason.INTERNAL_ERROR
+                        elif _is_out_of_credit(exc):
+                            reason = EndReason.PROVIDER_LIMIT
+                        else:
+                            reason = EndReason.PROVIDER_FAILURE
                         trace.record(
                             "internal.failed" if ours else "provider.failed",
                             error=type(exc).__name__,
                             message=str(exc)[:200],
                             where=_origin(exc),
+                            reason=reason.value,
                         )
+                        if reason is EndReason.PROVIDER_LIMIT:
+                            # Said as an answer rather than left to the ending line,
+                            # which carries a reason and figures. A reader who has
+                            # just lost the ability to ask needs the sentence: what
+                            # stopped, what would restart it, and that it was not
+                            # their question. Same shape as the run budget's refusal.
+                            yield Answer(
+                                question_id=trace.question_id,
+                                text=(
+                                    "The API key funding this app has reached its usage "
+                                    "limit, so no further question can be answered — "
+                                    "nothing is wrong with your question. Model usage "
+                                    "here is paid for by whoever deployed the app; ask "
+                                    "them to raise the limit."
+                                ),
+                            )
                         yield from evidence()
                         yield QuestionEnded(
                             question_id=trace.question_id,
-                            reason=(
-                                EndReason.INTERNAL_ERROR if ours else EndReason.PROVIDER_FAILURE
-                            ),
+                            reason=reason,
                             spend=ledger.question,
                             run_spend=ledger.run,
                             model=self._config.model,

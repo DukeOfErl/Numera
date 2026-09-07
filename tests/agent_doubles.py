@@ -57,6 +57,42 @@ def scripted(
     return ScriptedModel(responses=list(responses), failures=failures, reports_cost=reports_cost)
 
 
+def out_of_credit_error() -> Exception:
+    """The exception a real 402 arrives as, built rather than imitated.
+
+    A hand-rolled object with a `status_code` attribute would pass whether or not
+    the provider's own error type still carries one -- and `status_code` is exactly
+    the assumption `_is_out_of_credit` rests on. Constructed through
+    `openai.APIStatusError`, so the day that attribute is renamed the test fails
+    here instead of the app silently treating a spent key as a passing outage.
+    """
+    import httpx
+    import openai
+
+    request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    response = httpx.Response(
+        402,
+        request=request,
+        json={"error": {"message": "Insufficient credits", "code": 402}},
+    )
+    return openai.APIStatusError("Insufficient credits", response=response, body=None)
+
+
+class OutOfCreditModel(ScriptedModel):
+    """Answers every call the way OpenRouter answers a key over its limit.
+
+    Counts attempts like its parent, because "was this retried?" is half of what
+    the behaviour is: a 402 that goes through the backoff makes the reader wait
+    seconds for a sentence that was available immediately.
+    """
+
+    def _generate(
+        self, messages: list[BaseMessage], stop: Any = None, run_manager: Any = None, **kwargs: Any
+    ) -> ChatResult:
+        self.attempts += 1
+        raise out_of_credit_error()
+
+
 def tool_call(name: str, **args: Any) -> AIMessage:
     return AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": "call-1"}])
 

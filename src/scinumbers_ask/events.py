@@ -23,6 +23,11 @@ class EndReason(StrEnum):
     RUN_BUDGET = "run_budget"
     RETRIEVAL_BOUND = "retrieval_bound"
     PROVIDER_FAILURE = "provider_failure"
+    # Its own reason rather than a flavour of the failure above, because the two
+    # differ in the only way a driver acts on: a gateway error invites another
+    # attempt, and a key or account out of credit will answer identically until
+    # somebody pays. That is what puts this one in `messages.STOP_THE_RUN`.
+    PROVIDER_LIMIT = "provider_limit"
     INTERNAL_ERROR = "internal_error"
     CONVERSATION_BOUND = "conversation_bound"
 

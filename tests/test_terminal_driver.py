@@ -373,6 +373,7 @@ def test_an_ending_carrying_no_bound_says_nothing_about_one():
     "reason",
     [
         EndReason.PROVIDER_FAILURE,
+        EndReason.PROVIDER_LIMIT,
         EndReason.NO_ANSWER,
         EndReason.SPEND_CEILING,
         EndReason.RETRIEVAL_BOUND,

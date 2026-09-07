@@ -36,8 +36,18 @@ from .events import (
 # terminal quit on these and the web went on accepting questions, replaying the
 # same refusal indefinitely; two drivers disagreeing about whether the door is shut
 # is the divergence `messages` exists to prevent.
+#
+# A provider out of credit is here for the same reason, and is the only member a
+# reader cannot fix themselves: the key funding the run has no balance, so every
+# further question fails identically until somebody tops it up. PROVIDER_FAILURE
+# stays out -- a gateway that failed once may well answer the next call.
 STOP_THE_RUN = frozenset(
-    {EndReason.RUN_BUDGET, EndReason.CONVERSATION_BOUND, EndReason.NOT_CONFIGURED}
+    {
+        EndReason.RUN_BUDGET,
+        EndReason.CONVERSATION_BOUND,
+        EndReason.NOT_CONFIGURED,
+        EndReason.PROVIDER_LIMIT,
+    }
 )
 
 

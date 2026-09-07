@@ -12,6 +12,13 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **A spent API key ends a question with a sentence, and closes the run.** Where the
+  provider refuses a request for lack of credit, the question now ends as
+  `provider_limit` rather than as an indistinguishable `provider_failure`: it says a
+  usage limit was reached, that the question was not at fault, and that the remedy
+  lies with whoever pays for the deployment — and stops taking further questions,
+  since asking again cannot come out differently. The request is no longer retried,
+  because a key acquires no balance during a backoff ([ADR-0600]).
 - **SciNumbers ask** — an agent answering natural-language questions about
   biological quantities from a supplied JSONL corpus, citing an entry for every
   number and saying it could not find one rather than answering from the model's
@@ -153,3 +160,4 @@ number rather than an error:
 [ADR-0230]: docs/decisions/0230-flag-and-count-never-correct.md
 [ADR-0240]: docs/decisions/0240-stamp-every-ingest.md
 [ADR-0250]: docs/decisions/0250-guards-belong-to-the-operation.md
+[ADR-0600]: docs/decisions/0600-a-spent-key-is-its-own-ending.md

@@ -94,6 +94,15 @@ COVERED: dict[str, tuple[str, ...]] = {
     "Per-question limits reset within a session; run limits do not": (
         "test_spend.py::test_a_resumed_session_warns_against_its_own_ceiling_not_the_environment",
     ),
+    # add-provider-limit-ending's, mapped with the change that adds it. Three tests
+    # because the requirement makes three claims, and the third is the one a reader
+    # comparing words to tests should look at hardest: it is about what must *not*
+    # be classified as a spent key.
+    "A refused-for-credit request ends the question as a limit, not a failure": (
+        "test_agent.py::test_a_key_out_of_credit_says_what_happened_and_stops_the_run",
+        "test_agent.py::test_the_attribute_this_rule_reads_is_on_the_provider_s_own_error",
+        "test_agent.py::test_exhausted_retries_end_the_question_as_a_provider_failure",
+    ),
 }
 
 # Requirements with no test named yet. Listed rather than omitted: the point of this
