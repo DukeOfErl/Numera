@@ -22,9 +22,13 @@ incomplete. Only where nothing was established SHALL the agent substitute a stat
 that statement SHALL report what happened without asserting who owns the key or who can raise its
 limit — facts about a deployment rather than about the run.
 
-Every driver SHALL tell the reader that the remedy lies with whoever pays for the deployment, in one
+Every driver SHALL tell the reader that the limit has to be raised by whoever funds the app, in one
 shared wording, and SHALL NOT offer advice that cannot help — a new session reaches the same refusal
 on its first question.
+
+That wording SHALL NOT assume the reader is someone other than the funder. The same drivers serve a
+visitor to a hosted instance and the developer running the code on their own key, and an instruction
+to contact the person responsible is absurd when addressed to that person.
 
 Judgements about an answer's prose — an unsupported citation, an answer not grounded in the corpus —
 SHALL apply only to text the reader was shown, and SHALL NOT be made about a statement the agent
@@ -62,6 +66,10 @@ same thing again.
 - **WHEN** the provider refuses a request for lack of credit
 - **THEN** the request is not attempted again
 - **AND** the ending is reported without waiting out a retry delay
+
+#### Scenario: The reader is the one who funds the app
+- **WHEN** the run stops for lack of credit under a driver a developer runs on their own key
+- **THEN** the wording names the remedy without instructing the reader to contact somebody else
 
 #### Scenario: A transient provider error is not mistaken for a spent key
 - **WHEN** the provider fails for a reason other than credit

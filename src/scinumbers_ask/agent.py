@@ -630,16 +630,21 @@ class AskAgent:
                 from its own memory -- and it was reported as a clean answer.
 
                 `judge_the_prose=False` for an ending whose answer is this module's
-                own sentence rather than the model's text. Both prose judgements
-                describe what the reader was shown, so run over a substitute they
-                report on writing that was never on screen: a citation warning
-                accusing invisible text, or "this answer is not grounded in the
-                corpus" about a notice that was never an answer -- with
-                `answer.ungrounded` in the trail for a question the model never
-                answered. The entries are not a judgement about prose and are still
-                emitted: what retrieval found before the stop is worth showing.
+                own sentence rather than the model's text. What it suppresses is the
+                ungrounded report, which describes the answer the reader was shown:
+                run over a substitute it says "this answer is not grounded in the
+                corpus -- it says only what the model expected to find" about a
+                notice that was never an answer, and writes `answer.ungrounded` to
+                the trail for a question the model never answered.
+
+                The citation check needs no such guard and does not get a misleading
+                one: it reads the model's text, which is empty wherever a substitute
+                was used, so it reports nothing there by construction.
+
+                The entries are not a judgement about prose and are still emitted:
+                what retrieval found before the stop was paid for too.
                 """
-                cited = citations(answer_text, trace=trace) if judge_the_prose else ()
+                cited = citations(answer_text, trace=trace)
                 unknown = tuple(b for b in cited if self._repo.get(b) is None)
                 unretrieved = tuple(
                     b for b in cited if b not in unknown and b not in retrieved.entry_ids

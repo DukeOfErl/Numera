@@ -63,11 +63,24 @@ STOP_THE_RUN = frozenset(
 # Shared for the reason the rest of this module is: the terminal and the page are
 # answering one question, "may I ask again, and if not what would help", and two
 # drivers phrasing that differently are two claims about one fact.
+# Each sentence has to read correctly to *both* readers this project has: someone
+# using a hosted instance, and the developer running the same code on their own key.
+# "Ask whoever deployed the app" was the first wording and told the second reader to
+# contact themselves -- the exact absurdity that moving the sentence out of the agent
+# was supposed to avoid. Naming the remedy without addressing anyone works for both.
 RUN_OVER_ADVICE: dict[EndReason, str] = {
     EndReason.PROVIDER_LIMIT: (
-        "This app pays for its own model calls, and the key funding them has reached "
-        "its usage limit — so a new session will not help. Ask whoever deployed the app "
-        "to raise it."
+        "The key that pays for this app's model calls has reached its usage limit, so a "
+        "new session will not help — the limit has to be raised by whoever funds it."
+    ),
+    # Here for the same reason, and it was wrong before this change too: a missing
+    # credential or a spend that cannot be accounted for meets the reader again on
+    # the first question of any new session. The ending's own answer carries the
+    # specifics -- which variable, what to set -- so this only has to stop the page
+    # advising something that cannot work.
+    EndReason.NOT_CONFIGURED: (
+        "A new session will not help: this run stopped because something the app needs "
+        "is not configured, and that has to be fixed where the app runs."
     ),
 }
 

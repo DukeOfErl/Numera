@@ -63,7 +63,18 @@ That also repairs a banner this change would otherwise have broken. The page's l
 for a closed run is "start a new session to continue", which is true of a spent
 budget and false of a spent key — the next session's first question meets the same
 refusal — and the banner is the last thing on screen, so it outranks the answer
-that has just said otherwise.
+that has just said otherwise. `NOT_CONFIGURED` joins the table for the same reason,
+where the line was already wrong before this change: a missing credential, or a
+spend that cannot be accounted for, meets the reader again on the first question of
+any new session.
+
+**The wording addresses nobody.** "Ask whoever deployed the app to raise it" was the
+first attempt and reproduced, in the drivers, the absurdity that moving the sentence
+out of the agent was meant to end: the terminal is the driver a developer runs on
+their own key, so that sentence told the funder to contact themselves. Naming the
+remedy without a second person — "the limit has to be raised by whoever funds it" —
+reads correctly to a visitor and to the funder alike, and the spec now requires that
+rather than leaving it to whoever next edits the string.
 
 **Judgements about prose apply only to prose the reader saw.** `evidence()` takes
 `judge_the_prose=False` where the answer shown is the agent's substitute. Run over

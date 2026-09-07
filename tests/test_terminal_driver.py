@@ -401,10 +401,13 @@ def test_an_answered_question_exits_zero():
     assert run(Answered(), "s", ["q"], io.StringIO()) == 0
 
 
-def test_a_spent_key_says_whose_it_is_before_the_terminal_exits():
-    """The ending line names a reason and its figures. On this one ending the reader
-    also has to be told the remedy is somebody else's to apply -- otherwise the
-    terminal just stops, and the page and the terminal disagree about a fact."""
+def test_a_spent_key_names_the_remedy_before_the_terminal_exits():
+    """The ending line names a reason and its figures. On this one the reader also
+    has to learn that no retry helps -- otherwise the terminal just stops, and the
+    page and the terminal disagree about a fact.
+
+    The wording must also survive being read by the person who *is* the funder: this
+    is the driver a developer runs on their own key."""
 
     class OutOfCredit:
         def ask(self, session_id, question):
@@ -412,7 +415,7 @@ def test_a_spent_key_says_whose_it_is_before_the_terminal_exits():
 
     out = io.StringIO()
     assert run(OutOfCredit(), "s", ["q"], out) == 1
-    assert "raise it" in out.getvalue()
+    assert "has to be raised by whoever funds it" in out.getvalue()
 
 
 def test_an_ending_with_no_advice_adds_no_line():

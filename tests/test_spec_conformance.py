@@ -101,11 +101,13 @@ COVERED: dict[str, tuple[str, ...]] = {
     "A refused-for-credit request ends the question as a limit, not a failure": (
         "test_agent.py::test_a_key_out_of_credit_says_what_happened_and_stops_the_run",
         "test_agent.py::test_a_key_out_of_credit_keeps_the_answer_it_had_already_paid_for",
+        "test_agent.py::test_what_retrieval_found_before_the_refusal_is_still_shown",
         "test_agent.py::test_nothing_is_judged_about_prose_the_reader_never_saw",
         "test_agent.py::test_the_attribute_this_rule_reads_is_on_the_provider_s_own_error",
         "test_agent.py::test_exhausted_retries_end_the_question_as_a_provider_failure",
-        "test_terminal_driver.py::test_a_spent_key_says_whose_it_is_before_the_terminal_exits",
-        "test_web_driver.py::test_a_spent_key_replaces_the_start_a_new_session_advice",
+        "test_terminal_driver.py::test_a_spent_key_names_the_remedy_before_the_terminal_exits",
+        "test_web_driver.py::test_an_ending_a_new_session_cannot_fix_replaces_that_advice",
+        "test_web_driver.py::test_the_advice_names_the_remedy_without_addressing_anyone",
     ),
 }
 

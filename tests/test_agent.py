@@ -183,6 +183,26 @@ def test_a_key_out_of_credit_keeps_the_answer_it_had_already_paid_for(repo, conf
     assert any(isinstance(e, AnswerEntries) for e in events)
 
 
+def test_what_retrieval_found_before_the_refusal_is_still_shown(repo, config, tmp_path):
+    """A 402 after a search but before any prose: the entries survive the substitute.
+
+    The guarantee the `judge_the_prose` flag is *for* -- suppress the report about
+    prose, keep the evidence -- and it was unasserted. Moving the guard to the top of
+    `evidence()`, which drops the table for every substituted answer, passed the whole
+    suite: the two other tests here have prose (so nothing is suppressed) or nothing
+    retrieved (so an absent table is correct).
+    """
+    model = OutOfCreditModel(
+        responses=[tool_call("search_entries", property="Cell")], refuse_after=1
+    )
+    events = run(agent_with(repo, config, tmp_path, model), "s1", "How wide is E. coli?")
+    assert events[-1].reason is EndReason.PROVIDER_LIMIT
+    entries = next(e for e in events if isinstance(e, AnswerEntries))
+    assert entries.retrieved, "the search happened and was paid for; its entries stand"
+    # And still no judgement about the substitute standing in for an answer.
+    assert not any(isinstance(e, (CitationWarning, UngroundedRefusal)) for e in events)
+
+
 def test_nothing_is_judged_about_prose_the_reader_never_saw(repo, config, tmp_path):
     """With no answer of the model's, the notice stands in -- and is not analysed.
 

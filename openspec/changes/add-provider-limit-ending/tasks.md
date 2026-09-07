@@ -42,6 +42,31 @@ cut before the evaluation work, and this behaviour has to reach the deployed app
 - [x] 1b.5 The spec said "no further question is accepted until the limit is raised". `run_is_over`
       reads session state, so it is per session; the scenario now says so, and ADR-0600 records why
       closing it process-wide is not in this build.
+## 1c. What the second review pass found
+
+- [x] 1c.1 The `judge_the_prose` guarantee — suppress the report, keep the evidence — was
+      **unasserted**, and hoisting the guard to the top of `evidence()` (dropping the entries table
+      for every substituted answer) passed the whole suite: the two tests written for it either have
+      prose or have nothing retrieved. `test_what_retrieval_found_before_the_refusal_is_still_shown`
+      covers the retrieval-then-402-with-no-prose shape, and that mutant now dies against it.
+- [x] 1c.2 The `cited = … if judge_the_prose else ()` half of the flag was inert — `citations("")` is
+      already empty — while the docstring advertised it as a protection. Removed, and the docstring
+      now claims only the suppression it performs.
+- [x] 1c.3 "Ask whoever deployed the app to raise it" told the terminal's reader — a developer on
+      their own key — to contact themselves, which is the absurdity that moving the sentence out of
+      the agent was supposed to end. Reworded to name the remedy without a second person, and the
+      spec now requires that of any future wording.
+- [x] 1c.4 `NOT_CONFIGURED` gained an entry: it is in `STOP_THE_RUN`, so the page was advising a new
+      session for a missing credential too. Wrong before this change; the table was one entry short of
+      its own reasoning.
+- [ ] 1c.5 **Not done, and it is a defect this change only fixed one branch of.** `SpendLimitReached`,
+      `Unpriceable` and `ModelCallLimitExceededError` all substitute a sentence the same way and all
+      still call `evidence()` with judging on, so each can tell a reader "this answer is not grounded
+      in the corpus" about the agent's own notice, with `answer.ungrounded` in the trail. Verified
+      live on the spend-ceiling path. The one-line fix per branch is
+      `evidence(judge_the_prose=bool(answer_text.strip()))` plus a test each — deliberately left for
+      the user to schedule, since it widens this work package rather than completing it.
+
 - [ ] 1b.6 **When `main` merges into `dev`:** `evaluation.py:492` stops on
       `EndReason.RUN_BUDGET` alone, not on `STOP_THE_RUN`. A key spent mid-run would otherwise leave
       the harness asking every remaining question, recording the agent's statement as the answer and
