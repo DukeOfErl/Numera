@@ -209,9 +209,7 @@ def test_no_field_hands_the_model_a_notation_it_is_not_asked_to_write(entries):
     tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), lambda _e: None)}
 
     carrying = [
-        e
-        for e in entries
-        if any(cross_references(getattr(e, f) or "") for f in TEXT_FIELDS)
+        e for e in entries if any(cross_references(getattr(e, f) or "") for f in TEXT_FIELDS)
     ]
     assert carrying, "no entry cites another -- this check cannot fire"
 
@@ -225,3 +223,71 @@ def test_no_field_hands_the_model_a_notation_it_is_not_asked_to_write(entries):
         f"{len(leaked)} of {len(carrying)} entries hand the model a citation in the "
         f"source's form; first few: {leaked[:5]}"
     )
+
+
+# -- 5.5: what fraction of the corpus a value check could be strict about ----
+
+
+#: The four conditions an entry has to meet for a stated value to be checkable
+#: against it. Kept as a literal table, like MARKERS above, so adding a fifth is
+#: a decision rather than a diff nobody reads.
+CLEAN = {
+    "a measurement method is recorded": lambda e: bool(e.measurement_method.strip()),
+    "a scalar value is recorded": lambda e: e.value is not None,
+    "the unit is classified": lambda e: dimension(e.units) is not None,
+    "the range is not fused": lambda e: not e.range_fused,
+}
+
+
+def test_the_clean_fraction_is_reported_beside_the_answer_baseline(entries, capsys):
+    """The base rate a citation rate has to be read against.
+
+    Without it, "the agent cited a complete entry 14 per cent of the time" reads
+    as a failure of the agent rather than as a fact about the corpus. Printed and
+    not asserted, for the reason the marker counts are: what these rates *should*
+    be is a fact about the corpus, and a test that pinned them would fail every
+    time the ingester improved.
+
+    **Reported twice, because one of the four conditions measures us and not the
+    corpus.** An unclassified unit means `units.py`'s dimension table does not
+    know that spelling -- which is our coverage, not the corpus's quality. So the
+    conjunction is given once counting an unclassified unit as dirty and once
+    treating it as unknown and setting it aside. The gap between the two figures
+    is the size of our own table's blind spot, and on 2026-09-04 that table gained
+    `kDalton` and seven per-cell counts, moving 73 entries.
+
+    **Do not carry a figure from this test into a document without re-running it.**
+    The fused-range population has been measured three times -- 1,716, then 1,222,
+    then 1,445 -- because the ingester's number lexer was corrected twice. A flag
+    is only ever as good as the tokenizer under it, and a rate quoted from memory
+    is a rate measured against a lexer that no longer exists.
+    """
+    with capsys.disabled():
+        print(f"\n{len(entries)} entries")
+        for description, holds in CLEAN.items():
+            count = sum(1 for entry in entries if holds(entry))
+            print(f"  {count:>6}  {count / len(entries):6.1%}  {description}")
+
+        strict = sum(1 for entry in entries if all(holds(entry) for holds in CLEAN.values()))
+        print(f"  {strict:>6}  {strict / len(entries):6.1%}  all four (unclassified unit = dirty)")
+
+        without_units = [holds for name, holds in CLEAN.items() if name != "the unit is classified"]
+        lenient = sum(1 for entry in entries if all(holds(entry) for holds in without_units))
+        print(f"  {lenient:>6}  {lenient / len(entries):6.1%}  the other three (unit set aside)")
+        print(
+            f"  {lenient - strict:>6}  {(lenient - strict) / len(entries):6.1%}  "
+            f"the gap: our dimension table's blind spot, not the corpus's"
+        )
+
+
+def test_every_clean_condition_can_both_hold_and_fail(entries):
+    """Each condition is a claim about the corpus, and a condition that never
+    fails -- or never holds -- is reporting nothing while looking like a figure.
+
+    Both directions, for the reason the marker tests check both: a rate of zero
+    and a rate of one hundred per cent are the two ways a condition can be broken
+    rather than informative.
+    """
+    for description, holds in CLEAN.items():
+        met = sum(1 for entry in entries if holds(entry))
+        assert 0 < met < len(entries), f"{description} holds for {met} of {len(entries)}"

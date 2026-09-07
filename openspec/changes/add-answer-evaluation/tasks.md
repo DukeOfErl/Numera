@@ -247,13 +247,27 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
 
 ## 5. The baseline, and reading it
 
-- [ ] 5.1 Assemble a first question set from the corpus, committed to the repository — it carries
+- [x] 5.1 Assemble a first question set from the corpus, committed to the repository — it carries
       identifiers and wording, never entry text (ADR-0170). Happy-path questions on complete entries, and
       questions on each incomplete shape (2.3), chosen by querying the corpus for entries of that shape;
       the set's validation refuses a set missing one
   - The specimen questions on the reviewer page of 2026-09-04 are the seed: *E. coli* ribosome count and
     cell volume, ribosome size, the nuclear-volume question whose premise is wrong, budding yeast nuclear
     volume through the cell cycle, and a planarian question the corpus cannot answer at all.
+  - **Done: `question-sets/first-set.jsonl`, ten questions.** Committed inputs live in
+    `question-sets/`; outputs live in `evaluations/`, which is gitignored — two directories rather than
+    one, because a results file carries corpus text and a question set does not.
+  - **Two things the corpus settled that the plan had wrong.** There is no flatworm anywhere in it, so
+    *both* planarian questions are genuinely unsupported — one where neither term resolves, one where
+    the property is common and only the organism is absent, which is the harder case. And *E. coli*
+    **does** carry a nuclear-volume entry (100013, for the nucleoid), so the false-premise question is
+    supported-with-a-caveat rather than unanswerable: the desired answer cites the entry and says a
+    prokaryote has no membrane-bound nucleus. No deterministic check here can score that sentence,
+    which is precisely why the question is in the set and tagged for the judged layer.
+  - Guarded by `tests/test_first_question_set.py` (`corpus`-marked): a set can go stale three ways —
+    a retired identifier, a shape it no longer exercises, an unsupported question the corpus has since
+    learned to answer — and all three are silent, because the run still completes and the figures are
+    simply about something else.
 - [ ] 5.2 Measure the two retrieval bounds rather than defending them. `TOOL_CALL_LIMIT` (20) and
       `RUN_CALL_LIMIT` (12) were both chosen from a handful of observations — answers that satisfied their
       question used about five retrievals, one runaway used twenty-nine — and neither has been reached in
@@ -271,7 +285,7 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
       wrong with it, in a file beside the results
   - It is also the cheapest way to size the deferred value check: count how often a stated number is
     actually wrong. If that is rare, the parser stays deferred.
-- [ ] 5.5 Record what fraction of the corpus is clean, beside the answer baseline, so a citation rate is
+- [x] 5.5 Record what fraction of the corpus is clean, beside the answer baseline, so a citation rate is
       read against the base rate rather than as a failure: measurement method recorded, scalar value
       recorded, unit classified, range not fused. Report the four separately and the conjunction, and
       report it twice — once counting an unclassified unit as dirty and once as unknown — because that
@@ -282,6 +296,15 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     population is 1,445 records — 10.1% of the corpus, 23.5% of the 6,146 entries with a parsed range.
     This population has been measured three times, 1,716 → 1,222 → 1,445, and a flag is only ever as
     good as the tokenizer under it; keep that lesson in the report.
+  - **Measured 2026-09-07 over 14,294 entries**, and the warning above was right — none of the old
+    figures survived. A method recorded: 49.9%. A scalar value: 42.5%. A classified unit: 46.1%. An
+    unfused range: 90.1%. **All four: 13.9%** (1,983 entries). The other three with the unit set
+    aside: 24.5% (3,497). The gap between those two is 10.6% — 1,514 entries that fail only on a unit
+    spelling `units.py` does not know, which measures our dimension table and not the corpus. A
+    citation rate has to be read against 13.9%, not against 100%.
+  - The figures are printed by the `corpus`-marked test rather than pinned in an assertion: what they
+    *should* be is a fact about the corpus, and a test that fixed them would fail every time the
+    ingester improved. They go into a document beside the baseline when 5.3 records one.
 
 - [ ] 5.6 Review the branch before merging (see 1.5). Give the reviewer the *question set and the
       baseline* as well as the code: a set that measures the wrong thing is not a defect any test
