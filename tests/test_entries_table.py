@@ -9,92 +9,18 @@ from __future__ import annotations
 
 import io
 
-import pytest
 from conftest import agent_with
 
 from agent_doubles import says, scripted, tool_call
-from bionumbers_ask import entries_table
-from bionumbers_ask.citations import citations, format_citation
-from bionumbers_ask.cli import render, run
-from bionumbers_ask.events import AnswerEntries, CitationWarning
+from scinumbers_ask import entries_table
+from scinumbers_ask.citations import citations, format_citation
+from scinumbers_ask.cli import render, run
+from scinumbers_ask.events import AnswerEntries, CitationWarning
 
 FIRST, SECOND = 100001, 100002
 
 
 # -- the parser -----------------------------------------------------------
-
-
-def test_the_plural_marker_parses():
-    """A model listing entries writes "BNIDs 100002" naturally. Parsed as uncited,
-    that turned a well-cited answer into one with no citations at all: no cited rows,
-    no unknown-or-unretrieved check, and a scorer recording zero."""
-    assert citations("see BNIDs 100002") == (100002,)
-
-
-def test_one_marker_introduces_a_run_of_identifiers():
-    """The form the corpus's own entry text uses, and what a model listing entries
-    writes unprompted. Both readings were in the codebase: the corpus parser read the
-    run, the answer parser read only the first."""
-    assert citations("see BNIDs 100002 and 100003") == (100002, 100003)
-    assert citations("See BNID 102065, 104333") == (102065, 104333)
-    assert citations("BNIDs 100002, 100003 & 100004") == (100002, 100003, 100004)
-
-
-def test_a_run_stops_at_something_that_is_not_an_identifier():
-    """Identifiers after the first are inferred from position, so each has to look
-    like the first. Otherwise "and 3 other entries" contributes an entry 3, and the
-    run's own tail is no longer trustworthy either."""
-    assert citations("BNID 100002 and 3 other entries") == (100002,)
-    assert citations("BNID 100002, 3, 100004") == (100002,)
-
-
-def test_a_number_too_short_does_not_stop_the_rest_of_the_text_parsing():
-    """Found by mutation testing: turning the skip into a stop survived every test.
-    It would lose every citation after the first fragment, and an answer that did
-    cite its entries would be reported as uncited."""
-    assert citations("BNID 12 and BNID 100002") == (100002,)
-    assert citations("see BNID 104 678, then BNID 100003") == (100003,)
-
-
-def test_a_spaced_group_of_digits_does_not_contribute_an_identifier():
-    """What MIN_DIGITS is for, stated as the requirement rather than as the number.
-
-    A reference written "BNID 104 678" was contributing an entry 104 and an entry
-    678, forty times over the corpus. The length floor is how that is suppressed,
-    but the floor itself is a tuning constant, not a contract: no spec sets it, and
-    the corpus runs 100001-117360, so a four-digit identifier cannot exist. An
-    earlier version of this test asserted the exact boundary, which pinned the
-    implementation's choice as though it were required -- and asserted that a
-    four-digit citation is accepted, which is not behaviour worth guaranteeing.
-
-    So mutation testing's survivor here (`<` widened to `<=`) is knowingly left
-    alive. Killing it would mean testing the tuning rather than the requirement.
-    """
-    assert citations("see BNID 104 678") == ()
-    assert citations("see BNID 104 678, then BNID 100003") == (100003,)
-
-
-def test_a_bare_number_is_not_a_citation():
-    """The reason the format is stated at all: a six-digit quantity is not an id."""
-    assert citations("the cell holds 100000 ribosomes") == ()
-    assert citations("100000 ribosomes (BNID 106576)") == (106576,)
-
-
-@pytest.mark.parametrize(
-    "text",
-    ["BNID 100002", "bnid100002", "BNID: 100002", "bnid #100002", "BNID-100002"],
-)
-def test_the_marker_is_required_but_the_glue_is_not(text):
-    """Permissive glue on purpose: the form is asked of the model, so it is a
-    preference, not a control. A parser rejecting "BNID: x" would score a good
-    answer as uncited, and a false negative in evaluation is the worse error."""
-    assert citations(text) == (100002,)
-
-
-def test_citations_keep_their_order_without_repeating():
-    # Realistic widths: identifiers below MIN_DIGITS are refused, because a
-    # two-digit number after the marker is a fragment or a page, not an entry.
-    assert citations("BNID 100003 then BNID 100001 then BNID 100003") == (100003, 100001)
 
 
 def test_the_written_form_is_the_form_that_parses():
@@ -107,19 +33,19 @@ def test_the_written_form_is_the_form_that_parses():
 
 def test_cited_entries_come_before_the_rest(repo):
     rows = entries_table.rows_for(repo, cited=(SECOND,), retrieved=(FIRST, SECOND))
-    assert [r.bnid for r in rows] == [SECOND, FIRST]
+    assert [r.entry_id for r in rows] == [SECOND, FIRST]
     assert [r.cited for r in rows] == [True, False]
 
 
 def test_an_identifier_that_is_not_in_the_corpus_is_left_out(repo):
     """A fabricated citation has no row to show; the warning event reports it."""
     rows = entries_table.rows_for(repo, cited=(999999,), retrieved=(FIRST,))
-    assert [r.bnid for r in rows] == [FIRST]
+    assert [r.entry_id for r in rows] == [FIRST]
 
 
 def test_an_entry_retrieved_twice_appears_once(repo):
     rows = entries_table.rows_for(repo, cited=(FIRST,), retrieved=(FIRST, FIRST))
-    assert [r.bnid for r in rows] == [FIRST]
+    assert [r.entry_id for r in rows] == [FIRST]
 
 
 def test_a_row_carries_every_column_the_reader_needs(repo):
@@ -162,7 +88,7 @@ def test_every_row_occupies_the_same_number_of_lines(repo):
 
 def test_a_long_cell_is_truncated_rather_than_wrapped_further(repo):
     long_row = entries_table.Row(
-        bnid=1,
+        entry_id=1,
         property="x " * 80,
         organism="o",
         value="1",
@@ -247,23 +173,23 @@ def test_the_table_is_skipped_when_the_driver_has_no_corpus(repo):
 
 def test_the_search_reports_which_entries_it_returned(repo, config, tmp_path):
     """What makes both the table and the citation check possible."""
-    from bionumbers_ask.events import Retrieval
+    from scinumbers_ask.events import Retrieval
 
     model = scripted(tool_call("search_entries", property="Cell"), says("done"))
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
     search = next(e for e in events if isinstance(e, Retrieval))
-    assert search.detail["bnids"], "a driver cannot table entries it was never told about"
-    assert len(search.detail["bnids"]) == search.detail["returned"]
+    assert search.detail["entry_ids"], "a driver cannot table entries it was never told about"
+    assert len(search.detail["entry_ids"]) == search.detail["returned"]
 
 
 def test_the_identifiers_are_not_printed_on_the_progress_line(repo, config, tmp_path):
     """Fifty of them would bury what the search was actually for."""
-    from bionumbers_ask.events import Retrieval
+    from scinumbers_ask.events import Retrieval
 
     event = Retrieval(
         question_id="q",
         tool="search_entries",
-        detail={"property": "Cell", "returned": 2, "bnids": (FIRST, SECOND)},
+        detail={"property": "Cell", "returned": 2, "entry_ids": (FIRST, SECOND)},
     )
     line = render(event)
     assert "Cell" in line and "returned=2" in line
@@ -308,7 +234,7 @@ def test_a_real_entry_cited_without_being_retrieved_is_named(repo, config, tmp_p
     """It exists, so nothing about the answer looks wrong -- but this question
     never put it in front of the model."""
     model = scripted(
-        tool_call("get_entry", bnid=FIRST),
+        tool_call("get_entry", entry_id=FIRST),
         says(f"about 1 micrometre ({format_citation(SECOND)})"),
     )
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
@@ -337,7 +263,7 @@ def test_no_cell_in_the_table_comes_from_the_model(repo, config, tmp_path):
     must still show the corpus's value.
     """
     model = scripted(
-        tool_call("get_entry", bnid=SECOND),
+        tool_call("get_entry", entry_id=SECOND),
         says(f"about 4000 kilometres ({format_citation(SECOND)})"),
     )
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
@@ -386,7 +312,7 @@ def test_two_searches_are_summed_and_counted(repo, config, tmp_path):
 def test_fetching_an_entry_is_not_counted_as_a_search(repo, config, tmp_path):
     """A question answered from fetches alone matched nothing, and must not claim
     a matched figure of zero as though the corpus were empty."""
-    model = scripted(tool_call("get_entry", bnid=FIRST), says("done"))
+    model = scripted(tool_call("get_entry", entry_id=FIRST), says("done"))
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
     entries = next(e for e in events if isinstance(e, AnswerEntries))
     assert (entries.searches, entries.matched) == (0, 0)
@@ -398,13 +324,13 @@ def test_fetching_an_entry_is_not_counted_as_a_search(repo, config, tmp_path):
 
 def _repo_of(*specs):
     """A repository over entries written for a test, where the fixture has no case."""
-    from bionumbers_ask.corpus import Entry
-    from bionumbers_ask.repository import CorpusRepository
+    from scinumbers_ask.corpus import Entry
+    from scinumbers_ask.repository import CorpusRepository
 
     return CorpusRepository(
         tuple(
             Entry(
-                bnid=bnid,
+                entry_id=entry_id,
                 property=prop,
                 organism=organism,
                 units="μm",
@@ -417,7 +343,7 @@ def _repo_of(*specs):
                 comments="",
                 keywords=(),
             )
-            for bnid, prop, organism, method in specs
+            for entry_id, prop, organism, method in specs
         )
     )
 
@@ -441,7 +367,7 @@ def test_nothing_is_summarised_when_nothing_was_retrieved():
 def test_an_entry_whose_method_the_corpus_does_not_record_is_marked(repo):
     """A textbook page and a measurement over a thousand cells otherwise look
     identical in a table, and telling them apart is what a reader is here to do."""
-    by_id = {row.bnid: row for row in entries_table.rows_for(repo, (), (FIRST, SECOND))}
+    by_id = {row.entry_id: row for row in entries_table.rows_for(repo, (), (FIRST, SECOND))}
     assert by_id[FIRST].method_recorded is True
     assert by_id[SECOND].method_recorded is False
 
@@ -475,7 +401,7 @@ def test_uncited_entries_are_ordered_by_closeness_to_the_topic(repo):
     )
     # 100010 is another cell diameter and was retrieved last; 100020 counts
     # ribosomes and was retrieved first.
-    assert [row.bnid for row in rows] == [SECOND, 100010, 100020]
+    assert [row.entry_id for row in rows] == [SECOND, 100010, 100020]
 
 
 def test_wording_a_property_repeats_from_its_organism_does_not_score():
@@ -490,7 +416,7 @@ def test_wording_a_property_repeats_from_its_organism_does_not_score():
     # the discount the fimbriae entry scores twice -- "diameter" and "coli" -- and
     # overtakes the cell entry, which scores once.
     rows = entries_table.rows_for(repo, cited=(), retrieved=(1, 2), question="diameter of e. coli")
-    assert [row.bnid for row in rows] == [1, 2]
+    assert [row.entry_id for row in rows] == [1, 2]
 
 
 def test_the_cited_entries_wording_orders_the_rest(repo):
@@ -499,7 +425,7 @@ def test_the_cited_entries_wording_orders_the_rest(repo):
     the question alone cannot say which object the answer settled on."""
     # No question at all, so the cited entry's property is the only signal there is.
     rows = entries_table.rows_for(repo, cited=(SECOND,), retrieved=(COUNT, YEAST), question="")
-    uncited = [row.bnid for row in rows if not row.cited]
+    uncited = [row.entry_id for row in rows if not row.cited]
     assert uncited == [YEAST, COUNT], "the entry sharing the cited property should lead"
 
 
@@ -509,7 +435,7 @@ def test_the_question_wording_orders_the_rest_too(repo):
     rows = entries_table.rows_for(
         repo, cited=(SECOND,), retrieved=(MASS, COUNT), question="ribosomes"
     )
-    uncited = [row.bnid for row in rows if not row.cited]
+    uncited = [row.entry_id for row in rows if not row.cited]
     assert uncited == [COUNT, MASS], "the entry matching the question should lead"
 
 
@@ -519,7 +445,7 @@ def test_entries_the_score_cannot_separate_keep_the_order_they_were_met_in():
         (2, "Cell diameter", "Bacteria Escherichia coli", ""),
     )
     rows = entries_table.rows_for(repo, cited=(), retrieved=(2, 1), question="diameter")
-    assert [row.bnid for row in rows] == [2, 1]
+    assert [row.entry_id for row in rows] == [2, 1]
 
 
 def test_a_row_cited_without_being_retrieved_is_marked(repo):
@@ -579,23 +505,20 @@ def test_the_banner_is_not_drawn_for_a_break_below_the_row_limit(repo):
     assert entries_table.UNCITED_BANNER not in text
 
 
-def test_a_number_too_short_to_be_an_identifier_is_refused():
-    """34 entries write a cross-reference as "BNID 104 678". Reading the digits up to
-    the space turns a citation this parser used to miss into a wrong one it reports
-    with confidence, which is the worse of the two failures."""
-    from bionumbers_ask.citations import MIN_DIGITS
-
-    assert citations("see BNID 104 678") == ()
-    assert len(str(citations("see BNID 104678")[0])) >= MIN_DIGITS
-
-
-def test_the_corpus_and_the_answers_are_read_by_one_parser(repo):
+def test_one_implementation_reads_the_source_notation(repo):
     """Two parsers for one notation drifted once already: the corpus side read a run
-    of identifiers and the answer side read only the first."""
-    from bionumbers_ask import repository
+    of identifiers and the answer side read only the first.
 
-    assert not hasattr(repository, "_CITED"), "a second citation parser has reappeared"
-    assert repo.get(FIRST).cited_bnids == (102065, 104333)
+    There are two *callers* now -- an entry's prose and an answer -- and that is the
+    point of the split. What must not come back is a second *implementation*: both
+    route through the same function object, so a change to the notation cannot reach
+    one caller and miss the other.
+    """
+    from scinumbers_ask import bionumbers, citations, repository
+
+    assert repository.cross_references is bionumbers.cross_references
+    assert citations.cross_references is bionumbers.cross_references
+    assert repo.get(FIRST).cited_ids == (102065, 104333)
 
 
 # -- dimensional compatibility --------------------------------------------
@@ -661,9 +584,9 @@ def test_a_long_footnote_wraps_to_the_table(repo):
 # -- the conditions that distinguish differing values ----------------------
 
 
-def _row(bnid, method="", cited=True, value="1.0"):
+def _row(entry_id, method="", cited=True, value="1.0"):
     return entries_table.Row(
-        bnid=bnid,
+        entry_id=entry_id,
         property="Cell volume",
         organism="Bacteria Escherichia coli",
         value=value,
@@ -715,7 +638,7 @@ def test_an_entry_recording_no_method_is_left_out_but_still_marked():
     block = text.split("how the cited entries were measured:")[1].splitlines()
     listed = [line for line in block if line.startswith("  BNID")]
     assert len(listed) == 2, "the entry with no method should not be listed"
-    assert entries_table.format_citation(3) not in text
+    assert entries_table.bionumbers.label(3) not in text
     assert entries_table.NO_METHOD_LEGEND in text
 
 
@@ -734,10 +657,10 @@ def test_a_long_method_is_cut_to_the_table_and_says_so():
 
 
 def an_entry(**kwargs):
-    from bionumbers_ask.corpus import Entry
+    from scinumbers_ask.corpus import Entry
 
     base = dict(
-        bnid=1,
+        entry_id=1,
         property="p",
         organism="o",
         units="mg/L",
@@ -790,7 +713,7 @@ def test_each_flag_draws_its_own_mark_and_its_own_legend(repo):
     flag without the other, and "the source stated a bound" is not "these bounds may
     be different quantities" -- BNID 100420 carries both and is wrong in two ways."""
     row = entries_table.Row(
-        bnid=1,
+        entry_id=1,
         property="p",
         organism="o",
         value="8.0",
@@ -803,7 +726,7 @@ def test_each_flag_draws_its_own_mark_and_its_own_legend(repo):
     assert entries_table.FUSED not in row.markers()
 
     both = entries_table.Row(
-        bnid=1,
+        entry_id=1,
         property="p",
         organism="o",
         value="1–2",
@@ -820,7 +743,7 @@ def test_each_flag_draws_its_own_mark_and_its_own_legend(repo):
 
 def test_a_legend_is_absent_when_no_shown_row_carries_its_mark(repo):
     plain = entries_table.Row(
-        bnid=1,
+        entry_id=1,
         property="p",
         organism="o",
         value="1",

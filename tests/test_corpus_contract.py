@@ -22,13 +22,13 @@ from bionumbers_ingest.parsing import iter_rows
 
 # The twelve keys the consumer models, and the JSON types it accepts for each.
 #
-# SOURCE: `bionumbers_ask.corpus.Entry` and its `_number` / `_keywords` coercions,
+# SOURCE: `scinumbers_ask.corpus.Entry` and its `_number` / `_keywords` coercions,
 # on branch `feat/ask-agent`. Restated here as a literal rather than imported,
 # because that branch is not on this one. Two copies of a contract drift, so this
 # list is deliberately the ONLY copy in this branch, and the round-trip test at
 # the bottom takes over as the authority once the branches merge.
 REQUIRED = {
-    "bnid": (int,),
+    "entry_id": (int,),
     "property": (str, type(None)),
     "organism": (str, type(None)),
     "units": (str, type(None)),
@@ -56,18 +56,18 @@ def test_every_line_carries_every_required_key_with_an_accepted_type(corpus):
     assert corpus
     for obj in corpus:
         for key, accepted in REQUIRED.items():
-            assert key in obj, f"bnid {obj.get('bnid')} is missing {key}"
+            assert key in obj, f"entry_id {obj.get('entry_id')} is missing {key}"
             assert isinstance(obj[key], accepted), (
-                f"bnid {obj.get('bnid')}: {key} is {type(obj[key]).__name__}, "
+                f"entry_id {obj.get('entry_id')}: {key} is {type(obj[key]).__name__}, "
                 f"not one of {[t.__name__ for t in accepted]}"
             )
 
 
-def test_bnid_is_a_number_not_a_string(corpus):
+def test_entry_id_is_a_number_not_a_string(corpus):
     # the loader coerces, but a string identifier would sort and compare wrongly
     for obj in corpus:
-        assert isinstance(obj["bnid"], int)
-        assert not isinstance(obj["bnid"], bool)
+        assert isinstance(obj["entry_id"], int)
+        assert not isinstance(obj["entry_id"], bool)
 
 
 @pytest.mark.parametrize("key", SCALARS)
@@ -76,7 +76,7 @@ def test_an_absent_scalar_is_null_and_never_an_empty_string(corpus, key):
     # satisfies the loader's has-a-value branch and blanks out the measurement of
     # every range-only entry, which is 4,985 entries of the real corpus.
     for obj in corpus:
-        assert obj[key] != "", f"bnid {obj['bnid']}: {key} is an empty string"
+        assert obj[key] != "", f"entry_id {obj['entry_id']}: {key} is an empty string"
         assert obj[key] is None or isinstance(obj[key], (int, float))
 
 
@@ -89,7 +89,7 @@ def test_keywords_is_an_array_never_a_joined_string(corpus):
         assert all(isinstance(k, str) for k in kws)
         # a joined string passed to tuple() becomes a list of single characters
         looks_per_character = len(kws) > 3 and all(len(k) == 1 for k in kws)
-        assert not looks_per_character, f"bnid {obj['bnid']}: keywords are letters: {kws}"
+        assert not looks_per_character, f"entry_id {obj['entry_id']}: keywords are letters: {kws}"
 
 
 def test_the_predicate_and_the_flags_are_present_on_every_line(corpus):
@@ -115,7 +115,7 @@ def test_one_unusable_line_costs_the_whole_corpus(tmp_path):
     emitting a partially-built record.
     """
     out = tmp_path / "corpus.jsonl"
-    write_corpus([BioNumberRecord(bnid=1), BioNumberRecord(bnid=2)], out)
+    write_corpus([BioNumberRecord(entry_id=1), BioNumberRecord(entry_id=2)], out)
     good = out.read_text(encoding="utf-8").splitlines()
     out.write_text("\n".join([good[0], "{not json", good[1]]) + "\n", encoding="utf-8")
 
@@ -130,14 +130,14 @@ def test_one_unusable_line_costs_the_whole_corpus(tmp_path):
 
 
 def test_round_trip_through_the_real_loader(tmp_path, sample_html):
-    """Live only once `bionumbers_ask` is importable — i.e. after the merge to dev.
+    """Live only once `scinumbers_ask` is importable — i.e. after the merge to dev.
 
     Skipped on this branch by design. It becomes the authority over the literal
     above at exactly the moment loader drift would otherwise start going unnoticed.
     Verified by hand in the meantime; see task 5.5.
     """
     corpus_mod = pytest.importorskip(
-        "bionumbers_ask.corpus",
+        "scinumbers_ask.corpus",
         reason="the consumer lives on feat/ask-agent; live after the merge to dev",
     )
     out = tmp_path / "corpus.jsonl"
@@ -147,7 +147,7 @@ def test_round_trip_through_the_real_loader(tmp_path, sample_html):
     entries = corpus_mod.load(out)
     assert len(entries) == written
     for entry in entries:
-        assert entry.value_display, f"bnid {entry.bnid} renders as an empty measurement"
+        assert entry.value_display, f"entry_id {entry.entry_id} renders as an empty measurement"
         assert isinstance(entry.keywords, tuple)
 
 

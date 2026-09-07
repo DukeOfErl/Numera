@@ -1,10 +1,10 @@
 """The real-scale case the two-tier design exists for.
 
 Skipped unless a corpus is supplied, since the corpus is an external input with
-unresolved licensing and is not committed. Point BIONUMBERS_ASK_CORPUS at a
+unresolved licensing and is not committed. Point SCINUMBERS_CORPUS at a
 JSONL corpus to exercise it:
 
-    BIONUMBERS_ASK_CORPUS=~/path/bionumbers.jsonl uv run pytest
+    SCINUMBERS_CORPUS=~/path/bionumbers.jsonl uv run pytest
 """
 
 from __future__ import annotations
@@ -14,15 +14,15 @@ from pathlib import Path
 
 import pytest
 
-from bionumbers_ask.corpus import load
-from bionumbers_ask.repository import DEFAULT_LIMIT, CorpusRepository
+from scinumbers_ask.corpus import load
+from scinumbers_ask.repository import DEFAULT_LIMIT, CorpusRepository
 
-_path = os.environ.get("BIONUMBERS_ASK_CORPUS", "")
+_path = os.environ.get("SCINUMBERS_CORPUS", "")
 _corpus = Path(_path).expanduser() if _path else None
 
 pytestmark = pytest.mark.skipif(
     _corpus is None or not _corpus.is_file(),
-    reason="set BIONUMBERS_ASK_CORPUS to a JSONL corpus to run the scale checks",
+    reason="set SCINUMBERS_CORPUS to a JSONL corpus to run the scale checks",
 )
 
 

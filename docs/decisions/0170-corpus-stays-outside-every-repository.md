@@ -19,8 +19,11 @@ contributor.
 ## Decision
 
 The corpus is **an external input supplied at run time** — `--corpus`, or
-`BIONUMBERS_ASK_CORPUS` — and the loader fails with an explanatory message when
+`SCINUMBERS_CORPUS` — and the loader fails with an explanatory message when
 none is given. It is never committed.
+
+> _Amended 2026-08-31 (ADR-0400): the variable was `BIONUMBERS_ASK_CORPUS` when
+> this was written. The old name is now refused rather than ignored._
 
 `.gitignore` is anchored and matches the data file as well as the directory
 (`/corpus/`, `bionumbers*.jsonl`, `*.corpus.jsonl`), because the corpus is a

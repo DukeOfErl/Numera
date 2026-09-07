@@ -64,6 +64,69 @@ def micro_from_provider_cost(cost: float) -> int:
     return round(cost * MICRO_PER_USD)
 
 
+#: Every environment name this project has retired, and what replaced it.
+#:
+#: A renamed variable that is merely ignored is configuration that silently stops
+#: being read: a ceiling that no longer binds, a run label that quietly becomes
+#: "dev" and mixes an evaluation's spend into a person's, a corpus path that falls
+#: back to none. Each of those looks like a working run. So a retired name is
+#: refused by name, with its replacement in the message.
+RENAMED_ENV = {
+    "BIONUMBERS_ASK_CORPUS": "SCINUMBERS_CORPUS",
+    "BIONUMBERS_ASK_TRACE": "SCINUMBERS_TRACE",
+    "BIONUMBERS_ASK_CHECKPOINTS": "SCINUMBERS_CHECKPOINTS",
+    "BIONUMBERS_ASK_MODEL": "SCINUMBERS_MODEL",
+    "BIONUMBERS_ASK_QUESTION_CEILING_USD": "SCINUMBERS_QUESTION_CEILING_USD",
+    "BIONUMBERS_ASK_RUN_BUDGET_USD": "SCINUMBERS_RUN_BUDGET_USD",
+    "BIONUMBERS_ASK_RUN": "SCINUMBERS_RUN",
+}
+
+#: Retired without a replacement of the same meaning, so a rename message would be
+#: wrong. Read as a ceiling, a value that used to permit spending 20 per cent above
+#: it would now stop 20 per cent below -- a spend limit that silently tightens,
+#: which is worse than one that will not start. ADR-0180.
+WITHDRAWN_ENV = {
+    "BIONUMBERS_ASK_WARN_USD": (
+        "SCINUMBERS_QUESTION_CEILING_USD is the hard per-question limit, and the "
+        "warning is derived at 80 per cent of it"
+    ),
+}
+
+
+def refuse_retired_env() -> None:
+    """Refuse a run configured through a name this project no longer reads.
+
+    Called from `Config.from_env` so a library caller cannot miss it, **and** from
+    each driver before anything else reads the environment. The ordering matters
+    more than it looks: both drivers resolve the corpus before building a config,
+    so a reader with only the old corpus variable exported would otherwise be told
+    "no corpus path supplied" -- true, unhelpful, and pointing at the wrong thing.
+    """
+    for old, new in RENAMED_ENV.items():
+        if old in os.environ:
+            raise NotConfigured(f"{old} is now {new}. Rename it and try again.")
+    for old, guidance in WITHDRAWN_ENV.items():
+        if old in os.environ:
+            raise NotConfigured(f"{old} no longer exists. {guidance}.")
+
+
+def env_setting(name: str, default: str = "") -> str:
+    """Read one setting from the environment, refusing a retired name first.
+
+    The guard belongs here rather than in whoever calls it. Three settings -- the
+    corpus, the trail and the checkpoint store -- never pass through `Config`, so
+    a refusal living only in the two drivers protects exactly the two callers that
+    exist today. The architecture note says the evaluation harness will be a third
+    adapter; a harness that reads the trail path and builds an `AskAgent` directly
+    would get no refusal at all and would quietly write its trail to the default
+    path with a stale name exported.
+
+    Cheap enough to call on every read, and calling it on every read is the point.
+    """
+    refuse_retired_env()
+    return os.environ.get(name, default)
+
+
 @dataclass(frozen=True)
 class ModelPrices:
     """Per-million-token prices, in micro-dollars. Only a fallback.
@@ -109,22 +172,13 @@ class Config:
 
     @classmethod
     def from_env(cls) -> Config:
-        # Refused rather than reinterpreted. Read as a ceiling, a value that used
-        # to permit spending up to 20 per cent above it would now stop 20 per cent
-        # below -- a spend limit that silently tightens, which is worse than one
-        # that will not start.
-        if "BIONUMBERS_ASK_WARN_USD" in os.environ:
-            raise NotConfigured(
-                "BIONUMBERS_ASK_WARN_USD no longer exists. Set "
-                "BIONUMBERS_ASK_QUESTION_CEILING_USD instead: it is the hard "
-                "per-question limit, and the warning is derived at 80 per cent of it."
-            )
+        refuse_retired_env()
         return cls(
-            model=os.environ.get("BIONUMBERS_ASK_MODEL", DEFAULT_MODEL),
-            question_ceiling=usd(os.environ.get("BIONUMBERS_ASK_QUESTION_CEILING_USD", "0.60")),
-            run_budget=usd(os.environ.get("BIONUMBERS_ASK_RUN_BUDGET_USD", "1.20")),
+            model=os.environ.get("SCINUMBERS_MODEL", DEFAULT_MODEL),
+            question_ceiling=usd(os.environ.get("SCINUMBERS_QUESTION_CEILING_USD", "0.60")),
+            run_budget=usd(os.environ.get("SCINUMBERS_RUN_BUDGET_USD", "1.20")),
             prices=dict(FALLBACK_PRICES),
-            run_label=os.environ.get("BIONUMBERS_ASK_RUN", "").strip() or "dev",
+            run_label=os.environ.get("SCINUMBERS_RUN", "").strip() or "dev",
         )
 
 

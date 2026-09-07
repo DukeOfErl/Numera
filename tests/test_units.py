@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from bionumbers_ask.units import comparable, dimension, dimensions_of
+from scinumbers_ask.units import comparable, dimension, dimensions_of
 
 
 @pytest.mark.parametrize(

@@ -30,10 +30,9 @@ from typing import Any
 
 import streamlit as st
 
-from . import entries_table, messages, trace
+from . import bionumbers, entries_table, messages, trace
 from .agent import AskAgent
-from .citations import format_citation
-from .config import Config
+from .config import Config, env_setting, refuse_retired_env
 from .corpus import load
 from .events import Answer, AnswerEntries, Event, QuestionEnded, Retrieval
 from .repository import CorpusRepository
@@ -77,8 +76,8 @@ PROTOTYPE_BANNER_CSS = """
 </style>
 """
 
-SESSION_KEY = "bionumbers_ask.session"
-TRANSCRIPT_KEY = "bionumbers_ask.transcript"
+SESSION_KEY = "scinumbers_ask.session"
+TRANSCRIPT_KEY = "scinumbers_ask.transcript"
 
 # The session identifier lives in the URL as well as in session state. Session
 # state dies with the server; the checkpoint it points at does not, so without
@@ -250,16 +249,17 @@ def resources(corpus: str | None = None) -> tuple[CorpusRepository, AskAgent]:
     they are not. Configuration comes from the environment because a Streamlit
     script has no argv to read it from.
     """
-    trace.to_file(os.environ.get("BIONUMBERS_ASK_TRACE", trace.DEFAULT_FILE))
+    refuse_retired_env()
+    trace.to_file(env_setting("SCINUMBERS_TRACE", trace.DEFAULT_FILE))
     # The corpus path is resolved by the caller, outside this function. Anything
     # drawn inside a cached function is recorded and replayed on every cache hit,
     # so an `st.info` announcing a build would be redrawn at the top of the page
     # for the life of the server -- a notice that was true once and false for every
     # rerun after it.
     if corpus is None:
-        corpus = os.environ.get("BIONUMBERS_ASK_CORPUS", "")
+        corpus = env_setting("SCINUMBERS_CORPUS")
     repo = CorpusRepository(load(corpus))
-    checkpoints = os.environ.get("BIONUMBERS_ASK_CHECKPOINTS", DEFAULT_CHECKPOINTS)
+    checkpoints = env_setting("SCINUMBERS_CHECKPOINTS", DEFAULT_CHECKPOINTS)
     # The store is created on demand by the checkpointer, but its directory is not.
     directory = os.path.dirname(checkpoints)
     if directory:
@@ -285,7 +285,7 @@ def as_text(text: str) -> str:
 def _row_label(row: entries_table.Row) -> str:
     """One line identifying an entry, for the side panel's collapsed rows."""
     value = "" if not row.has_scalar else f"{row.value} {row.units}".strip()
-    parts = [row.property, row.organism, value, format_citation(row.bnid)]
+    parts = [row.property, row.organism, value, bionumbers.label(row.entry_id)]
     label = " · ".join(part for part in parts if part)
     marks = _markers(row)
     return f"{marks} {label}" if marks else label
@@ -330,7 +330,7 @@ def _frame(rows: tuple[entries_table.Row, ...]) -> list[dict[str, Any]]:
             "Units": row.units,
             # A string, not a number: an identifier formatted as a quantity picks
             # up a thousands separator and stops matching the citation in the prose.
-            "ID": str(row.bnid),
+            "ID": str(row.entry_id),
             "Reference": row.reference,
         }
         for row in rows

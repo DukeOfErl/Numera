@@ -27,7 +27,7 @@ from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from . import run_ledger
-from .citations import citations
+from .citations import FORM, citations
 from .config import Config, NotConfigured, format_usd, warning_for
 from .events import (
     Answer,
@@ -54,15 +54,19 @@ from .spend import (
 from .tools import ToolBudget, build_tools
 from .trace import start_question
 
-SYSTEM_PROMPT = """\
+# An f-string so the citation form is the one `citations.py` parses, not a copy of
+# it. It was a copy, and nothing tied the two together: the prompt could have asked
+# for a form the scorer did not read, and the only symptom would have been answers
+# reported as uncited.
+SYSTEM_PROMPT = f"""\
 You answer questions about biological quantities using only a corpus of curated \
 entries, reached through your tools. You have no other source.
 
 Rules, in order of importance:
 
-1. Cite every quantity you state, by its bnid, written as "BNID 100002" -- the \
-word BNID, a space, then the number, every time. A quantity you cannot attribute \
-to an entry you retrieved does not go in the answer.
+1. Cite every quantity you state, by its entry identifier, written as "{FORM}" -- \
+the number inside double square brackets, every time. A quantity you cannot \
+attribute to an entry you retrieved does not go in the answer.
 2. Search before you answer, always, even when you are confident the corpus does \
 not cover the question. An answer given without retrieving anything reports what \
 you expected to find, not what is there, and "I did not find it" is only true if \
@@ -202,13 +206,25 @@ def _origin(exc: BaseException) -> str:
 
     The innermost of our own frames, so a defect surfacing deep inside a library
     still points at the line of ours that led there.
+
+    Our frames are recognised by the module name each one was compiled in, not by
+    its filename. Two earlier versions of this got it wrong in the same silent
+    direction -- returning no origin at all, so an internal error says the fault is
+    ours without saying where, and nothing raises. First a hardcoded package name,
+    which a rename falsified; then the package directory from `__file__`, which
+    compares a resolved path against an *unresolved* `co_filename` and so fails
+    for every exception whenever the checkout or the editable install is reached
+    through a symlink. `__package__` is computed, involves no filesystem, and
+    survives both.
     """
     frame = exc.__traceback__
     where = ""
     while frame is not None:
-        name = frame.tb_frame.f_code.co_filename
-        if "bionumbers_ask" in name:
-            where = f"{Path(name).name}:{frame.tb_lineno}"
+        # The dot matters: without it a sibling `scinumbers_ask_helpers` would read
+        # as ours.
+        module = frame.tb_frame.f_globals.get("__name__", "")
+        if module == __package__ or module.startswith(f"{__package__}."):
+            where = f"{Path(frame.tb_frame.f_code.co_filename).name}:{frame.tb_lineno}"
         frame = frame.tb_next
     return where
 
@@ -311,7 +327,7 @@ def _middleware(gate: SpendGate) -> list:
 class _Retrieved:
     """What a question put in front of the model, and how much it passed over."""
 
-    bnids: dict[int, None] = field(default_factory=dict)
+    entry_ids: dict[int, None] = field(default_factory=dict)
     matched: int = 0
     searches: int = 0
 
@@ -326,14 +342,14 @@ def _collect(retrieved: _Retrieved, event: Retrieval) -> None:
     if "matched" in event.detail:
         retrieved.matched += int(event.detail["matched"])
         retrieved.searches += 1
-    for bnid in event.detail.get("bnids") or ():
-        retrieved.bnids.setdefault(int(bnid), None)
+    for entry_id in event.detail.get("entry_ids") or ():
+        retrieved.entry_ids.setdefault(int(entry_id), None)
     # Both keys are required. `found` alone is not a fetch marker: list_values
     # reports how many vocabulary values it found under the same key, and reading
-    # a bnid off that raises.
-    bnid = event.detail.get("bnid")
-    if bnid is not None and event.detail.get("found"):
-        retrieved.bnids.setdefault(int(bnid), None)
+    # a entry_id off that raises.
+    entry_id = event.detail.get("entry_id")
+    if entry_id is not None and event.detail.get("found"):
+        retrieved.entry_ids.setdefault(int(entry_id), None)
 
 
 def _persisted(saver: SqliteSaver, session_id: str) -> dict:
@@ -488,7 +504,8 @@ class AskAgent:
                     question_id=trace.question_id,
                     text=(
                         "This conversation has reached its length limit, so I cannot take another "
-                        "question in it without dropping earlier context. Please start a new session."
+                        "question in it without dropping earlier context. "
+                        "Please start a new session."
                     ),
                 )
                 yield QuestionEnded(
@@ -585,10 +602,10 @@ class AskAgent:
                 answer citing an entry no tool call returned, is the model answering
                 from its own memory -- and it was reported as a clean answer.
                 """
-                cited = citations(answer_text)
+                cited = citations(answer_text, trace=trace)
                 unknown = tuple(b for b in cited if self._repo.get(b) is None)
                 unretrieved = tuple(
-                    b for b in cited if b not in unknown and b not in retrieved.bnids
+                    b for b in cited if b not in unknown and b not in retrieved.entry_ids
                 )
                 if unknown or unretrieved:
                     # A cited entry no tool call returned came from the model's own
@@ -600,7 +617,7 @@ class AskAgent:
                         unknown=unknown,
                         unretrieved=unretrieved,
                     )
-                if not (retrieved.bnids or retrieved.searches or cited):
+                if not (retrieved.entry_ids or retrieved.searches or cited):
                     # Nothing retrieved, nothing searched, nothing cited. The table
                     # is right to stay empty -- there is no evidence to show -- but
                     # the answer is not therefore fine: it describes the corpus
@@ -618,7 +635,7 @@ class AskAgent:
                 yield AnswerEntries(
                     question_id=trace.question_id,
                     cited=cited,
-                    retrieved=tuple(retrieved.bnids),
+                    retrieved=tuple(retrieved.entry_ids),
                     matched=retrieved.matched,
                     searches=retrieved.searches,
                     question=question,

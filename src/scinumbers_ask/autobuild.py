@@ -100,7 +100,7 @@ def unavailable_but_buildable(export: Path) -> str:
         "Install the ingestion extra -- `uv sync --extra ask --extra ingest` -- and "
         "it will be built on the next start, or run `bionumbers-ingest "
         f"{export}` yourself once that extra is installed and point "
-        "BIONUMBERS_ASK_CORPUS at the result."
+        "SCINUMBERS_CORPUS at the result."
     )
 
 
@@ -155,7 +155,7 @@ def corpus_path(configured: str, announce: Callable[[str], None]) -> str:
         # their export. A `ValueError` out of here is a traceback in the terminal
         # and Streamlit's exception panel on the page, for what is a typo.
         raise CorpusUnavailable(
-            f"{exc}. BIONUMBERS_ASK_CORPUS names the corpus file itself, not the "
+            f"{exc}. SCINUMBERS_CORPUS names the corpus file itself, not the "
             "directory holding it."
         ) from exc
     if found.is_ready:
@@ -181,7 +181,7 @@ def corpus_path(configured: str, announce: Callable[[str], None]) -> str:
         raise CorpusUnavailable(
             f"Refusing to build the corpus at {exc.path}: git would track it in "
             f"{exc.repo}, and the BioNumbers data must not enter a repository. "
-            "Point BIONUMBERS_ASK_CORPUS somewhere outside the checkout."
+            "Point SCINUMBERS_CORPUS somewhere outside the checkout."
         ) from exc
     except Exception as exc:
         # Every other way a build can fail, and there are many: a truncated

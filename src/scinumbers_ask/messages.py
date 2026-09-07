@@ -13,7 +13,7 @@ carry. Deliberately not in `cli.py` either, which is one adapter among several.
 
 from __future__ import annotations
 
-from .citations import format_citation
+from . import bionumbers
 from .config import format_usd
 from .events import (
     CitationWarning,
@@ -71,11 +71,11 @@ def warning_text(event: Event) -> str | None:
     if isinstance(event, CitationWarning):
         parts = []
         if event.unknown:
-            parts.append(f"not in the corpus: {', '.join(map(format_citation, event.unknown))}")
+            parts.append(f"not in the corpus: {', '.join(map(bionumbers.label, event.unknown))}")
         if event.unretrieved:
             parts.append(
                 "cited without being retrieved: "
-                + ", ".join(map(format_citation, event.unretrieved))
+                + ", ".join(map(bionumbers.label, event.unretrieved))
             )
         return "; ".join(parts)
     return None
@@ -83,7 +83,7 @@ def warning_text(event: Event) -> str | None:
 
 # Carried for the entries table and the citation check, not for a person to read:
 # fifty identifiers on a progress line would bury what the search was for.
-UNRENDERED_DETAIL = {"bnids"}
+UNRENDERED_DETAIL = {"entry_ids"}
 
 
 def retrieval_text(event: Retrieval) -> str:

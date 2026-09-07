@@ -88,7 +88,7 @@ So:
   as one literal list in the test, with a comment naming its source (`bionumbers_ask.corpus.Entry`,
   `feat/ask-agent`). It runs a real ingest of the fixture and asserts every emitted line against it,
   trap by trap: absent scalars are `null` and never `""`, `keywords` is an array and never a joined
-  string, `bnid` is a number.
+  string, `entry_id` is a number.
 - **(b) A round-trip test that activates on merge.** `pytest.importorskip("bionumbers_ask.corpus")`,
   then ingest the fixture and call the real `load()`. It skips in this branch and becomes a live test
   the moment this lands on `dev` alongside the agent — which is also the moment loader drift would

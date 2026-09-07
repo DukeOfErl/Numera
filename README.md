@@ -10,7 +10,8 @@ model's own knowledge. It is for people who need a figure they can defend.
 
 Three commitments shape the design:
 
-- **Provenance.** Every figure carries the identifier of the entry it came from, and those entries
+- **Provenance.** Every figure carries the identifier of the entry it came from, written `[[100002]]`
+  so a citation can never be confused with a quantity, and those entries
   are shown beside the answer. A number the answer used but the corpus never returned is flagged as
   unsupported rather than quietly printed.
 - **Precision.** Units are compared by dimension, so a length is never silently reconciled with a
@@ -78,12 +79,12 @@ export OPENROUTER_API_KEY=...                  # the model is reached through Op
 this repository** — the data's licensing is unresolved, so nothing derived from it may enter a git
 repository, and the build refuses to write anywhere git would track it.
 
-**3. Start the app.** Point `BIONUMBERS_ASK_CORPUS` at where the corpus should go. Finding none
+**3. Start the app.** Point `SCINUMBERS_CORPUS` at where the corpus should go. Finding none
 there and the export beside it, the app says what it is about to do and builds one — about a minute,
 once.
 
 ```bash
-export BIONUMBERS_ASK_CORPUS=~/bionumbers/bionumbers.jsonl   # BioNumbers.xls is in that directory
+export SCINUMBERS_CORPUS=~/bionumbers/bionumbers.jsonl   # BioNumbers.xls is in that directory
 uv run streamlit run streamlit_app.py
 ```
 
@@ -96,13 +97,13 @@ measurement.
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `OPENROUTER_API_KEY` | — | required; a question ends as `not_configured` without it |
-| `BIONUMBERS_ASK_CORPUS` | — | required; path to the JSONL corpus |
-| `BIONUMBERS_ASK_MODEL` | `anthropic/claude-haiku-4.5` | the model, as an OpenRouter slug |
-| `BIONUMBERS_ASK_QUESTION_CEILING_USD` | `0.60` | hard per-question limit; the warning is derived at 80% of it |
-| `BIONUMBERS_ASK_RUN_BUDGET_USD` | `1.20` | total across every question in a run |
-| `BIONUMBERS_ASK_RUN` | `dev` | names the run spend is counted against; a new name starts a fresh budget |
-| `BIONUMBERS_ASK_CHECKPOINTS` | `checkpoints/ask.sqlite` | where sessions persist |
-| `BIONUMBERS_ASK_TRACE` | `logs/trace.jsonl` | the structured trail; `-` for stderr, empty to discard |
+| `SCINUMBERS_CORPUS` | — | required; path to the JSONL corpus |
+| `SCINUMBERS_MODEL` | `anthropic/claude-haiku-4.5` | the model, as an OpenRouter slug |
+| `SCINUMBERS_QUESTION_CEILING_USD` | `0.60` | hard per-question limit; the warning is derived at 80% of it |
+| `SCINUMBERS_RUN_BUDGET_USD` | `1.20` | total across every question in a run |
+| `SCINUMBERS_RUN` | `dev` | names the run spend is counted against; a new name starts a fresh budget |
+| `SCINUMBERS_CHECKPOINTS` | `checkpoints/ask.sqlite` | where sessions persist |
+| `SCINUMBERS_TRACE` | `logs/trace.jsonl` | the structured trail; `-` for stderr, empty to discard |
 
 Spend is enforced, not merely reported: a question stops at its ceiling and presents what it had
 established, marked incomplete, rather than being cut off mid-sentence. A limit is configured where
@@ -112,7 +113,7 @@ it binds — the number you set is the one that stops work
 ## Tests
 
 ```bash
-uv run pytest                                  # 850 tests on a six-entry fixture; no API key needed
+uv run pytest                                  # 891 tests on a six-entry fixture; no API key needed
 ```
 
 The suite drives the real agent with scripted models rather than mocking the framework, so the
@@ -120,7 +121,7 @@ middleware, the checkpointer and the tool loop are exercised. Two suites are exc
 because they need something the repository does not carry:
 
 ```bash
-BIONUMBERS_ASK_CORPUS=... uv run pytest -m corpus    # markers checked against a real corpus
+SCINUMBERS_CORPUS=... uv run pytest -m corpus    # markers checked against a real corpus
 OPENROUTER_API_KEY=...    uv run pytest -m network   # real model calls; costs about $0.01
 ```
 
@@ -142,6 +143,7 @@ documentation. Those are covered above. Where the project went past the brief:
 | Beyond the brief | Where |
 |---|---|
 | Provenance as a hard requirement, not a prompt instruction — citations are checked against what was actually retrieved, and unsupported ones flagged | `citations.py`, `entries_table.py` |
+| The source's own notation restated only where the model reads it, never in the corpus — so the stored entry stays quotable | ADR-0420, `bionumbers.py` |
 | Agentic retrieval over a 14,294-entry corpus: capped summaries with an honest total, then full entries on demand | ADR-0150, `tools.py` |
 | Spend enforced in middleware — a per-question ceiling and a run budget that stop the next call rather than reporting after the fact | ADR-0120, ADR-0180, `spend.py` |
 | The agent separated from its drivers, so a web page and an evaluation harness run the identical agent with no mode flag | ADR-0110, `test_driver_independence.py` |
@@ -161,6 +163,6 @@ against expected answers.
   question as a sequence, and which modules may depend on which
 - `openspec/changes/add-ask-agent/proposal.md` — why an agent rather than a search box, what was
   deferred and why
-- `src/bionumbers_ask/events.py` — the port: everything the agent emits and the one command it takes
+- `src/scinumbers_ask/events.py` — the port: everything the agent emits and the one command it takes
 
 To cite BioNumbers itself: Milo et al. *Nucl. Acids Res.* (2010) 38 (suppl 1): D750–D753.

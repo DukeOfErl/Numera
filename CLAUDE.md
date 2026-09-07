@@ -18,6 +18,7 @@ Two branches that each number ADRs from the current highest id will both claim t
 | `add-ask-agent` | `0100`–`0190`, `0260`–`0290` |
 | `add-corpus-ingestion` | `0200`–`0250` — all written |
 | `add-corpus-autobuild` | `0300`–`0340` |
+| `rename-to-scinumbers` | `0400`–`0450` |
 
 **This table is the authority, not a scan of `docs/decisions/`.** A scan cannot see uncommitted ADRs on another branch: `git ls-tree` reads committed trees, and each branch is checked out in its own worktree, so a number can be spent and still invisible from here. `add-ask-agent` has written `0100`–`0190` and holds a second range, `0260`–`0290`, because its first block ran out while the change was still open. A block is extended rather than renumbered: the ADRs already written are referenced from code comments and commit messages, and renumbering would break every one of those references to buy contiguity that nothing needs. Its first block was also uncommitted for two sessions, which is how a scan came to report those numbers as free. Never conclude a number is free because no file for it turns up.
 
@@ -31,7 +32,7 @@ description of the code.
 ## Architecture
 
 Three work packages, three packages under `src/`, one dependency extra each, so no two branches edit
-the same source tree: `bionumbers_ingest` (`ingest`), `bionumbers_ask` (`ask`), `bionumbers`
+the same source tree: `bionumbers_ingest` (`ingest`), `scinumbers_ask` (`ask`), `bionumbers`
 (`validator`). The ingester and the ask agent are both here; the validator is not yet.
 
 Diagrams — including the agent's graph generated from the compiled object — are in
@@ -61,7 +62,8 @@ why a rule both the table and the model need (the implausible-span test) lives o
 | `corpus.py` | `Entry`, the loader, and the judgements that belong to a value |
 | `repository.py` | Indexes, search, vocabulary, the alias index (ADR-0130) |
 | `units.py` | Three-valued dimensional compatibility (ADR-0160) |
-| `citations.py` | Parsing and formatting `BNID nnnnnn` |
+| `citations.py` | The delimited citation form `[[nnnnnn]]`, written and parsed (ADR-0410) |
+| `bionumbers.py` | The only module that names BioNumbers: its `BNID` notation, read and restated (ADR-0420) |
 | `entries_table.py` | Rows, marks and legends — shared by both drivers |
 | `messages.py` | Wording both drivers use, and `STOP_THE_RUN` |
 | `cli.py` / `web.py` | The two adapters |
@@ -105,7 +107,7 @@ Five things about it that reading one module will not tell you:
   uses `<` as a less-than sign in prose. A tag is recognised only by a real HTML element name.
 - **Records are buffered, not streamed, between cleaning and the writer**, because each carries a
   digest of the whole source, which is unknown until the last byte. Roughly 70 MB; ADR-0240.
-- **Four booleans are the contract with `bionumbers_ask`**, not the flag names: `range_fused`,
+- **Four booleans are the contract with `scinumbers_ask`**, not the flag names: `range_fused`,
   `range_qualified`, `range_one_sided` and `range_approximate`. `parse_flags` is cleaning's own
   vocabulary and may change — the last two became fields because the consumer was reading them out of
   that list by name, where a rename would have turned them silently false. ADR-0230.
@@ -139,9 +141,42 @@ What it buys is that the requirement's words sit next to the name of the test
 asserting them, where a reader comparing the two can see the mismatch. A review
 aid, not a proof.
 
+It reads `openspec/specs/` plus the deltas of changes still **open** — not
+`changes/` recursively, which is what it read until the project's first archive.
+An archived change keeps its deltas under `changes/archive/`, so a recursive read
+counts every promoted requirement twice, and once a second change modifies one it
+keeps finding the *superseded* wording next to the name of the test asserting the
+current one. Comparing those two is the whole point, so it has to read the version
+in force.
+
+### A spec delta is the requirement's full new text
+
+A `MODIFIED` block is the **entire requirement as it will now read**, not the part
+being changed. Write it by copying the current requirement out of
+`openspec/specs/` and editing that copy. Writing out the paragraphs the change
+cares about produces a deletion of everything else, and the delta file has no
+baseline to diff against, so the diff looks like an addition.
+
+`openspec archive` refuses a `MODIFIED` block that drops a **scenario**, and that
+refusal is the only thing between a hand-written delta and a silent deletion — it
+says nothing about dropped **prose**. `rename-to-scinumbers`'s own delta for the
+corpus contract was caught dropping three scenarios; the same block also dropped
+three paragraphs of requirement text (the range-`null` prohibition, the
+string-or-`null` rule for the remaining keys, the paragraph licensing extra
+fields) and nothing would have reported that.
+
+`MODIFIED` also requires its target to be in `openspec/specs/` already, so a
+change cannot be archived before the change that *added* the requirement it
+modifies. **Archive each change as it completes.** Letting several pile up turns
+that ordering into a blocker found at the end: `rename-to-scinumbers` cannot
+archive until `add-ask-agent` does, and `--skip-specs` is not the way out — it
+archives the change while promoting nothing, which is the only reason to archive.
+
 ## Running the tests
 
-`pytest` is offline by default and runs on the six-entry fixture: `addopts = "-m 'not network and not corpus'"` deselects both markers, so a green run may never have executed the tests that hit a real service or the ones that check a marker can fire against a real corpus. Run those explicitly with `pytest -m network` and `BIONUMBERS_ASK_CORPUS=... pytest -m corpus`.
+A repeated-run harness -- fault seeding, mutation testing -- should exclude the `slow` marker as well, and must write the **whole** expression: `pytest -m "not network and not corpus and not slow"`. A second `-m` replaces `addopts` rather than ANDing with it, so `-m "not slow"` alone re-selects `network` and `corpus` and the run gets *slower* -- silently. 63s becomes 34s written correctly.
+
+`pytest` is offline by default and runs on the six-entry fixture: `addopts = "-m 'not network and not corpus'"` deselects both markers, so a green run may never have executed the tests that hit a real service or the ones that check a marker can fire against a real corpus. Run those explicitly with `pytest -m network` and `SCINUMBERS_CORPUS=... pytest -m corpus`.
 
 ## Testing the tests
 
@@ -149,7 +184,7 @@ Two techniques, both scoped by consequence: spend the effort where a silent bug 
 
 **Fault seeding** is the default, and the user-level conventions cover it: seed one realistic defect into a *copy* of the source and check that exactly the right test fails.
 
-**Mutation testing** is the automated complement, and finds what seeding structurally cannot — code no test can distinguish. Run it at the end of a task, over the module just touched, via the **`mutation-test-module`** skill, which carries the recipe and this project's three setup gotchas. Not over the whole package (2,000+ mutants, hours) and never as a CI gate.
+**Mutation testing** is the automated complement, and finds what seeding structurally cannot — code no test can distinguish. Run it at the end of a task, over the module just touched, via the **`mutation-test-module`** skill, which carries the recipe and this project's four setup gotchas. Not over the whole package (2,000+ mutants, hours) and never as a CI gate.
 
 Its yield decays, and that is expected rather than a failure: a module's first run finds real gaps, later runs on settled code return mostly equivalent mutants. Once two or three consecutive runs turn up nothing but string-sentinel and default-argument survivors, stop running it on that area and reach for it again only when the code changes substantially. It is a tool for new and reworked code, not a standing gate.
 

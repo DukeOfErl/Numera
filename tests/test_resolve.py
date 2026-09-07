@@ -98,7 +98,7 @@ def test_building_produces_a_corpus_the_loader_can_read(export):
     lines = corpus.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 6  # the fixture's data rows, padding excluded
 
-    load = pytest.importorskip("bionumbers_ask.corpus").load
+    load = pytest.importorskip("scinumbers_ask.corpus").load
     assert len(load(str(corpus))) == 6
 
 
@@ -133,13 +133,13 @@ def test_two_exports_differing_only_in_case_are_ambiguous(tmp_path, sample_html)
 def test_the_export_name_agrees_with_the_consumers_copy():
     """The consumer restates this constant, and cannot import it.
 
-    `bionumbers_ask.autobuild` names the export in the branch where importing this
+    `scinumbers_ask.autobuild` names the export in the branch where importing this
     package failed, so the duplication is unavoidable. Asserting the two agree
     whenever both are installed is what keeps it from drifting.
     """
     from bionumbers_ingest.resolve import EXPORT_NAME
 
-    autobuild = pytest.importorskip("bionumbers_ask.autobuild")
+    autobuild = pytest.importorskip("scinumbers_ask.autobuild")
     assert autobuild.EXPORT_NAME == EXPORT_NAME
 
 

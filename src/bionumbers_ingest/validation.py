@@ -74,7 +74,7 @@ def report_for(
     row_limit: int | None = None,
 ) -> RunReport:
     """Count what the run produced. Reports zeroes rather than omitting them."""
-    seen: Counter[int] = Counter(r.bnid for r in records)
+    seen: Counter[int] = Counter(r.entry_id for r in records)
     flags: Counter[str] = Counter()
     for record in records:
         flags.update(record.parse_flags)

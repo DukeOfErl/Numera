@@ -7,9 +7,9 @@ import io
 
 import pytest
 
-from bionumbers_ask.corpus import load
-from bionumbers_ask.repository import CorpusRepository
-from bionumbers_ask.trace import configure, start_question
+from scinumbers_ask.corpus import load
+from scinumbers_ask.repository import CorpusRepository
+from scinumbers_ask.trace import configure, start_question
 
 FIXTURE = "tests/fixtures/corpus_sample.jsonl"
 SECOND, COUNT = 100002, 100020
@@ -45,7 +45,7 @@ def test_a_search_matching_nothing_returns_nothing_invented(repo):
 
 def test_compact_rows_carry_enough_to_choose_between_entries(repo):
     row = repo.search(property="Cell diameter", organism="cerevisiae").rows[0]
-    assert (row.bnid, row.value, row.units) == (100010, "5.0", "μm")
+    assert (row.entry_id, row.value, row.units) == (100010, "5.0", "μm")
     assert "Saccharomyces" in row.organism
 
 
@@ -98,21 +98,21 @@ def test_a_keyword_matches_an_entrys_keywords(repo):
     whole suite. Keyword search is a retrieval path -- matching the wrong entries
     silently changes what the model is allowed to answer from."""
     # "radius" appears only in an entry's keywords, never in a property.
-    assert [row.bnid for row in repo.search(keyword="radius").rows] == [SECOND]
+    assert [row.entry_id for row in repo.search(keyword="radius").rows] == [SECOND]
 
 
 def test_a_keyword_matches_a_property_the_keywords_do_not_carry(repo):
     """The second half of the same condition: "ribosomes" is in the property and
     not in the keywords, which are stored singular. Joining the two checks with
     `and` instead of `or` also survived."""
-    assert [row.bnid for row in repo.search(keyword="ribosomes").rows] == [COUNT]
+    assert [row.entry_id for row in repo.search(keyword="ribosomes").rows] == [COUNT]
 
 
 @pytest.mark.parametrize("keyword", ["RADIUS", "Radius"])
 def test_keyword_matching_ignores_case_on_both_sides(repo, keyword):
     """The model writes the question's wording, not the curator's. Case-folding
     either side away survived every test."""
-    assert [row.bnid for row in repo.search(keyword=keyword).rows] == [SECOND]
+    assert [row.entry_id for row in repo.search(keyword=keyword).rows] == [SECOND]
 
 
 def test_vocabulary_lists_properties_as_well_as_organisms(repo):
@@ -147,11 +147,11 @@ def test_vocabulary_leads_with_the_commonest_value(repo):
 
 
 def test_a_full_entry_exposes_its_cited_identifiers(repo):
-    assert repo.get(100001).cited_bnids == (102065, 104333)
+    assert repo.get(100001).cited_ids == (102065, 104333)
 
 
 def test_an_entry_citing_nothing_has_an_empty_list(repo):
-    assert repo.get(100003).cited_bnids == ()
+    assert repo.get(100003).cited_ids == ()
 
 
 def test_an_unknown_identifier_returns_nothing(repo):
@@ -232,7 +232,7 @@ def test_repeated_identifiers_are_refused_rather_than_collapsed(tmp_path):
     path = tmp_path / "dupe.jsonl"
     path.write_text(
         "\n".join(
-            json.dumps({"bnid": 7, "property": p, "units": "u", "value": 1.0})
+            json.dumps({"entry_id": 7, "property": p, "units": "u", "value": 1.0})
             for p in ("first", "second")
         )
         + "\n",
@@ -262,14 +262,14 @@ def test_an_unknown_vocabulary_field_is_recoverable(repo):
 
 
 def test_a_common_name_phrase_does_not_become_an_abbreviation():
-    from bionumbers_ask.repository import _abbreviated_binomials
+    from scinumbers_ask.repository import _abbreviated_binomials
 
     # "African clawed frog Xenopus laevis" must not yield "a. clawed".
     assert _abbreviated_binomials("African clawed frog Xenopus laevis") == {"x. laevis"}
 
 
 def test_a_binomial_followed_by_an_authority_is_still_abbreviated():
-    from bionumbers_ask.repository import _abbreviated_binomials
+    from scinumbers_ask.repository import _abbreviated_binomials
 
     # Requiring the pair to be the final two tokens would lose this one.
     assert _abbreviated_binomials("Peanut Arachis hypogaea L.") == {"a. hypogaea"}
@@ -280,7 +280,7 @@ def test_trace_records_are_emitted_without_explicit_configuration():
 
     # An unconfigured logger would inherit the root's WARNING level and discard
     # every record silently -- the trail vanishing when nobody knows to look.
-    assert logging.getLogger("bionumbers_ask").getEffectiveLevel() == logging.INFO
+    assert logging.getLogger("scinumbers_ask").getEffectiveLevel() == logging.INFO
 
 
 @pytest.mark.parametrize("term", ["E. coli", "E.coli", "e.coli", "E coli", "e coli"])

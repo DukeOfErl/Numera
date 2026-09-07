@@ -20,11 +20,11 @@ from conftest import FIXTURE, agent_with
 from streamlit.testing.v1 import AppTest
 
 from agent_doubles import batched_tool_calls, costing, says, scripted, tool_call
-from bionumbers_ask import entries_table, messages, web
-from bionumbers_ask.agent import AskAgent
-from bionumbers_ask.cli import render
-from bionumbers_ask.corpus import load
-from bionumbers_ask.events import (
+from scinumbers_ask import entries_table, messages, web
+from scinumbers_ask.agent import AskAgent
+from scinumbers_ask.cli import render
+from scinumbers_ask.corpus import load
+from scinumbers_ask.events import (
     Answer,
     AnswerEntries,
     CitationWarning,
@@ -36,7 +36,7 @@ from bionumbers_ask.events import (
     Retrieval,
     SpendWarning,
 )
-from bionumbers_ask.repository import CorpusRepository
+from scinumbers_ask.repository import CorpusRepository
 
 APP = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 
@@ -220,12 +220,12 @@ def test_session_state_holds_the_identifier_and_what_was_drawn_and_nothing_else(
     model = scripted(says("an answer"))
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
-    kept = {k for k in at.session_state.filtered_state if k.startswith("bionumbers_ask.")}
+    kept = {k for k in at.session_state.filtered_state if k.startswith("scinumbers_ask.")}
     assert kept == {web.SESSION_KEY, web.TRANSCRIPT_KEY}
 
 
 def test_a_missing_corpus_is_explained_rather_than_raised(monkeypatch):
-    from bionumbers_ask.corpus import CorpusUnavailable
+    from scinumbers_ask.corpus import CorpusUnavailable
 
     def unavailable(corpus=None):
         raise CorpusUnavailable("no corpus was supplied")
@@ -298,7 +298,7 @@ def counted(monkeypatch, tmp_path):
     monkeypatch.setattr(web, "load", counting_load)
     monkeypatch.setattr(web, "CorpusRepository", counting_repository)
     monkeypatch.setattr(web.trace, "to_file", lambda spec: None)
-    monkeypatch.setenv("BIONUMBERS_ASK_CHECKPOINTS", str(tmp_path / "c.sqlite"))
+    monkeypatch.setenv("SCINUMBERS_CHECKPOINTS", str(tmp_path / "c.sqlite"))
     yield counts
     web.resources.clear()
 
@@ -349,10 +349,10 @@ def test_the_identifiers_a_search_returned_stay_off_the_progress_line():
         Retrieval(
             question_id="q",
             tool="search_entries",
-            detail={"property": "Cell", "bnids": [100001, 100002]},
+            detail={"property": "Cell", "entry_ids": [100001, 100002]},
         )
     )
-    assert "bnids" not in item.text and "100001" not in item.text
+    assert "entry_ids" not in item.text and "100001" not in item.text
 
 
 def test_progress_reaches_the_page_in_order_before_the_answer(monkeypatch, repo, config, tmp_path):
@@ -377,7 +377,7 @@ def test_each_retrieval_is_its_own_element_rather_than_one_line_rewritten(
     """A rewritten line composes into its last value and the sequence is lost."""
     model = scripted(
         tool_call("search_entries", property="Cell"),
-        tool_call("get_entry", bnid=100002),
+        tool_call("get_entry", entry_id=100002),
         says("an answer"),
     )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
@@ -500,7 +500,7 @@ def test_a_question_that_retrieved_nothing_draws_no_table(repo):
 
 def test_the_cited_entries_come_first(repo):
     table = web.item_for(entries(cited=(100002,), retrieved=(100001, 100002)), repo).table
-    assert [row.bnid for row in table.rows][0] == 100002
+    assert [row.entry_id for row in table.rows][0] == 100002
     assert [row.cited for row in table.rows] == [True, False]
 
 
@@ -514,7 +514,7 @@ def test_a_row_names_the_entry_and_its_identifier(repo):
 def test_a_row_without_a_recorded_method_is_marked(repo):
     """The corpus records no method for 100002, and a marked row says so."""
     table = web.item_for(entries(), repo).table
-    row = next(r for r in table.rows if r.bnid == 100002)
+    row = next(r for r in table.rows if r.entry_id == 100002)
     assert not row.method_recorded
     assert web._row_label(row).startswith(entries_table.NO_METHOD)
 
@@ -523,13 +523,15 @@ def test_every_retrieved_entry_is_reachable_even_past_the_cap(monkeypatch, repo,
     """Beyond the cap they are listed rather than dropped: nothing retrieved is hidden."""
     monkeypatch.setattr(web, "CITED_ROWS", 2)
     monkeypatch.setattr(web, "UNCITED_ROWS", 1)
-    every = tuple(entry.bnid for entry in load(FIXTURE))
+    every = tuple(entry.entry_id for entry in load(FIXTURE))
     table = web.item_for(entries(cited=(), retrieved=every), repo).table
     assert len(table.rows) == len(every) > 2, "rows were dropped rather than carried"
 
 
 def test_the_table_reaches_the_main_column_as_a_table(monkeypatch, repo, config, tmp_path):
-    model = scripted(tool_call("get_entry", bnid=100002), says("about 1 micrometre (BNID 100002)"))
+    model = scripted(
+        tool_call("get_entry", entry_id=100002), says("about 1 micrometre (BNID 100002)")
+    )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
     assert at.dataframe, "no table was drawn"
@@ -540,7 +542,9 @@ def test_the_openable_entries_are_in_the_side_panel_not_the_main_column(
     monkeypatch, repo, config, tmp_path
 ):
     """The main column is for reading the answer against; the panel is for digging."""
-    model = scripted(tool_call("get_entry", bnid=100002), says("about 1 micrometre (BNID 100002)"))
+    model = scripted(
+        tool_call("get_entry", entry_id=100002), says("about 1 micrometre (BNID 100002)")
+    )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
     labels = [e.label for e in at.sidebar.expander]
@@ -550,7 +554,9 @@ def test_the_openable_entries_are_in_the_side_panel_not_the_main_column(
 
 def test_an_opened_row_shows_the_entry_the_model_never_saw(monkeypatch, repo, config, tmp_path):
     """The reference is looked up for display and never travels through the agent."""
-    model = scripted(tool_call("get_entry", bnid=100002), says("about 1 micrometre (BNID 100002)"))
+    model = scripted(
+        tool_call("get_entry", entry_id=100002), says("about 1 micrometre (BNID 100002)")
+    )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
     drawn = " ".join(c.value for c in at.caption) + " ".join(m.value for m in at.markdown)
@@ -564,7 +570,7 @@ def test_the_cited_and_uncited_entries_are_separated(repo):
 
 
 def test_the_panel_carries_every_entry_however_the_table_is_capped(repo):
-    every = tuple(entry.bnid for entry in load(FIXTURE))
+    every = tuple(entry.entry_id for entry in load(FIXTURE))
     table = web.item_for(entries(cited=(), retrieved=every), repo).table
     assert len(table.rows) == len(every), "the panel would be missing entries"
 
@@ -577,7 +583,7 @@ def test_an_entry_with_no_scalar_is_marked_and_its_value_left_blank():
     passes without running.
     """
     row = entries_table.Row(
-        bnid=106614,
+        entry_id=106614,
         property="Length, diameter, volume",
         organism="Bacteria Escherichia coli",
         value="(no scalar value)",
@@ -649,7 +655,7 @@ def many(cited_count: int, uncited_count: int) -> tuple[entries_table.Row, ...]:
 
     def row(i: int, cited: bool) -> entries_table.Row:
         return entries_table.Row(
-            bnid=100000 + i,
+            entry_id=100000 + i,
             property=f"Property {i}",
             organism="Bacteria Escherichia coli",
             value="1.0",
@@ -689,7 +695,7 @@ def test_cited_entries_beyond_the_cap_are_announced_not_dropped_silently(
     monkeypatch.setattr(web, "CITED_ROWS", 2)
     cited = (100001, 100002, 100003)
     model = scripted(
-        batched_tool_calls(*[("get_entry", {"bnid": b}) for b in cited]),
+        batched_tool_calls(*[("get_entry", {"entry_id": b}) for b in cited]),
         says("BNIDs 100001, 100002 and 100003"),
     )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "sizes?")
@@ -699,7 +705,7 @@ def test_cited_entries_beyond_the_cap_are_announced_not_dropped_silently(
 
 
 def test_nothing_is_announced_when_every_cited_entry_is_shown(monkeypatch, repo, config, tmp_path):
-    model = scripted(tool_call("get_entry", bnid=100002), says("about 1 um (BNID 100002)"))
+    model = scripted(tool_call("get_entry", entry_id=100002), says("about 1 um (BNID 100002)"))
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
     assert not any("more cited" in w.value for w in at.warning)
@@ -749,7 +755,7 @@ def test_a_citation_with_nothing_retrieved_still_draws_its_row(repo):
     """
     item = web.item_for(entries(cited=(100001,), retrieved=()), repo)
     assert item is not None and item.kind is web.Kind.ENTRIES
-    assert [row.bnid for row in item.table.rows] == [100001]
+    assert [row.entry_id for row in item.table.rows] == [100001]
     assert not item.table.rows[0].retrieved
     # The same fact reaches the terminal, and has all along.
     assert entries_table.NOT_RETRIEVED in render(entries(cited=(100001,), retrieved=()), repo)
@@ -826,7 +832,7 @@ def test_keywords_that_are_all_stripped_markup_draw_no_keyword_line(repo):
 
     def row(keywords):
         return entries_table.Row(
-            bnid=1,
+            entry_id=1,
             property="p",
             organism="o",
             value="1",
@@ -900,3 +906,22 @@ def test_a_failure_while_drawing_does_not_lose_the_question(repo, config, tmp_pa
     assert agent.conversation_length("s") == 2, "the agent kept the turn"
     assert transcript[0][0] == "a question", "and so did the page"
     assert items, "with whatever had been drawn before the fault"
+
+
+def test_the_page_refuses_a_retired_variable_before_it_looks_for_a_corpus(monkeypatch):
+    """The web path has the same ordering hazard as the terminal one.
+
+    The page resolves the corpus itself, before the cached `resources` runs, so a
+    refusal living only in `resources` would arrive after the corpus lookup had
+    already failed -- and the reader would be told a corpus is missing when what is
+    wrong is the name of the variable holding its path.
+    """
+    monkeypatch.delenv("SCINUMBERS_CORPUS", raising=False)
+    monkeypatch.setenv("BIONUMBERS_ASK_CORPUS", "/somewhere/corpus.jsonl")
+
+    at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+
+    errors = [e.value for e in at.error]
+    assert any("SCINUMBERS_CORPUS" in text for text in errors), errors
+    assert not any("No corpus path supplied" in text for text in errors), errors
+    assert not at.exception, "the page raised instead of explaining"

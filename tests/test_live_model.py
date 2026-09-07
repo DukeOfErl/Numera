@@ -21,11 +21,11 @@ import re
 
 import pytest
 
-from bionumbers_ask.agent import AskAgent
-from bionumbers_ask.config import Config
-from bionumbers_ask.corpus import load
-from bionumbers_ask.events import Answer, EndReason, QuestionEnded, Retrieval
-from bionumbers_ask.repository import CorpusRepository
+from scinumbers_ask.agent import AskAgent
+from scinumbers_ask.config import Config
+from scinumbers_ask.corpus import load
+from scinumbers_ask.events import Answer, EndReason, QuestionEnded, Retrieval
+from scinumbers_ask.repository import CorpusRepository
 
 pytestmark = [
     pytest.mark.network,
@@ -52,7 +52,7 @@ def test_a_live_question_is_answered_with_a_citation(live_agent):
 
     assert any(isinstance(e, Retrieval) for e in events), "no tool was used"
     answer = next(e for e in events if isinstance(e, Answer)).text
-    # A quantity without a bnid beside it is the failure this project exists to
+    # A quantity without an identifier beside it is the failure this project exists to
     # prevent. Asserting a citation is present is a harness property; whether the
     # right one was chosen is answer-evaluation's job, not this test's.
     assert re.search(r"\b10000\d\b", answer), f"no entry cited in: {answer[:200]}"
@@ -76,12 +76,12 @@ def test_the_provider_still_reports_cost_where_the_ledger_reads_it(live_agent):
     assert end.spend < 100_000, f"unexpectedly expensive: {end.spend} micro-dollars"
 
 
-_corpus_path = os.environ.get("BIONUMBERS_ASK_CORPUS", "")
+_corpus_path = os.environ.get("SCINUMBERS_CORPUS", "")
 
 
 @pytest.mark.skipif(
     not (_corpus_path and os.path.isfile(os.path.expanduser(_corpus_path))),
-    reason="set BIONUMBERS_ASK_CORPUS to a JSONL corpus to run the end-to-end check",
+    reason="set SCINUMBERS_CORPUS to a JSONL corpus to run the end-to-end check",
 )
 def test_the_terminal_driver_answers_from_the_real_corpus_with_a_citation(tmp_path):
     """The whole path: driver, agent, tools, real corpus, real model.
@@ -92,8 +92,8 @@ def test_the_terminal_driver_answers_from_the_real_corpus_with_a_citation(tmp_pa
     """
     import io
 
-    from bionumbers_ask.cli import run
-    from bionumbers_ask.corpus import load
+    from scinumbers_ask.cli import run
+    from scinumbers_ask.corpus import load
 
     repo = CorpusRepository(load(os.path.expanduser(_corpus_path)))
     agent = AskAgent(repo, Config.from_env(), str(tmp_path / "e2e.sqlite"))
@@ -105,7 +105,7 @@ def test_the_terminal_driver_answers_from_the_real_corpus_with_a_citation(tmp_pa
     assert "answered" in text, text[-400:]
 
     # The citation must be in the answer, not merely somewhere in the output: the
-    # rendered retrieval lines carry bnids too, so asserting over the whole text
+    # rendered retrieval lines carry identifiers too, so asserting over the whole text
     # would pass on an answer that cited nothing.
     body = text.split("\n  — ")[0]
     answer = "\n".join(line for line in body.splitlines() if not line.startswith("  · "))
@@ -126,7 +126,7 @@ def test_a_question_the_corpus_does_not_cover_gets_no_number(live_agent):
     lifespan is comprehensively uncovered -- and it is something the model certainly
     knows, which is what makes it a test rather than a formality.
     """
-    from bionumbers_ask.citations import citations
+    from scinumbers_ask.citations import citations
 
     events = list(live_agent.ask("uncovered", "What is the lifespan of a laboratory mouse?"))
     answer = next(e for e in events if isinstance(e, Answer))
@@ -161,7 +161,7 @@ def test_disagreeing_entries_are_reported_with_what_distinguishes_them(live_agen
     tempting wrong answer is "cell diameter ranges from 1 to 5 um", which is a
     spread across two organisms presented as a measurement of one.
     """
-    from bionumbers_ask.citations import citations
+    from scinumbers_ask.citations import citations
 
     events = list(live_agent.ask("disagree", "How wide is a cell, in micrometres?"))
     answer = next(e for e in events if isinstance(e, Answer))
@@ -194,7 +194,7 @@ def test_a_converted_value_is_marked_as_computed_and_cites_its_input(live_agent)
     the question cannot be answered without computing, and the computed figure must
     say that it was computed.
     """
-    from bionumbers_ask.citations import citations
+    from scinumbers_ask.citations import citations
 
     events = list(live_agent.ask("converted", "What is the cell length of E. coli in nanometres?"))
     answer = next(e for e in events if isinstance(e, Answer))
@@ -247,3 +247,21 @@ def test_a_retrieval_miss_is_not_reported_as_an_absence(live_agent):
     assert overclaimed is None, (
         f"asserted an absence it did not establish: {overclaimed.group(0)!r}"
     )
+
+
+def test_a_live_model_writes_the_delimited_form(live_agent):
+    """The probe behind the notation change.
+
+    The form is asked for in the prompt, which makes it a preference rather than a
+    control: nothing in the harness can make a model comply. The previous notation
+    had years of observation behind it and this one has none, so a form asserted
+    here and never seen from a real model would be a change made on faith.
+
+    Deliberately not asserting the *absence* of the source's form -- the parser
+    accepts both on purpose, and a model that wrote one of each would still be
+    scored correctly. What must hold is that the form the prompt asks for is a form
+    the model will actually produce.
+    """
+    events = list(live_agent.ask("live-form", "How wide is an E. coli cell?"))
+    answer = next(e for e in events if isinstance(e, Answer)).text
+    assert re.search(r"\[\[\d+\]\]", answer), f"no delimited citation in: {answer[:300]}"

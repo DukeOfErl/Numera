@@ -1,0 +1,49 @@
+#!/usr/bin/env python3
+"""Print the trace for the most recent question, one readable line per event.
+
+Lived untracked in a worktree until the `entry_id` rename went through the
+codebase and silently broke its one hand-written key. Hence the rule the
+fallback branch follows: an event this script has never heard of prints its own
+fields rather than a name and an empty string, so a new or renamed event
+degrades to verbose instead of to blank.
+"""
+
+import json
+import sys
+from pathlib import Path
+
+#: Carried by every record, so never worth printing beside the event's own fields.
+ENVELOPE = {"event", "level", "question_id", "run"}
+
+path = Path(sys.argv[1] if len(sys.argv) > 1 else "logs/trace.jsonl")
+records = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+if not records:
+    sys.exit(f"{path} holds no records")
+
+qid = records[-1].get("question_id")
+for r in [r for r in records if r.get("question_id") == qid]:
+    e = r["event"]
+    if e == "search":
+        print(
+            f"  search    {r.get('property') or '-'} / "
+            f"{r.get('organism') or r.get('keyword') or '-'}"
+            f"   matched={r.get('matched')} shown={r.get('returned')}"
+            f" truncated={r.get('truncated')}  {r.get('entry_ids')}"
+        )
+        if r.get("organism_resolved_to"):
+            print(f"            alias resolved to {r['organism_resolved_to']}")
+    elif e == "spend.increment":
+        print(
+            f"  model     +${r['increment'] / 1e6:.4f}   "
+            f"{r['prompt_tokens']} in / {r['completion_tokens']} out"
+            f"   question=${r['question_total'] / 1e6:.4f}"
+        )
+    elif e == "question.answered":
+        print(
+            f"  ANSWERED  ${r['spend_micro'] / 1e6:.4f}   "
+            f"tool_calls={r.get('tool_calls')}/{r.get('tool_call_limit')}"
+            f"   model_calls={r.get('model_calls')}/{r.get('call_limit')}"
+        )
+    else:
+        rest = "  ".join(f"{k}={r[k]!r}" for k in sorted(set(r) - ENVELOPE))
+        print(f"  {e}  {rest}")

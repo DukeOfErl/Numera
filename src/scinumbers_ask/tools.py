@@ -11,6 +11,8 @@ from collections.abc import Callable
 
 from langchain_core.tools import StructuredTool
 
+from .bionumbers import rewrite
+from .citations import format_citation
 from .events import Retrieval
 from .repository import DEFAULT_LIMIT, CorpusRepository
 from .trace import QuestionTrace
@@ -110,7 +112,7 @@ def build_tools(
                     # So a citation can be checked against what the agent was
                     # actually shown, and a driver can table these entries without
                     # asking the corpus a second question.
-                    "bnids": tuple(row.bnid for row in result.rows),
+                    "entry_ids": tuple(row.entry_id for row in result.rows),
                 },
             )
         )
@@ -120,7 +122,7 @@ def build_tools(
                 "call list_values before concluding it has nothing on the topic."
             )
         lines = [
-            f"{row.bnid}\t{row.property}\t{row.organism}\t{row.value} {row.units}".rstrip()
+            f"{row.entry_id}\t{row.property}\t{row.organism}\t{row.value} {row.units}".rstrip()
             for row in result.rows
         ]
         header = (
@@ -128,7 +130,9 @@ def build_tools(
             if result.truncated
             else f"{result.total_matched} entries matched; all shown."
         )
-        out = [header, "bnid\tproperty\torganism\tvalue", *lines]
+        # Same boundary, same reason: `property` is a column here (ADR-0420).
+        lines = [rewrite(line, format_citation) for line in lines]
+        out = [header, "entry_id\tproperty\torganism\tvalue", *lines]
         spanned = dimensions_of([row.units for row in result.rows])
         if len(spanned) > 1:
             # Said here rather than left to the system prompt. The prompt's rule
@@ -143,22 +147,22 @@ def build_tools(
             )
         return "\n".join(out)
 
-    def get_entry(bnid: int) -> str:
-        if not afford("get_entry", {"bnid": bnid}):
+    def get_entry(entry_id: int) -> str:
+        if not afford("get_entry", {"entry_id": entry_id}):
             return EXHAUSTED
-        found = repo.get(bnid, trace=trace)
+        found = repo.get(entry_id, trace=trace)
         emit(
             Retrieval(
                 question_id=trace.question_id,
                 tool="get_entry",
-                detail={"bnid": bnid, "found": found is not None},
+                detail={"entry_id": entry_id, "found": found is not None},
             )
         )
         if found is None:
-            return f"No entry {bnid}."
+            return f"No entry {entry_id}."
         e = found.entry
         parts = [
-            f"bnid: {e.bnid}",
+            f"entry_id: {e.entry_id}",
             f"property: {e.property}",
             f"organism: {e.organism}",
             f"value: {e.value_display} {e.units}".rstrip(),
@@ -180,9 +184,21 @@ def build_tools(
             parts.append(f"method: {e.measurement_method}")
         if e.comments:
             parts.append(f"comments: {e.comments}")
-        if found.cited_bnids:
-            parts.append("cites: " + ", ".join(str(i) for i in found.cited_bnids))
-        return "\n".join(parts)
+        if found.cited_ids:
+            # Bare numbers here were citations in no notation at all -- unusable by a
+            # model told to cite in one, and unparsable if it copied them.
+            parts.append("cites: " + ", ".join(format_citation(i) for i in found.cited_ids))
+        # Restated once, where the text leaves for the model, rather than field by
+        # field. An entry's prose saying "See BNID 102065" is the likeliest reason for
+        # a model to answer in a form the parser was not told to expect, and it is the
+        # corpus that puts it there -- but `comments` and `method` are not the only
+        # fields carrying it: 8 entries cite others inside `property` and 2 inside
+        # `reference`. A per-field list is a list to keep complete; one call at the
+        # boundary cannot miss a field, now or when a field is added.
+        #
+        # A rendering only: the stored entry and every surface a person sees keep the
+        # source's words (ADR-0420).
+        return rewrite("\n".join(parts), format_citation)
 
     def _caveats(e) -> list[str]:
         """What the source did not claim about this value, in words the model reads.
@@ -246,7 +262,10 @@ def build_tools(
             )
         )
         if not values:
-            return f"No {field} values contain {contains!r}. The corpus has nothing under that wording."
+            return (
+                f"No {field} values contain {contains!r}. "
+                "The corpus has nothing under that wording."
+            )
         return "\n".join(f"{value}\t{count} entries" for value, count in values)
 
     return [
@@ -265,10 +284,12 @@ def build_tools(
             func=get_entry,
             name="get_entry",
             description=(
-                "Read one entry in full, by its bnid. Call this for every entry you intend to cite, "
+                "Read one entry in full, by its entry_id. "
+                "Call this for every entry you intend to cite, "
                 "and whenever you need the conditions, measurement method, reference or "
                 "cross-references behind a value. An entry may cite others; those are worth "
-                "following when they bear on the question."
+                "following when they bear on the question -- retrieve one before you "
+                "cite it, because a cross-reference you have not read is not evidence."
             ),
         ),
         StructuredTool.from_function(

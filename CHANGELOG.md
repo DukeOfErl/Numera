@@ -16,7 +16,7 @@ any release; `1.0.0` when it stabilizes.
   biological quantities from a supplied JSONL corpus, citing an entry for every
   number and saying it could not find one rather than answering from the model's
   own knowledge.
-- **Two drivers over one agent** — a terminal (`bionumbers-ask`) and a web page
+- **Two drivers over one agent** — a terminal (`scinumbers-ask`) and a web page
   (`streamlit run streamlit_app.py`), both rendering the same events. The agent is
   not told which is calling it.
 - **Entries beside every answer** — cited first, then others the search found and
@@ -77,6 +77,40 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **Citations are written `[[100002]]`.** The model was asked for `BNID 100002`, in
+  a package no longer named for that database. The delimiters mean the parser has no
+  rules about an identifier's shape left — the width floor, the run rule and the
+  digit-count continuation existed only to infer where an identifier ended
+  ([ADR-0410]). The prompt now produces the form from the parser's own definition
+  instead of restating it, which it had done for the project's whole life with
+  nothing tying the two together.
+- The parser still accepts `BNID 100002`. Not for the model's sake — an entry
+  rendered to it no longer contains that form — but for the reader's: someone who
+  knows BioNumbers types it into a question, follow-ups inherit the conversation,
+  and from then on answers are written in it. Rejecting it would mark those
+  well-cited answers unsupported.
+- **An entry's own cross-references are restated only where the model reads them.**
+  BioNumbers writes `See BNID 102065, 104333` in its entry text; the copy handed to
+  the model says `See [[102065]], [[104333]]`. The stored corpus and every surface a
+  person sees keep the source's words, so an entry stays quotable and a view of the
+  unprocessed record remains possible ([ADR-0420]). Rewriting at ingest was
+  rejected for that reason.
+- **The identifier field and corpus key are `entry_id`.** Still an integer;
+  [ADR-0430] records what a widening to a string would touch rather than building
+  for a source that does not exist yet.
+- Trace records name `entry_id` and `entry_ids` where they named `bnid` and `bnids`.
+  A `logs/trace.jsonl` written before this reads differently to anything parsing
+  those keys.
+- **Renamed to `scinumbers`.** The package is `scinumbers_ask`, the console script
+  is `scinumbers-ask`, and the environment variables are `SCINUMBERS_*`. The app
+  has called itself SciNumbers on every surface a reader sees since the README was
+  written; the code now agrees ([ADR-0400]). `bionumbers-ingest` keeps its name —
+  it is the BioNumbers adapter, and that is what it is called.
+- A `BIONUMBERS_ASK_*` variable now **stops the run** and names its replacement,
+  rather than being ignored. Ignoring one is configuration that silently stops
+  being read — a ceiling that no longer binds, a run label that quietly becomes
+  `dev` and mixes an evaluation's spend into a person's — and each of those looks
+  like a working run.
 - The whole export is processed by default; a row limit must be asked for and is
   recorded in the manifest. A sampled corpus looks complete and is not.
 - The corpus appears at its destination only after the last record is written, so
@@ -109,6 +143,10 @@ number rather than an error:
 - Three cells wrote an exponent once for both bounds — `1-2×10^9 cells/ml` stored
   as 1 to 2,000,000,000 — now flagged rather than corrected.
 
+[ADR-0410]: docs/decisions/0410-one-delimited-citation-form.md
+[ADR-0420]: docs/decisions/0420-rewrite-notation-when-rendering.md
+[ADR-0430]: docs/decisions/0430-the-entry-identifier-stays-an-integer.md
+[ADR-0400]: docs/decisions/0400-the-package-is-named-for-the-question.md
 [ADR-0200]: docs/decisions/0200-ship-an-ingester-not-a-prepared-corpus.md
 [ADR-0210]: docs/decisions/0210-verifying-a-contract-owned-by-another-branch.md
 [ADR-0220]: docs/decisions/0220-jsonl-only.md

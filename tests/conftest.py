@@ -11,17 +11,17 @@ from pathlib import Path
 
 import pytest
 
-from bionumbers_ask.agent import AskAgent
-from bionumbers_ask.config import Config, usd
-from bionumbers_ask.corpus import load
-from bionumbers_ask.repository import CorpusRepository
+from scinumbers_ask.agent import AskAgent
+from scinumbers_ask.config import Config, usd
+from scinumbers_ask.corpus import load
+from scinumbers_ask.repository import CorpusRepository
 
 FIXTURE = str(Path(__file__).parent / "fixtures" / "corpus_sample.jsonl")
 
 
 @pytest.fixture(autouse=True)
 def _fast_retries(monkeypatch):
-    monkeypatch.setattr("bionumbers_ask.agent.RETRY_INITIAL_DELAY", 0.0)
+    monkeypatch.setattr("scinumbers_ask.agent.RETRY_INITIAL_DELAY", 0.0)
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +38,7 @@ def _trail_stays_in_the_tmp_dir(tmp_path, monkeypatch):
     Set through the documented environment variable rather than by patching, so the
     path a real run takes is the one under test.
     """
-    monkeypatch.setenv("BIONUMBERS_ASK_TRACE", str(tmp_path / "trace.jsonl"))
+    monkeypatch.setenv("SCINUMBERS_TRACE", str(tmp_path / "trace.jsonl"))
 
 
 @pytest.fixture

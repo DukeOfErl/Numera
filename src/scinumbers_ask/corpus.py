@@ -25,9 +25,20 @@ class CorpusUnavailable(Exception):
     """Raised instead of falling back to bundled data, of which there is none."""
 
 
+class CorpusOutOfDate(CorpusUnavailable):
+    """A corpus whose entries are keyed the way an older ingester wrote them.
+
+    A subclass, so every driver already reporting `CorpusUnavailable` reports this
+    without changing -- and a distinct type, so the message can say what to do. It
+    arrived as a bare `KeyError('entry_id')` first, which is true and useless: the
+    reader is told a key is missing, not that their corpus is a version behind and
+    not that the app will not rebuild it for them.
+    """
+
+
 @dataclass(frozen=True)
 class Entry:
-    bnid: int
+    entry_id: int
     property: str
     organism: str
     units: str
@@ -161,8 +172,20 @@ def _keywords(value: Any) -> tuple[str, ...]:
 
 
 def _entry(raw: dict) -> Entry:
+    if "entry_id" not in raw and "bnid" in raw:
+        # Refused by name rather than reinterpreted. The alternative -- reading
+        # `bnid` as a fallback -- is a compatibility branch that would outlive its
+        # usefulness and quietly keep two wire formats alive; and `autobuild` never
+        # rebuilds a corpus that exists (its `is_ready`), so a corpus a version
+        # behind would otherwise reach here on every start with nothing to fix it.
+        raise CorpusOutOfDate(
+            "this corpus was built by an older ingester -- its entries are keyed "
+            "'bnid', and this version reads 'entry_id'. Delete the corpus file and "
+            "start again -- the app rebuilds it, about a minute, if the export sits "
+            "beside it -- or rebuild it yourself with `bionumbers-ingest`."
+        )
     return Entry(
-        bnid=int(raw["bnid"]),
+        entry_id=int(raw["entry_id"]),
         property=(raw.get("property") or "").strip(),
         organism=(raw.get("organism") or "").strip(),
         units=(raw.get("units") or "").strip(),
@@ -205,6 +228,11 @@ def load(path: str | Path | None) -> tuple[Entry, ...]:
                 continue
             try:
                 entries.append(_entry(json.loads(line)))
+            except CorpusOutOfDate as exc:
+                # Before the general handler, or the sentence would be flattened into
+                # "line 1 is not a usable entry" -- which is how a fixable corpus
+                # comes to look like a corrupt one.
+                raise CorpusOutOfDate(f"{p}: {exc}") from exc
             except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
                 raise CorpusUnavailable(f"{p}: line {number} is not a usable entry: {exc}") from exc
     if not entries:

@@ -19,7 +19,7 @@ from typing import TextIO
 
 from . import autobuild, entries_table, messages, trace
 from .agent import AskAgent
-from .config import Config, NotConfigured
+from .config import Config, NotConfigured, env_setting, refuse_retired_env
 from .corpus import CorpusUnavailable, load
 from .events import (
     Answer,
@@ -120,14 +120,23 @@ def _questions_from_terminal(out: TextIO) -> Iterable[str]:
 
 
 def main(argv: list[str] | None = None) -> None:
+    # First, and before the parser exists. Two of this parser's defaults read the
+    # environment, and argparse evaluates a default when the argument is *declared*
+    # -- above the try below, where a raised NotConfigured escapes as a traceback
+    # rather than as the sentence it was written to be.
+    try:
+        refuse_retired_env()
+    except NotConfigured as exc:
+        raise SystemExit(f"scinumbers-ask: {exc}") from exc
+
     parser = argparse.ArgumentParser(
-        prog="bionumbers-ask",
+        prog="scinumbers-ask",
         description="Ask questions about biological quantities, answered only from a corpus.",
     )
     parser.add_argument(
         "--corpus",
-        default=os.environ.get("BIONUMBERS_ASK_CORPUS", ""),
-        help="path to the JSONL corpus (or set BIONUMBERS_ASK_CORPUS)",
+        default=env_setting("SCINUMBERS_CORPUS"),
+        help="path to the JSONL corpus (or set SCINUMBERS_CORPUS)",
     )
     parser.add_argument(
         "--checkpoints",
@@ -141,7 +150,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--trace",
-        default=os.environ.get("BIONUMBERS_ASK_TRACE", trace.DEFAULT_FILE),
+        default=env_setting("SCINUMBERS_TRACE", trace.DEFAULT_FILE),
         help=f"where the structured trail is written (default {trace.DEFAULT_FILE}); "
         "'-' for stderr, empty to discard it",
     )
@@ -155,8 +164,8 @@ def main(argv: list[str] | None = None) -> None:
 
     # Both are misconfiguration a person can fix, not a fault: the message is the
     # whole point of raising them, and a traceback buries it in a stack the reader
-    # did not cause. `NotConfigured` carries the instructions for the retired
-    # BIONUMBERS_ASK_WARN_USD, which arriving as a crash would waste entirely.
+    # did not cause. `NotConfigured` carries the instructions for a retired
+    # variable name, which arriving as a crash would waste entirely.
     try:
         # Announced on stderr: in one-shot mode stdout carries the answer, and a
         # build notice mixed into it would corrupt whatever reads that.
@@ -164,7 +173,7 @@ def main(argv: list[str] | None = None) -> None:
         repo = CorpusRepository(load(corpus))
         config = Config.from_env()
     except (CorpusUnavailable, NotConfigured) as exc:
-        raise SystemExit(f"bionumbers-ask: {exc}") from exc
+        raise SystemExit(f"scinumbers-ask: {exc}") from exc
     # The store is created on demand by the checkpointer, but its directory is not.
     directory = os.path.dirname(args.checkpoints)
     if directory:

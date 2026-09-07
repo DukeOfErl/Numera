@@ -28,7 +28,7 @@ from bionumbers_ingest.ingest import ingest
 #: case-insensitively, because a browser on a case-preserving filesystem is not
 #: consistent about it.
 #:
-#: Restated in `bionumbers_ask.autobuild`, unavoidably: that module has to name the
+#: Restated in `scinumbers_ask.autobuild`, unavoidably: that module has to name the
 #: export in the branch where this package failed to import, so it cannot import
 #: this. `tests/test_resolve.py` asserts the two agree whenever both are present,
 #: which is the only thing that makes the duplication safe.

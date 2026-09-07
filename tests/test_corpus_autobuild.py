@@ -14,8 +14,8 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURE
 
-from bionumbers_ask import autobuild
-from bionumbers_ask.corpus import CorpusUnavailable
+from scinumbers_ask import autobuild
+from scinumbers_ask.corpus import CorpusUnavailable
 
 
 @pytest.fixture
@@ -140,8 +140,8 @@ def test_without_the_ingester_and_without_an_export_nothing_is_claimed(
 
 
 def test_the_terminal_shows_the_refusal_rather_than_a_traceback(outside_any_repo, monkeypatch):
-    from bionumbers_ask.cli import main
     from bionumbers_ingest.guard import OutputWouldBeCommitted
+    from scinumbers_ask.cli import main
 
     (outside_any_repo / "BioNumbers.xls").write_text("not really an export")
     corpus = outside_any_repo / "bionumbers.jsonl"
@@ -153,19 +153,19 @@ def test_the_terminal_shows_the_refusal_rather_than_a_traceback(outside_any_repo
     with pytest.raises(SystemExit) as exited:
         main(["--corpus", str(corpus), "--ask", "q"])
     assert "must not enter a repository" in str(exited.value)
-    assert "bionumbers-ask:" in str(exited.value)
+    assert "scinumbers-ask:" in str(exited.value)
 
 
 def test_the_page_shows_the_refusal_rather_than_a_traceback(outside_any_repo, monkeypatch):
     from streamlit.testing.v1 import AppTest
 
-    from bionumbers_ask import web
     from bionumbers_ingest.guard import OutputWouldBeCommitted
+    from scinumbers_ask import web
 
     (outside_any_repo / "BioNumbers.xls").write_text("not really an export")
     corpus = outside_any_repo / "bionumbers.jsonl"
-    monkeypatch.setenv("BIONUMBERS_ASK_CORPUS", str(corpus))
-    monkeypatch.setenv("BIONUMBERS_ASK_CHECKPOINTS", str(outside_any_repo / "c.sqlite"))
+    monkeypatch.setenv("SCINUMBERS_CORPUS", str(corpus))
+    monkeypatch.setenv("SCINUMBERS_CHECKPOINTS", str(outside_any_repo / "c.sqlite"))
 
     def refuse(plan):
         raise OutputWouldBeCommitted(corpus, "/some/checkout")
@@ -295,7 +295,7 @@ def test_the_guarded_branch_agrees_with_the_resolver_wherever_no_build_happens(
 
 
 def test_a_configured_export_resolves_to_the_corpus_beside_it_either_way(tmp_path, monkeypatch):
-    """`BIONUMBERS_ASK_CORPUS` pointing at the .xls means "here is the export", not
+    """`SCINUMBERS_CORPUS` pointing at the .xls means "here is the export", not
     "here is the corpus". The resolver knows that; the hand copy did not, and
     returned the export -- so `load` was handed 27 MB of HTML and died on line 1.
 
@@ -373,7 +373,7 @@ def test_the_build_notice_is_not_drawn_from_inside_the_cache():
     import ast
     import inspect
 
-    from bionumbers_ask import web
+    from scinumbers_ask import web
 
     # The code, not the prose. A plain substring search matched this function's own
     # comment explaining why `st.info` must not be here -- a source-scanning test
