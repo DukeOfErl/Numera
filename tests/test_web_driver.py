@@ -818,6 +818,32 @@ def test_a_question_stopped_on_its_own_ceiling_does_not_stop_the_run():
     assert not web.run_is_over([("q", [item])])
 
 
+@pytest.mark.parametrize("reason", [EndReason.PROVIDER_LIMIT, EndReason.NOT_CONFIGURED])
+def test_an_ending_a_new_session_cannot_fix_replaces_that_advice(reason):
+    """The banner is the last thing on screen, so wrong advice there outranks the
+    answer above it -- and for both of these the next session's first question meets
+    the identical refusal."""
+    advice = web.run_over_advice([("q", [web.item_for(ending(reason))])])
+    assert "new session will not help" in advice
+
+
+def test_the_advice_names_the_remedy_without_addressing_anyone():
+    """One wording for two readers: someone on a hosted instance, and the developer
+    running the same code on their own key. "Ask whoever deployed the app" told the
+    second reader to contact themselves."""
+    advice = web.run_over_advice([("q", [web.item_for(ending(EndReason.PROVIDER_LIMIT))])])
+    assert "whoever funds it" in advice
+    assert "ask" not in advice.lower(), "no second person: the local reader is the funder"
+
+
+def test_an_ending_a_new_session_does_fix_leaves_the_page_its_own_line():
+    """A fresh session really does refresh a spent budget and a full conversation, so
+    the page's own wording is right and nothing should replace it."""
+    assert web.run_over_advice([("q", [web.item_for(ending(EndReason.RUN_BUDGET))])]) == ""
+    assert web.run_over_advice([("q", [web.item_for(ending(EndReason.CONVERSATION_BOUND))])]) == ""
+    assert web.run_over_advice([("q", [web.item_for(ending(EndReason.ANSWERED))])]) == ""
+
+
 def test_the_run_budget_shown_is_the_one_the_run_was_measured_against():
     """Read off the ending rather than out of configuration, so a session resumed
     in a differently-configured process reports the cap it is actually subject to."""

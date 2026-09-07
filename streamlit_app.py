@@ -82,14 +82,22 @@ for asked, drawn in web.transcript(st.session_state):
     with st.chat_message("assistant"):
         web.show(drawn)
 
-# Some endings close the run: the budget is spent, or the conversation is past its
-# token bound. Asking again cannot come out differently, so the input goes away
-# rather than replaying the same refusal -- the terminal returns from its read loop
-# at exactly these endings.
+# Some endings close the run: the budget is spent, the conversation is past its
+# token bound, nothing is configured, or the key funding the calls is out of credit.
+# Asking again cannot come out differently, so the input goes away rather than
+# replaying the same refusal -- the terminal returns from its read loop at exactly
+# these endings.
 if web.run_is_over(web.transcript(st.session_state)):
+    # An ending with advice of its own replaces the line below rather than sitting
+    # under it: "start a new session" is wrong for a spent key -- the next session's
+    # first question meets the same refusal -- and this banner is the last thing on
+    # screen, so wrong advice here outranks the answer that said otherwise.
     st.error(
-        "This run has stopped taking questions. Start a new session to continue —"
-        " reload with a fresh `?session=` or clear this one.",
+        web.as_text(
+            web.run_over_advice(web.transcript(st.session_state))
+            or "This run has stopped taking questions. Start a new session to continue —"
+            " reload with a fresh `?session=` or clear this one."
+        ),
         icon=":material/block:",
     )
 # `submit_mode="disable"` because a question runs for as long as the agent takes:

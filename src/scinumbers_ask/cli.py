@@ -103,6 +103,13 @@ def run(
                     # says the question did not finish as intended.
                     code = 1
                 if event.reason in messages.STOP_THE_RUN:
+                    # Where the ending has advice of its own, said before returning:
+                    # the terminal otherwise exits on the ending line alone, which
+                    # names a reason without saying that the remedy is somebody
+                    # else's to apply. The page shows the same sentence.
+                    advice = messages.run_over_advice(event.reason)
+                    if advice:
+                        print(advice, file=out, flush=True)
                     return code
     return code
 

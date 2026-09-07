@@ -19,6 +19,14 @@ Two branches that each number ADRs from the current highest id will both claim t
 | `add-corpus-ingestion` | `0200`–`0250` — all written |
 | `add-corpus-autobuild` | `0300`–`0340` |
 | `rename-to-scinumbers` | `0400`–`0450` |
+| `add-answer-evaluation` | `0500`–`0550` — spent on `dev`, no file on this branch |
+| `add-answer-shape` | `0560`–`0590` — spent on `dev`, no file on this branch |
+| `add-provider-limit-ending` | `0600`–`0640` — `0600` written |
+
+The two evaluation rows are recorded here although nothing on this branch uses
+them. `main` was cut before that work (see the merge of `cf9e875`), so a reader
+allocating from this table alone would take `0500` and collide the moment the
+evaluation line merges — which is the exact drift the paragraph below describes.
 
 **This table is the authority, not a scan of `docs/decisions/`.** A scan cannot see uncommitted ADRs on another branch: `git ls-tree` reads committed trees, and each branch is checked out in its own worktree, so a number can be spent and still invisible from here. `add-ask-agent` has written `0100`–`0190` and holds a second range, `0260`–`0290`, because its first block ran out while the change was still open. A block is extended rather than renumbered: the ADRs already written are referenced from code comments and commit messages, and renumbering would break every one of those references to buy contiguity that nothing needs. Its first block was also uncommitted for two sessions, which is how a scan came to report those numbers as free. Never conclude a number is free because no file for it turns up.
 

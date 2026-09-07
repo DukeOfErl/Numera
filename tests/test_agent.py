@@ -4,17 +4,30 @@ from __future__ import annotations
 
 import pytest
 from conftest import agent_with, run
+from langchain_core.messages import AIMessage
 
-from agent_doubles import batched_tool_calls, costing, says, scripted, tool_call
+from agent_doubles import (
+    OutOfCreditModel,
+    batched_tool_calls,
+    costing,
+    out_of_credit_error,
+    provider_error,
+    says,
+    scripted,
+    tool_call,
+)
+from scinumbers_ask import messages
 from scinumbers_ask.agent import CONVERSATION_BOUND, SYSTEM_PROMPT, AskAgent
 from scinumbers_ask.config import Config, usd
 from scinumbers_ask.events import (
     Answer,
     AnswerEntries,
+    CitationWarning,
     EndReason,
     QuestionEnded,
     QuestionStarted,
     Retrieval,
+    UngroundedRefusal,
 )
 
 # -- the event contract ---------------------------------------------------
@@ -112,6 +125,134 @@ def test_exhausted_retries_end_the_question_as_a_provider_failure(repo, config, 
     assert end.reason is EndReason.PROVIDER_FAILURE
     assert end.incomplete is True
     assert not any(isinstance(e, Answer) for e in events)
+    # The other direction of the same rule, and the one that costs more: an outage
+    # must not be reported as a spent key, which would shut the run for everyone on
+    # a reason that was not true.
+    assert end.reason not in messages.STOP_THE_RUN
+
+
+def test_a_key_out_of_credit_says_what_happened_and_stops_the_run(repo, config, tmp_path):
+    """A shared deployment's key hits its cap while somebody is using it.
+
+    The terse ending line was all a reader got: "provider_failure · $0.00 · ...",
+    which reads as a fault in the app or in their question, and left the input live
+    so the next question failed the same way. Both parts are the point -- the
+    sentence, and the door closing.
+    """
+    model = OutOfCreditModel(responses=[says("never reached")])
+    events = run(agent_with(repo, config, tmp_path, model), "s1", "q")
+    end = events[-1]
+    assert isinstance(end, QuestionEnded)
+    assert end.reason is EndReason.PROVIDER_LIMIT
+    assert end.incomplete is True
+    # Asking again cannot come out differently until somebody pays.
+    assert end.reason in messages.STOP_THE_RUN
+    answer = next(e for e in events if isinstance(e, Answer))
+    # The agent reports the fact. What to *do* about it -- whose key, who can raise
+    # it -- is a fact about a deployment, so it is the drivers' sentence:
+    # `test_terminal_driver` and `test_web_driver` asserts each renders it.
+    assert "no credit left" in answer.text
+    assert messages.run_over_advice(EndReason.PROVIDER_LIMIT), "the drivers need the advice"
+    # Not retried: the key does not acquire a balance during the backoff, and the
+    # reader would wait out the full delay for the same sentence.
+    assert model.attempts == 1
+
+
+def test_a_key_out_of_credit_keeps_the_answer_it_had_already_paid_for(repo, config, tmp_path):
+    """The balance usually runs out part-way through, not before the first call.
+
+    This branch used to yield a canned notice *as* the answer, discarding whatever
+    the model had established -- the opposite of what every other early ending in
+    the same loop does, and on the shape of failure that happens most.
+    """
+    model = OutOfCreditModel(
+        responses=[
+            AIMessage(
+                content="Cell diameter is about 1.0–1.1 μm [[100002]].",
+                tool_calls=[{"name": "search_entries", "args": {"property": "Cell"}, "id": "c1"}],
+            )
+        ],
+        refuse_after=1,
+    )
+    events = run(agent_with(repo, config, tmp_path, model), "s1", "How wide is E. coli?")
+    answer = next(e for e in events if isinstance(e, Answer))
+    assert "1.0–1.1 μm" in answer.text, "the model's own text, not a notice replacing it"
+    assert events[-1].reason is EndReason.PROVIDER_LIMIT
+    assert events[-1].incomplete is True
+    # The entries it did retrieve are still shown: work already paid for.
+    assert any(isinstance(e, AnswerEntries) for e in events)
+
+
+def test_a_question_with_no_answer_is_not_told_its_answer_is_ungrounded(repo, config, tmp_path):
+    """There is no answer, so "this answer is not grounded in the corpus" describes
+    something that does not exist -- and `NO_ANSWER` already says what happened.
+
+    A fourth instance of the same defect, found while fixing the three branches that
+    substitute a sentence: this one does not even substitute, it shows nothing.
+    """
+    model = scripted(AIMessage(content=""))
+    events = run(agent_with(repo, config, tmp_path, model), "s1", "q")
+    assert events[-1].reason is EndReason.NO_ANSWER
+    assert not any(isinstance(e, UngroundedRefusal) for e in events)
+
+
+def test_what_retrieval_found_before_the_refusal_is_still_shown(repo, config, tmp_path):
+    """A 402 after a search but before any prose: the entries survive the substitute.
+
+    The guarantee the `judge_the_prose` flag is *for* -- suppress the report about
+    prose, keep the evidence -- and it was unasserted. Moving the guard to the top of
+    `evidence()`, which drops the table for every substituted answer, passed the whole
+    suite: the two other tests here have prose (so nothing is suppressed) or nothing
+    retrieved (so an absent table is correct).
+    """
+    model = OutOfCreditModel(
+        responses=[tool_call("search_entries", property="Cell")], refuse_after=1
+    )
+    events = run(agent_with(repo, config, tmp_path, model), "s1", "How wide is E. coli?")
+    assert events[-1].reason is EndReason.PROVIDER_LIMIT
+    entries = next(e for e in events if isinstance(e, AnswerEntries))
+    assert entries.retrieved, "the search happened and was paid for; its entries stand"
+    # And still no judgement about the substitute standing in for an answer.
+    assert not any(isinstance(e, (CitationWarning, UngroundedRefusal)) for e in events)
+
+
+def test_nothing_is_judged_about_prose_the_reader_never_saw(repo, config, tmp_path):
+    """With no answer of the model's, the notice stands in -- and is not analysed.
+
+    Judged, it produced accusations about invisible text: a citation warning naming
+    an entry the discarded prose had cited, or "this answer is not grounded in the
+    corpus -- it says only what the model expected to find" about a system notice,
+    with `answer.ungrounded` in the trail for a question the model never answered.
+    """
+    model = OutOfCreditModel(responses=[says("never reached")])
+    events = run(agent_with(repo, config, tmp_path, model), "s1", "q")
+    answer = next(e for e in events if isinstance(e, Answer))
+    assert "no credit left" in answer.text
+    assert not any(isinstance(e, (CitationWarning, UngroundedRefusal)) for e in events)
+    # Nothing was retrieved either, so an entries table would say nothing at all.
+    assert not any(isinstance(e, AnswerEntries) for e in events)
+
+
+def test_the_attribute_this_rule_reads_is_on_the_provider_s_own_error(repo, config, tmp_path):
+    """`_is_out_of_credit` reads `status_code`, so this asserts the real type has one.
+
+    Against `openai.APIStatusError` rather than a stand-in with the attribute
+    bolted on, which would pass whether or not the provider's error still carried
+    it -- and the failure that mattered would be silent: every spent key reported
+    as an ordinary outage, with the door left open.
+    """
+    from scinumbers_ask.agent import _is_out_of_credit
+
+    assert _is_out_of_credit(out_of_credit_error())
+    # The expensive direction, and it needs errors that *have* a status: with only
+    # status-less exceptions here, a rule reading `status_code is not None` passed
+    # the whole suite -- and under it a rate limit or a bad gateway would close the
+    # run for every reader. 429 and 502 are the two this would actually meet.
+    assert not _is_out_of_credit(provider_error(429, "Rate limited"))
+    assert not _is_out_of_credit(provider_error(502, "Bad gateway"))
+    assert not _is_out_of_credit(provider_error(401, "Invalid credentials"))
+    assert not _is_out_of_credit(RuntimeError("upstream unavailable"))
+    assert not _is_out_of_credit(TimeoutError())
 
 
 # -- unattended operation is a driver, not a mode -------------------------

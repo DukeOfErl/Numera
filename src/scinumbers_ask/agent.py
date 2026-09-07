@@ -200,6 +200,29 @@ OUR_DEFECT = (
     AssertionError,
 )
 
+#: The provider's answer when there is no money left. OpenRouter returns 402 both
+#: for an account out of credits and for a key over its own spending limit, and
+#: documents them in one sentence -- so one code covers both, which is what we
+#: want: the remedy is the same, and the reader cannot tell the two apart anyway.
+OUT_OF_CREDIT_STATUS = 402
+
+
+def _is_out_of_credit(exc: BaseException) -> bool:
+    """Whether this failure means the money ran out rather than the call went wrong.
+
+    Reads the status code and nothing else. Not the message text: the wording is
+    the provider's to change, and a rule matching on prose would go quietly false
+    the day it did.
+
+    **Conservative on purpose, because the two directions do not cost the same.**
+    A transient failure misread as "out of credit" tells the reader the run is over
+    when it is not, and closes the door for everyone on a reason that was not true.
+    A limit misread as a transient failure costs one pointless retry and then says
+    the same thing again. So only an unambiguous 402 counts, and everything else
+    stays an ordinary provider failure.
+    """
+    return getattr(exc, "status_code", None) == OUT_OF_CREDIT_STATUS
+
 
 def _origin(exc: BaseException) -> str:
     """Where in this package the exception was raised, for the trail.
@@ -276,8 +299,12 @@ def _retry_on(exc: Exception) -> bool:
     question stopped on its ceiling would take seconds longer to say so. Retrying
     an unpriceable response is equally futile -- a provider that reports no cost
     will not start reporting one on the second attempt.
+
+    A provider out of credit is the same futility from the other side of the wire:
+    the key does not acquire a balance during the backoff, so retrying only makes
+    the reader wait longer for the same sentence.
     """
-    return not isinstance(exc, (SpendLimitReached, Unpriceable))
+    return not isinstance(exc, (SpendLimitReached, Unpriceable)) and not _is_out_of_credit(exc)
 
 
 def _middleware(gate: SpendGate) -> list:
@@ -589,7 +616,7 @@ class AskAgent:
             # reader met them in, and the order the table falls back to.
             retrieved = _Retrieved()
 
-            def evidence() -> Iterator[Event]:
+            def evidence(judge_the_prose: bool = True) -> Iterator[Event]:
                 """What the answer rests on, and anything it should not rest on.
 
                 Emitted before every ending that got as far as retrieving, a limit
@@ -601,6 +628,21 @@ class AskAgent:
                 where it matters most: a search that matched nothing, followed by an
                 answer citing an entry no tool call returned, is the model answering
                 from its own memory -- and it was reported as a clean answer.
+
+                `judge_the_prose=False` for an ending whose answer is this module's
+                own sentence rather than the model's text. What it suppresses is the
+                ungrounded report, which describes the answer the reader was shown:
+                run over a substitute it says "this answer is not grounded in the
+                corpus -- it says only what the model expected to find" about a
+                notice that was never an answer, and writes `answer.ungrounded` to
+                the trail for a question the model never answered.
+
+                The citation check needs no such guard and does not get a misleading
+                one: it reads the model's text, which is empty wherever a substitute
+                was used, so it reports nothing there by construction.
+
+                The entries are not a judgement about prose and are still emitted:
+                what retrieval found before the stop was paid for too.
                 """
                 cited = citations(answer_text, trace=trace)
                 unknown = tuple(b for b in cited if self._repo.get(b) is None)
@@ -618,6 +660,10 @@ class AskAgent:
                         unretrieved=unretrieved,
                     )
                 if not (retrieved.entry_ids or retrieved.searches or cited):
+                    if not judge_the_prose:
+                        # Nothing retrieved and no answer of the model's to judge.
+                        # An empty entries table says nothing a reader needs.
+                        return
                     # Nothing retrieved, nothing searched, nothing cited. The table
                     # is right to stay empty -- there is no evidence to show -- but
                     # the answer is not therefore fine: it describes the corpus
@@ -680,7 +726,7 @@ class AskAgent:
                                 "could cite, so there is no partial answer to give."
                             ),
                         )
-                        yield from evidence()
+                        yield from evidence(judge_the_prose=bool(answer_text.strip()))
                         yield QuestionEnded(
                             question_id=trace.question_id,
                             reason=limit.reason,
@@ -701,7 +747,10 @@ class AskAgent:
                         # control: stop rather than continue blind.
                         trace.record("spend.unpriceable", detail=str(exc))
                         yield Answer(question_id=trace.question_id, text=str(exc))
-                        yield from evidence()
+                        # Never the model's text on this branch: the answer shown is
+                        # always this exception's sentence, whatever the model had
+                        # said. So the prose judgements never apply here.
+                        yield from evidence(judge_the_prose=False)
                         yield QuestionEnded(
                             question_id=trace.question_id,
                             reason=EndReason.NOT_CONFIGURED,
@@ -742,7 +791,7 @@ class AskAgent:
                                 "there is no partial answer to give."
                             ),
                         )
-                        yield from evidence()
+                        yield from evidence(judge_the_prose=bool(answer_text.strip()))
                         yield QuestionEnded(
                             question_id=trace.question_id,
                             reason=EndReason.RETRIEVAL_BOUND,
@@ -766,18 +815,48 @@ class AskAgent:
                         # sees it to look in the wrong place -- or to blame a
                         # service that did nothing wrong.
                         ours = isinstance(exc, (*OUR_DEFECT, LedgerUnavailable))
+                        if ours:
+                            reason = EndReason.INTERNAL_ERROR
+                        elif _is_out_of_credit(exc):
+                            reason = EndReason.PROVIDER_LIMIT
+                        else:
+                            reason = EndReason.PROVIDER_FAILURE
                         trace.record(
                             "internal.failed" if ours else "provider.failed",
                             error=type(exc).__name__,
                             message=str(exc)[:200],
                             where=_origin(exc),
+                            reason=reason.value,
                         )
-                        yield from evidence()
+                        if reason is EndReason.PROVIDER_LIMIT:
+                            # Whatever the model had established is presented, and
+                            # the ending marks it incomplete -- the reasoning the
+                            # spend limit above states, and this is the branch it
+                            # matters most in: the balance usually runs out part-way
+                            # through a question whose earlier hops were paid for,
+                            # so discarding the text is the common case rather than
+                            # the corner one.
+                            #
+                            # What to *do* about a spent key is not the agent's to
+                            # say: which key, whose money, and who can raise it are
+                            # facts about a deployment. `messages.run_over_advice`
+                            # carries that sentence and both drivers render it.
+                            partial = answer_text.strip()
+                            yield Answer(
+                                question_id=trace.question_id,
+                                text=partial
+                                or (
+                                    "I could not answer this: the provider refused the "
+                                    "request because the key or account funding it has no "
+                                    "credit left."
+                                ),
+                            )
+                            yield from evidence(judge_the_prose=bool(partial))
+                        else:
+                            yield from evidence()
                         yield QuestionEnded(
                             question_id=trace.question_id,
-                            reason=(
-                                EndReason.INTERNAL_ERROR if ours else EndReason.PROVIDER_FAILURE
-                            ),
+                            reason=reason,
                             spend=ledger.question,
                             run_spend=ledger.run,
                             model=self._config.model,
@@ -821,7 +900,12 @@ class AskAgent:
             # answered question would hand the driver a blank answer marked
             # complete, which is the silent failure this project cannot afford.
             trace.record("question.no_answer", tool_calls=tool_calls)
-            yield from evidence()
+            # No answer at all, so there is no answer to call ungrounded. Saying
+            # "this answer is not grounded in the corpus" where the reader was shown
+            # nothing describes something that does not exist, and `NO_ANSWER`
+            # already reports what happened. Found while fixing the branches above:
+            # same defect, one line further down.
+            yield from evidence(judge_the_prose=False)
             yield QuestionEnded(
                 question_id=trace.question_id,
                 reason=EndReason.NO_ANSWER,
