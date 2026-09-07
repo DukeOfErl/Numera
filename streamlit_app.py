@@ -9,7 +9,6 @@ SCINUMBERS_CORPUS, SCINUMBERS_CHECKPOINTS, SCINUMBERS_TRACE -- since
 a Streamlit script is given no arguments of its own.
 """
 
-
 import streamlit as st
 
 from scinumbers_ask import autobuild, web
@@ -117,4 +116,3 @@ elif question := st.chat_input("Ask a question", submit_mode="disable"):
 # main column's table is the first few rows of the same set. Written after the
 # conversation so it reflects the question just asked.
 web.draw_full_entries(web.latest_table(web.transcript(st.session_state)))
-
