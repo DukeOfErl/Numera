@@ -12,6 +12,11 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **The evaluation refuses to write its results where git would track them.**
+  Every record carries the retrieval results the agent was shown, verbatim, so a
+  results file holds corpus text — the same unlicensed data the corpus itself is.
+  The refusal asks git directly, in the write path rather than the command, and
+  `evaluations/` is gitignored as well.
 - **`scinumbers-eval report`** — reads a results file and gives its figures:
   expected entries cited, and the two ways an expected entry can be missed
   (retrieved and passed over, or never retrieved) reported apart; whether the

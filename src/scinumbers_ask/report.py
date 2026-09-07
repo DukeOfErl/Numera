@@ -21,6 +21,7 @@ from .evaluation import Result
 from .question_set import Question, shapes_of
 from .repository import CorpusRepository
 from .scoring import (
+    asked,
     asked_terms,
     bounds_reached,
     citation_score,
@@ -28,6 +29,7 @@ from .scoring import (
     correctly_declined,
     grounded_failures_of,
     grouped,
+    never_asked,
     outliers_among_peers,
     peers_too_few,
     spread,
@@ -110,9 +112,27 @@ def _figures(
     entries: tuple[Entry, ...],
     repo: CorpusRepository,
 ) -> list[str]:
-    supported = [r for r in results if not _question_of(r, by_id).unsupported]
-    unsupported = [r for r in results if _question_of(r, by_id).unsupported]
     lines: list[str] = []
+    # Only what the model actually answered. A crashed question records an empty
+    # answer, which states no quantity and so scored as a correct refusal; a
+    # question refused on the run budget records the budget message, whose dollar
+    # figures scored as a fabrication. Both are reported here and scored nowhere.
+    missed = never_asked(results)
+    if missed:
+        reasons = Counter(
+            result.failure.split(":")[0] if result.failure else result.end_reason
+            for result in missed
+        )
+        lines.append(
+            f"{len(missed)} question(s) never reached the model and are scored in "
+            f"nothing below: " + ", ".join(f"{why} {count}" for why, count in reasons.most_common())
+        )
+    scored = asked(results)
+    if not scored:
+        lines.append("nothing was answered, so there is nothing to score")
+        return lines + _cost(results) + _endings(results)
+    supported = [r for r in scored if not _question_of(r, by_id).unsupported]
+    unsupported = [r for r in scored if _question_of(r, by_id).unsupported]
 
     if supported:
         scores = [citation_score(r) for r in supported]
@@ -132,12 +152,28 @@ def _figures(
             f"(reported, not counted as errors)"
         )
 
-        terms = [asked_terms(r, _question_of(r, by_id), repo) for r in supported]
+        # Only questions the current set still holds. A stand-in question asks
+        # about "(unknown)", which resolves to nothing, so every such result was
+        # landing in this denominator as a miss that could never be anything else.
+        in_the_set = [r for r in supported if r.question_id in by_id]
+        strayed = len(supported) - len(in_the_set)
+        terms = [asked_terms(r, by_id[r.question_id], repo) for r in in_the_set]
+        if not terms:
+            lines.append(
+                "the asked organism and property are unscored: no result's question "
+                "is in the current set"
+            )
+            return lines + _cost(results) + _endings(results)
         lines.append(
             f"searched for the asked organism: "
             f"{sum(1 for t in terms if t.searched_organism)} of {len(terms)}; "
             f"property: {sum(1 for t in terms if t.searched_property)} of {len(terms)}"
         )
+        if strayed:
+            lines.append(
+                f"  ({strayed} result(s) are for questions the current set no longer "
+                f"holds, so what they asked is unknown and they are left out here)"
+            )
         cited_count = sum(t.cited for t in terms)
         lines.append(
             f"  cited entries carrying the asked organism: "
@@ -320,7 +356,11 @@ def _per_shape(
             for shape in shapes_of(entry):
                 shapes.setdefault(str(shape), []).append(result)
     for shape, members in sorted(shapes.items()):
-        unique = tuple(dict.fromkeys(members))
+        # By key, not by the record: `Result.retrievals` is a tuple of dicts, so
+        # hashing one raises `TypeError`. Every result from a real run records a
+        # retrieval, so this flag worked only on results that had none -- which is
+        # exactly what the synthetic records in the tests were.
+        unique = tuple({result.key: result for result in members}.values())
         lines.append(f"  {shape} ({len(unique)} results)")
         lines += ["    " + line for line in _figures(unique, by_id, entries, repo)]
     return lines

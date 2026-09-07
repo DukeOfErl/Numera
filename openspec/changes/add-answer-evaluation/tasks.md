@@ -201,6 +201,27 @@ reads a number out of the answer's prose, except 4.3, which only asks whether a 
     match (over-credits — a search for "Cell" agrees with an asked "Cell volume"); and the outlier
     factor of two over a tight interval (over-flags, ADR-0520).
 
+**What the branch review of groups 3-4 found** (2026-09-07). Ten findings, all reproduced, all
+fixed on that branch. Four are worth carrying forward as lessons rather than as history:
+
+- **A results file holds corpus text**, because the recorded context is verbatim by requirement. The
+  default path was not gitignored and nothing in the write path asked, so a `git add -A` after a run
+  would have committed corpus excerpts — the one irreversible mistake this project can make. Fixed by
+  importing the ingester's own guard (ADR-0250) rather than writing a second copy. **Any later
+  artefact of a run — a judgements file, a hand-label file, an exported report — carries the same
+  risk and needs the same guard.**
+- **The append-per-result shape did not survive the interruption it was designed for.** A torn final
+  line was tolerated on read and then concatenated with the next record, silently dropping a
+  paid-for result and eventually making the whole file unreadable. Tolerating a partial read is only
+  half the job; the write has to repair before appending.
+- **A crashed question scored as a correct refusal**, and one refused on the run budget scored as a
+  fabrication — its answer is the budget message, whose dollar figures contain digits. Scoring read
+  `answer` and never `failure` or `end_reason`, so infrastructure failures moved the headline figure
+  in the unfalsifiable direction. `reached_the_model` is now the scored population.
+- **`--by-shape` crashed on every real results file** and no test caught it, because `Result` is
+  unhashable once it carries a retrieval and every synthetic test record had none. A double that is
+  simpler than the real thing in a load-bearing way hides the path it stands in for.
+
 ## 5. The baseline, and reading it
 
 - [ ] 5.1 Assemble a first question set from the corpus, committed to the repository — it carries

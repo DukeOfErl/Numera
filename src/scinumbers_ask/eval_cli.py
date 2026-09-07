@@ -121,7 +121,10 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(f"{PROG}: {exc}") from exc
 
     if args.command == "run":
-        _run(args, questions, corpus)
+        # `entries` rather than the path: `main` has already parsed the corpus for
+        # `check_against_corpus`, and a 20-30 MB file was being read a second time
+        # with both copies alive for the length of the run.
+        _run(args, questions, corpus, entries or ())
         return
 
     if args.command == "report":
@@ -159,9 +162,8 @@ def main(argv: list[str] | None = None) -> None:
         )
 
 
-def _run(args, questions, corpus: str) -> None:
+def _run(args, questions, corpus: str, entries) -> None:
     """Ask the set and record it. Everything printed here goes to stdout as text."""
-    entries = load(corpus)
     try:
         config = Config.from_env()
     except NotConfigured as exc:

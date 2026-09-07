@@ -327,6 +327,18 @@ def test_a_value_far_below_its_peers_is_flagged_too():
     assert flagged.outside_by > OUTLIER_FACTOR
 
 
+def test_an_entry_with_a_twin_still_counts_its_twin_as_a_peer():
+    """The peer index groups by value, so removing "this entry's value" has to
+    remove one copy and not every match -- two entries can record the same number,
+    and dropping both would shrink the population the floor is measured against.
+    """
+    twins = tuple(an_entry(entry_id=i, value=2.0) for i in range(1, MIN_PEERS + 2))
+    population = twins + (an_entry(entry_id=99, value=100.0),)
+    assert peers_too_few((1,), population) == ()
+    (flagged,) = outliers_among_peers((99,), population)
+    assert flagged.peers == MIN_PEERS + 1
+
+
 def test_a_property_with_too_few_peers_is_not_judged_and_says_so():
     """An absence that reads as a pass is the failure this exists to prevent."""
     peers = tuple(an_entry(entry_id=i, value=2.0) for i in range(1, MIN_PEERS))

@@ -8,6 +8,8 @@ would be indistinguishable, from the report, from a system that answered wrongly
 from __future__ import annotations
 
 import json
+import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -20,6 +22,7 @@ from scinumbers_ask.evaluation import (
     Provenance,
     Result,
     ResultsFileError,
+    ResultsWouldBeCommitted,
     append_result,
     code_version,
     in_order,
@@ -498,3 +501,117 @@ def test_a_chain_is_ordered_from_its_root():
     first = a_question("q1")
     ordered = in_order((third, second, first))
     assert [q.question_id for q in ordered] == ["q1", "q2", "q3"]
+
+
+# -- What the branch review of group 3 found -------------------------------------
+
+
+def test_appending_after_a_torn_line_does_not_lose_the_new_result(tmp_path):
+    """The failure the append-per-result shape was supposed to survive.
+
+    A run killed mid-write leaves a partial record with no trailing newline.
+    Appending onto it fused the two into one invalid line -- still the *last*
+    line, so the newly paid-for result was silently dropped on the next read; one
+    more append pushed it into the middle and every read from then on refused the
+    whole file, blaming damage after the fact.
+    """
+    path = tmp_path / "results.jsonl"
+    append_result(path, a_result("q1"))
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write('{"question_id": "q2", "repe')
+
+    append_result(path, a_result("q3"))
+    append_result(path, a_result("q4"))
+
+    assert [result.question_id for result in read_results(path)] == ["q1", "q3", "q4"]
+
+
+def test_a_torn_line_is_the_only_thing_a_repair_removes(tmp_path):
+    """A complete file must be appended to untouched: the repair reads the last
+    byte, and a rule that trimmed a whole line regardless would eat a good one."""
+    path = tmp_path / "results.jsonl"
+    append_result(path, a_result("q1"))
+    append_result(path, a_result("q2"))
+    assert [result.question_id for result in read_results(path)] == ["q1", "q2"]
+
+
+def test_a_results_file_git_would_track_is_refused_before_it_is_written(tmp_path):
+    """Every record carries the retrieval results verbatim, so a results file
+    holds corpus text -- the same unlicensed data the corpus itself is, which must
+    never enter a repository (ADR-0170), where history is permanent.
+
+    The guard is on the write, not on the command: a second driver would otherwise
+    route around the one irreversible mistake this project can make.
+    """
+    tracked = Path("src") / "scinumbers_ask" / "leaked-results.jsonl"
+    with pytest.raises(ResultsWouldBeCommitted, match="git would track"):
+        append_result(tracked, a_result("q1"))
+    assert not tracked.exists()
+
+
+def test_a_results_file_outside_the_repository_is_allowed(tmp_path):
+    """The other direction. A guard that refused everywhere would be discovered
+    only as "the evaluation cannot write anything"."""
+    path = tmp_path / "results.jsonl"
+    append_result(path, a_result("q1"))
+    assert path.is_file()
+
+
+def test_a_provenance_from_a_later_version_is_refused_with_an_explanation(tmp_path):
+    """`Provenance` is documented as gaining reasoning effort as soon as `Config`
+    carries it, so a file from a later version is expected rather than exotic. It
+    used to raise `TypeError`, which the command does not catch, so `report` gave
+    a traceback instead of the "written by a different version" sentence.
+    """
+    path = tmp_path / "results.jsonl"
+    append_result(path, a_result("q1"))
+    record = json.loads(path.read_text().splitlines()[0])
+    record["provenance"]["reasoning_effort"] = "high"
+    path.write_text(json.dumps(record) + "\n")
+
+    with pytest.raises(ResultsFileError, match="reasoning_effort"):
+        read_results(path)
+
+
+def test_an_untracked_file_does_not_mark_the_code_modified():
+    """A stray untracked path is not a change to the code.
+
+    Without `--untracked-files=no`, the results directory itself marks every run
+    `+modified`, and the report then splits identical code into groups it refuses
+    to combine on the grounds that they are different systems.
+    """
+    reported = code_version()
+    if not reported.startswith("git "):
+        pytest.skip("not a git checkout")
+    tracked_changes = subprocess.run(
+        ["git", "diff", "--quiet", "HEAD"], capture_output=True, check=False
+    )
+    if tracked_changes.returncode == 0:
+        assert "+modified" not in reported
+
+
+def test_a_re_asked_question_supersedes_its_earlier_record(tmp_path):
+    """Appending is the only write, so re-asking leaves the earlier record behind.
+
+    `outstanding` re-asks deliberately when a follow-up's parent is missing, on
+    the ground that the recorded answer belongs to a session that no longer
+    exists. Returning both would have every figure count the answer the driver
+    had just declared invalid, and would report the question as unstable across
+    repeats it never had.
+    """
+    path = tmp_path / "results.jsonl"
+    append_result(path, replace(a_result("q1"), answer="the stale answer"))
+    append_result(path, replace(a_result("q1"), answer="the current answer"))
+
+    (result,) = read_results(path)
+    assert result.answer == "the current answer"
+
+
+def test_superseding_keeps_each_repeat_of_a_question_apart(tmp_path):
+    """The key is the question *and* the repeat: collapsing on the question alone
+    would throw away every repeat but the last, which is the measurement."""
+    path = tmp_path / "results.jsonl"
+    append_result(path, a_result("q1"))
+    append_result(path, replace(a_result("q1"), repeat=2))
+
+    assert [result.repeat for result in read_results(path)] == [1, 2]

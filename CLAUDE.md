@@ -53,6 +53,16 @@ still to come. The agent takes no
 parameter naming its caller, so it cannot behave one way for a person and another
 for a harness (ADR-0110).
 
+**Two modules reach for the ingester, not one.** `autobuild` builds a corpus when
+only an export exists. `evaluation` imports `bionumbers_ingest.guard` to refuse a
+results path git would track: every result carries the retrieval results verbatim,
+so a results file holds corpus text, and that guard is the one thing standing
+between an evaluation and the single irreversible mistake this project can make
+(ADR-0170, ADR-0250). It is imported rather than reimplemented deliberately — two
+copies of that guard would be one that gets fixed and one that does not — and it
+refuses to write at all if the ingester is absent, because the cheap direction for
+an irreversible mistake is to stop.
+
 **The dependency direction is the one rule with teeth.** Adapters may reach into
 the core; the core may not reach back. Nothing in Python enforces this — an
 `import streamlit` in the tool layer would run perfectly — so
@@ -83,7 +93,7 @@ core, and a test there refuses a name with no file behind it.
 | `messages.py` | Wording both drivers use, and `STOP_THE_RUN` |
 | `cli.py` / `web.py` | The two interactive adapters |
 | `question_set.py` | The evaluation's question set: the format, its reader, and the entry shapes derived from the corpus |
-| `evaluation.py` | The evaluation driver: asks, records one line per result, resumes, and fingerprints what produced each |
+| `evaluation.py` | The evaluation driver: asks, records one line per result, resumes, fingerprints what produced each, and refuses a results path git would track |
 | `scoring.py` | Every score needing no model and no prose parser, as pure functions; the outlier check (ADR-0520) |
 | `report.py` | Figures read out of a results file, never combined across model, prompt or corpus |
 | `eval_cli.py` | The evaluation command (`scinumbers-eval`): `check`, `run` and `report` |

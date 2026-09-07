@@ -266,3 +266,84 @@ def test_a_result_whose_question_has_left_the_set_does_not_break_the_report(corp
     missing question would be worse than reporting it as unexpected."""
     text = render((a_result("gone"),), (a_question(),), corpus)
     assert "expected entries cited" in text
+
+
+# -- What the branch review of group 4 found -------------------------------------
+
+
+def test_figures_per_shape_survive_a_result_that_recorded_a_retrieval(corpus):
+    """`--by-shape` crashed on every real results file.
+
+    De-duplicating results by hashing them raised `TypeError`, because
+    `Result.retrievals` is a tuple of dicts. Every result from an actual run
+    records a retrieval, so the flag worked only on synthetic records that had
+    none -- which is what the other tests here build.
+    """
+    with_retrieval = a_result(retrievals=({"tool": "search_entries", "property": "Cell volume"},))
+    text = render((with_retrieval,), (a_question(),), corpus, by_shape=True)
+    assert "per entry shape" in text
+
+
+def test_a_crashed_question_is_not_scored_as_a_correct_refusal(corpus):
+    """The unfalsifiable direction: an infrastructure failure inflating the
+    headline refusal figure for a question the model never saw.
+
+    A crashed question records an empty answer, an empty answer states no
+    quantity, and an unsupported question that states no quantity was counted as
+    correctly declined.
+    """
+    question = a_question("q9", unsupported=True, expected_entries=())
+    crashed = a_result(
+        "q9",
+        answer="",
+        cited=(),
+        expected_entries=(),
+        failure="APIConnectionError: boom",
+        end_reason="provider_failure",
+    )
+    text = render((crashed,), (question,), corpus)
+    assert "never reached the model" in text
+    assert "unsupported questions declined: 1 of 1" not in text
+
+
+def test_a_question_refused_on_the_run_budget_is_not_scored_as_a_fabrication(corpus):
+    """Its answer is the budget message, whose dollar figures contain digits, so
+    the digit rule read it as a stated quantity."""
+    question = a_question("q9", unsupported=True, expected_entries=())
+    refused = a_result(
+        "q9",
+        answer="This run has spent $1.20 against a $1.20 budget, so no further questions.",
+        cited=(),
+        expected_entries=(),
+        end_reason="run_budget",
+    )
+    text = render((refused,), (question,), corpus)
+    assert "never reached the model" in text
+    assert "for reading" not in text
+
+
+def test_a_run_where_nothing_was_answered_scores_nothing_and_says_so(corpus):
+    failed = a_result(failure="APIConnectionError: boom", end_reason="provider_failure")
+    text = render((failed,), (a_question(),), corpus)
+    assert "nothing was answered, so there is nothing to score" in text
+    assert "expected entries cited" not in text
+
+
+def test_the_cost_of_a_question_that_never_reached_the_model_is_still_reported(corpus):
+    """It is excluded from the scores, not from the ledger: the spend happened."""
+    refused = a_result(end_reason="run_budget", spend=3_000, run_spend=3_000)
+    text = render((refused,), (a_question(),), corpus)
+    assert "spend in this session" in text
+    assert "endings: run_budget 1" in text
+
+
+def test_a_question_no_longer_in_the_set_is_left_out_of_the_asked_terms_figures(corpus):
+    """A stand-in question asks about "(unknown)", which resolves to nothing, so
+    each such result was an unavoidable miss in a denominator it did not belong
+    in."""
+    searched = a_result(retrievals=({"tool": "search_entries", "organism": "E. coli"},))
+    text = render((searched, a_result("gone")), (a_question(),), corpus)
+    # One of one, not one of two: the stray result is out of the denominator, and
+    # its absence is stated rather than left to be inferred from the count.
+    assert "searched for the asked organism: 1 of 1" in text
+    assert "the current set no longer holds" in text

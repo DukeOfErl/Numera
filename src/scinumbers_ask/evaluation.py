@@ -79,7 +79,12 @@ def code_version() -> str:
     if (root / ".git").exists():
         commit = _git(root, "rev-parse", "--short", "HEAD")
         if commit:
-            modified = _git(root, "status", "--porcelain")
+            # `--untracked-files=no`, because untracked files are not a change to
+            # the code. Without it, any stray untracked path -- the results
+            # directory itself, among others -- marks every run `+modified`, and
+            # the report then splits identical code into groups it refuses to
+            # combine, saying they are different systems.
+            modified = _git(root, "status", "--porcelain", "--untracked-files=no")
             return f"git {commit}+modified" if modified else f"git {commit}"
     try:
         return f"package {version('bionumbers')}"
@@ -202,14 +207,93 @@ def append_result(path: str | Path, result: Result) -> None:
     was holding.
     """
     file = Path(path)
+    if not file.exists():
+        # Checked as the file comes into existence: that is the moment the path
+        # becomes real, it costs two git calls once rather than per record, and it
+        # catches a caller that reaches this function directly.
+        refuse_a_committable_results_path(file)
     if file.parent != Path(""):
         file.parent.mkdir(parents=True, exist_ok=True)
+    _drop_a_torn_last_line(file)
     with file.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(asdict(result), ensure_ascii=False) + "\n")
 
 
+def _drop_a_torn_last_line(file: Path) -> None:
+    """Remove a final line with no newline before appending after it.
+
+    The failure this exists for, and it is the one the append-per-result shape was
+    supposed to survive. A run killed mid-write leaves a partial record with no
+    trailing newline. `read_results` tolerates that, so a resume proceeds -- and
+    then the next append concatenates its JSON onto the partial line. The fused
+    line is still *last*, so the newly paid-for result is silently dropped on the
+    next read; one more append pushes it into the middle, and from then on every
+    read raises, blaming damage after the fact for a whole run's results.
+
+    The torn record was already unreadable, so truncating it loses nothing that
+    could have been reported, and it is what keeps the file appendable.
+    """
+    if not file.is_file() or file.stat().st_size == 0:
+        return
+    with file.open("rb+") as handle:
+        handle.seek(-1, 2)
+        if handle.read(1) == b"\n":
+            return
+        handle.seek(0)
+        content = handle.read()
+        keep = content.rfind(b"\n") + 1
+        handle.seek(keep)
+        handle.truncate()
+
+
 class ResultsFileError(Exception):
     """A results file that cannot be read back, and why."""
+
+
+class ResultsWouldBeCommitted(Exception):
+    """The results path is one git would track, and results carry corpus text.
+
+    Its own type, so a caller can tell this from a file it merely cannot parse.
+    """
+
+
+def refuse_a_committable_results_path(path: str | Path) -> None:
+    """Refuse to write results where git would track them.
+
+    **Every record carries the retrieval results verbatim** -- that is what the
+    spec requires of the recorded context -- so a results file holds corpus text,
+    and the corpus is an external input with unresolved licensing that must never
+    enter a repository (ADR-0170). The three checkouts here share one origin, so a
+    leak from any of them publishes, and git history is permanent.
+
+    A `.gitignore` entry protects only the repositories someone remembered to
+    edit; asking git whether it would track the file asks the authority instead.
+    That reasoning and this code are the ingester's (ADR-0250), reused rather than
+    reimplemented: two copies of a guard against an irreversible mistake is one
+    copy that will be fixed and one that will not.
+
+    **No guard available means no write.** If the ingester is absent -- it lives in
+    a sibling package that a branch may not have -- this refuses rather than
+    proceeding unchecked, because the cheap direction for an irreversible mistake
+    is to stop.
+    """
+    try:
+        from bionumbers_ingest.guard import committable_repo_for
+    except ImportError as exc:  # pragma: no cover - both packages are present here
+        raise ResultsWouldBeCommitted(
+            f"Cannot check whether {path} is committable: the guard lives in "
+            f"`bionumbers_ingest`, which is not installed. Results carry corpus "
+            f"text verbatim, so this refuses rather than writing unchecked."
+        ) from exc
+    repo = committable_repo_for(Path(path))
+    if repo is not None:
+        raise ResultsWouldBeCommitted(
+            f"git would track {path} in {repo}. Every result carries the retrieval "
+            f"results the agent was shown, verbatim, so a results file holds corpus "
+            f"text -- which must never enter a repository (ADR-0170), and history is "
+            f"permanent. Write it outside the repository, or add its directory to "
+            f".gitignore."
+        )
 
 
 def read_results(path: str | Path) -> tuple[Result, ...]:
@@ -238,7 +322,23 @@ def read_results(path: str | Path) -> tuple[Result, ...]:
                 f"file was damaged, and reading on would drop results silently."
             ) from exc
         results.append(_result_from(raw, f"{file}:{number}"))
-    return tuple(results)
+    return _current(results)
+
+
+def _current(results: list[Result]) -> tuple[Result, ...]:
+    """The last record for each question and repeat, in the order first written.
+
+    Appending is the only write, so re-asking a question leaves the earlier record
+    in place -- and `outstanding` re-asks deliberately, when a follow-up's parent
+    is missing and its recorded answer belongs to a session that no longer exists.
+    Returning both would have every figure count the superseded answer, and would
+    show the question as unstable across "repeats" it never had, from a record the
+    driver had just declared invalid.
+    """
+    latest: dict[tuple[str, int], Result] = {}
+    for result in results:
+        latest[result.key] = result
+    return tuple(latest.values())
 
 
 def _result_from(raw: dict[str, Any], where: str) -> Result:
@@ -251,6 +351,19 @@ def _result_from(raw: dict[str, Any], where: str) -> Result:
             f"re-run rather than reading it as if the fields matched."
         )
     provenance = raw.get("provenance")
+    if provenance is not None:
+        # Guarded like the record's own fields. `Provenance` is documented as
+        # gaining reasoning effort as soon as `Config` carries it, so a file from a
+        # later version is expected -- and `Provenance(**provenance)` unguarded
+        # raised `TypeError`, which the command does not catch, so a report gave a
+        # traceback instead of "written by a different version".
+        unknown_provenance = sorted(set(provenance) - set(Provenance.__dataclass_fields__))
+        if unknown_provenance:
+            raise ResultsFileError(
+                f"{where}: the provenance carries {unknown_provenance}, which this "
+                f"reader does not know. The file was written by a different version; "
+                f"report from that version or re-run."
+            )
     fields = dict(raw)
     for name in ("expected_entries", "cited", "retrieved", "context"):
         if name in fields and fields[name] is not None:

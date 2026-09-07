@@ -283,6 +283,36 @@ def representative_value(entry: Entry) -> float | None:
     return None
 
 
+def _values_by_quantity(entries: tuple[Entry, ...]) -> dict[tuple[str, str], list[float]]:
+    """Usable values grouped by the quantity they measure: property and organism.
+
+    Built once instead of scanning the corpus for every cited entry. The report
+    calls the two peer functions for the group and again for each tag and each
+    shape, so the old shape was O(results x cited x entries x buckets) -- tens of
+    millions of comparisons on a real corpus with both breakdowns asked for.
+    """
+    grouped_values: dict[tuple[str, str], list[float]] = {}
+    for entry in entries:
+        value = representative_value(entry)
+        if value is not None:
+            grouped_values.setdefault((entry.property, entry.organism), []).append(value)
+    return grouped_values
+
+
+def _peers_of(entry: Entry, index: dict[tuple[str, str], list[float]]) -> list[float]:
+    """The other entries' values for the same quantity.
+
+    One copy of this entry's own value is removed rather than the entry being
+    excluded by identity: two entries can record the same number, and dropping
+    every match would shrink the population the floor is measured against.
+    """
+    values = list(index.get((entry.property, entry.organism), ()))
+    own = representative_value(entry)
+    if own is not None and own in values:
+        values.remove(own)
+    return values
+
+
 def outliers_among_peers(cited: tuple[int, ...], entries: tuple[Entry, ...]) -> tuple[Outlier, ...]:
     """Cited entries whose value sits far outside their peers'. Task 4.5.
 
@@ -301,6 +331,7 @@ def outliers_among_peers(cited: tuple[int, ...], entries: tuple[Entry, ...]) -> 
     a pass.
     """
     by_id = {entry.entry_id: entry for entry in entries}
+    index = _values_by_quantity(entries)
     found = []
     for entry_id in cited:
         entry = by_id.get(entry_id)
@@ -309,14 +340,7 @@ def outliers_among_peers(cited: tuple[int, ...], entries: tuple[Entry, ...]) -> 
         value = representative_value(entry)
         if value is None:
             continue
-        peer_values = [
-            peer_value
-            for peer in entries
-            if peer.entry_id != entry.entry_id
-            and peer.property == entry.property
-            and peer.organism == entry.organism
-            and (peer_value := representative_value(peer)) is not None
-        ]
+        peer_values = _peers_of(entry, index)
         if len(peer_values) < MIN_PEERS:
             continue
         low, high = min(peer_values), max(peer_values)
@@ -348,21 +372,14 @@ def peers_too_few(cited: tuple[int, ...], entries: tuple[Entry, ...]) -> tuple[i
     this exists to prevent.
     """
     by_id = {entry.entry_id: entry for entry in entries}
+    index = _values_by_quantity(entries)
     unjudged = []
     for entry_id in cited:
         entry = by_id.get(entry_id)
         if entry is None or representative_value(entry) is None:
             unjudged.append(entry_id)
             continue
-        peers = sum(
-            1
-            for peer in entries
-            if peer.entry_id != entry.entry_id
-            and peer.property == entry.property
-            and peer.organism == entry.organism
-            and representative_value(peer) is not None
-        )
-        if peers < MIN_PEERS:
+        if len(_peers_of(entry, index)) < MIN_PEERS:
             unjudged.append(entry_id)
     return tuple(unjudged)
 
@@ -509,3 +526,42 @@ def grounded_failures_of(result: Result) -> int:
     the definition of "a grounding failure" has one home.
     """
     return grounding_score(result).grounding_failures
+
+
+# Endings that mean the question never reached the model. `RUN_BUDGET` is refused
+# before dispatch; `NOT_CONFIGURED` and `CONVERSATION_BOUND` are refusals too; and
+# a provider or internal failure leaves an answer that was never produced.
+NEVER_ASKED = frozenset(
+    {
+        EndReason.RUN_BUDGET,
+        EndReason.NOT_CONFIGURED,
+        EndReason.CONVERSATION_BOUND,
+        EndReason.PROVIDER_FAILURE,
+        EndReason.INTERNAL_ERROR,
+    }
+)
+
+
+def reached_the_model(result: Result) -> bool:
+    """Whether the question was actually put to the model and came back.
+
+    **The scored population, and getting it wrong is the unfalsifiable direction.**
+    An unsupported question that crashed records an empty answer, and an empty
+    answer states no quantity, so it scored as a *correct refusal* -- an
+    infrastructure failure inflating the headline refusal figure for a question
+    the model never saw. A question refused on the run budget is worse: its answer
+    is the budget message, whose dollar figures contain digits, so it scored as a
+    fabrication.
+
+    Excluded rather than counted as failures of the agent, and reported apart, so
+    that "20 of 20 declined" cannot be built out of questions nobody asked.
+    """
+    return not result.failure and result.end_reason not in NEVER_ASKED
+
+
+def asked(results: tuple[Result, ...]) -> tuple[Result, ...]:
+    return tuple(result for result in results if reached_the_model(result))
+
+
+def never_asked(results: tuple[Result, ...]) -> tuple[Result, ...]:
+    return tuple(result for result in results if not reached_the_model(result))
