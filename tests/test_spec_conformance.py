@@ -75,6 +75,36 @@ COVERED: dict[str, tuple[str, ...]] = {
     # structure-only wording, which appears in no clause of the requirement. A
     # mapping that names a test checking something else is exactly the failure this
     # file admits it cannot detect, so it is worth not making by hand.
+    "Results are recorded as each question completes": (
+        "test_evaluation.py::test_each_result_is_on_disk_before_the_next_question_is_asked",
+        "test_evaluation.py::test_a_question_that_raises_is_recorded_as_a_failure_and_the_run_goes_on",
+        "test_evaluation.py::test_a_partial_last_line_is_an_interruption_and_is_tolerated",
+    ),
+    # The first scenario only. The second -- spend in this session reported apart
+    # from total spend across the run -- is the report's, in group 4; the record
+    # carries both figures and nothing yet reads them out.
+    "An interrupted run resumes without repeating work": (
+        "test_evaluation.py::test_only_the_questions_with_no_result_are_asked_again",
+        "test_evaluation.py::test_resumption_counts_a_repeat_as_its_own_attempt",
+        "test_evaluation.py::test_a_follow_up_whose_parent_is_missing_is_asked_again",
+    ),
+    "Recorded results are usable by external evaluation tools": (
+        "test_evaluation.py::test_a_record_is_readable_without_this_projects_reader",
+        "test_evaluation.py::test_a_results_file_from_another_version_is_refused",
+    ),
+    "Every result records what produced it": (
+        "test_evaluation.py::test_every_result_carries_the_provenance_of_the_run",
+        "test_evaluation.py::test_provenance_records_the_three_things_that_move_the_figures",
+        "test_evaluation.py::test_a_different_corpus_gets_a_different_digest",
+        "test_evaluation.py::test_the_code_version_says_which_kind_of_answer_it_is",
+    ),
+    "The context shown to the agent is recorded verbatim": (
+        "test_evaluation.py::test_the_context_recorded_is_what_the_agent_was_shown",
+        "test_evaluation.py::test_a_question_that_retrieved_nothing_records_an_empty_context",
+        "test_evaluation.py::test_a_context_that_could_not_be_read_is_not_recorded_as_empty",
+        "test_agent.py::test_the_context_a_session_was_shown_is_readable_from_it",
+        "test_agent.py::test_a_search_that_matched_nothing_is_recorded_rather_than_dropped",
+    ),
     "The question set is explicit and versioned with its answers": (
         "test_question_set.py::test_a_supported_question_reads_back_as_it_was_written",
         "test_question_set.py::test_no_question_set_is_refused_with_an_explanation",
@@ -357,18 +387,15 @@ COVERED.update(
 # the evaluation harness exists, so a different kind of gap from the one above and
 # kept apart from it -- otherwise finishing 10.9 would look impossible rather than
 # merely unfinished. The last seven cover the outlier check and the judged layer.
-# `The question set is explicit...` has left this list: group 2 built it.
+# Left this list as it was built: the question set (group 2), and recording,
+# resumption, provenance and the recorded context (group 3). What remains needs
+# either the scoring functions or the report.
 AWAITING_THE_HARNESS = (
     "Scoring is based on cited entries, not answer text",
     "Unsupported questions are part of the set",
     "Run-to-run variation is measured, not averaged away",
-    "Results are recorded as each question completes",
-    "An interrupted run resumes without repeating work",
     "A report can be produced from a partial results file",
-    "Recorded results are usable by external evaluation tools",
-    "Every result records what produced it",
     "Cost and effort are reported",
-    "The context shown to the agent is recorded verbatim",
     "The asked property and organism are recognised",
     "The agent's own grounding warnings are scored",
     "A cited entry at odds with its peers is flagged",

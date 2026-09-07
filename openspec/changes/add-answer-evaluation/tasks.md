@@ -93,31 +93,46 @@ fixed on that branch; these were deferred deliberately, each to where the materi
   (`kDalton` was added on 2026-09-04), so the same entry can be `NO_CLASSIFIED_UNIT` one week and
   `COMPLETE` the next, and 4.8's per-shape breakdown would mix the two. 3.4's code version covers it
   in a checkout but not in an installed wheel.
-- **Nothing requires a parent to precede its child in the file.** The format permits any order, so
-  3.2 must order the set itself rather than trusting the file's order.
+- ~~**Nothing requires a parent to precede its child in the file.**~~ Answered in 3.2: `in_order`
+  sorts parents before children, and the format still permits any order.
 - **`-p no:deepeval` in `addopts` is global**, so group 6's DeepEval pytest integration
   (`assert_test`, its marker) is off for the whole suite. If 6.3 wants it, override `addopts` in that
   run and write the *whole* expression -- the same trap as `-m`.
 
 ## 3. The driver and its records
 
-- [ ] 3.1 Add one public read on `AskAgent` returning the tool results a session was shown, as plain text
+- [x] 3.1 Add one public read on `AskAgent` returning the tool results a session was shown, as plain text
       per result, tested in the agent's suite against a scripted model
-- [ ] 3.2 Implement the evaluation driver: one session per question, a follow-up in its parent's session,
+- [x] 3.2 Implement the evaluation driver: one session per question, a follow-up in its parent's session,
       outcomes recorded from emitted events, the run stopped when a question ends on the run budget
-- [ ] 3.3 Append each result as its question completes, carrying the question, answer, cited and
+- [x] 3.3 Append each result as its question completes, carrying the question, answer, cited and
       retrieved entries, expected entries, the context shown, the agent's warnings (`CitationWarning`,
       `UngroundedRefusal`), the end reason, spend, and every count `QuestionEnded` carries. Record a failed
       question as a failure and continue
-- [ ] 3.4 Record provenance on every result: model and every `Config` setting that shapes an answer, a
+- [x] 3.4 Record provenance on every result: model and every `Config` setting that shapes an answer, a
       digest of the system prompt, a digest and entry count of the corpus file, the code version (git
       commit, else package version, saying which), and the UTC time
-- [ ] 3.5 Implement resumption against an existing results file, attempting only the questions and
+- [x] 3.5 Implement resumption against an existing results file, attempting only the questions and
       repeats not present; a follow-up whose parent is missing counts as missing
-- [ ] 3.6 Support repeating each question and record the repeat index on every result
+- [x] 3.6 Support repeating each question and record the repeat index on every result
   - Repeated runs are also the baseline a cost-drift alert would need. That alert is out of scope — see
     `add-ask-agent`'s Deferred section, *Alerting on cost drift* — and this task's output is what makes
     it possible.
+  - **Two things came out of building this that were not in the plan.** Each `Retrieval`'s tool and
+    arguments are recorded, because 4.2 scores the asked organism and property from exactly those and a
+    record without them would mean re-asking the whole set to score it. And the recorded context
+    distinguishes `null` from `[]`: the spec requires an empty context to be told apart from one that
+    was not recorded, and collapsing them would make a harness fault look like proof the agent searched
+    for nothing.
+  - Fault-seeded over `evaluation.py` in an isolated copy: eight defects, seven caught. The survivor
+    was resumption keyed on the question alone, ignoring the repeat — every resumption test ran at the
+    default of one repeat, where the mistake cannot show. A run interrupted during the first repeat and
+    resumed asking for three would have recorded one and reported it as three, against the requirement
+    that variation is measured rather than averaged away. Note also that the *first* seed written for
+    it was equivalent (it forced recorded repeats to 1, which is what they were) and passed for the
+    right reason — a seed that survives is a claim about the seed until it is read.
+  - The `run` subcommand landed with the driver rather than waiting for group 4: a driver with no
+    caller cannot be run end to end, and the console script existed already.
 
 ## 4. Scoring that needs no parser, and the report
 

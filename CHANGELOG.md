@@ -12,6 +12,16 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **`scinumbers-eval run`** — asks a question set and appends one record per
+  question as it completes, so an interrupted run keeps everything it finished.
+  Each record carries the question, the answer, the entries cited, retrieved and
+  expected, every retrieval's arguments, the context the agent was actually shown,
+  the agent's own grounding warnings, and what produced it: the model and its
+  settings, a digest of the prompt, a digest and entry count of the corpus, the
+  code version, and the time. Re-running resumes: only the questions and repeats
+  with no result are asked. A question that fails is recorded as a failure and the
+  run carries on; a question that ends on the run budget stops the run and says
+  how many were left unasked.
 - **A question set for evaluating answers**, and `scinumbers-eval check` to
   validate one. Each question records what it asks — the property and the
   organisms, in the corpus's own vocabulary, and more than one of each where the

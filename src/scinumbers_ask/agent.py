@@ -23,6 +23,7 @@ from langchain.agents.middleware import (
 )
 from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import ToolMessage
 from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.checkpoint.sqlite import SqliteSaver
 
@@ -140,6 +141,29 @@ def _text_of(message: object) -> str:
             if isinstance(part, dict) and part.get("type") == "text"
         )
     return ""
+
+
+def _is_tool_result(message: object) -> bool:
+    """Whether a persisted message is a tool result.
+
+    By type rather than by class alone: a checkpoint read back carries whatever the
+    framework serialised, and a version that reconstructs tool results as some
+    other class would silently empty the record of what the agent was shown.
+    """
+    return isinstance(message, ToolMessage) or getattr(message, "type", "") == "tool"
+
+
+def _tool_text(message: object) -> str:
+    """A tool result as text, never silently blank.
+
+    `_text_of` returns "" for content it does not recognise, which is right for an
+    answer -- a blank answer is visible -- and wrong here: this is the record of
+    the evidence, so an unrecognised shape is written out rather than dropped.
+    """
+    content = getattr(message, "content", "")
+    if isinstance(content, str):
+        return content
+    return _text_of(message) or str(content)
 
 
 def default_model(config: Config) -> BaseChatModel:
@@ -404,6 +428,28 @@ class AskAgent:
         with self._saver() as saver:
             persisted = _persisted(saver, session_id)
             return _conversation_size(persisted, persisted.get("messages") or [])
+
+    def tool_results(self, session_id: str) -> tuple[str, ...]:
+        """Every tool result this session was shown, in order, as plain text.
+
+        The evaluation has to record the context the agent actually had, and the
+        session's own transcript is the only thing that is that by construction.
+        Rebuilding it from the entry identifiers in `Retrieval` events would need
+        the tools' private rendering, would drift from it silently the first time
+        that rendering changed, and could not reproduce what a `list_values` call
+        or a "No entries matched" reply put in front of the model.
+
+        Plain text and nothing else, so the message shape stays the agent's own.
+        A caller wanting to know which tool produced which result reads the
+        `Retrieval` events, which carry the tool and its arguments.
+
+        Read straight from the checkpoint, for the reason `conversation_length`
+        gives: constructing an agent to answer this would build a chat model and
+        so demand an API key to answer a question needing no model.
+        """
+        with self._saver() as saver:
+            messages = _persisted(saver, session_id).get("messages") or []
+        return tuple(_tool_text(message) for message in messages if _is_tool_result(message))
 
     @property
     def run_budget(self) -> int:
