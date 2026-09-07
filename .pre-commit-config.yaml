@@ -1,0 +1,25 @@
+# Ruff at every commit, from its own mirror rather than from the project's venv.
+#
+# A `repo: local` hook calling `uv run ruff` was the first idea and is wrong for this
+# repository: it needs a synced project environment in whichever worktree the commit
+# is made from, and this repo is worked in three of them -- one of which has no venv
+# at all -- so committing there would sync the whole langchain stack to check
+# formatting. The mirror builds its own isolated environment from the rev below,
+# needs neither uv nor a venv, and behaves identically in CI and on a fresh clone.
+#
+# `rev` here and the `ruff` pin in pyproject's dev group MUST MOVE TOGETHER. Ruff's
+# formatter output can change between minor releases, so an open range in one place
+# and a pin in the other is churn waiting to happen -- which is exactly how eight
+# files came to be unformatted while `ruff check` stayed green. Both say 0.16.6, and
+# the tree was formatted by 0.16.6; 0.16.3, the version installed when this landed,
+# agrees on every file here, which is how the pin was chosen without a flag day.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.6
+    hooks:
+      # Deliberately no `--fix`. A formatter rewriting layout at commit time is
+      # fine; a linter rewriting logic is an edit nobody read. If `--fix` is ever
+      # wanted, it has to come before the formatter hook -- ruff's own README says
+      # its fixes can produce code that then needs reformatting.
+      - id: ruff-check
+      - id: ruff-format

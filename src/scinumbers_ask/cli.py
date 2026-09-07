@@ -197,6 +197,4 @@ def main(argv: list[str] | None = None) -> None:
 
     print(f"{len(repo)} entries · session {session_id} · {config.model}")
     print("Ask a question, or 'exit'. Continue this session later with --session.")
-    raise SystemExit(
-        run(agent, session_id, _questions_from_terminal(sys.stdout), repo=repo)
-    )
+    raise SystemExit(run(agent, session_id, _questions_from_terminal(sys.stdout), repo=repo))

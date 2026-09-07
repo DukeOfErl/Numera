@@ -209,9 +209,7 @@ def test_no_field_hands_the_model_a_notation_it_is_not_asked_to_write(entries):
     tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), lambda _e: None)}
 
     carrying = [
-        e
-        for e in entries
-        if any(cross_references(getattr(e, f) or "") for f in TEXT_FIELDS)
+        e for e in entries if any(cross_references(getattr(e, f) or "") for f in TEXT_FIELDS)
     ]
     assert carrying, "no entry cites another -- this check cannot fire"
 

@@ -47,7 +47,15 @@ dev = [
     # lines does no test ever run", which is the signature of a real path hidden
     # behind an injected fake.
     "pytest-cov>=5.0",
-    "ruff>=0.16",
+    # Pinned exactly, and the pin is paired: `.pre-commit-config.yaml` names the
+    # same version. Ruff's formatter output can change between minor releases, so a
+    # range here and a pin there means the hook and the venv eventually disagree and
+    # every commit carries reformatting churn. Bump both or neither.
+    "ruff==0.16.6",
+    # So `uv run pre-commit install` works from a synced checkout. Open range on
+    # purpose: this tool runs the hooks, it does not rewrite code, so its version
+    # cannot move formatting under anyone.
+    "pre-commit>=4.0",
 ]
 
 [build-system]

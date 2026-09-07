@@ -180,6 +180,23 @@ that ordering into a blocker found at the end: `rename-to-scinumbers` cannot
 archive until `add-ask-agent` does, and `--skip-specs` is not the way out — it
 archives the change while promoting nothing, which is the only reason to archive.
 
+## Lint and format: automatic, and pinned in two places
+
+`ruff check` and `ruff format` run at every commit through `.pre-commit-config.yaml`, and in CI
+(`.github/workflows/checks.yml`) over the whole tree. A fresh clone or a new worktree needs
+`uv run pre-commit install` once — the hook lives in `.git/hooks`, which worktrees share, so one
+install covers all of them.
+
+**The rev in `.pre-commit-config.yaml` and the `ruff` pin in `pyproject.toml` must move together.**
+Ruff's formatter output can change between minor releases, so a range in one place and a pin in the
+other is how eight files came to be unformatted while `ruff check` stayed green for weeks. The
+pre-commit rev is the arbiter: CI runs the hooks, not the venv's ruff, so a local ruff that has
+wandered is reported rather than silently committing churn.
+
+CI **reports, it does not gate.** Streamlit Cloud deploys a branch tip whether or not the checks
+pass, so a green tick is a smoke alarm and not a lock. It also cannot run the two marked suites,
+which is the point of the paragraph below.
+
 ## Running the tests
 
 A repeated-run harness -- fault seeding, mutation testing -- should exclude the `slow` marker as well, and must write the **whole** expression: `pytest -m "not network and not corpus and not slow"`. A second `-m` replaces `addopts` rather than ANDing with it, so `-m "not slow"` alone re-selects `network` and `corpus` and the run gets *slower* -- silently. 63s becomes 34s written correctly.
