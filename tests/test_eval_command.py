@@ -183,7 +183,7 @@ def test_a_run_without_a_corpus_is_refused_before_a_model_is_built(tmp_path):
     constructed, which is what stops "no corpus" arriving as a missing API key."""
     with pytest.raises(SystemExit) as exit_info:
         main(["run", write_set(tmp_path, SUPPORTED), "--results", str(tmp_path / "r.jsonl")])
-    assert "A run needs a corpus" in str(exit_info.value)
+    assert "run needs a corpus" in str(exit_info.value)
 
 
 def test_both_subcommands_are_offered(capsys):
@@ -191,3 +191,33 @@ def test_both_subcommands_are_offered(capsys):
         main(["--help"])
     out = capsys.readouterr().out
     assert "check" in out and "run" in out
+
+
+def test_a_report_without_a_corpus_is_refused(tmp_path):
+    """Scoring reads the corpus: the outlier check compares an entry with its
+    peers, and the asked-terms score resolves through the repository."""
+    with pytest.raises(SystemExit) as exit_info:
+        main(["report", write_set(tmp_path, SUPPORTED), "--results", str(tmp_path / "r.jsonl")])
+    assert "report needs a corpus" in str(exit_info.value)
+
+
+def test_a_report_on_a_file_that_does_not_exist_says_nothing_is_scored(tmp_path, capsys):
+    """An empty run is not a run of zeros. A report that scored an absent file
+    would print a table of noughts and read as a result."""
+    corpus = write_all_shapes_corpus(tmp_path)
+    questions = [{**SUPPORTED, "expected_entries": [i]} for i in range(1, 7)]
+    for index, question in enumerate(questions, start=1):
+        question["question_id"] = f"q{index}"
+    main(
+        [
+            "report",
+            write_set(tmp_path, *questions),
+            "--corpus",
+            corpus,
+            "--results",
+            str(tmp_path / "absent.jsonl"),
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "No results yet" in out
+    assert "nothing is implied by that" in out

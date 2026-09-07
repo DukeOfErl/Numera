@@ -35,6 +35,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from .corpus import Entry
+from .repository import CorpusRepository
 from .units import dimension
 
 
@@ -382,17 +383,21 @@ def _check_the_set(located: list[tuple[str, Question]]) -> None:
 
 
 def check_against_corpus(questions: tuple[Question, ...], entries: tuple[Entry, ...]) -> None:
-    """Refuse a set whose expected entries are absent, or whose shapes are partial.
+    """Refuse a set the corpus contradicts, reporting every problem at once.
 
-    Two different failures, reported together because a person fixing the set wants
-    both at once: an identifier the corpus does not hold (a stale set, or a typo),
-    and a shape no question in the set exercises.
+    Three different failures, and a person fixing the set wants all of them
+    together: an identifier the corpus does not hold, a shape no question
+    exercises, and an unsupported flag on a question the corpus can answer.
 
-    The shape rule is what stops a set from measuring the happy path alone. Most of
-    the corpus is incomplete in at least one way, so a set drawn only from complete
-    entries says nothing about the behaviour most questions will actually meet.
+    **Reported together rather than one at a time, and that is not only
+    convenience.** Raising on the first found hid the third behind the second: a
+    set of one unsupported question has no expected entries, so it always failed
+    the shape rule, and the flag was never checked at all. An ordering that decides
+    which problem a person is allowed to see is a bug in the checker.
     """
     held = {entry.entry_id: entry for entry in entries}
+    problems: list[str] = []
+
     absent = {
         question.question_id: sorted(set(question.expected_entries) - set(held))
         for question in questions
@@ -400,21 +405,87 @@ def check_against_corpus(questions: tuple[Question, ...], entries: tuple[Entry, 
     }
     if absent:
         listed = "; ".join(f"{qid} expects {ids}" for qid, ids in sorted(absent.items()))
-        raise QuestionSetError(
+        problems.append(
             f"The corpus does not hold every expected entry: {listed}. Either the set "
             f"predates this corpus or an identifier is wrong; nothing can be scored "
             f"against an entry that is not there."
         )
 
+    # Only the identifiers the corpus holds: the absent ones are already reported,
+    # and looking their shapes up would raise instead of adding to the list.
     present: set[EntryShape] = set()
     for question in questions:
         for identifier in question.expected_entries:
-            present |= shapes_of(held[identifier])
+            if identifier in held:
+                present |= shapes_of(held[identifier])
     missing = [shape for shape in EntryShape if shape not in present]
     if missing:
-        raise QuestionSetError(
+        problems.append(
             f"No question's expected entries carry these shapes: "
             f"{[str(shape) for shape in missing]}. The report gives its figures per "
             f"shape, and a shape absent from the set is a figure nobody can read. Add "
             f"a question whose expected entries carry each."
         )
+
+    answerable = _unsupported_the_corpus_can_answer(questions, entries)
+    if answerable:
+        listed = "; ".join(
+            f"{qid} could be answered from {ids}" for qid, ids in sorted(answerable.items())
+        )
+        problems.append(
+            f"A question marked unsupported is one the corpus can answer: {listed}. "
+            f"This is the most expensive mistake a set can carry: the agent answers "
+            f"it correctly and cites, and that is then scored as a fabrication -- the "
+            f"evaluation's most-read figure, wrong for the one reason no reader would "
+            f"suspect. Drop the flag and record the entries, or narrow what the "
+            f"question asks."
+        )
+
+    if problems:
+        raise QuestionSetError("\n\n".join(problems))
+
+
+def _unsupported_the_corpus_can_answer(
+    questions: tuple[Question, ...], entries: tuple[Entry, ...]
+) -> dict[str, list[int]]:
+    """Unsupported questions the corpus does hold entries for. Task 4.11.
+
+    Resolved the way the corpus's own search resolves, so an abbreviated binomial
+    counts -- the same public methods the evaluation's asked-terms score uses,
+    rather than a second rule that would drift from them.
+
+    **The conjunction, not either half.** A question asking for E. coli's nuclear
+    volume resolves to a real property and a real organism and is still
+    unanswerable, because no entry carries both. Refusing on either half alone
+    would reject exactly the questions worth having in the set.
+
+    **Which direction is expensive.** A question wrongly refused here costs one
+    line of the set, edited by the person who is already looking at the file. A
+    question wrongly accepted costs the headline figure of the whole evaluation.
+    So the refusal absorbs the uncertainty, and task 4.10 counts both directions
+    against the first real run.
+    """
+    # Built here rather than taken as an argument: the resolution has to be the
+    # repository's, and a caller holding entries should not have to build one to
+    # validate a set. It is an index over the corpus, built once per check.
+    repo = CorpusRepository(entries)
+    answerable: dict[str, list[int]] = {}
+    for question in questions:
+        if not question.unsupported:
+            continue
+        organisms = {
+            stored for term in question.asked_organisms for stored in repo.resolve_organism(term)
+        }
+        properties = {
+            stored for term in question.asked_properties for stored in repo.resolve_property(term)
+        }
+        if not organisms or not properties:
+            continue
+        found = [
+            entry.entry_id
+            for entry in entries
+            if entry.organism in organisms and entry.property in properties
+        ]
+        if found:
+            answerable[question.question_id] = sorted(found)[:5]
+    return answerable

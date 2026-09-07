@@ -19,7 +19,7 @@ Two branches that each number ADRs from the current highest id will both claim t
 | `add-corpus-ingestion` | `0200`–`0250` — all written |
 | `add-corpus-autobuild` | `0300`–`0340` |
 | `rename-to-scinumbers` | `0400`–`0450` |
-| `add-answer-evaluation` | `0500`–`0550` |
+| `add-answer-evaluation` | `0500`–`0550` — `0500`, `0510`, `0520` written |
 | `add-answer-shape` | `0560`–`0590` |
 
 **This table is the authority, not a scan of `docs/decisions/`.** A scan cannot see uncommitted ADRs on another branch: `git ls-tree` reads committed trees, and each branch is checked out in its own worktree, so a number can be spent and still invisible from here. `add-ask-agent` has written `0100`–`0190` and holds a second range, `0260`–`0290`, because its first block ran out while the change was still open. A block is extended rather than renumbered: the ADRs already written are referenced from code comments and commit messages, and renumbering would break every one of those references to buy contiguity that nothing needs. Its first block was also uncommitted for two sessions, which is how a scan came to report those numbers as free. Never conclude a number is free because no file for it turns up.
@@ -47,10 +47,21 @@ Diagrams — including the agent's graph generated from the compiled object — 
 
 **Ports and adapters.** `agent.py` emits events (`events.py`) and accepts a
 question; it never touches an interface and never blocks for input. `cli.py` and
-`web.py` are adapters over it, and the evaluation harness is the third — it can
-ask a question set and record what came back, but not yet score it. The agent takes no
+`web.py` are adapters over it, and the evaluation harness is the third — it asks
+a question set, records what came back, and reports on it; the judged layer is
+still to come. The agent takes no
 parameter naming its caller, so it cannot behave one way for a person and another
 for a harness (ADR-0110).
+
+**Two modules reach for the ingester, not one.** `autobuild` builds a corpus when
+only an export exists. `evaluation` imports `bionumbers_ingest.guard` to refuse a
+results path git would track: every result carries the retrieval results verbatim,
+so a results file holds corpus text, and that guard is the one thing standing
+between an evaluation and the single irreversible mistake this project can make
+(ADR-0170, ADR-0250). It is imported rather than reimplemented deliberately — two
+copies of that guard would be one that gets fixed and one that does not — and it
+refuses to write at all if the ingester is absent, because the cheap direction for
+an irreversible mistake is to stop.
 
 **The dependency direction is the one rule with teeth.** Adapters may reach into
 the core; the core may not reach back. Nothing in Python enforces this — an
@@ -82,8 +93,10 @@ core, and a test there refuses a name with no file behind it.
 | `messages.py` | Wording both drivers use, and `STOP_THE_RUN` |
 | `cli.py` / `web.py` | The two interactive adapters |
 | `question_set.py` | The evaluation's question set: the format, its reader, and the entry shapes derived from the corpus |
-| `evaluation.py` | The evaluation driver: asks, records one line per result, resumes, and fingerprints what produced each |
-| `eval_cli.py` | The evaluation command (`scinumbers-eval`): `check` and `run` |
+| `evaluation.py` | The evaluation driver: asks, records one line per result, resumes, fingerprints what produced each, and refuses a results path git would track |
+| `scoring.py` | Every score needing no model and no prose parser, as pure functions; the outlier check (ADR-0520) |
+| `report.py` | Figures read out of a results file, never combined across model, prompt or corpus |
+| `eval_cli.py` | The evaluation command (`scinumbers-eval`): `check`, `run` and `report` |
 | `trace.py` | The structured trail, one question id throughout |
 
 **Patterns, named where they are used.** Ports and adapters (above). Repository

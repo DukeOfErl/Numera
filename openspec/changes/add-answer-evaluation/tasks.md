@@ -72,7 +72,8 @@ recorded there rather than here.
 **What the branch review of groups 1-2 left open** (2026-09-04). Everything else it found was
 fixed on that branch; these were deferred deliberately, each to where the material for it exists:
 
-- **Nothing validates `unsupported: true` against the corpus.** The corpus check refuses a stale
+- ~~**Nothing validates `unsupported: true` against the corpus.**~~ Done in 4.11, refusing on the
+  conjunction of a resolved property and a resolved organism. The corpus check refuses a stale
   *supported* identifier and says nothing about a question wrongly marked unsupported. That is the
   expensive direction: the corpus answers it, the agent answers it correctly and cites, and the spec's
   own scenario scores that as a **fabrication** -- the evaluation's headline figure, wrong for the one
@@ -139,46 +140,87 @@ fixed on that branch; these were deferred deliberately, each to where the materi
 Everything in this group reads events, the citation set, the corpus and the question set. Nothing here
 reads a number out of the answer's prose, except 4.3, which only asks whether a digit is present.
 
-- [ ] 4.1 Score by comparing cited entries against expected entries, reporting unexpected citations
+- [x] 4.1 Score by comparing cited entries against expected entries, reporting unexpected citations
       separately rather than as errors, and splitting the expected entries not cited into retrieved and
       passed over versus never retrieved
-- [ ] 4.2 Score whether the agent searched for the asked organism and property — a public resolution
+- [x] 4.2 Score whether the agent searched for the asked organism and property — a public resolution
       method on the repository, the same one `search` uses, applied to each `Retrieval`'s arguments — and
       what fraction of cited entries carry the asked organism and property in their fields; the two
       reported apart
-- [ ] 4.3 Detect a stated quantity from two signals — a parsed citation, and any digit in the prose — and
+- [x] 4.3 Detect a stated quantity from two signals — a parsed citation, and any digit in the prose — and
       score an unsupported question as declined only when neither is present; a quantity given is a
       fabrication, reported apart from citation failures, with every flagged answer listed for reading.
       Deliberately a digit test and not a number parser: the cheap direction is to over-flag
-- [ ] 4.4 Score the agent's own warnings: unretrieved and unknown citations as grounding failures; a
+- [x] 4.4 Score the agent's own warnings: unretrieved and unknown citations as grounding failures; a
       refusal with no retrieval as an ungrounded refusal apart from correctly declined; `claimed_searching`
       counted separately
-- [ ] 4.5 Flag a cited entry that is a distant outlier among the entries for the same property and
+- [x] 4.5 Flag a cited entry that is a distant outlier among the entries for the same property and
       organism, naming its value and the interval its peers occupy, reported for reading and not scored.
       Say in the code which comparison is used and why, and report nothing where a property has too few
       peers to judge
   - This is the check that catches an answer whose every number is correct and correctly attributed and
     whose headline is still the one figure in the corpus that contradicts all its neighbours. It needs
     only the citation set and the corpus. The threshold is an open question in the design.
-- [ ] 4.6 Score follow-up answers on whether they cite in full rather than referring back to an earlier
+- [x] 4.6 Score follow-up answers on whether they cite in full rather than referring back to an earlier
       answer
-- [ ] 4.7 Report the spread across repeats beside the aggregate, and report a question whose cited
+- [x] 4.7 Report the spread across repeats beside the aggregate, and report a question whose cited
       entries differ across repeats as unstable
-- [ ] 4.8 Produce the report from the results file: coverage stated when partial; figures per model, per
+- [x] 4.8 Produce the report from the results file: coverage stated when partial; figures per model, per
       prompt digest and per corpus digest, never combined across any of them, saying when the corpus
       differed; per tag and per entry shape on request; a run stopped on budget distinguished from a
       completed one; cost and tool calls per question and in aggregate; spend in this session apart from
       total spend across a resumed run; how often each ending carried `at_tool_bound`,
       `at_retrieval_bound` or `at_spend_ceiling`
-- [ ] 4.9 Fault-seed and mutation-test the scoring module before the baseline is recorded; it is where a
+- [x] 4.9 Fault-seed and mutation-test the scoring module before the baseline is recorded; it is where a
       wrong figure looks right
-- [ ] 4.11 Validate `unsupported: true` against the corpus, with the same resolution 4.2 uses: a
+  - Fault-seeded: ten defects, eight caught by the test written for each, two survivors and both
+    worth the trip. One showed that `correctly_declined`'s ungrounded-refusal clause is **redundant**
+    against anything the agent can emit — `UngroundedRefusal` means no retrieval happened, so the
+    retrieval count alone carries it. The clause stays, annotated, because scoring reads *files* that
+    another tool or a hand edit can make inconsistent, and a test now covers that record.
+  - The other survivor was the outlier comparison: a median-based rule passed every test, because
+    the yeast population happens to give the same verdict either way. The distinguishing case is peers
+    at 1, 1, 1, 1 and 10, where the median is 1 and a value of 5 sits inside the recorded range — now
+    a test, and the reasoning is ADR-0520.
+  - **A seed that fails to apply reads as a pass.** One seed's text did not match after the formatter
+    reflowed it; the harness printed "56 passed" for a run against pristine source. The assertion in
+    the seeding script is what caught it, and any such harness needs one.
+  - Mutation testing over `scoring.py` is still owed; the module has had fault seeding only.
+- [x] 4.11 Validate `unsupported: true` against the corpus, with the same resolution 4.2 uses: a
       question claiming the corpus cannot answer it, which the corpus can, scores a correct cited answer
       as a fabrication and becomes the evaluation's most-read number. Refuse rather than warn — a
       wrongly refused unsupported question costs one line of the set, a wrongly accepted one costs the
       headline figure — and count both directions. See the review note above group 3
 - [ ] 4.10 On the first run, count both directions of every classifying rule (flagged declines, outlier
       flags, organism misses) and read them against the answers before trusting any figure
+  - **Still open by design: it needs a real run.** Each rule now says in its own docstring which
+    direction it errs and why, and each direction has a test, but a test proves the rule behaves as
+    intended rather than that the intent was right. The three to count: the digit rule for a stated
+    quantity (over-flags — a refusal mentioning any number is marked, and the same rule also drops it
+    from the refusals-that-searched-first count, so two figures move together); the asked-property
+    match (over-credits — a search for "Cell" agrees with an asked "Cell volume"); and the outlier
+    factor of two over a tight interval (over-flags, ADR-0520).
+
+**What the branch review of groups 3-4 found** (2026-09-07). Ten findings, all reproduced, all
+fixed on that branch. Four are worth carrying forward as lessons rather than as history:
+
+- **A results file holds corpus text**, because the recorded context is verbatim by requirement. The
+  default path was not gitignored and nothing in the write path asked, so a `git add -A` after a run
+  would have committed corpus excerpts — the one irreversible mistake this project can make. Fixed by
+  importing the ingester's own guard (ADR-0250) rather than writing a second copy. **Any later
+  artefact of a run — a judgements file, a hand-label file, an exported report — carries the same
+  risk and needs the same guard.**
+- **The append-per-result shape did not survive the interruption it was designed for.** A torn final
+  line was tolerated on read and then concatenated with the next record, silently dropping a
+  paid-for result and eventually making the whole file unreadable. Tolerating a partial read is only
+  half the job; the write has to repair before appending.
+- **A crashed question scored as a correct refusal**, and one refused on the run budget scored as a
+  fabrication — its answer is the budget message, whose dollar figures contain digits. Scoring read
+  `answer` and never `failure` or `end_reason`, so infrastructure failures moved the headline figure
+  in the unfalsifiable direction. `reached_the_model` is now the scored population.
+- **`--by-shape` crashed on every real results file** and no test caught it, because `Result` is
+  unhashable once it carries a retrieval and every synthetic test record had none. A double that is
+  simpler than the real thing in a load-bearing way hides the path it stands in for.
 
 ## 5. The baseline, and reading it
 

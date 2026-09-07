@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from conftest import write_all_shapes_corpus
+from conftest import FIXTURE, write_all_shapes_corpus
 
 from scinumbers_ask.corpus import Entry, load
 from scinumbers_ask.question_set import (
@@ -670,3 +670,72 @@ def test_the_corpus_check_runs_when_the_loader_is_given_a_corpus(tmp_path):
     stale = {**SUPPORTED, "expected_entries": [999999]}
     with pytest.raises(QuestionSetError, match="q1 expects \\[999999\\]"):
         load_question_set(write_set(tmp_path, stale), corpus)
+
+
+# -- 4.11: the unsupported flag, against the corpus ------------------------------
+
+
+def test_an_unsupported_question_the_corpus_can_answer_is_refused(tmp_path):
+    """The most expensive mistake a set can carry.
+
+    The agent answers it correctly and cites, and that is then scored as a
+    fabrication -- the evaluation's most-read figure, wrong for the one reason no
+    reader would suspect. The corpus and the question are both in hand at this
+    moment, so nothing excuses letting it through.
+    """
+    corpus = load(FIXTURE)
+    wrong = Question(
+        question_id="q9",
+        question="How wide is an E. coli cell?",
+        asked_properties=("Cell diameter",),
+        asked_organisms=("E. coli",),
+        unsupported=True,
+    )
+    with pytest.raises(QuestionSetError, match="could be answered from"):
+        check_against_corpus((wrong,), corpus)
+
+
+def test_an_unsupported_question_the_corpus_cannot_answer_passes(tmp_path):
+    """The other direction, and the one that must not be refused: a set without
+    unanswerable questions measures nothing about refusal behaviour."""
+    corpus = load(FIXTURE)
+    fine = Question(
+        question_id="q9",
+        question="How many neoblasts does a planarian have?",
+        asked_properties=("Number of neoblasts",),
+        asked_organisms=("Planarian",),
+        unsupported=True,
+    )
+    _check_shapes_aside(fine, corpus)
+
+
+def test_a_real_property_asked_of_the_wrong_organism_is_still_unsupported(tmp_path):
+    """The conjunction, not either half.
+
+    `Cell volume` is a real property in the fixture and yeast is a real organism,
+    but no entry carries both -- yeast appears only with `Cell diameter`. So the
+    question is genuinely unanswerable, and refusing it would reject exactly the
+    questions the set exists to contain.
+    """
+    corpus = load(FIXTURE)
+    fine = Question(
+        question_id="q9",
+        question="What is the volume of a yeast cell?",
+        asked_properties=("Cell volume",),
+        asked_organisms=("Saccharomyces",),
+        unsupported=True,
+    )
+    _check_shapes_aside(fine, corpus)
+
+
+def _check_shapes_aside(question: Question, corpus) -> None:
+    """Run the corpus check on one unsupported question without the shape rule.
+
+    The shape rule needs a set covering all six shapes, which is a different
+    concern from the flag being right; asserting them together would make either
+    failure look like the other.
+    """
+    with pytest.raises(QuestionSetError) as raised:
+        check_against_corpus((question,), corpus)
+    assert "could be answered from" not in str(raised.value)
+    assert "shapes" in str(raised.value)

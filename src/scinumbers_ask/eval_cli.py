@@ -1,9 +1,10 @@
 """The evaluation command. A third adapter over the agent, alongside `cli` and `web`.
 
-`check` reads a question set and says whether it can be evaluated against; `run`
-asks it and records the results. `report` and `judge` follow, which is why these
-are subcommands rather than a bare path argument -- a positional that means one
-thing today and another next week breaks a script nobody remembers writing.
+`check` reads a question set and says whether it can be evaluated against, `run`
+asks it and records the results, and `report` reads those results back. `judge`
+follows, which is why these are subcommands rather than a bare path argument -- a
+positional that means one thing today and another next week breaks a script
+nobody remembers writing.
 
 The command builds the agent and hands it to the driver, rather than the driver
 building one. That is what lets the driver be tested against a scripted model, and
@@ -20,8 +21,9 @@ from . import autobuild
 from .agent import AskAgent
 from .config import Config, NotConfigured, env_setting, format_usd, refuse_retired_env
 from .corpus import CorpusUnavailable, load
-from .evaluation import ResultsFileError, provenance_for, run_evaluation
+from .evaluation import ResultsFileError, provenance_for, read_results, run_evaluation
 from .question_set import QuestionSetError, load_question_set
+from .report import render
 from .repository import CorpusRepository
 
 PROG = "scinumbers-eval"
@@ -75,6 +77,23 @@ def main(argv: list[str] | None = None) -> None:
         help="where sessions and run spend are persisted; separate from the ask "
         "command's store, so an evaluation does not spend a person's run budget",
     )
+    shown = commands.add_parser("report", help="read a results file and report on it")
+    shown.add_argument("question_set", help="path to the question set (JSONL)")
+    shown.add_argument(
+        "--corpus",
+        default=env_setting("SCINUMBERS_CORPUS"),
+        help="path to the JSONL corpus (or set SCINUMBERS_CORPUS); required here",
+    )
+    shown.add_argument("--results", default="evaluations/results.jsonl")
+    shown.add_argument(
+        "--repeats",
+        type=int,
+        default=1,
+        help="how many repeats the run asked for, so a partial file can say so",
+    )
+    shown.add_argument("--by-tag", action="store_true", help="figures per question tag")
+    shown.add_argument("--by-shape", action="store_true", help="figures per entry shape")
+
     args = parser.parse_args(argv)
 
     try:
@@ -90,10 +109,11 @@ def main(argv: list[str] | None = None) -> None:
         )
         # `None` says "structure only" out loud. The parameter has no default, so a
         # later driver cannot skip the corpus checks by leaving it off.
-        if args.command == "run" and not corpus:
+        if args.command in {"run", "report"} and not corpus:
             raise CorpusUnavailable(
-                "A run needs a corpus: pass --corpus or set SCINUMBERS_CORPUS. "
-                "Checking a question set without one is possible; asking it is not."
+                f"{args.command} needs a corpus: pass --corpus or set "
+                f"SCINUMBERS_CORPUS. Checking a question set without one is "
+                f"possible; asking it, or scoring what it returned, is not."
             )
         entries = load(corpus) if corpus else None
         questions = load_question_set(args.question_set, entries)
@@ -101,7 +121,28 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(f"{PROG}: {exc}") from exc
 
     if args.command == "run":
-        _run(args, questions, corpus)
+        # `entries` rather than the path: `main` has already parsed the corpus for
+        # `check_against_corpus`, and a 20-30 MB file was being read a second time
+        # with both copies alive for the length of the run.
+        _run(args, questions, corpus, entries or ())
+        return
+
+    if args.command == "report":
+        try:
+            results = read_results(args.results)
+        except ResultsFileError as exc:
+            raise SystemExit(f"{PROG}: {exc}") from exc
+        print(
+            render(
+                results,
+                questions,
+                entries or (),
+                repeats=args.repeats,
+                by_tag=args.by_tag,
+                by_shape=args.by_shape,
+            ),
+            end="",
+        )
         return
 
     followups = sum(1 for question in questions if question.follows is not None)
@@ -121,9 +162,8 @@ def main(argv: list[str] | None = None) -> None:
         )
 
 
-def _run(args, questions, corpus: str) -> None:
+def _run(args, questions, corpus: str, entries) -> None:
     """Ask the set and record it. Everything printed here goes to stdout as text."""
-    entries = load(corpus)
     try:
         config = Config.from_env()
     except NotConfigured as exc:
