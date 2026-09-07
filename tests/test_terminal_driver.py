@@ -399,3 +399,29 @@ def test_an_answered_question_exits_zero():
             yield ended(EndReason.ANSWERED)
 
     assert run(Answered(), "s", ["q"], io.StringIO()) == 0
+
+
+def test_a_spent_key_says_whose_it_is_before_the_terminal_exits():
+    """The ending line names a reason and its figures. On this one ending the reader
+    also has to be told the remedy is somebody else's to apply -- otherwise the
+    terminal just stops, and the page and the terminal disagree about a fact."""
+
+    class OutOfCredit:
+        def ask(self, session_id, question):
+            yield ended(EndReason.PROVIDER_LIMIT, incomplete=True)
+
+    out = io.StringIO()
+    assert run(OutOfCredit(), "s", ["q"], out) == 1
+    assert "raise it" in out.getvalue()
+
+
+def test_an_ending_with_no_advice_adds_no_line():
+    """A spent budget needs nothing beyond its ending line: a new run refreshes it."""
+
+    class Spent:
+        def ask(self, session_id, question):
+            yield ended(EndReason.RUN_BUDGET, incomplete=True)
+
+    out = io.StringIO()
+    run(Spent(), "s", ["q"], out)
+    assert out.getvalue().count("\n") == 1, "the ending line and nothing after it"

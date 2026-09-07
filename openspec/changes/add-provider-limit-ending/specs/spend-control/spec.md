@@ -17,8 +17,18 @@ Where the provider refuses a request because the key or account funding it has n
 agent SHALL end the question with a reason distinct from a transient provider failure, and that
 reason SHALL be one after which no further question is accepted.
 
-The ending SHALL be accompanied by an answer stating that a usage limit was reached, that the reader's
-question was not at fault, and that the remedy lies with whoever pays for the deployment.
+Whatever the agent had established before the refusal SHALL be presented, with the ending marked
+incomplete. Only where nothing was established SHALL the agent substitute a statement of its own, and
+that statement SHALL report what happened without asserting who owns the key or who can raise its
+limit — facts about a deployment rather than about the run.
+
+Every driver SHALL tell the reader that the remedy lies with whoever pays for the deployment, in one
+shared wording, and SHALL NOT offer advice that cannot help — a new session reaches the same refusal
+on its first question.
+
+Judgements about an answer's prose — an unsupported citation, an answer not grounded in the corpus —
+SHALL apply only to text the reader was shown, and SHALL NOT be made about a statement the agent
+substituted. Evidence of what retrieval found is not such a judgement and SHALL still be reported.
 
 The agent SHALL NOT retry such a request. Retrying cannot succeed — a key acquires no balance during
 a backoff — and it delays the only sentence the reader can act on.
@@ -34,8 +44,19 @@ same thing again.
 #### Scenario: The key funding a deployment reaches its cap
 - **WHEN** the provider refuses a request because the funding key has no credit left
 - **THEN** the question ends with a reason naming a limit rather than a failure
-- **AND** an answer states what stopped, that the question was not at fault, and what would restart it
-- **AND** no further question is accepted until the limit is raised
+- **AND** the reader is told that the remedy lies with whoever pays for the deployment
+- **AND** no further question is accepted in that session until the limit is raised
+
+#### Scenario: The refusal arrives part-way through a question
+- **WHEN** the agent has already established something citable and the provider then refuses for credit
+- **THEN** what it established is presented rather than discarded
+- **AND** the ending is marked incomplete
+- **AND** the entries retrieved before the refusal are still reported
+
+#### Scenario: Nothing was established before the refusal
+- **WHEN** the provider refuses for credit before the agent has produced any answer text
+- **THEN** the agent's own statement of what happened stands in for the answer
+- **AND** no judgement about an answer's citations or grounding is reported, there being no answer to judge
 
 #### Scenario: A credit refusal is not retried
 - **WHEN** the provider refuses a request for lack of credit

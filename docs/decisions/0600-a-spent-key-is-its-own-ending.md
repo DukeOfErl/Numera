@@ -41,10 +41,38 @@ refusal already is not: the key does not acquire a balance during the backoff, s
 retrying buys the reader seconds of waiting for a sentence that was available
 immediately.
 
-The ending is accompanied by an `Answer` carrying the sentence — what stopped,
-what would restart it, and that it was not the reader's question — rather than
-leaving the ending line to imply it. This follows the run-budget refusal, which
-does the same thing for the same reason.
+**The answer stays the model's.** Whatever text the model had produced is
+presented and the ending marks it incomplete, exactly as the spend-ceiling branch
+beside it does — and this is the branch where that matters most, because a balance
+usually runs out part-way through a question whose earlier hops were already paid
+for, which makes the discarded-answer case the common one rather than the corner.
+Only where there is no text does the agent substitute a sentence of its own, and
+that sentence states the fact — the provider refused the request because the key or
+account funding it has no credit left — without saying whose key it is.
+
+**What to do about it is the drivers' sentence, not the agent's.** Which key, whose
+money, and who can top it up are facts about a *deployment*: the agent has no
+standing to assert them, and a developer running this locally would be told to
+contact themselves. `messages.run_over_advice(reason)` carries the wording, shared
+for the reason the rest of that module is — the terminal and the page are answering
+one question, "may I ask again, and if not what would help", and two drivers
+phrasing that differently are two claims about one fact. It is keyed per reason and
+returns `None` for every ending whose existing wording is already right.
+
+That also repairs a banner this change would otherwise have broken. The page's line
+for a closed run is "start a new session to continue", which is true of a spent
+budget and false of a spent key — the next session's first question meets the same
+refusal — and the banner is the last thing on screen, so it outranks the answer
+that has just said otherwise.
+
+**Judgements about prose apply only to prose the reader saw.** `evidence()` takes
+`judge_the_prose=False` where the answer shown is the agent's substitute. Run over
+a substitute it reported on writing that was never on screen: a citation warning
+naming an entry the discarded text had cited, or "this answer is not grounded in
+the corpus — it says only what the model expected to find" about a system notice,
+with `answer.ungrounded` in the trail for a question the model never answered. The
+entries table is not a judgement about prose and is still emitted, because what
+retrieval found before the stop was paid for too.
 
 Detection reads `status_code == 402` and nothing else, deliberately not the
 message text: the wording belongs to the provider and a rule matching on prose
@@ -57,15 +85,29 @@ directions do not cost the same. A transient failure misread as a spent key clos
 the run for everyone on a reason that was not true; a spent key misread as a
 transient failure costs one pointless retry and then says the same thing again. So
 the rule is deliberately narrow — an unambiguous 402, nothing inferred — and the
-cheap direction absorbs the uncertainty. Both directions are asserted:
-`test_a_key_out_of_credit_says_what_happened_and_stops_the_run` covers the
-under-flagging side, and `test_exhausted_retries_end_the_question_as_a_provider_failure`
-now asserts that an outage does *not* end up in `STOP_THE_RUN`. Seeding each
-mutation of the rule into a copy fails exactly one of those two.
+cheap direction absorbs the uncertainty.
 
-What is given up: a 402 that a provider ever returns for something *other* than
-credit would be reported as a spent key, and the run would close on it. Nothing in
+**Both directions are asserted, and the first version of this ADR claimed that
+before it was true.** The negative cases were `RuntimeError` and `TimeoutError`,
+neither of which carries a status at all, so nothing distinguished "status is 402"
+from "has a status": a review seeded `status_code is not None` and the whole suite
+passed, under which an ordinary 429 rate limit or a 502 would close the run for
+every reader — the exact failure this section says is covered. The negatives are now
+real `openai.APIStatusError`s at 429, 502 and 401, and three mutations of the rule
+each die against the test that should catch them (`return False` the out-of-credit
+tests, `return True` the exhausted-retries one, `status_code is not None` the
+attribute test). The lesson is narrower than "test both directions": a negative case
+has to differ from the positive one *in the dimension the rule reads*.
+
+What is given up: a 402 that a provider ever returns for something other than credit
+would be reported as a spent key, and the run would close on it. Nothing in
 OpenRouter's documented codes does that today.
+
+**The door is shut per session, not per deployment.** `run_is_over` reads the
+transcript in Streamlit's session state, so a reader who opens a new tab may ask
+once more — and immediately gets the same refusal and the same advice. Closing it
+process-wide means shared state between sessions, which this build does not have;
+the spec is written to the behaviour rather than the intention.
 
 `status_code` is an attribute of the provider's own error type, which this project
 does not own. `test_the_attribute_this_rule_reads_is_on_the_provider_s_own_error`

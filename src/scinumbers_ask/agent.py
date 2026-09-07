@@ -616,7 +616,7 @@ class AskAgent:
             # reader met them in, and the order the table falls back to.
             retrieved = _Retrieved()
 
-            def evidence() -> Iterator[Event]:
+            def evidence(judge_the_prose: bool = True) -> Iterator[Event]:
                 """What the answer rests on, and anything it should not rest on.
 
                 Emitted before every ending that got as far as retrieving, a limit
@@ -628,8 +628,18 @@ class AskAgent:
                 where it matters most: a search that matched nothing, followed by an
                 answer citing an entry no tool call returned, is the model answering
                 from its own memory -- and it was reported as a clean answer.
+
+                `judge_the_prose=False` for an ending whose answer is this module's
+                own sentence rather than the model's text. Both prose judgements
+                describe what the reader was shown, so run over a substitute they
+                report on writing that was never on screen: a citation warning
+                accusing invisible text, or "this answer is not grounded in the
+                corpus" about a notice that was never an answer -- with
+                `answer.ungrounded` in the trail for a question the model never
+                answered. The entries are not a judgement about prose and are still
+                emitted: what retrieval found before the stop is worth showing.
                 """
-                cited = citations(answer_text, trace=trace)
+                cited = citations(answer_text, trace=trace) if judge_the_prose else ()
                 unknown = tuple(b for b in cited if self._repo.get(b) is None)
                 unretrieved = tuple(
                     b for b in cited if b not in unknown and b not in retrieved.entry_ids
@@ -645,6 +655,10 @@ class AskAgent:
                         unretrieved=unretrieved,
                     )
                 if not (retrieved.entry_ids or retrieved.searches or cited):
+                    if not judge_the_prose:
+                        # Nothing retrieved and no answer of the model's to judge.
+                        # An empty entries table says nothing a reader needs.
+                        return
                     # Nothing retrieved, nothing searched, nothing cited. The table
                     # is right to stay empty -- there is no evidence to show -- but
                     # the answer is not therefore fine: it describes the corpus
@@ -807,22 +821,31 @@ class AskAgent:
                             reason=reason.value,
                         )
                         if reason is EndReason.PROVIDER_LIMIT:
-                            # Said as an answer rather than left to the ending line,
-                            # which carries a reason and figures. A reader who has
-                            # just lost the ability to ask needs the sentence: what
-                            # stopped, what would restart it, and that it was not
-                            # their question. Same shape as the run budget's refusal.
+                            # Whatever the model had established is presented, and
+                            # the ending marks it incomplete -- the reasoning the
+                            # spend limit above states, and this is the branch it
+                            # matters most in: the balance usually runs out part-way
+                            # through a question whose earlier hops were paid for,
+                            # so discarding the text is the common case rather than
+                            # the corner one.
+                            #
+                            # What to *do* about a spent key is not the agent's to
+                            # say: which key, whose money, and who can raise it are
+                            # facts about a deployment. `messages.run_over_advice`
+                            # carries that sentence and both drivers render it.
+                            partial = answer_text.strip()
                             yield Answer(
                                 question_id=trace.question_id,
-                                text=(
-                                    "The API key funding this app has reached its usage "
-                                    "limit, so no further question can be answered — "
-                                    "nothing is wrong with your question. Model usage "
-                                    "here is paid for by whoever deployed the app; ask "
-                                    "them to raise the limit."
+                                text=partial
+                                or (
+                                    "I could not answer this: the provider refused the "
+                                    "request because the key or account funding it has no "
+                                    "credit left."
                                 ),
                             )
-                        yield from evidence()
+                            yield from evidence(judge_the_prose=bool(partial))
+                        else:
+                            yield from evidence()
                         yield QuestionEnded(
                             question_id=trace.question_id,
                             reason=reason,

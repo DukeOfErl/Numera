@@ -151,6 +151,9 @@ class Item:
     # shaped this way (ADR-0100): whether the run is over is a decision, and a
     # test can read it off an item where it cannot read it off a drawn page.
     ends_the_run: bool = False
+    # Decided here for the same reason, and carried rather than looked up later: the
+    # ending's reason is available at this point and gone by the time the page draws.
+    stop_advice: str = ""
     run_spend: int = 0
     run_budget: int = 0
 
@@ -186,6 +189,7 @@ def item_for(event: Event, repo: CorpusRepository | None = None) -> Item | None:
             Kind.ENDING,
             messages.ending_text(event),
             ends_the_run=event.reason in messages.STOP_THE_RUN,
+            stop_advice=messages.run_over_advice(event.reason) or "",
             run_spend=event.run_spend,
             run_budget=event.run_budget,
         )
@@ -514,6 +518,24 @@ def run_is_over(transcript: Iterable[tuple[str, list[Item]]]) -> bool:
     return any(
         item.ends_the_run for _, items in transcript for item in items if item.kind is Kind.ENDING
     )
+
+
+def run_over_advice(transcript: Iterable[tuple[str, list[Item]]]) -> str:
+    """What to say about the ending that shut the door, or "" for nothing to add.
+
+    The page's own line -- start a new session -- is right for a spent budget and a
+    full conversation, and wrong for a key with no credit: the new session's first
+    question meets the same refusal. So the ending that stopped the run gets to
+    replace it.
+
+    The first such ending, not the last: it is the one that closed the run, and
+    whatever ended a question after that describes a run that was already over.
+    """
+    for _, items in transcript:
+        for item in items:
+            if item.kind is Kind.ENDING and item.ends_the_run and item.stop_advice:
+                return item.stop_advice
+    return ""
 
 
 def run_status(

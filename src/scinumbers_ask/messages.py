@@ -51,6 +51,37 @@ STOP_THE_RUN = frozenset(
 )
 
 
+# What to do about a shut door, where "start a new session" is the wrong answer.
+#
+# Each driver has its own generic line for a run that is over, and for a spent run
+# budget or a full conversation that line is right: a fresh session does refresh
+# both. A key with no credit is different in kind -- the next session's first
+# question meets the same refusal -- so the generic advice sends the reader round a
+# loop, and it is the last thing on screen, under an answer that has just told them
+# the opposite.
+#
+# Shared for the reason the rest of this module is: the terminal and the page are
+# answering one question, "may I ask again, and if not what would help", and two
+# drivers phrasing that differently are two claims about one fact.
+RUN_OVER_ADVICE: dict[EndReason, str] = {
+    EndReason.PROVIDER_LIMIT: (
+        "This app pays for its own model calls, and the key funding them has reached "
+        "its usage limit — so a new session will not help. Ask whoever deployed the app "
+        "to raise it."
+    ),
+}
+
+
+def run_over_advice(reason: EndReason) -> str | None:
+    """What a driver should say about this ending, beyond its own generic line.
+
+    `None` for every ending with no advice of its own, which is most of them: a
+    driver falls back to its own wording rather than being handed a sentence for a
+    case where its existing one is already correct.
+    """
+    return RUN_OVER_ADVICE.get(reason)
+
+
 def warning_text(event: Event) -> str | None:
     """The sentence for a warning event, or None if the event is not one."""
     if isinstance(event, ConversationWarning):

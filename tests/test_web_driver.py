@@ -818,6 +818,22 @@ def test_a_question_stopped_on_its_own_ceiling_does_not_stop_the_run():
     assert not web.run_is_over([("q", [item])])
 
 
+def test_a_spent_key_replaces_the_start_a_new_session_advice():
+    """The banner is the last thing on screen, so wrong advice there outranks the
+    answer above it -- and a new session's first question meets the same refusal."""
+    item = web.item_for(ending(EndReason.PROVIDER_LIMIT))
+    advice = web.run_over_advice([("q", [item])])
+    assert "new session will not help" in advice
+    assert "raise it" in advice
+
+
+def test_an_ending_with_no_advice_of_its_own_leaves_the_page_its_own_line():
+    """Most endings need nothing extra: a fresh session does refresh a spent budget
+    and a full conversation, so the page's own wording is already right."""
+    assert web.run_over_advice([("q", [web.item_for(ending(EndReason.RUN_BUDGET))])]) == ""
+    assert web.run_over_advice([("q", [web.item_for(ending(EndReason.ANSWERED))])]) == ""
+
+
 def test_the_run_budget_shown_is_the_one_the_run_was_measured_against():
     """Read off the ending rather than out of configuration, so a session resumed
     in a differently-configured process reports the cap it is actually subject to."""

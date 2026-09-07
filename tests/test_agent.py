@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import pytest
 from conftest import agent_with, run
+from langchain_core.messages import AIMessage
 
 from agent_doubles import (
     OutOfCreditModel,
     batched_tool_calls,
     costing,
     out_of_credit_error,
+    provider_error,
     says,
     scripted,
     tool_call,
@@ -20,10 +22,12 @@ from scinumbers_ask.config import Config, usd
 from scinumbers_ask.events import (
     Answer,
     AnswerEntries,
+    CitationWarning,
     EndReason,
     QuestionEnded,
     QuestionStarted,
     Retrieval,
+    UngroundedRefusal,
 )
 
 # -- the event contract ---------------------------------------------------
@@ -144,11 +148,56 @@ def test_a_key_out_of_credit_says_what_happened_and_stops_the_run(repo, config, 
     # Asking again cannot come out differently until somebody pays.
     assert end.reason in messages.STOP_THE_RUN
     answer = next(e for e in events if isinstance(e, Answer))
-    assert "usage limit" in answer.text
-    assert "nothing is wrong with your question" in answer.text
+    # The agent reports the fact. What to *do* about it -- whose key, who can raise
+    # it -- is a fact about a deployment, so it is the drivers' sentence:
+    # `test_terminal_driver` and `test_web_driver` asserts each renders it.
+    assert "no credit left" in answer.text
+    assert messages.run_over_advice(EndReason.PROVIDER_LIMIT), "the drivers need the advice"
     # Not retried: the key does not acquire a balance during the backoff, and the
     # reader would wait out the full delay for the same sentence.
     assert model.attempts == 1
+
+
+def test_a_key_out_of_credit_keeps_the_answer_it_had_already_paid_for(repo, config, tmp_path):
+    """The balance usually runs out part-way through, not before the first call.
+
+    This branch used to yield a canned notice *as* the answer, discarding whatever
+    the model had established -- the opposite of what every other early ending in
+    the same loop does, and on the shape of failure that happens most.
+    """
+    model = OutOfCreditModel(
+        responses=[
+            AIMessage(
+                content="Cell diameter is about 1.0–1.1 μm [[100002]].",
+                tool_calls=[{"name": "search_entries", "args": {"property": "Cell"}, "id": "c1"}],
+            )
+        ],
+        refuse_after=1,
+    )
+    events = run(agent_with(repo, config, tmp_path, model), "s1", "How wide is E. coli?")
+    answer = next(e for e in events if isinstance(e, Answer))
+    assert "1.0–1.1 μm" in answer.text, "the model's own text, not a notice replacing it"
+    assert events[-1].reason is EndReason.PROVIDER_LIMIT
+    assert events[-1].incomplete is True
+    # The entries it did retrieve are still shown: work already paid for.
+    assert any(isinstance(e, AnswerEntries) for e in events)
+
+
+def test_nothing_is_judged_about_prose_the_reader_never_saw(repo, config, tmp_path):
+    """With no answer of the model's, the notice stands in -- and is not analysed.
+
+    Judged, it produced accusations about invisible text: a citation warning naming
+    an entry the discarded prose had cited, or "this answer is not grounded in the
+    corpus -- it says only what the model expected to find" about a system notice,
+    with `answer.ungrounded` in the trail for a question the model never answered.
+    """
+    model = OutOfCreditModel(responses=[says("never reached")])
+    events = run(agent_with(repo, config, tmp_path, model), "s1", "q")
+    answer = next(e for e in events if isinstance(e, Answer))
+    assert "no credit left" in answer.text
+    assert not any(isinstance(e, (CitationWarning, UngroundedRefusal)) for e in events)
+    # Nothing was retrieved either, so an entries table would say nothing at all.
+    assert not any(isinstance(e, AnswerEntries) for e in events)
 
 
 def test_the_attribute_this_rule_reads_is_on_the_provider_s_own_error(repo, config, tmp_path):
@@ -162,8 +211,13 @@ def test_the_attribute_this_rule_reads_is_on_the_provider_s_own_error(repo, conf
     from scinumbers_ask.agent import _is_out_of_credit
 
     assert _is_out_of_credit(out_of_credit_error())
-    # Conservative in the direction that matters: anything not unambiguously a 402
-    # stays an ordinary provider failure.
+    # The expensive direction, and it needs errors that *have* a status: with only
+    # status-less exceptions here, a rule reading `status_code is not None` passed
+    # the whole suite -- and under it a rate limit or a bad gateway would close the
+    # run for every reader. 429 and 502 are the two this would actually meet.
+    assert not _is_out_of_credit(provider_error(429, "Rate limited"))
+    assert not _is_out_of_credit(provider_error(502, "Bad gateway"))
+    assert not _is_out_of_credit(provider_error(401, "Invalid credentials"))
     assert not _is_out_of_credit(RuntimeError("upstream unavailable"))
     assert not _is_out_of_credit(TimeoutError())
 
