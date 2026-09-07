@@ -36,6 +36,12 @@ recorded there rather than here.
     installed ad hoc and are in no extra or group. Nothing here needs them, but a mutation run does:
     reinstall before reaching for the `mutation-test-module` skill.
 
+- [x] 1.5 Run an adversarial code review of the branch before merging it, and act on what it
+      finds in the same branch. **Not optional and not a formality**: the review of groups 1-2
+      found a reproducible crash, a shape that called a hedged value complete, a format that
+      could not express a question kind the spec requires, and a conformance mapping that
+      over-claimed — all in code that had already passed fault seeding and mutation testing
+
 ## 2. The question set
 
 - [x] 2.1 Define the question set format (JSONL, ADR-0220): identifier, question, the property and
@@ -100,6 +106,8 @@ fixed on that branch; these were deferred deliberately, each to where the materi
   (`assert_test`, its marker) is off for the whole suite. If 6.3 wants it, override `addopts` in that
   run and write the *whole* expression -- the same trap as `-m`.
 
+- [x] 2.4 Review the branch before merging (see 1.5)
+
 ## 3. The driver and its records
 
 - [x] 3.1 Add one public read on `AskAgent` returning the tool results a session was shown, as plain text
@@ -134,6 +142,8 @@ fixed on that branch; these were deferred deliberately, each to where the materi
     right reason — a seed that survives is a claim about the seed until it is read.
   - The `run` subcommand landed with the driver rather than waiting for group 4: a driver with no
     caller cannot be run end to end, and the console script existed already.
+
+- [x] 3.7 Review the branch before merging (see 1.5)
 
 ## 4. Scoring that needs no parser, and the report
 
@@ -185,7 +195,17 @@ reads a number out of the answer's prose, except 4.3, which only asks whether a 
   - **A seed that fails to apply reads as a pass.** One seed's text did not match after the formatter
     reflowed it; the harness printed "56 passed" for a run against pristine source. The assertion in
     the seeding script is what caught it, and any such harness needs one.
-  - Mutation testing over `scoring.py` is still owed; the module has had fault seeding only.
+  - **Mutation testing, done 2026-09-07: 338 mutants, 57 survivors on the first pass and most of them
+    real** — which is the strongest evidence yet that the two instruments find different things.
+    Fault seeding had passed over every one. `bounds_reached` had no direct test at all; each part of
+    the provenance carried "never combine two runs" alone, so nulling any one merged runs that differ
+    in it; the `property` key was read from a retrieval by a literal no test exercised; a one-sided
+    range was never given to `representative_value`, which would have raised on it; `MIN_PEERS` was
+    never tested at exactly the floor; and every `continue` in the peer functions could be a `break`,
+    silencing the outlier check for everything cited after the first unjudgeable entry. It also found
+    `Outlier.peer_median` — a field with no reader, left from the median form ADR-0520 rejected — now
+    removed. 25 survivors left, all sentinel permutations or constructor fields the properties do not
+    read; zero control-flow flips.
 - [x] 4.11 Validate `unsupported: true` against the corpus, with the same resolution 4.2 uses: a
       question claiming the corpus cannot answer it, which the corpus can, scores a correct cited answer
       as a fabrication and becomes the evaluation's most-read number. Refuse rather than warn — a
@@ -221,6 +241,9 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
 - **`--by-shape` crashed on every real results file** and no test caught it, because `Result` is
   unhashable once it carries a retrieval and every synthetic test record had none. A double that is
   simpler than the real thing in a load-bearing way hides the path it stands in for.
+
+- [x] 4.12 Review the branch before merging (see 1.5). The review of groups 3-4 found ten
+      defects, including a results file that would have committed corpus text
 
 ## 5. The baseline, and reading it
 
@@ -260,6 +283,10 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     This population has been measured three times, 1,716 → 1,222 → 1,445, and a flag is only ever as
     good as the tokenizer under it; keep that lesson in the report.
 
+- [ ] 5.6 Review the branch before merging (see 1.5). Give the reviewer the *question set and the
+      baseline* as well as the code: a set that measures the wrong thing is not a defect any test
+      can see
+
 ## 6. The judged layer
 
 Gated on group 5, and on 5.4 in particular: the judge is validated against the hand labels, not against
@@ -287,6 +314,9 @@ a checker (ADR-0510).
 - [ ] 6.8 Set the floor from what 6.7 shows, not from the design's placeholder, and write an ADR only if
       the reading changes a decision
 
+- [ ] 6.8 Review the branch before merging (see 1.5). The judge is the component whose output a
+      reader is least able to check, so brief the reviewer on the agreement gate specifically
+
 ## 7. Documentation and conformance
 
 - [ ] 7.1 `README.md`: how to run an evaluation, resume one, judge one, and read the report — the task
@@ -299,3 +329,6 @@ a checker (ADR-0510).
 - [ ] 7.5 `tests/test_spec_conformance.py`: map every requirement in `answer-evaluation` to the test that
       asserts it, retiring the gap entries this change added, in the same commits as the tests
 - [ ] 7.6 Reconcile the ADR block against `CLAUDE.md` before archiving
+
+- [ ] 7.7 Review the whole change before archiving: the specs against the code that claims to
+      satisfy them, not only the last group's diff (see 1.5)

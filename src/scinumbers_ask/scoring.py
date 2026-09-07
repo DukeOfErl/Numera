@@ -19,7 +19,6 @@ first real run rather than trusting the choice.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from statistics import median
 
 from .citations import citations
 from .corpus import Entry
@@ -261,7 +260,6 @@ class Outlier:
     peers: int
     peer_low: float
     peer_high: float
-    peer_median: float
     #: How far outside the peers' interval it sits, as a factor. Above 1 by
     #: construction: at or below the factor it would not be reported.
     outside_by: float
@@ -357,7 +355,6 @@ def outliers_among_peers(cited: tuple[int, ...], entries: tuple[Entry, ...]) -> 
                 peers=len(peer_values),
                 peer_low=low,
                 peer_high=high,
-                peer_median=median(peer_values),
                 outside_by=outside,
             )
         )

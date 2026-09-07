@@ -543,6 +543,11 @@ def test_a_results_file_git_would_track_is_refused_before_it_is_written(tmp_path
     The guard is on the write, not on the command: a second driver would otherwise
     route around the one irreversible mistake this project can make.
     """
+    if not Path(".git").exists():
+        # The assertion is "git would track this", so it needs a repository to be
+        # about. Skipped rather than passed vacuously: an exported tarball, and the
+        # throwaway copy a mutation run works in, are both trees without one.
+        pytest.skip("not a git checkout, so there is no tracking to refuse")
     tracked = Path("src") / "scinumbers_ask" / "leaked-results.jsonl"
     with pytest.raises(ResultsWouldBeCommitted, match="git would track"):
         append_result(tracked, a_result("q1"))

@@ -4,6 +4,30 @@ Every assertion here comes from a requirement or from the rule's own stated
 direction of error, never from running the function and writing down what it said.
 Where a rule classifies, both directions are tested -- the one it is meant to catch
 and the one it must not.
+
+**Mutation testing, 2026-09-07: 338 mutants, 25 knowingly left alive.** The first
+run had 57 survivors and most were real -- fault seeding had passed over all of
+them, because a seed encodes a belief and nobody had a belief about, for instance,
+`bounds_reached` having no direct test at all. What it found: every field of the
+event `bounds_reached` rebuilds could be nulled; each part of the provenance
+carried "never combine two runs" alone, so nulling any one merged runs that differ
+in it; the `property` key was read from a retrieval by a literal no test
+exercised; a one-sided range was never given to `representative_value`, which
+would have raised on it; `MIN_PEERS` was never tested at exactly the floor; and
+every `continue` in the two peer functions could be a `break`, which would have
+silenced the outlier check for everything cited after the first entry it could not
+judge. It also found a field with no reader at all -- `Outlier.peer_median`, left
+over from the median comparison ADR-0520 rejected -- which is now gone.
+
+The 25 that remain, and why each is not worth a test: thirteen permute the
+sentinel strings in the no-provenance fallback, where the contract is that the
+group is *distinct* and not what it is called; five null fields of the event
+`bounds_reached` rebuilds that its three properties do not read, and the
+constructor requires them; two rewrite a `dict.get` default that cannot be reached,
+since the index is built from the same entries the lookup keys come from; two turn
+a `False` initialiser into `None`, which is falsy either way; and the rest are
+equivalent boolean rewrites. Zero control-flow flips survive, which is the line
+worth holding.
 """
 
 from __future__ import annotations
@@ -12,7 +36,7 @@ import pytest
 from conftest import FIXTURE
 
 from scinumbers_ask.corpus import Entry, load
-from scinumbers_ask.evaluation import Result
+from scinumbers_ask.evaluation import Provenance, Result
 from scinumbers_ask.question_set import Question
 from scinumbers_ask.repository import CorpusRepository
 from scinumbers_ask.scoring import (
@@ -20,10 +44,13 @@ from scinumbers_ask.scoring import (
     OUTLIER_FACTOR,
     Spread,
     asked_terms,
+    bounds_reached,
     citation_score,
     cites_in_full,
     correctly_declined,
     grounding_score,
+    group_of,
+    grouped,
     outliers_among_peers,
     peers_too_few,
     quantity_score,
@@ -33,9 +60,27 @@ from scinumbers_ask.scoring import (
     unsupported_score,
 )
 
+A_PROVENANCE = Provenance(
+    recorded_at="2026-09-07T09:00:00+00:00",
+    model="fake/model",
+    question_ceiling=600_000,
+    run_budget=1_200_000,
+    run_label="test",
+    prompt_digest="prompt0000000001",
+    corpus_digest="corpus0000000001",
+    corpus_entries=6,
+    code_version="git abc1234",
+)
+
 
 def a_result(**kwargs) -> Result:
-    base = dict(question_id="q1", repeat=1, question="how big?", answer="an answer")
+    base = dict(
+        question_id="q1",
+        repeat=1,
+        question="how big?",
+        answer="an answer",
+        provenance=A_PROVENANCE,
+    )
     base.update(kwargs)
     return Result(**base)
 
@@ -416,3 +461,212 @@ def test_each_question_is_reported_separately():
     reported = {item.question_id: item for item in stability(results)}
     assert reported["q1"].unstable
     assert not reported["q2"].unstable
+
+
+# -- What mutation testing found -------------------------------------------------
+
+
+def test_a_matching_property_argument_counts_as_looking_for_the_property():
+    """The `property` key was read from the retrieval by a literal no test
+    exercised: every test here searched by *keyword*, or by a property that was
+    meant not to match. Rewriting the literal to nonsense changed nothing."""
+    repo = CorpusRepository(load(FIXTURE))
+    result = a_result(retrievals=({"tool": "search_entries", "property": "Cell diameter"},))
+    assert asked_terms(result, a_question(), repo).searched_property
+
+
+def test_the_grounding_score_carries_every_signal_the_agent_emitted():
+    """Each field was a pass-through that no assertion read, so any of them could
+    have been dropped. `ungrounded_refusal` in particular decides whether a
+    refusal can be a correct decline."""
+    result = a_result(
+        ungrounded_refusal=True,
+        claimed_searching=True,
+        retrievals=({"tool": "search_entries"}, {"tool": "list_values"}),
+    )
+    scored = grounding_score(result)
+    assert scored.ungrounded_refusal is True
+    assert scored.claimed_searching is True
+    assert scored.retrievals == 2
+
+
+def test_stability_reports_the_entries_each_repeat_cited():
+    """The verdict is the headline and the sets are the evidence for it; a reader
+    told "unstable" and shown nothing cannot act on it."""
+    results = (a_result(repeat=1, cited=(1, 2)), a_result(repeat=2, cited=(1,)))
+    (reported,) = stability(results)
+    assert reported.cited_sets == ((1, 2), (1,))
+
+
+def test_each_bound_is_read_from_the_endings_own_definition():
+    """`bounds_reached` had no direct test at all -- the only assertions were on
+    the report's rendering of it, so every field of the event it rebuilds could
+    have been dropped or nulled."""
+    at_tools = a_result(tool_calls=20, tool_call_limit=20)
+    at_calls = a_result(model_calls=12, call_limit=12)
+    at_spend = a_result(spend=600_000, spend_ceiling=600_000)
+    assert bounds_reached(at_tools).at_tool_bound
+    assert bounds_reached(at_calls).at_retrieval_bound
+    assert bounds_reached(at_spend).at_spend_ceiling
+
+
+def test_room_to_spare_is_not_reported_as_a_bound():
+    """The other direction, and the one that matters: an answer produced with room
+    left is a different thing from one produced at a limit, and reporting every
+    answer as bounded would retire the distinction."""
+    with_room = a_result(
+        tool_calls=3,
+        tool_call_limit=20,
+        model_calls=2,
+        call_limit=12,
+        spend=1_000,
+        spend_ceiling=600_000,
+    )
+    reached = bounds_reached(with_room)
+    assert not (reached.at_tool_bound or reached.at_retrieval_bound or reached.at_spend_ceiling)
+
+
+def test_a_bound_of_zero_is_not_a_bound_that_was_reached():
+    """An unrecorded limit reads as zero, and `0 >= 0` would report every question
+    as having exhausted a limit nobody set."""
+    unrecorded = a_result(tool_calls=0, tool_call_limit=0, model_calls=0, call_limit=0)
+    reached = bounds_reached(unrecorded)
+    assert not (reached.at_tool_bound or reached.at_retrieval_bound)
+
+
+def test_a_result_with_no_provenance_is_never_grouped_with_one_that_has_it():
+    """A record that cannot say what produced it cannot be compared with one that
+    can, so it gets its own group instead of joining any other -- the alternative
+    is averaging it into figures it may not belong to."""
+    known = a_result(provenance=A_PROVENANCE)
+    unknown = a_result(question_id="q2", provenance=None)
+    groups = grouped((known, unknown))
+    assert len(groups) == 2
+    assert group_of(unknown) != group_of(known)
+
+
+def test_results_from_the_same_run_share_one_group():
+    """The other direction: grouping that separated identical runs would print
+    every question apart and refuse to combine any of them."""
+    assert len(grouped((a_result(), a_result(question_id="q2")))) == 1
+
+
+def test_a_one_sided_range_has_no_representative_value():
+    """594 entries in the corpus record a bound rather than a range. Averaging one
+    bound with a missing one is not a midpoint, and the arithmetic would raise
+    rather than answer."""
+    assert representative_value(an_entry(value=None, range_low=2.0, range_high=None)) is None
+    assert representative_value(an_entry(value=None, range_high=2.0, range_low=None)) is None
+
+
+def test_a_midpoint_of_exactly_zero_is_not_judged():
+    """The boundary the rule states: zero is not judged, and a range of -1 to 1
+    has a midpoint of exactly zero."""
+    assert representative_value(an_entry(value=None, range_low=-1.0, range_high=1.0)) is None
+
+
+def test_a_midpoint_below_one_is_still_a_value():
+    """The other side of that boundary. Sub-unit values are ordinary here -- cell
+    volumes in cubic micrometres -- and refusing them would silence the check on
+    much of the corpus."""
+    assert representative_value(an_entry(value=None, range_low=0.4, range_high=0.6)) == 0.5
+
+
+def test_exactly_the_peer_floor_is_enough_to_judge():
+    """`MIN_PEERS` is the number needed, not the number to exceed. Off by one, the
+    check goes quiet on every population sitting exactly at the floor."""
+    peers = tuple(an_entry(entry_id=i, value=2.0) for i in range(1, MIN_PEERS + 1))
+    population = peers + (an_entry(entry_id=99, value=100.0),)
+    assert peers_too_few((99,), population) == ()
+    assert len(outliers_among_peers((99,), population)) == 1
+
+
+def test_the_factor_reported_is_how_far_outside_the_entry_sits():
+    """Asserted as a number, not just as "more than the threshold": the figure is
+    what a reader judges the entry by, and a multiplication in place of the
+    division would still have been "more than the threshold"."""
+    (flagged,) = outliers_among_peers((99,), yeast_population())
+    assert flagged.outside_by == pytest.approx(10.3 / 3.3)
+
+
+def test_a_value_at_the_low_boundary_is_not_flagged():
+    """The low side of the interval, which only the high side had covered."""
+    peers = tuple(an_entry(entry_id=i, value=4.0) for i in range(1, MIN_PEERS + 1))
+    population = peers + (an_entry(entry_id=99, value=4.0 / OUTLIER_FACTOR),)
+    assert outliers_among_peers((99,), population) == ()
+
+
+def test_an_unjudgeable_citation_does_not_stop_the_ones_after_it():
+    """Skipping the rest of the citation list instead of one entry: every
+    `continue` here could have been a `break`, and a single entry with no usable
+    number would have silenced the check for everything cited alongside it."""
+    population = yeast_population() + (an_entry(entry_id=50, value=None),)
+    flagged = outliers_among_peers((50, 99), population)
+    assert [outlier.entry_id for outlier in flagged] == [99]
+    assert peers_too_few((50, 99), population) == (50,)
+
+
+@pytest.mark.parametrize(
+    "field,other",
+    [
+        ("model", "another/model"),
+        ("prompt_digest", "prompt0000000002"),
+        ("corpus_digest", "corpus0000000002"),
+        ("corpus_entries", 7),
+        ("code_version", "git def5678"),
+    ],
+)
+def test_every_part_of_the_provenance_separates_one_run_from_another(field, other):
+    """ "Never combined across model, prompt or corpus" is a requirement, and each
+    field carried it alone. Nulling any one of them merged two runs that differ in
+    it -- the figures would be averaged and the report would say they came from one
+    system.
+    """
+    from dataclasses import replace as with_field
+
+    first = a_result()
+    second = a_result(question_id="q2", provenance=with_field(A_PROVENANCE, **{field: other}))
+    assert group_of(first) != group_of(second)
+    assert len(grouped((first, second))) == 2
+
+
+def test_a_citation_the_corpus_does_not_hold_does_not_stop_the_check():
+    """The other `continue` in the loop. One stale identifier in a citation list
+    would have silenced the outlier check for every entry cited after it."""
+    population = yeast_population()
+    flagged = outliers_among_peers((999999, 99), population)
+    assert [outlier.entry_id for outlier in flagged] == [99]
+
+
+def test_the_factor_below_the_interval_is_also_how_far_outside_it_sits():
+    """The low side of the figure, asserted as a number for the reason the high
+    side is: a multiplication would also have been "more than the threshold"."""
+    peers = tuple(an_entry(entry_id=i, value=10.0) for i in range(1, MIN_PEERS + 1))
+    population = peers + (an_entry(entry_id=99, value=2.0),)
+    (flagged,) = outliers_among_peers((99,), population)
+    assert flagged.outside_by == pytest.approx(10.0 / 2.0)
+
+
+def test_neither_a_lonely_entry_nor_an_ordinary_one_stops_the_check_after_it():
+    """The last two `continue`s in the loop, and they matter for the same reason
+    the others do: the outlier is usually not the first entry an answer cites.
+
+    The first cited entry here has no peers at all, the second sits inside its
+    peers' interval, and the third is the outlier. With either `continue` turned
+    into a `break`, the check reports nothing at all for this answer -- which is
+    indistinguishable from an answer with nothing wrong in it.
+    """
+    lonely = an_entry(entry_id=40, property="Doubling time", value=30.0)
+    population = yeast_population() + (lonely,)
+    flagged = outliers_among_peers((40, 1, 99), population)
+    assert [outlier.entry_id for outlier in flagged] == [99]
+
+
+def test_every_citation_that_could_not_be_judged_is_reported_not_just_the_first():
+    """The count is what the report puts in front of a reader, so stopping at the
+    first would understate how much of an answer went unchecked."""
+    population = yeast_population() + (
+        an_entry(entry_id=50, value=None),
+        an_entry(entry_id=51, value=None),
+    )
+    assert peers_too_few((50, 51), population) == (50, 51)

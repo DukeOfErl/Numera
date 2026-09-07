@@ -45,3 +45,6 @@ untouched.
       baseline taken before this change from being combined with one taken after. Whether the new shape
       helps or hurts is a measurement for that harness and is **not** claimed here
 - [ ] 4.2 Reconcile the ADR block against `CLAUDE.md`
+- [ ] 4.3 Run an adversarial code review of the branch before merging. Small is not a reason to skip
+      it: this change edits the system prompt, where a defect shows up as every answer being slightly
+      worse and no test failing
