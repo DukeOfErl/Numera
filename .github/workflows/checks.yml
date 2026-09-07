@@ -20,7 +20,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      # The exact version, not `@v10`: setup-uv publishes floating major tags only
+      # up to v7, so `@v10` is "unable to find version" and the whole job fails at
+      # Set up. Its README pins a commit SHA with a `# v10.0.1` comment, and reading
+      # a floating major out of that is what broke this workflow's first run.
+      # `actions/checkout` does publish them, hence `@v7` above.
+      - uses: astral-sh/setup-uv@v10.0.1
       # Through pre-commit, so the rev pinned in .pre-commit-config.yaml is the
       # single arbiter of formatting: a developer whose local ruff has wandered
       # from the pin is told here instead of quietly committing churn. Needs none
@@ -31,7 +36,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      # The exact version, not `@v10`: setup-uv publishes floating major tags only
+      # up to v7, so `@v10` is "unable to find version" and the whole job fails at
+      # Set up. Its README pins a commit SHA with a `# v10.0.1` comment, and reading
+      # a floating major out of that is what broke this workflow's first run.
+      # `actions/checkout` does publish them, hence `@v7` above.
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
       # Both extras. `--extra ask` alone leaves the ingester's tests failing at
