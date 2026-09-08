@@ -193,6 +193,21 @@ elif question := st.chat_input("Ask a question", submit_mode="disable"):
     with st.chat_message("assistant"):
         web.answer(agent.ask(session, question), repo, items)
 
+    # The ending only exists now, and the branch above decided whether the run was
+    # over *before* this question ran. Streamlit reruns on the next interaction and
+    # not when a script finishes, so without this the reader is left looking at a
+    # live input on a run that is over, with no line saying why -- which is the state
+    # `run_is_over` exists to prevent, arriving one interaction late. It showed up on
+    # the deployed app's very first question: a spent key, and nothing on the page to
+    # say a new one was needed.
+    #
+    # A rerun rather than drawing the banner here: the input has already been created
+    # by the time the ending arrives and cannot be taken back within one run, and a
+    # closed run that still offers an input is the other half of the same confusion.
+    # It costs one redraw from the transcript -- no question, no model call.
+    if web.run_is_over(web.transcript(st.session_state)):
+        st.rerun()
+
 # The side panel carries the newest answer's entries, whole and openable -- the
 # main column's table is the first few rows of the same set. Written after the
 # conversation so it reflects the question just asked.
