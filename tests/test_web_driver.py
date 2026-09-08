@@ -811,6 +811,39 @@ def test_an_ending_that_stops_the_terminal_stops_the_page(reason):
     assert web.run_is_over([("q", [item])])
 
 
+def test_the_run_closing_is_said_on_the_run_that_closes_it(monkeypatch, repo):
+    """Not one interaction later, which is what the page used to do.
+
+    The banner is decided before the chat input, so on the run where the question is
+    asked `run_is_over` is read *before* the ending exists. Streamlit reruns on the
+    next interaction and not when a script finishes, so the reader was left with a
+    live input on a closed run and no line saying why -- and only a reload revealed
+    it. Seen on the deployed app's first question: a spent key, and nothing on the
+    page to say so.
+
+    Asserted through the real script, because the fault was in the ordering of one
+    run and no test of `run_is_over` or `ends_the_run` can see that: both were right
+    the whole time.
+    """
+
+    class SpentKey:
+        def ask(self, session_id, question):
+            yield Answer(question_id="q", text="I could not answer this.")
+            yield ending(EndReason.PROVIDER_LIMIT, incomplete=True)
+
+        def run_spend(self) -> int:
+            return 0
+
+        run_budget = 1_200_000
+
+    at = ask(app(monkeypatch, repo, SpentKey()).run(), "hi")
+
+    assert any("usage limit" in error.value for error in at.error), (
+        "the reader has to be told on the run that closed, not after a reload"
+    )
+    assert not at.chat_input, "and not left an input that cannot produce a new answer"
+
+
 def test_a_question_stopped_on_its_own_ceiling_does_not_stop_the_run():
     """The per-question ceiling refreshes; the run budget does not."""
     item = web.item_for(ending(EndReason.SPEND_CEILING))
