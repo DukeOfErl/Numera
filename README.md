@@ -113,7 +113,14 @@ it binds — the number you set is the one that stops work
 ## This branch: hosted deployment
 
 **`deploy/streamlit-cloud` is never merged back.** It carries four changes `main` must
-not have, and it is rebased onto `main` rather than merged into it.
+not have.
+
+**Update it by merging `main` into it — do not rebase.** This branch has a second
+writer: Streamlit Cloud's Codespaces integration pushes here (it added
+`.devcontainer/`), and Cloud watches the ref. Rebasing means force-pushing, and a
+force-push discards whatever arrived from the other side; `--force-with-lease` refused
+exactly that once, which is the only reason the dev-container commit survived. The
+instruction here used to say "rebase", written before anything else could write to it.
 
 1. **The `ask` extra's packages are `[project].dependencies`.** Community Cloud picks
    a dependency file by precedence — `uv.lock` first — and runs `uv sync`, which does
