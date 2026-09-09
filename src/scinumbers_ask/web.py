@@ -599,14 +599,27 @@ def answer(
     append them meant a raising `draw` skipped the append entirely, while the agent
     had already persisted the turn -- the page forgot a question the model
     remembered, and the next answer was built on context nothing on screen showed.
+
+    The box is opened by the first retrieval rather than before the loop, because a
+    question that retrieves nothing -- a refusal, a spent key, an answer the model
+    gave straight -- otherwise left an empty "Retrieval" box on screen, claiming a
+    search that never happened. `show` has always guarded this on the replay path;
+    only the live path drew it unconditionally.
+
+    Opening it late also places it where the first retrieval falls rather than
+    always at the top, so a warning raised before any tool call now appears above
+    it instead of below. That is the order the events actually arrived in.
     """
-    box = _retrieval_box(expanded=True)
+    box = None
     drawn: list[Item] = [] if into is None else into
     for item in items_for(events, repo):
+        if item.kind is Kind.PROGRESS and box is None:
+            box = _retrieval_box(expanded=True)
         with box if item.kind is Kind.PROGRESS else nullcontext():
             draw(item)
         drawn.append(item)
-    box.update(label="Retrieval", state="complete", expanded=False)
+    if box is not None:
+        box.update(label="Retrieval", state="complete", expanded=False)
     return drawn
 
 
