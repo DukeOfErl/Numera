@@ -105,7 +105,7 @@ def test_a_spelled_out_dalton_is_a_mass_like_its_symbol():
 
 
 def test_a_mass_is_incompatible_with_a_length_rather_than_unknown():
-    """The case found on the reviewer page of 2026-09-04: an answer offered
+    """The case found while writing specimen answers on 2026-09-04: one offered
     2,700 kDa as the top of a range of nanometres, and this returned None -- so
     the one check that should have refused the comparison said nothing."""
     assert comparable("nm", "kDalton") is False

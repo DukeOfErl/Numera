@@ -314,7 +314,7 @@ def test_a_follow_up_that_states_no_quantity_is_not_marked_for_citing_nothing():
 
 
 def yeast_population() -> tuple[Entry, ...]:
-    """The case this check exists for, from the reviewer page of 2026-09-04:
+    """The case this check exists for, from the specimen answers of 2026-09-04:
     eight entries between 1.76 and 3.3, and one at 10.3."""
     peers = [
         an_entry(entry_id=i, value=value)

@@ -251,7 +251,7 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
       identifiers and wording, never entry text (ADR-0170). Happy-path questions on complete entries, and
       questions on each incomplete shape (2.3), chosen by querying the corpus for entries of that shape;
       the set's validation refuses a set missing one
-  - The specimen questions on the reviewer page of 2026-09-04 are the seed: *E. coli* ribosome count and
+  - The specimen questions written for the review page of 2026-09-04 are the seed: *E. coli* ribosome count and
     cell volume, ribosome size, the nuclear-volume question whose premise is wrong, budding yeast nuclear
     volume through the cell cycle, and a planarian question the corpus cannot answer at all.
   - **Done: `question-sets/first-set.jsonl`, ten questions.** Committed inputs live in
