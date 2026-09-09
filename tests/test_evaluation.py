@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from conftest import agent_with, write_all_shapes_corpus
 
-from agent_doubles import costing, says, scripted, tool_call
+from agent_doubles import OutOfCreditModel, costing, says, scripted, tool_call
 from scinumbers_ask.config import Config, usd
 from scinumbers_ask.corpus import load
 from scinumbers_ask.evaluation import (
@@ -32,6 +32,7 @@ from scinumbers_ask.evaluation import (
     run_evaluation,
     session_for,
 )
+from scinumbers_ask.events import EndReason
 from scinumbers_ask.question_set import Question
 
 PROVENANCE = Provenance(
@@ -278,7 +279,7 @@ def test_the_run_stops_when_a_question_ends_on_the_run_budget(repo, tmp_path):
         agent, (a_question("q1"), a_question("q2"), a_question("q3")), path, PROVENANCE
     )
 
-    assert outcome.stopped_on_run_budget is True
+    assert outcome.stopped_on is EndReason.RUN_BUDGET
     # The second is refused by the agent before dispatch and recorded as such; the
     # third is never asked, and only the driver can be responsible for that.
     assert model.attempts == 1
@@ -288,6 +289,43 @@ def test_the_run_stops_when_a_question_ends_on_the_run_budget(repo, tmp_path):
     first, second = results_of(path)
     assert first.end_reason == "answered"
     assert second.end_reason == "run_budget"
+
+
+def test_the_run_stops_on_a_spent_key_too_not_only_on_the_budget(repo, config, tmp_path):
+    """Every ending the interactive drivers stop on, not the one this was written for.
+
+    A key that runs out part-way is the case that made this matter: the harness went
+    on asking, recorded the agent's "no credit left" notice as each answer, and every
+    one of them scored as an ungrounded non-answer. A results file that reads as the
+    model failing, for a run that had simply stopped -- and the run's own figures
+    would have looked complete.
+    """
+    model = OutOfCreditModel(responses=[says("never reached")])
+    agent = agent_with(repo, config, tmp_path, model)
+    path = tmp_path / "results.jsonl"
+
+    outcome = run_evaluation(
+        agent, (a_question("q1"), a_question("q2"), a_question("q3")), path, PROVENANCE
+    )
+
+    assert outcome.stopped_on is EndReason.PROVIDER_LIMIT
+    assert outcome.attempted == 1, "the second question was never asked"
+    assert outcome.skipped == ("q2", "q3")
+
+
+def test_an_ending_that_does_not_close_the_run_does_not_stop_the_harness(repo, tmp_path):
+    """The other direction, and the expensive one: a question stopped on its own
+    ceiling refreshes, so halting there would abandon a set over one costly question."""
+    tight = Config(model="fake/model", question_ceiling=usd("0.000050"), run_budget=usd("1.00"))
+    model = scripted(costing(says("an answer"), 0.000_110), costing(says("another"), 0.000_001))
+    agent = agent_with(repo, tight, tmp_path, model)
+    path = tmp_path / "results.jsonl"
+
+    outcome = run_evaluation(agent, (a_question("q1"), a_question("q2")), path, PROVENANCE)
+
+    assert outcome.stopped_on is None
+    assert outcome.attempted == 2
+    assert outcome.skipped == ()
 
 
 def test_each_result_is_on_disk_before_the_next_question_is_asked(repo, config, tmp_path):
