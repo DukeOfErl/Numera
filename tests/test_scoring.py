@@ -13,6 +13,7 @@ from conftest import FIXTURE
 
 from scinumbers_ask.corpus import Entry, load
 from scinumbers_ask.evaluation import Result
+from scinumbers_ask.events import EndReason
 from scinumbers_ask.messages import STOP_THE_RUN
 from scinumbers_ask.question_set import Question
 from scinumbers_ask.repository import CorpusRepository
@@ -223,6 +224,23 @@ def test_a_refusal_with_no_search_behind_it_is_never_a_correct_decline():
     result = a_result(answer="Not in the corpus.", ungrounded_refusal=True)
     assert not correctly_declined(result)
     assert not correctly_declined(a_result(answer="Not in the corpus.", retrievals=()))
+
+
+def test_a_plain_string_matches_a_set_of_endings():
+    """Load-bearing, undocumented until now, and silent if it breaks.
+
+    Two guards compare a `Result`'s `end_reason` -- a plain string, because a
+    record has to be readable without this package -- against sets of `EndReason`
+    members. That works only because `EndReason` mixes in `str`, which precedes
+    `Enum` in the MRO and therefore supplies `__hash__`. `Enum.__hash__` hashes the
+    member *name*, so a plain `Enum` would make every one of those comparisons
+    return `False`: the report would stop warning about closed runs and the scoring
+    would start scoring questions the model never saw, with nothing raising.
+    """
+    assert issubclass(EndReason, str)
+    assert EndReason.__hash__ is str.__hash__
+    assert "run_budget" in {EndReason.RUN_BUDGET}
+    assert all(str(reason) in STOP_THE_RUN for reason in STOP_THE_RUN)
 
 
 @pytest.mark.parametrize("closing", sorted(str(reason) for reason in STOP_THE_RUN))

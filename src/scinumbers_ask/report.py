@@ -38,10 +38,6 @@ from .scoring import (
     unsupported_score,
 )
 
-#: The endings whose string form closes a run. Compared as strings because a
-#: `Result` records `end_reason` as one, having been read back from a file.
-_CLOSING = frozenset(str(reason) for reason in STOP_THE_RUN)
-
 
 def render(
     results: tuple[Result, ...],
@@ -101,7 +97,14 @@ def _coverage(
     # run stopped by a spent API key as a *completed* run -- which is the first
     # thing this module's docstring says it refuses to do. The driver already stops
     # on the whole set; the report was the half that did not keep up.
-    stopped = [result for result in results if result.end_reason in _CLOSING]
+    #
+    # A `Result` carries `end_reason` as a plain string, and it matches members of
+    # the set directly because `EndReason` mixes in `str`, which precedes `Enum` in
+    # the MRO and so supplies `__hash__`. `Enum.__hash__` hashes the member *name*,
+    # so the day that mixin is dropped this comparison starts returning nothing and
+    # says so nowhere -- `test_a_plain_string_matches_a_set_of_endings` is what
+    # fails instead.
+    stopped = [result for result in results if result.end_reason in STOP_THE_RUN]
     if stopped:
         reasons = ", ".join(
             f"{reason} {count}"
