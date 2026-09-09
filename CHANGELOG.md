@@ -12,6 +12,15 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **A spent API key ends a question as a limit, and says whose limit it is.** Where
+  the provider refuses a request for lack of credit, the question ends as
+  `provider_limit` rather than as an indistinguishable `provider_failure`, and both
+  drivers say that the remedy lies with whoever pays for the deployment — replacing
+  the page's "start a new session" advice, which a spent key makes useless. Further
+  questions are refused, since asking again cannot come out differently, and the
+  request is no longer retried, because a key acquires no balance during a backoff.
+  Whatever the answer had established before the refusal is kept rather than replaced
+  by the notice ([ADR-0600]).
 - **The evaluation refuses to write its results where git would track them.**
   Every record carries the retrieval results the agent was shown, verbatim, so a
   results file holds corpus text — the same unlicensed data the corpus itself is.
@@ -49,30 +58,6 @@ any release; `1.0.0` when it stabilizes.
   repeated question id, a follow-up whose parent is absent, an expected entry
   the corpus does not hold, or a set whose expected entries are all complete
   and so measure the happy path alone.
-- **SciNumbers ask** — an agent answering natural-language questions about
-  biological quantities from a supplied JSONL corpus, citing an entry for every
-  number and saying it could not find one rather than answering from the model's
-  own knowledge.
-- **Two drivers over one agent** — a terminal (`scinumbers-ask`) and a web page
-  (`streamlit run streamlit_app.py`), both rendering the same events. The agent is
-  not told which is calling it.
-- **Entries beside every answer** — cited first, then others the search found and
-  the answer passed over, with the counts of what was retrieved and what matched.
-- **Marks for what the source did not claim** — no measurement method, no scalar
-  value, cited-but-not-retrieved, a bound or approximation reported as exact, two
-  bounds that may be different quantities, and a range spanning more than a
-  millionfold. Each is shown to the reader and told to the model.
-- **Dimensional checking** — values are compared only where their units measure the
-  same kind of thing, with an unrecognised unit reported as unknown rather than
-  assumed compatible.
-- **Sessions that survive a restart** — LangGraph checkpoints keyed by a session
-  identifier published to the page's URL.
-- **Limits said where they bind** — a per-question spend ceiling with a warning
-  derived at 80 per cent, a run budget, a conversation bounded by token count, a
-  model-call limit and a retrieval limit. Every question ends with a stated reason,
-  what it cost, and which bounds it reached.
-- **A warning when an answer is not grounded** — a citation to an entry no tool call
-  returned, and an answer produced with no retrieval behind it.
 
 ### Known gaps
 
@@ -158,6 +143,39 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **An ending that speaks for the agent is no longer reported as a bad answer.** Where
+  a question stops on its spend ceiling, on an unpriceable response, on the retrieval
+  bound, or with no answer at all, the sentence the reader sees is the agent's own —
+  and it was being run through the citation and grounding checks, so a reader could be
+  told "this answer is not grounded in the corpus" about a system notice, with
+  `answer.ungrounded` written to the trail for a question the model never answered.
+  What retrieval found is still reported: that is evidence, not a judgement about
+  prose.
+- **SciNumbers ask** — an agent answering natural-language questions about
+  biological quantities from a supplied JSONL corpus, citing an entry for every
+  number and saying it could not find one rather than answering from the model's
+  own knowledge.
+- **Two drivers over one agent** — a terminal (`scinumbers-ask`) and a web page
+  (`streamlit run streamlit_app.py`), both rendering the same events. The agent is
+  not told which is calling it.
+- **Entries beside every answer** — cited first, then others the search found and
+  the answer passed over, with the counts of what was retrieved and what matched.
+- **Marks for what the source did not claim** — no measurement method, no scalar
+  value, cited-but-not-retrieved, a bound or approximation reported as exact, two
+  bounds that may be different quantities, and a range spanning more than a
+  millionfold. Each is shown to the reader and told to the model.
+- **Dimensional checking** — values are compared only where their units measure the
+  same kind of thing, with an unrecognised unit reported as unknown rather than
+  assumed compatible.
+- **Sessions that survive a restart** — LangGraph checkpoints keyed by a session
+  identifier published to the page's URL.
+- **Limits said where they bind** — a per-question spend ceiling with a warning
+  derived at 80 per cent, a run budget, a conversation bounded by token count, a
+  model-call limit and a retrieval limit. Every question ends with a stated reason,
+  what it cost, and which bounds it reached.
+- **A warning when an answer is not grounded** — a citation to an entry no tool call
+  returned, and an answer produced with no retrieval behind it.
+
 - **A molecular mass no longer compares as unknown against a length.** The unit
   table classified the symbol `kDa` but not the spelled-out `kDalton`, and
   `Copies/cell` but not `ribosomes/cell`, so the check that exists to refuse a
@@ -200,3 +218,4 @@ number rather than an error:
 [ADR-0230]: docs/decisions/0230-flag-and-count-never-correct.md
 [ADR-0240]: docs/decisions/0240-stamp-every-ingest.md
 [ADR-0250]: docs/decisions/0250-guards-belong-to-the-operation.md
+[ADR-0600]: docs/decisions/0600-a-spent-key-is-its-own-ending.md

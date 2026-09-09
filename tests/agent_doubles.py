@@ -57,6 +57,56 @@ def scripted(
     return ScriptedModel(responses=list(responses), failures=failures, reports_cost=reports_cost)
 
 
+def provider_error(status: int, message: str) -> Exception:
+    """The exception a real HTTP failure from the provider arrives as.
+
+    Built through `openai.APIStatusError` rather than imitated. A hand-rolled
+    object carrying a `status_code` would pass whether or not the provider's own
+    error type still has one -- and that attribute is the whole of what
+    `_is_out_of_credit` reads. Any status, so the tests can pin what must *not*
+    count as a spent key as precisely as what must.
+    """
+    import httpx
+    import openai
+
+    request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    response = httpx.Response(
+        status,
+        request=request,
+        json={"error": {"message": message, "code": status}},
+    )
+    return openai.APIStatusError(message, response=response, body=None)
+
+
+def out_of_credit_error() -> Exception:
+    """What OpenRouter answers when the key or the account has no credit left."""
+    return provider_error(402, "Insufficient credits")
+
+
+class OutOfCreditModel(ScriptedModel):
+    """Answers the way OpenRouter answers a key over its limit.
+
+    `refuse_after` is how many calls succeed first, because where the refusal lands
+    changes what the reader should see: on the first call there is no answer to
+    keep, and part-way through a question the earlier hops have already been paid
+    for. The default refuses immediately.
+
+    Counts attempts like its parent, because "was this retried?" is half of the
+    behaviour: a 402 sent through the backoff makes the reader wait seconds for a
+    sentence that was available at once.
+    """
+
+    refuse_after: int = 0
+
+    def _generate(
+        self, messages: list[BaseMessage], stop: Any = None, run_manager: Any = None, **kwargs: Any
+    ) -> ChatResult:
+        if self.attempts >= self.refuse_after:
+            self.attempts += 1
+            raise out_of_credit_error()
+        return super()._generate(messages, stop, run_manager, **kwargs)
+
+
 def tool_call(name: str, **args: Any) -> AIMessage:
     return AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": "call-1"}])
 

@@ -21,6 +21,7 @@ Two branches that each number ADRs from the current highest id will both claim t
 | `rename-to-scinumbers` | `0400`–`0450` |
 | `add-answer-evaluation` | `0500`–`0550` — `0500`, `0510`, `0520` written |
 | `add-answer-shape` | `0560`–`0590` |
+| `add-provider-limit-ending` | `0600`–`0640` — `0600` written |
 
 **This table is the authority, not a scan of `docs/decisions/`.** A scan cannot see uncommitted ADRs on another branch: `git ls-tree` reads committed trees, and each branch is checked out in its own worktree, so a number can be spent and still invisible from here. `add-ask-agent` has written `0100`–`0190` and holds a second range, `0260`–`0290`, because its first block ran out while the change was still open. A block is extended rather than renumbered: the ADRs already written are referenced from code comments and commit messages, and renumbering would break every one of those references to buy contiguity that nothing needs. Its first block was also uncommitted for two sessions, which is how a scan came to report those numbers as free. Never conclude a number is free because no file for it turns up.
 
@@ -201,6 +202,23 @@ modifies. **Archive each change as it completes.** Letting several pile up turns
 that ordering into a blocker found at the end: `rename-to-scinumbers` cannot
 archive until `add-ask-agent` does, and `--skip-specs` is not the way out — it
 archives the change while promoting nothing, which is the only reason to archive.
+
+## Lint and format: automatic, and pinned in two places
+
+`ruff check` and `ruff format` run at every commit through `.pre-commit-config.yaml`, and in CI
+(`.github/workflows/checks.yml`) over the whole tree. A fresh clone or a new worktree needs
+`uv run pre-commit install` once — the hook lives in `.git/hooks`, which worktrees share, so one
+install covers all of them.
+
+**The rev in `.pre-commit-config.yaml` and the `ruff` pin in `pyproject.toml` must move together.**
+Ruff's formatter output can change between minor releases, so a range in one place and a pin in the
+other is how eight files came to be unformatted while `ruff check` stayed green for weeks. The
+pre-commit rev is the arbiter: CI runs the hooks, not the venv's ruff, so a local ruff that has
+wandered is reported rather than silently committing churn.
+
+CI **reports, it does not gate.** Streamlit Cloud deploys a branch tip whether or not the checks
+pass, so a green tick is a smoke alarm and not a lock. It also cannot run the two marked suites,
+which is the point of the paragraph below.
 
 ## Running the tests
 

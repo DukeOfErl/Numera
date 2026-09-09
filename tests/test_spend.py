@@ -25,10 +25,12 @@ from scinumbers_ask.agent import RUN_CALL_LIMIT, AskAgent
 from scinumbers_ask.config import FALLBACK_PRICES, Config, ModelPrices, usd
 from scinumbers_ask.events import (
     Answer,
+    CitationWarning,
     CostProjection,
     EndReason,
     QuestionEnded,
     SpendWarning,
+    UngroundedRefusal,
 )
 from scinumbers_ask.spend import (
     SpendLedger,
@@ -140,6 +142,42 @@ def test_the_gate_stops_dispatching_once_the_ceiling_is_reached(repo, tight, tmp
         f"the model was called {model.attempts} times after the ceiling was reached"
     )
     assert model.attempts < RUN_CALL_LIMIT, "the call limit stopped this, not the spend gate"
+
+
+def test_a_ceiling_reached_with_nothing_established_judges_no_prose(repo, tight, tmp_path):
+    """The substitute sentence is not an answer, so it is not reported as a bad one.
+
+    The reader was shown "I stopped on a spend limit before establishing anything I
+    could cite", with "nothing was retrieved for this question, so this answer is not
+    grounded in the corpus -- it says only what the model expected to find" directly
+    beneath it, and `answer.ungrounded` in the trail for a question the model never
+    answered.
+
+    The call has to be one that never reaches the corpus: a `search_entries` that
+    crosses the ceiling still emits its `Retrieval` first, so something *was*
+    retrieved and the ungrounded report cannot fire. The first version of this test
+    used one and passed against the unfixed code -- vacuous, and it took seeding the
+    old behaviour back in to notice.
+    """
+    model = scripted(costing(tool_call("no_such_tool"), 0.000_200))
+    events = list(agent_with(repo, tight, tmp_path, model).ask("s", "q"))
+
+    assert ended(events).reason is EndReason.SPEND_CEILING
+    assert not any(isinstance(e, (UngroundedRefusal, CitationWarning)) for e in events)
+
+
+def test_a_model_reporting_no_cost_judges_no_prose_either(repo, config, tmp_path):
+    """This branch always substitutes: the answer shown is the exception's sentence,
+    whatever the model said. So the model's text is never what the reader read, and
+    judging it accuses prose that was discarded -- here a citation the reader cannot
+    see, which is the direction the other two branches cannot reach."""
+    model = scripted(says("about 1 micrometre [[100002]]"), reports_cost=False)
+    events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
+
+    assert ended(events).reason is EndReason.NOT_CONFIGURED
+    answer = next(e for e in events if isinstance(e, Answer))
+    assert "[[100002]]" not in answer.text, "the shown answer is the exception's sentence"
+    assert not any(isinstance(e, (UngroundedRefusal, CitationWarning)) for e in events)
 
 
 def test_a_question_stopped_on_its_ceiling_presents_what_it_established(repo, tight, tmp_path):

@@ -103,6 +103,13 @@ def run(
                     # says the question did not finish as intended.
                     code = 1
                 if event.reason in messages.STOP_THE_RUN:
+                    # Where the ending has advice of its own, said before returning:
+                    # the terminal otherwise exits on the ending line alone, which
+                    # names a reason without saying that the remedy is somebody
+                    # else's to apply. The page shows the same sentence.
+                    advice = messages.run_over_advice(event.reason)
+                    if advice:
+                        print(advice, file=out, flush=True)
                     return code
     return code
 
@@ -190,6 +197,4 @@ def main(argv: list[str] | None = None) -> None:
 
     print(f"{len(repo)} entries · session {session_id} · {config.model}")
     print("Ask a question, or 'exit'. Continue this session later with --session.")
-    raise SystemExit(
-        run(agent, session_id, _questions_from_terminal(sys.stdout), repo=repo)
-    )
+    raise SystemExit(run(agent, session_id, _questions_from_terminal(sys.stdout), repo=repo))

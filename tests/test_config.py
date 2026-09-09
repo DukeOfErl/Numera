@@ -134,9 +134,7 @@ def _env_reads() -> str:
     files = [*(ROOT / "src" / "scinumbers_ask").glob("*.py"), ROOT / "streamlit_app.py"]
     text = "\n".join(f.read_text(encoding="utf-8") for f in files)
     return "\n".join(
-        line
-        for line in text.splitlines()
-        if "os.environ" in line or "env_setting(" in line
+        line for line in text.splitlines() if "os.environ" in line or "env_setting(" in line
     )
 
 
@@ -169,7 +167,7 @@ def test_no_retired_name_is_still_being_read():
 
 @pytest.mark.parametrize("old", sorted(WITHDRAWN_ENV))
 def test_a_withdrawn_variable_is_refused_without_being_called_a_rename(monkeypatch, old):
-    """"0.50" as a warning and as a ceiling are different limits.
+    """ "0.50" as a warning and as a ceiling are different limits.
 
     A rename message would tell the reader to move the value across, which would
     tighten their spend limit by 20 per cent while appearing to preserve it. So

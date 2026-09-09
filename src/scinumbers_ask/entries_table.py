@@ -81,8 +81,7 @@ FUSED_LEGEND = f"{FUSED} the two bounds may describe different quantities"
 # about it too and the agent must not reach into a presentation module for it.
 IMPLAUSIBLE = "\u00a1"
 IMPLAUSIBLE_LEGEND = (
-    f"{IMPLAUSIBLE} the bounds span more than a millionfold, which no single "
-    "measurement does"
+    f"{IMPLAUSIBLE} the bounds span more than a millionfold, which no single measurement does"
 )
 
 # Words that carry no topic. Kept small on purpose -- this is a tie-breaker for

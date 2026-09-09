@@ -9,7 +9,6 @@ SCINUMBERS_CORPUS, SCINUMBERS_CHECKPOINTS, SCINUMBERS_TRACE -- since
 a Streamlit script is given no arguments of its own.
 """
 
-
 import streamlit as st
 
 from scinumbers_ask import autobuild, web
@@ -82,14 +81,22 @@ for asked, drawn in web.transcript(st.session_state):
     with st.chat_message("assistant"):
         web.show(drawn)
 
-# Some endings close the run: the budget is spent, or the conversation is past its
-# token bound. Asking again cannot come out differently, so the input goes away
-# rather than replaying the same refusal -- the terminal returns from its read loop
-# at exactly these endings.
+# Some endings close the run: the budget is spent, the conversation is past its
+# token bound, nothing is configured, or the key funding the calls is out of credit.
+# Asking again cannot come out differently, so the input goes away rather than
+# replaying the same refusal -- the terminal returns from its read loop at exactly
+# these endings.
 if web.run_is_over(web.transcript(st.session_state)):
+    # An ending with advice of its own replaces the line below rather than sitting
+    # under it: "start a new session" is wrong for a spent key -- the next session's
+    # first question meets the same refusal -- and this banner is the last thing on
+    # screen, so wrong advice here outranks the answer that said otherwise.
     st.error(
-        "This run has stopped taking questions. Start a new session to continue —"
-        " reload with a fresh `?session=` or clear this one.",
+        web.as_text(
+            web.run_over_advice(web.transcript(st.session_state))
+            or "This run has stopped taking questions. Start a new session to continue —"
+            " reload with a fresh `?session=` or clear this one."
+        ),
         icon=":material/block:",
     )
 # `submit_mode="disable"` because a question runs for as long as the agent takes:
@@ -105,8 +112,22 @@ elif question := st.chat_input("Ask a question", submit_mode="disable"):
     with st.chat_message("assistant"):
         web.answer(agent.ask(session, question), repo, items)
 
+    # The ending only exists now, and the branch above decided whether the run was
+    # over *before* this question ran. Streamlit reruns on the next interaction and
+    # not when a script finishes, so without this the reader is left looking at a
+    # live input on a run that is over, with no line saying why -- which is the state
+    # `run_is_over` exists to prevent, arriving one interaction late. It showed up on
+    # the deployed app's very first question: a spent key, and nothing on the page to
+    # say a new one was needed.
+    #
+    # A rerun rather than drawing the banner here: the input has already been created
+    # by the time the ending arrives and cannot be taken back within one run, and a
+    # closed run that still offers an input is the other half of the same confusion.
+    # It costs one redraw from the transcript -- no question, no model call.
+    if web.run_is_over(web.transcript(st.session_state)):
+        st.rerun()
+
 # The side panel carries the newest answer's entries, whole and openable -- the
 # main column's table is the first few rows of the same set. Written after the
 # conversation so it reflects the question just asked.
 web.draw_full_entries(web.latest_table(web.transcript(st.session_state)))
-

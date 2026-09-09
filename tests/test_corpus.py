@@ -129,7 +129,9 @@ def test_a_malformed_line_is_refused_with_its_line_number(tmp_path):
 
 
 def test_an_entry_with_no_value_at_all_says_so(tmp_path):
-    path = _write(tmp_path, {"entry_id": 1, "property": "p", "units": "u", "table_link": "http://x"})
+    path = _write(
+        tmp_path, {"entry_id": 1, "property": "p", "units": "u", "table_link": "http://x"}
+    )
     assert load(path)[0].value_display == "(no scalar value)"
 
 

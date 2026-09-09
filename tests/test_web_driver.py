@@ -811,11 +811,70 @@ def test_an_ending_that_stops_the_terminal_stops_the_page(reason):
     assert web.run_is_over([("q", [item])])
 
 
+def test_the_run_closing_is_said_on_the_run_that_closes_it(monkeypatch, repo):
+    """Not one interaction later, which is what the page used to do.
+
+    The banner is decided before the chat input, so on the run where the question is
+    asked `run_is_over` is read *before* the ending exists. Streamlit reruns on the
+    next interaction and not when a script finishes, so the reader was left with a
+    live input on a closed run and no line saying why -- and only a reload revealed
+    it. Seen on the deployed app's first question: a spent key, and nothing on the
+    page to say so.
+
+    Asserted through the real script, because the fault was in the ordering of one
+    run and no test of `run_is_over` or `ends_the_run` can see that: both were right
+    the whole time.
+    """
+
+    class SpentKey:
+        def ask(self, session_id, question):
+            yield Answer(question_id="q", text="I could not answer this.")
+            yield ending(EndReason.PROVIDER_LIMIT, incomplete=True)
+
+        def run_spend(self) -> int:
+            return 0
+
+        run_budget = 1_200_000
+
+    at = ask(app(monkeypatch, repo, SpentKey()).run(), "hi")
+
+    assert any("usage limit" in error.value for error in at.error), (
+        "the reader has to be told on the run that closed, not after a reload"
+    )
+    assert not at.chat_input, "and not left an input that cannot produce a new answer"
+
+
 def test_a_question_stopped_on_its_own_ceiling_does_not_stop_the_run():
     """The per-question ceiling refreshes; the run budget does not."""
     item = web.item_for(ending(EndReason.SPEND_CEILING))
     assert not item.ends_the_run
     assert not web.run_is_over([("q", [item])])
+
+
+@pytest.mark.parametrize("reason", [EndReason.PROVIDER_LIMIT, EndReason.NOT_CONFIGURED])
+def test_an_ending_a_new_session_cannot_fix_replaces_that_advice(reason):
+    """The banner is the last thing on screen, so wrong advice there outranks the
+    answer above it -- and for both of these the next session's first question meets
+    the identical refusal."""
+    advice = web.run_over_advice([("q", [web.item_for(ending(reason))])])
+    assert "new session will not help" in advice
+
+
+def test_the_advice_names_the_remedy_without_addressing_anyone():
+    """One wording for two readers: someone on a hosted instance, and the developer
+    running the same code on their own key. "Ask whoever deployed the app" told the
+    second reader to contact themselves."""
+    advice = web.run_over_advice([("q", [web.item_for(ending(EndReason.PROVIDER_LIMIT))])])
+    assert "whoever funds it" in advice
+    assert "ask" not in advice.lower(), "no second person: the local reader is the funder"
+
+
+def test_an_ending_a_new_session_does_fix_leaves_the_page_its_own_line():
+    """A fresh session really does refresh a spent budget and a full conversation, so
+    the page's own wording is right and nothing should replace it."""
+    assert web.run_over_advice([("q", [web.item_for(ending(EndReason.RUN_BUDGET))])]) == ""
+    assert web.run_over_advice([("q", [web.item_for(ending(EndReason.CONVERSATION_BOUND))])]) == ""
+    assert web.run_over_advice([("q", [web.item_for(ending(EndReason.ANSWERED))])]) == ""
 
 
 def test_the_run_budget_shown_is_the_one_the_run_was_measured_against():
