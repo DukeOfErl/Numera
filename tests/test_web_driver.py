@@ -387,6 +387,38 @@ def test_each_retrieval_is_its_own_element_rather_than_one_line_rewritten(
     assert "search_entries" in progress[0] and "get_entry" in progress[1]
 
 
+def test_a_question_that_retrieved_nothing_draws_no_retrieval_box(
+    monkeypatch, repo, config, tmp_path
+):
+    """An empty box claims a search that never happened.
+
+    Driven through `AppTest` rather than over items, because the defect is not in
+    what the items say -- there are no progress items at all -- but in an element
+    the driver creates on its own. Nothing below the script can see it.
+    """
+    model = scripted(says("I could not answer this."))
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    assert [box.label for box in at.status] == []
+
+
+def test_a_question_that_retrieved_something_still_draws_the_box(
+    monkeypatch, repo, config, tmp_path
+):
+    """The other direction: the fix must not be "never draw it".
+
+    The two differ only in whether a retrieval happened, which is the one thing the
+    rule reads.
+    """
+    model = scripted(
+        tool_call("search_entries", property="Cell"),
+        says("about 1 micrometre (BNID 100002)"),
+    )
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    assert [box.label for box in at.status] == ["Retrieval"]
+
+
 # -- warnings are said, not swallowed --------------------------------------
 
 
