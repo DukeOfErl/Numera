@@ -111,6 +111,20 @@ def test_a_run_stopped_on_its_budget_is_distinguished_from_a_completed_one(corpu
     assert "is not a completed run" in text
 
 
+def test_a_run_closed_by_a_spent_key_is_not_reported_as_completed(corpus):
+    """The report was written when the run budget was the only closing ending.
+
+    `PROVIDER_LIMIT` was added later, the driver learned to stop on the whole
+    shared set, and this line kept comparing against `run_budget` alone -- so a run
+    cut short because the API key had no credit left read as a run that finished.
+    That is the first thing this module's docstring says it refuses to do.
+    """
+    spent = a_result("q2", end_reason="provider_limit", answer="", cited=())
+    text = render((a_result(), spent), (a_question(), a_question("q2")), corpus)
+    assert "is not a completed run" in text
+    assert "provider_limit 1" in text
+
+
 def test_a_failed_question_is_named(corpus):
     failed = a_result("q2", failure="RuntimeError: the provider fell over")
     text = render((a_result(), failed), (a_question(), a_question("q2")), corpus)

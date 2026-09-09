@@ -18,6 +18,7 @@ from collections import Counter
 from .config import format_usd
 from .corpus import Entry
 from .evaluation import Result
+from .messages import STOP_THE_RUN
 from .question_set import Question, shapes_of
 from .repository import CorpusRepository
 from .scoring import (
@@ -36,6 +37,10 @@ from .scoring import (
     stability,
     unsupported_score,
 )
+
+#: The endings whose string form closes a run. Compared as strings because a
+#: `Result` records `end_reason` as one, having been read back from a file.
+_CLOSING = frozenset(str(reason) for reason in STOP_THE_RUN)
 
 
 def render(
@@ -91,11 +96,20 @@ def _coverage(
             f"PARTIAL: {expected - recorded} of {expected} expected results are absent. "
             f"Every figure below is over what is here."
         )
-    stopped = [result for result in results if result.end_reason == "run_budget"]
+    # Every ending after which asking again cannot come out differently, from the
+    # one set the drivers share. Written against `run_budget` alone, this reported a
+    # run stopped by a spent API key as a *completed* run -- which is the first
+    # thing this module's docstring says it refuses to do. The driver already stops
+    # on the whole set; the report was the half that did not keep up.
+    stopped = [result for result in results if result.end_reason in _CLOSING]
     if stopped:
+        reasons = ", ".join(
+            f"{reason} {count}"
+            for reason, count in Counter(result.end_reason for result in stopped).most_common()
+        )
         lines.append(
-            f"The run reached its budget on {len(stopped)} question(s); a run stopped on "
-            f"its budget is not a completed run."
+            f"The run was closed on {len(stopped)} question(s) ({reasons}); a run stopped "
+            f"on a limit is not a completed run."
         )
     failed = [result for result in results if result.failure]
     if failed:

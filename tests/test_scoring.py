@@ -13,6 +13,7 @@ from conftest import FIXTURE
 
 from scinumbers_ask.corpus import Entry, load
 from scinumbers_ask.evaluation import Result
+from scinumbers_ask.messages import STOP_THE_RUN
 from scinumbers_ask.question_set import Question
 from scinumbers_ask.repository import CorpusRepository
 from scinumbers_ask.scoring import (
@@ -27,6 +28,7 @@ from scinumbers_ask.scoring import (
     outliers_among_peers,
     peers_too_few,
     quantity_score,
+    reached_the_model,
     representative_value,
     spread,
     stability,
@@ -221,6 +223,18 @@ def test_a_refusal_with_no_search_behind_it_is_never_a_correct_decline():
     result = a_result(answer="Not in the corpus.", ungrounded_refusal=True)
     assert not correctly_declined(result)
     assert not correctly_declined(a_result(answer="Not in the corpus.", retrievals=()))
+
+
+@pytest.mark.parametrize("closing", sorted(str(reason) for reason in STOP_THE_RUN))
+def test_no_ending_that_closes_the_run_is_scored_as_the_models_answer(closing):
+    """Each of these records the agent's own notice as the answer text.
+
+    The set had its own copy here and went stale the day `PROVIDER_LIMIT` arrived:
+    a question refused because the key had no credit left was scored, so an unpaid
+    invoice was reported as the model's behaviour. Parametrised over the shared set
+    so the next ending added to it cannot slip past this test either.
+    """
+    assert not reached_the_model(a_result(end_reason=closing, answer="no credit left"))
 
 
 def test_a_record_claiming_both_a_refusal_and_a_search_is_scored_conservatively():
