@@ -196,6 +196,21 @@ COVERED: dict[str, tuple[str, ...]] = {
     "Per-question limits reset within a session; run limits do not": (
         "test_spend.py::test_a_resumed_session_warns_against_its_own_ceiling_not_the_environment",
     ),
+    # add-provider-limit-ending's, mapped with the change that adds it. One test per
+    # claim the requirement makes, and the last three are the ones a reader comparing
+    # words to tests should look at hardest: what must *not* be classified as a spent
+    # key, and that both drivers say the same thing about the remedy.
+    "A refused-for-credit request ends the question as a limit, not a failure": (
+        "test_agent.py::test_a_key_out_of_credit_says_what_happened_and_stops_the_run",
+        "test_agent.py::test_a_key_out_of_credit_keeps_the_answer_it_had_already_paid_for",
+        "test_agent.py::test_what_retrieval_found_before_the_refusal_is_still_shown",
+        "test_agent.py::test_nothing_is_judged_about_prose_the_reader_never_saw",
+        "test_agent.py::test_the_attribute_this_rule_reads_is_on_the_provider_s_own_error",
+        "test_agent.py::test_exhausted_retries_end_the_question_as_a_provider_failure",
+        "test_terminal_driver.py::test_a_spent_key_names_the_remedy_before_the_terminal_exits",
+        "test_web_driver.py::test_an_ending_a_new_session_cannot_fix_replaces_that_advice",
+        "test_web_driver.py::test_the_advice_names_the_remedy_without_addressing_anyone",
+    ),
 }
 
 # Requirements with no test named yet. Listed rather than omitted: the point of this

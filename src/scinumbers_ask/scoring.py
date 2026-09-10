@@ -24,6 +24,7 @@ from .citations import citations
 from .corpus import Entry
 from .evaluation import Result
 from .events import EndReason, QuestionEnded
+from .messages import STOP_THE_RUN
 from .question_set import Question
 from .repository import CorpusRepository
 
@@ -525,18 +526,20 @@ def grounded_failures_of(result: Result) -> int:
     return grounding_score(result).grounding_failures
 
 
-# Endings that mean the question never reached the model. `RUN_BUDGET` is refused
-# before dispatch; `NOT_CONFIGURED` and `CONVERSATION_BOUND` are refusals too; and
-# a provider or internal failure leaves an answer that was never produced.
-NEVER_ASKED = frozenset(
-    {
-        EndReason.RUN_BUDGET,
-        EndReason.NOT_CONFIGURED,
-        EndReason.CONVERSATION_BOUND,
-        EndReason.PROVIDER_FAILURE,
-        EndReason.INTERNAL_ERROR,
-    }
-)
+# Endings that mean the question never reached the model: everything that closes a
+# run, plus the two failures that leave an answer nobody produced.
+#
+# **Built from the drivers' own set rather than listed again here.** This module
+# had its own copy, and it went stale the day `PROVIDER_LIMIT` was added: a
+# question refused because the key had no credit left recorded the agent's "no
+# credit" notice as its answer, and that answer was then scored -- an unpaid
+# invoice reported as the model's behaviour. A third adapter deciding for itself
+# which endings are final is how they come to disagree, which is the argument the
+# set was shared for.
+NEVER_ASKED = frozenset(STOP_THE_RUN) | {
+    EndReason.PROVIDER_FAILURE,
+    EndReason.INTERNAL_ERROR,
+}
 
 
 def reached_the_model(result: Result) -> bool:

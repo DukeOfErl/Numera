@@ -12,6 +12,15 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **A spent API key ends a question as a limit, and says whose limit it is.** Where
+  the provider refuses a request for lack of credit, the question ends as
+  `provider_limit` rather than as an indistinguishable `provider_failure`, and both
+  drivers say that the remedy lies with whoever pays for the deployment — replacing
+  the page's "start a new session" advice, which a spent key makes useless. Further
+  questions are refused, since asking again cannot come out differently, and the
+  request is no longer retried, because a key acquires no balance during a backoff.
+  Whatever the answer had established before the refusal is kept rather than replaced
+  by the notice ([ADR-0600]).
 - **The evaluation refuses to write its results where git would track them.**
   Every record carries the retrieval results the agent was shown, verbatim, so a
   results file holds corpus text — the same unlicensed data the corpus itself is.
@@ -158,6 +167,19 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **A question that searched for nothing no longer shows an empty "Retrieval" box.**
+  The page opened the box before the first event arrived, so a question answered
+  without a single tool call — a refusal, a spent key, an answer the model gave
+  straight — left a collapsed box on screen claiming a search that never happened.
+  It is opened by the first retrieval now, as the replay path has always done.
+- **An ending that speaks for the agent is no longer reported as a bad answer.** Where
+  a question stops on its spend ceiling, on an unpriceable response, on the retrieval
+  bound, or with no answer at all, the sentence the reader sees is the agent's own —
+  and it was being run through the citation and grounding checks, so a reader could be
+  told "this answer is not grounded in the corpus" about a system notice, with
+  `answer.ungrounded` written to the trail for a question the model never answered.
+  What retrieval found is still reported: that is evidence, not a judgement about
+  prose.
 - **A molecular mass no longer compares as unknown against a length.** The unit
   table classified the symbol `kDa` but not the spelled-out `kDalton`, and
   `Copies/cell` but not `ribosomes/cell`, so the check that exists to refuse a
@@ -200,3 +222,4 @@ number rather than an error:
 [ADR-0230]: docs/decisions/0230-flag-and-count-never-correct.md
 [ADR-0240]: docs/decisions/0240-stamp-every-ingest.md
 [ADR-0250]: docs/decisions/0250-guards-belong-to-the-operation.md
+[ADR-0600]: docs/decisions/0600-a-spent-key-is-its-own-ending.md

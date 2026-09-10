@@ -21,6 +21,7 @@ Two branches that each number ADRs from the current highest id will both claim t
 | `rename-to-scinumbers` | `0400`–`0450` |
 | `add-answer-evaluation` | `0500`–`0550` — `0500`, `0510`, `0520` written |
 | `add-answer-shape` | `0560`–`0590` |
+| `add-provider-limit-ending` | `0600`–`0640` — `0600` written |
 
 **This table is the authority, not a scan of `docs/decisions/`.** A scan cannot see uncommitted ADRs on another branch: `git ls-tree` reads committed trees, and each branch is checked out in its own worktree, so a number can be spent and still invisible from here. `add-ask-agent` has written `0100`–`0190` and holds a second range, `0260`–`0290`, because its first block ran out while the change was still open. A block is extended rather than renumbered: the ADRs already written are referenced from code comments and commit messages, and renumbering would break every one of those references to buy contiguity that nothing needs. Its first block was also uncommitted for two sessions, which is how a scan came to report those numbers as free. Never conclude a number is free because no file for it turns up.
 
@@ -202,6 +203,23 @@ that ordering into a blocker found at the end: `rename-to-scinumbers` cannot
 archive until `add-ask-agent` does, and `--skip-specs` is not the way out — it
 archives the change while promoting nothing, which is the only reason to archive.
 
+## Lint and format: automatic, and pinned in two places
+
+`ruff check` and `ruff format` run at every commit through `.pre-commit-config.yaml`, and in CI
+(`.github/workflows/checks.yml`) over the whole tree. A fresh clone or a new worktree needs
+`uv run pre-commit install` once — the hook lives in `.git/hooks`, which worktrees share, so one
+install covers all of them.
+
+**The rev in `.pre-commit-config.yaml` and the `ruff` pin in `pyproject.toml` must move together.**
+Ruff's formatter output can change between minor releases, so a range in one place and a pin in the
+other is how eight files came to be unformatted while `ruff check` stayed green for weeks. The
+pre-commit rev is the arbiter: CI runs the hooks, not the venv's ruff, so a local ruff that has
+wandered is reported rather than silently committing churn.
+
+CI **reports, it does not gate.** Streamlit Cloud deploys a branch tip whether or not the checks
+pass, so a green tick is a smoke alarm and not a lock. It also cannot run the two marked suites,
+which is the point of the paragraph below.
+
 ## Running the tests
 
 A repeated-run harness -- fault seeding, mutation testing -- should exclude the `slow` marker as well, and must write the **whole** expression: `pytest -m "not network and not corpus and not slow"`. A second `-m` replaces `addopts` rather than ANDing with it, so `-m "not slow"` alone re-selects `network` and `corpus` and the run gets *slower* -- silently. 63s becomes 34s written correctly.
@@ -216,8 +234,30 @@ Two techniques, both scoped by consequence: spend the effort where a silent bug 
 
 **Fault seeding** is the default, and the user-level conventions cover it: seed one realistic defect into a *copy* of the source and check that exactly the right test fails.
 
+**A negative case has to differ from the positive one in the dimension the rule actually reads.** This is narrower than "test both directions", and it is what three blind tests in this project had in common — each read correctly and proved nothing, and each was found by seeding rather than by review. `_is_out_of_credit` checks `status_code == 402`; its negatives were `RuntimeError` and `TimeoutError`, which carry no status at all, so the mutant `status_code is not None` — under which every 429 and 502 would permanently close the run — passed all 905 tests. The negatives had to be real `APIStatusError`s at 429, 502 and 401. Before writing a negative case, name the dimension the predicate reads and check the case varies *that*, not merely the outcome.
+
+**No coverage claim before the mutant dies.** Do not write "both directions are pinned" in an ADR, a task list or a commit message until a seeded defect has actually failed the test you are crediting. ADR-0600 asserted it and was wrong, and the claim then stood in the record as a reason not to look again — which is worse than saying nothing, because a false all-clear retires the suspicion that would have found the gap. Write the claim after the seeding, and name the mutant that died.
+
 **Mutation testing** is the automated complement, and finds what seeding structurally cannot — code no test can distinguish. Run it at the end of a task, over the module just touched, via the **`mutation-test-module`** skill, which carries the recipe and this project's four setup gotchas. Not over the whole package (2,000+ mutants, hours) and never as a CI gate.
 
 Its yield decays, and that is expected rather than a failure: a module's first run finds real gaps, later runs on settled code return mostly equivalent mutants. Once two or three consecutive runs turn up nothing but string-sentinel and default-argument survivors, stop running it on that area and reach for it again only when the code changes substantially. It is a tool for new and reworked code, not a standing gate.
 
 **Yield decays per instrument, not absolutely, and that distinction has already been paid for.** `cleaning.py` was reviewed by reading seven times, with findings each time and no downward trend: 9, 11, 6, 5, 5, 5, 7. The sixth pass caught a defect the fifth pass had *introduced*, and the seventh — after mutation testing had run over the same module — still found a HIGH. Reading the same code again is the instrument with the fastest decay; a lens it cannot use (mutation testing, a scoped adversarial review, a question about a second caller) resets the yield. So "the last pass found little" is evidence about the instrument, not about the code, and the move is to switch lenses rather than to conclude the module is clean.
+
+## When something is drawn is a driver-level question
+
+A change to *when* an element is created, relative to the rest of a script run, cannot be seen below
+the driver. `web.items_for` decides what the page says and is tested directly (ADR-0100), but the
+order and the lifetime of the elements themselves belong to `streamlit_app.py`, which Streamlit
+re-runs from the top on every interaction. **Drive the real script through `AppTest` for those.**
+
+There is a production incident to cite. The "this run is over" banner was decided before
+`st.chat_input`, so on the run that ended the conversation the ending did not exist yet and the
+banner appeared one interaction late — never, for a reader who stopped there. `run_is_over` and
+`ends_the_run` were correct throughout and every item-level test passed; the first real question put
+to the deployed app found it. The same blindness hides an element drawn unconditionally that should
+not have been drawn at all, which is how the empty "Retrieval" box survived.
+
+This does not contradict the scoping rule above. Driver bugs still announce themselves to the first
+person who looks, so they do not earn a seeding budget — the point is only that the person looking
+has to be looking at a whole script run, and `AppTest` is the cheapest thing that is.

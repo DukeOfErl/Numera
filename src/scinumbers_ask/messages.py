@@ -36,9 +36,63 @@ from .events import (
 # terminal quit on these and the web went on accepting questions, replaying the
 # same refusal indefinitely; two drivers disagreeing about whether the door is shut
 # is the divergence `messages` exists to prevent.
+#
+# A provider out of credit is here for the same reason, and is the only member a
+# reader cannot fix themselves: the key funding the run has no balance, so every
+# further question fails identically until somebody tops it up. PROVIDER_FAILURE
+# stays out -- a gateway that failed once may well answer the next call.
 STOP_THE_RUN = frozenset(
-    {EndReason.RUN_BUDGET, EndReason.CONVERSATION_BOUND, EndReason.NOT_CONFIGURED}
+    {
+        EndReason.RUN_BUDGET,
+        EndReason.CONVERSATION_BOUND,
+        EndReason.NOT_CONFIGURED,
+        EndReason.PROVIDER_LIMIT,
+    }
 )
+
+
+# What to do about a shut door, where "start a new session" is the wrong answer.
+#
+# Each driver has its own generic line for a run that is over, and for a spent run
+# budget or a full conversation that line is right: a fresh session does refresh
+# both. A key with no credit is different in kind -- the next session's first
+# question meets the same refusal -- so the generic advice sends the reader round a
+# loop, and it is the last thing on screen, under an answer that has just told them
+# the opposite.
+#
+# Shared for the reason the rest of this module is: the terminal and the page are
+# answering one question, "may I ask again, and if not what would help", and two
+# drivers phrasing that differently are two claims about one fact.
+# Each sentence has to read correctly to *both* readers this project has: someone
+# using a hosted instance, and the developer running the same code on their own key.
+# "Ask whoever deployed the app" was the first wording and told the second reader to
+# contact themselves -- the exact absurdity that moving the sentence out of the agent
+# was supposed to avoid. Naming the remedy without addressing anyone works for both.
+RUN_OVER_ADVICE: dict[EndReason, str] = {
+    EndReason.PROVIDER_LIMIT: (
+        "The key that pays for this app's model calls has reached its usage limit, so a "
+        "new session will not help — the limit has to be raised by whoever funds it."
+    ),
+    # Here for the same reason, and it was wrong before this change too: a missing
+    # credential or a spend that cannot be accounted for meets the reader again on
+    # the first question of any new session. The ending's own answer carries the
+    # specifics -- which variable, what to set -- so this only has to stop the page
+    # advising something that cannot work.
+    EndReason.NOT_CONFIGURED: (
+        "A new session will not help: this run stopped because something the app needs "
+        "is not configured, and that has to be fixed where the app runs."
+    ),
+}
+
+
+def run_over_advice(reason: EndReason) -> str | None:
+    """What a driver should say about this ending, beyond its own generic line.
+
+    `None` for every ending with no advice of its own, which is most of them: a
+    driver falls back to its own wording rather than being handed a sentence for a
+    case where its existing one is already correct.
+    """
+    return RUN_OVER_ADVICE.get(reason)
 
 
 def warning_text(event: Event) -> str | None:

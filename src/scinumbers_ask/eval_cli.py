@@ -17,11 +17,12 @@ import argparse
 import os
 import sys
 
-from . import autobuild
+from . import autobuild, messages
 from .agent import AskAgent
 from .config import Config, NotConfigured, env_setting, format_usd, refuse_retired_env
 from .corpus import CorpusUnavailable, load
 from .evaluation import ResultsFileError, provenance_for, read_results, run_evaluation
+from .events import EndReason
 from .question_set import QuestionSetError, load_question_set
 from .report import render
 from .repository import CorpusRepository
@@ -193,11 +194,24 @@ def _run(args, questions, corpus: str, entries) -> None:
     print(f"Recorded {outcome.recorded} of {outcome.attempted} attempted in {args.results}.")
     if outcome.failed:
         print(f"{outcome.failed} question(s) failed and were recorded as failures.")
-    if outcome.stopped_on_run_budget:
+    if outcome.stopped_on is not None:
         # Said plainly, because a partial run that reads as a complete one is the
         # way a report comes to describe a set it never finished asking.
+        #
+        # The remedy is named per reason rather than assumed. Telling someone to
+        # raise SCINUMBERS_RUN_BUDGET_USD when the API key has no credit left sends
+        # them to change the one number that cannot help.
         print(
-            f"The run stopped on its budget of {format_usd(config.run_budget)}; "
-            f"{outcome.questions_skipped} question(s) were not asked. Raise "
-            f"SCINUMBERS_RUN_BUDGET_USD and run again to resume where this stopped."
+            f"The run stopped on {outcome.stopped_on.value}; "
+            f"{outcome.questions_skipped} question(s) were not asked."
         )
+        if outcome.stopped_on is EndReason.RUN_BUDGET:
+            print(
+                f"The budget was {format_usd(config.run_budget)}. Raise "
+                "SCINUMBERS_RUN_BUDGET_USD and run again to resume where this stopped."
+            )
+        else:
+            advice = messages.run_over_advice(outcome.stopped_on)
+            if advice:
+                print(advice)
+            print("Run again once that is resolved; it resumes where this stopped.")

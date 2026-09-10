@@ -151,6 +151,9 @@ class Item:
     # shaped this way (ADR-0100): whether the run is over is a decision, and a
     # test can read it off an item where it cannot read it off a drawn page.
     ends_the_run: bool = False
+    # Decided here for the same reason, and carried rather than looked up later: the
+    # ending's reason is available at this point and gone by the time the page draws.
+    stop_advice: str = ""
     run_spend: int = 0
     run_budget: int = 0
 
@@ -186,6 +189,7 @@ def item_for(event: Event, repo: CorpusRepository | None = None) -> Item | None:
             Kind.ENDING,
             messages.ending_text(event),
             ends_the_run=event.reason in messages.STOP_THE_RUN,
+            stop_advice=messages.run_over_advice(event.reason) or "",
             run_spend=event.run_spend,
             run_budget=event.run_budget,
         )
@@ -516,6 +520,24 @@ def run_is_over(transcript: Iterable[tuple[str, list[Item]]]) -> bool:
     )
 
 
+def run_over_advice(transcript: Iterable[tuple[str, list[Item]]]) -> str:
+    """What to say about the ending that shut the door, or "" for nothing to add.
+
+    The page's own line -- start a new session -- is right for a spent budget and a
+    full conversation, and wrong for a key with no credit: the new session's first
+    question meets the same refusal. So the ending that stopped the run gets to
+    replace it.
+
+    The first such ending, not the last: it is the one that closed the run, and
+    whatever ended a question after that describes a run that was already over.
+    """
+    for _, items in transcript:
+        for item in items:
+            if item.kind is Kind.ENDING and item.ends_the_run and item.stop_advice:
+                return item.stop_advice
+    return ""
+
+
 def run_status(
     transcript: Iterable[tuple[str, list[Item]]],
     fallback: tuple[int, int] | None = None,
@@ -577,14 +599,27 @@ def answer(
     append them meant a raising `draw` skipped the append entirely, while the agent
     had already persisted the turn -- the page forgot a question the model
     remembered, and the next answer was built on context nothing on screen showed.
+
+    The box is opened by the first retrieval rather than before the loop, because a
+    question that retrieves nothing -- a refusal, a spent key, an answer the model
+    gave straight -- otherwise left an empty "Retrieval" box on screen, claiming a
+    search that never happened. `show` has always guarded this on the replay path;
+    only the live path drew it unconditionally.
+
+    Opening it late also places it where the first retrieval falls rather than
+    always at the top, so a warning raised before any tool call now appears above
+    it instead of below. That is the order the events actually arrived in.
     """
-    box = _retrieval_box(expanded=True)
+    box = None
     drawn: list[Item] = [] if into is None else into
     for item in items_for(events, repo):
+        if item.kind is Kind.PROGRESS and box is None:
+            box = _retrieval_box(expanded=True)
         with box if item.kind is Kind.PROGRESS else nullcontext():
             draw(item)
         drawn.append(item)
-    box.update(label="Retrieval", state="complete", expanded=False)
+    if box is not None:
+        box.update(label="Retrieval", state="complete", expanded=False)
     return drawn
 
 

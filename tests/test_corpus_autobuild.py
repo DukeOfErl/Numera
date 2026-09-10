@@ -359,9 +359,7 @@ def test_nothing_to_build_names_the_corpus_not_the_export(tmp_path):
     export as the missing corpus -- sending the reader to look at a file that is
     not the one missing."""
     export = tmp_path / "BioNumbers.xls"
-    assert autobuild.corpus_path(str(export), lambda _t: None) == str(
-        tmp_path / "BioNumbers.jsonl"
-    )
+    assert autobuild.corpus_path(str(export), lambda _t: None) == str(tmp_path / "BioNumbers.jsonl")
 
 
 def test_the_build_notice_is_not_drawn_from_inside_the_cache():

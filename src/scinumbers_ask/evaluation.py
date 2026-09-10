@@ -32,6 +32,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
+from . import messages
 from .agent import SYSTEM_PROMPT, AskAgent
 from .config import Config
 from .events import (
@@ -447,7 +448,12 @@ class Outcome:
     attempted: int = 0
     recorded: int = 0
     failed: int = 0
-    stopped_on_run_budget: bool = False
+    #: Which ending closed the run, or None if it ran to the end. A reason rather
+    #: than the boolean `stopped_on_run_budget` this replaces: that name was the
+    #: only closing ending there was when it was written, and the caller has to say
+    #: *which* limit was reached. Raising the run budget does nothing for a key with
+    #: no credit left.
+    stopped_on: EndReason | None = None
     questions_skipped: int = 0
     skipped: tuple[str, ...] = field(default_factory=tuple)
 
@@ -489,8 +495,20 @@ def run_evaluation(
         outcome.recorded += 1
         if result.failure:
             outcome.failed += 1
-        if result.end_reason == EndReason.RUN_BUDGET:
-            outcome.stopped_on_run_budget = True
+        # Every ending after which asking again cannot come out differently, not the
+        # run budget alone. `STOP_THE_RUN` is the set both interactive drivers already
+        # stop on, and it is shared for exactly this reason: a third adapter deciding
+        # for itself which endings are final is how they come to disagree. Left as
+        # `RUN_BUDGET` only, a key that ran out of credit part-way would leave the
+        # harness asking every remaining question, recording the agent's "no credit
+        # left" notice as each answer and scoring each as an ungrounded non-answer --
+        # a results file that reads as the model failing rather than a run that
+        # stopped.
+        if result.end_reason in messages.STOP_THE_RUN:
+            # Back to the enum: a `Result` holds the reason as a string, because a
+            # record has to be readable without this package. `Outcome` is in-memory
+            # and its caller compares against members, so the string stops here.
+            outcome.stopped_on = EndReason(result.end_reason)
             stopped_at = position
     return outcome
 

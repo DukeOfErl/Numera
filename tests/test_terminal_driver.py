@@ -373,6 +373,7 @@ def test_an_ending_carrying_no_bound_says_nothing_about_one():
     "reason",
     [
         EndReason.PROVIDER_FAILURE,
+        EndReason.PROVIDER_LIMIT,
         EndReason.NO_ANSWER,
         EndReason.SPEND_CEILING,
         EndReason.RETRIEVAL_BOUND,
@@ -398,3 +399,32 @@ def test_an_answered_question_exits_zero():
             yield ended(EndReason.ANSWERED)
 
     assert run(Answered(), "s", ["q"], io.StringIO()) == 0
+
+
+def test_a_spent_key_names_the_remedy_before_the_terminal_exits():
+    """The ending line names a reason and its figures. On this one the reader also
+    has to learn that no retry helps -- otherwise the terminal just stops, and the
+    page and the terminal disagree about a fact.
+
+    The wording must also survive being read by the person who *is* the funder: this
+    is the driver a developer runs on their own key."""
+
+    class OutOfCredit:
+        def ask(self, session_id, question):
+            yield ended(EndReason.PROVIDER_LIMIT, incomplete=True)
+
+    out = io.StringIO()
+    assert run(OutOfCredit(), "s", ["q"], out) == 1
+    assert "has to be raised by whoever funds it" in out.getvalue()
+
+
+def test_an_ending_with_no_advice_adds_no_line():
+    """A spent budget needs nothing beyond its ending line: a new run refreshes it."""
+
+    class Spent:
+        def ask(self, session_id, question):
+            yield ended(EndReason.RUN_BUDGET, incomplete=True)
+
+    out = io.StringIO()
+    run(Spent(), "s", ["q"], out)
+    assert out.getvalue().count("\n") == 1, "the ending line and nothing after it"

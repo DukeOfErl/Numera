@@ -113,7 +113,8 @@ it binds — the number you set is the one that stops work
 ## Tests
 
 ```bash
-uv run pytest                                  # 891 tests on a six-entry fixture; no API key needed
+uv run pytest                                  # 917 tests on a six-entry fixture; no API key needed
+uv run pre-commit install                      # once per clone: ruff check and ruff format at each commit
 ```
 
 The suite drives the real agent with scripted models rather than mocking the framework, so the

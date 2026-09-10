@@ -155,8 +155,7 @@ def corpus_path(configured: str, announce: Callable[[str], None]) -> str:
         # their export. A `ValueError` out of here is a traceback in the terminal
         # and Streamlit's exception panel on the page, for what is a typo.
         raise CorpusUnavailable(
-            f"{exc}. SCINUMBERS_CORPUS names the corpus file itself, not the "
-            "directory holding it."
+            f"{exc}. SCINUMBERS_CORPUS names the corpus file itself, not the directory holding it."
         ) from exc
     if found.is_ready:
         return str(found.corpus_path)
