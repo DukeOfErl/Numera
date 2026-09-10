@@ -309,6 +309,11 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
       wrong with it, in a file beside the results
   - It is also the cheapest way to size the deferred value check: count how often a stated number is
     actually wrong. If that is rare, the parser stays deferred.
+  - **Three states, not two, and this was measured before the file was designed.** DeepEval's
+    faithfulness verdict is `yes` / `no` / `idk`, so a binary label file could not be compared against
+    it in 6.7 without collapsing a state arbitrarily — and the collapse would not show up in the
+    agreement figure. Label on the same three states. Design: *What DeepEval's faithfulness metric
+    actually returns*.
 - [x] 5.5 Record what fraction of the corpus is clean, beside the answer baseline, so a citation rate is
       read against the base rate rather than as a failure: measurement method recorded, scalar value
       recorded, unit classified, range not fused. Report the four separately and the conjunction, and
@@ -343,12 +348,31 @@ a checker (ADR-0510).
       through OpenRouter, honouring the schema argument via structured output, reading the provider's cost
       figure per call, telemetry switched off before the import. The only module that imports `deepeval`,
       and it imports it lazily so the deterministic layer runs without the extra
-- [ ] 6.2 Verify the DeepEval surface against the installed version rather than the design: confirm
+- [ ] 6.1b Set `penalize_ambiguous_claims=True`, and say in the code why the shipped default is wrong
+      here: `_calculate_score` counts every verdict that is not `no`, so `idk` scores as faithful —
+      the lenient direction on exactly the claims the judge was least sure of, in a layer that exists
+      to catch what the deterministic checks cannot see. Leave `truths_extraction_limit` unset until
+      measured: our contexts are whole tool results, and a low cap judges an answer against a fraction
+      of what the agent was shown, reporting the difference as unfaithfulness
+- [x] 6.2 Verify the DeepEval surface against the installed version rather than the design: confirm
       `FaithfulnessMetric` exposes `.score`, `.reason`, `.claims`, `.truths` and `.verdicts[i].verdict/.reason`
       after `measure()`. Record what was verified and against which version in the module's docstring
+  - **Done 2026-09-10 against the installed 4.2.1**, ahead of its group because 5.4's label format
+    depends on it. The surface is as the design assumed, but three things were not: the verdict is
+    three-valued (`yes`/`no`/`idk`), `idk` counts as *faithful* by default, and an answer yielding no
+    claims scores 1.0. Recorded in the design; 6.1b and 6.3 carry the consequences. The docstring note
+    still has to be written when the module exists.
+- [ ] 6.2b Restate the verified surface in the judge module's docstring when 6.1 creates it, naming the
+      version it was checked against — a finding recorded only in a design document is one the next
+      reader of the code will not meet
 - [ ] 6.3 Implement the `judge` pass: read the results file, judge each answer that states a quantity,
       record a refusal as not judged, and append one judgement per question, repeat and judge model —
       claims, verdicts, reasons, score, judge model, judge spend — to a second JSONL. Resumable against it
+  - **Gate on whether claims were extracted, never on the score.** `_calculate_score` returns 1.0 for
+    an empty verdict list, so a refusal — or an answer whose claims the extractor cannot parse — reads
+    as perfectly faithful. "Record a refusal as not judged" was written on principle; this is the
+    measurement that makes it load-bearing, and the two conditions are the same number and different
+    facts.
 - [ ] 6.4 Test the wrapper and the pass against a scripted judge, so the harness's tests assert this code
       and not the framework's prompts; one `network`-marked check runs the real judge on a fixture answer
 - [ ] 6.5 Check how claim extraction treats `[[nnnnnn]]` markers on the baseline's answers; if it distorts
@@ -361,7 +385,7 @@ a checker (ADR-0510).
 - [ ] 6.8 Set the floor from what 6.7 shows, not from the design's placeholder, and write an ADR only if
       the reading changes a decision
 
-- [ ] 6.8 Review the branch before merging (see 1.5). The judge is the component whose output a
+- [ ] 6.9 Review the branch before merging (see 1.5). The judge is the component whose output a
       reader is least able to check, so brief the reviewer on the agreement gate specifically
 
 ## 7. Documentation and conformance
