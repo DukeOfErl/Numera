@@ -374,7 +374,7 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     question against a limit of 20; the most model calls any question used was 3 against 12. The
     second half of the question — whether an answer produced *at* a bound scores worse — cannot be
     answered yet, because no answer was produced at one. Repeats may change that; a harder set would.
-- [ ] 5.3 Record a baseline on the development model, with repeats, and keep the report beside the ADRs
+- [x] 5.3 Record a baseline on the development model, with repeats, and keep the report beside the ADRs
       that the figures bear on
   - **A smoke run came first: ten questions, one repeat, $0.13, all answered, no failures.** Findings
     in `docs/evaluations/2026-09-07-smoke.md`. It proved the harness end to end and found four things,
@@ -403,6 +403,22 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     searched the organism and never a matching property; and a correct follow-up is reported as a
     grounding failure, because the agent's `unretrieved` warning means "not retrieved in *this*
     question" and a follow-up legitimately retrieves nothing.
+  - **Recorded 2026-09-11: `docs/evaluations/2026-09-11-baseline.md`.** 10 x 3, $0.38, 30 of 30
+    answered, no bound reached. 140 of 219 expected entries reached the table (64%) — but `basic`
+    stands at 90% and `compound` at 24%, and the aggregate hides that entirely. Three findings to
+    act on: compound questions fail on *search* (the two-organism comparison reached 0 of 24 on one
+    repeat and 8 on the others); run-to-run variation is large enough that a single-repeat
+    comparison of two prompts is noise (`yeast-nuclear-volume` went 2, 9, 9); and expected entries
+    are landing at ranks 17 to 29 where the CLI shows five rows, which is a ranking failure and not
+    a search one.
+  - **The property search is the largest single lever, and it belongs to `add-ask-agent`.**
+    `search` matches a property by substring on the whole argument, so a multi-word argument needs
+    the stored value to contain that phrase verbatim: `"nucleus volume"` over yeast matches **1**
+    entry and finds 0 of 9 expected, while `"volume"` matches 63 and finds all 9. The agent
+    searching one word is the recall-preserving adaptation, not the defect. Matching on all terms
+    present gives `"cell volume"` over *E. coli* 48 entries and 8 of 8 expected — full recall at
+    half the noise. Stemming ("nucleus" against a stored "Nuclear") is a second step.
+
 - [ ] 5.4 **Read every answer in the baseline by hand and label it.** This is a task, not a review step:
       the labels are the reference the judge in group 6 is measured against, and they are also the only
       instrument that finds a fault nobody specified. Record, per answer, whether it is sound and what is
