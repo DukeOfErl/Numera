@@ -739,3 +739,91 @@ def _check_shapes_aside(question: Question, corpus) -> None:
         check_against_corpus((question,), corpus)
     assert "could be answered from" not in str(raised.value)
     assert "shapes" in str(raised.value)
+
+
+# -- ADR-0530: the admissible list ---------------------------------------------
+#
+# Its whole job is negative -- it stops a citation being reported as unexpected --
+# so every test here is about the list failing to do that quietly. A list read as
+# absent, a list overlapping the expected one, a list naming an entry the corpus
+# does not hold: each leaves the score looking exactly as it does when the list is
+# right.
+
+
+def test_admissible_entries_are_read_and_kept_apart_from_expected(tmp_path):
+    path = write_set(tmp_path, {**SUPPORTED, "admissible_entries": [100011, 100012]})
+    (question,) = load_question_set(path, None)
+    assert question.admissible_entries == (100011, 100012)
+    assert question.expected_entries == (100003, 100004)
+
+
+def test_an_entry_in_both_lists_is_refused(tmp_path):
+    """The lists disagree about what a missing citation means, so an entry in both
+    makes the score depend on which is consulted first."""
+    path = write_set(tmp_path, {**SUPPORTED, "admissible_entries": [100004]})
+    with pytest.raises(QuestionSetError) as raised:
+        load_question_set(path, None)
+    assert "100004" in str(raised.value)
+    assert "expected and" in str(raised.value)
+
+
+def test_an_unsupported_question_may_not_name_admissible_entries(tmp_path):
+    path = write_set(
+        tmp_path,
+        {
+            "question_id": "q1",
+            "question": "How many neoblasts does a planarian have?",
+            "asked_properties": "Number of neoblasts",
+            "asked_organisms": "Planarian",
+            "unsupported": True,
+            "admissible_entries": [100003],
+        },
+    )
+    with pytest.raises(QuestionSetError) as raised:
+        load_question_set(path, None)
+    assert "admissible" in str(raised.value)
+
+
+def test_a_refusal_about_the_admissible_list_names_that_list(tmp_path):
+    """Both lists share one reader. A message hard-coded to `expected_entries`
+    would send someone to a list that is correct, and the mutant that reintroduces
+    it changes nothing a test asserting only the type would see."""
+    path = write_set(tmp_path, {**SUPPORTED, "admissible_entries": ["100011"]})
+    with pytest.raises(QuestionSetError) as raised:
+        load_question_set(path, None)
+    assert "admissible_entries" in str(raised.value)
+    assert "expected_entries" not in str(raised.value)
+
+
+def test_an_admissible_entry_the_corpus_does_not_hold_is_refused():
+    """Reported apart from a missing expected entry: an expected one gone means
+    the question lost support, an admissible one means the exemption lapsed."""
+    question = Question(
+        question_id="q1",
+        question="How big is an E. coli cell?",
+        asked_properties=("Cell volume",),
+        asked_organisms=("Bacteria Escherichia coli",),
+        expected_entries=(1,),
+        admissible_entries=(99999,),
+    )
+    with pytest.raises(QuestionSetError) as raised:
+        check_against_corpus((question,), (an_entry(),))
+    assert "admissible entry" in str(raised.value)
+    assert "99999" in str(raised.value)
+
+
+def test_a_question_built_directly_also_refuses_unsupported_with_admissible():
+    """Two guards stand here and only one was asserted. The reader refuses this
+    before `Question` is ever constructed, so disabling the dataclass's own check
+    left the suite green -- and the dataclass is the guard that holds for a caller
+    building a set programmatically rather than reading a file. Found by seeding."""
+    with pytest.raises(QuestionSetError) as raised:
+        Question(
+            question_id="q1",
+            question="How many neoblasts does a planarian have?",
+            asked_properties=("Number of neoblasts",),
+            asked_organisms=("Planarian",),
+            unsupported=True,
+            admissible_entries=(100003,),
+        )
+    assert "admissible" in str(raised.value)

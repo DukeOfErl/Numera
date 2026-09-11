@@ -288,7 +288,7 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     a retired identifier, a shape it no longer exercises, an unsupported question the corpus has since
     learned to answer — and all three are silent, because the run still completes and the figures are
     simply about something else.
-- [ ] 5.1b Widen every question's expected entries to every spelling of the asked property, and add
+- [x] 5.1b Widen every question's expected entries to every spelling of the asked property, and add
       `admissible_entries` where a *different* property still answers (ADR-0530). **This is the one
       item that must land before 5.3**: expected entries are copied into each result at run time, so
       a list fixed afterwards does not repair the records it was scored into, and the only remedy is
@@ -306,6 +306,40 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     new list, and `tests/test_first_question_set.py` to keep it from going stale.
   - Each widened list is a hand judgement with no controlled vocabulary behind it, so a wrong one is
     invisible until someone reads an answer against it. That is what 5.6 asks a reviewer to do.
+  - **Done 2026-09-11. The eight supported questions went from 24 expected entries to 91**, and the
+    two unsupported ones are unchanged. Per question: ribosome count 7 → 10, the stationary-phase
+    follow-up 1 → 2, *E. coli* cell volume 4 → 8, ribosome diameter 2 → 3, yeast nuclear volume
+    3 → 9, yeast cell volume 3 → 17, the yeast-vs-*E. coli* comparison 3 → 24, the *E. coli* nucleus
+    1 → 2. Three questions carry `admissible_entries`, five carry none.
+  - **The spellings the old lists missed are the whole story.** "Volume of nucleus" and "Volume of
+    nuclei during S phase" record the same property as "Nuclear volume"; "Size of 70s (intact) of
+    ribosome" the same as "Diameter of 70S (intact) ribosome"; "No. of ribosomes per E. coli TG1"
+    the same as "Number of ribosomes/cell". Not one of them contains the asked property as a
+    substring, so `resolve_property` finds none of them and neither did the search that built the
+    original lists.
+  - **One call worth knowing about.** `ecoli-nucleus` now expects both 100013 ("Nuclear (DNA+protein)
+    volume", 0.16 um^3) and 107009 ("Volume of nucleoid", 0.2) rather than treating the nucleoid as
+    admissible. They are one property under two spellings and their values agree, which is the case
+    the widening rule is *for*; putting them in different lists would split one quantity by wording,
+    which is the mistake ADR-0530 exists to stop.
+  - **`admissible_entries` is kept deliberately narrow**, and the direction was chosen rather than
+    fallen into: too generous and a genuinely off-topic citation goes unflagged, too narrow and a
+    reasonable one is listed as unexpected — which is reported and never counted as an error. The
+    cheap direction is narrow. So a radius, a diameter and a fraction-of-cell-volume are admissible
+    for a volume question (one step, same object) and a surface area, a nucleus/cytoplasm ratio and
+    a subunit's dimension are not.
+  - **Two corpus oddities recorded rather than corrected.** 104441 and 104442 read as nitrifying
+    bacteria from their wording ("with nitrite as oxidizer") but the corpus files them under
+    *E. coli*; the set follows the corpus. And 103074 (the percentage increase in yeast cell volume
+    on a shift to aerobic growth) is expected for the conditions question and deliberately excluded
+    from the comparison question — the same entry, two questions, because it bears on how volume
+    varies and not on which cell is bigger.
+  - **Five seeded defects, five caught, after the harness was fixed.** The first run reported 0 of 5
+    with identical timings, which is the signature of a harness testing the installed package rather
+    than the copy; it now asserts the module's `__file__` is inside the copy and kills a canary
+    before believing a pass. The one real survivor: `Question.__post_init__`'s refusal of
+    `unsupported` with admissible entries is shadowed by the reader's, so nothing asserted the guard
+    that holds for a caller building a set programmatically. Tested directly now.
 
 - [~] 5.2 Measure the two retrieval bounds rather than defending them. `TOOL_CALL_LIMIT` (20) and
       `RUN_CALL_LIMIT` (12) were both chosen from a handful of observations — answers that satisfied their

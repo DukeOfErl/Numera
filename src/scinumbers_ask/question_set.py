@@ -62,6 +62,17 @@ class Question:
     asked_properties: tuple[str, ...]
     asked_organisms: tuple[str, ...]
     expected_entries: tuple[int, ...] = ()
+    # Entries recording a *different* property that nonetheless answers the
+    # question -- the nucleoid where a bacterium was asked for a nucleus, a radius
+    # where a volume was asked for. Citing one is not unexpected and not citing one
+    # is not a miss; the list exists so that `unexpected` means something (ADR-0530).
+    #
+    # Unlike `expected_entries` this is **not** copied into a result record. It is
+    # read from the set at report time, because borderline cases are found by
+    # reading a run's answers (task 5.4) and freezing it would price every
+    # discovery at a fresh run. The two lists therefore behave differently, which
+    # is a wart accepted deliberately and recorded in the ADR.
+    admissible_entries: tuple[int, ...] = ()
     unsupported: bool = False
     # The question this one follows, asked in that question's session.
     follows: str | None = None
@@ -83,6 +94,18 @@ class Question:
         if self.unsupported and self.expected_entries:
             raise QuestionSetError(
                 f"{self.question_id!r} is marked unsupported and names expected entries."
+            )
+        if self.unsupported and self.admissible_entries:
+            raise QuestionSetError(
+                f"{self.question_id!r} is marked unsupported and names admissible entries."
+            )
+        both = set(self.expected_entries) & set(self.admissible_entries)
+        if both:
+            raise QuestionSetError(
+                f"{self.question_id!r} names {sorted(both)} as both expected and "
+                f"admissible. The lists mean opposite things about a missing citation "
+                f"-- expected is a miss, admissible is not -- so an entry in both makes "
+                f"the score depend on which list is read first."
             )
         if not self.unsupported and not self.expected_entries:
             raise QuestionSetError(
@@ -201,7 +224,14 @@ def load_question_set(
 # list, and a key that differs from the attribute it fills is how a later author
 # comes to write one and read the other.
 _REQUIRED = ("question_id", "question", "asked_properties", "asked_organisms")
-_OPTIONAL = ("expected_entries", "unsupported", "follows", "tags", "notes")
+_OPTIONAL = (
+    "expected_entries",
+    "admissible_entries",
+    "unsupported",
+    "follows",
+    "tags",
+    "notes",
+)
 
 
 def _question(raw: object, where: str) -> Question:
@@ -221,11 +251,20 @@ def _question(raw: object, where: str) -> Question:
 
     identifier = _text(raw["question_id"], "question_id", where)
     expected = _entry_identifiers(raw.get("expected_entries", []), where)
+    admissible = _entry_identifiers(
+        raw.get("admissible_entries", []), where, key="admissible_entries"
+    )
     unsupported = _boolean(raw.get("unsupported", False), "unsupported", where)
 
     # Each direction of the disagreement is its own sentence: they are different
     # mistakes and the fix for one is not the fix for the other. `Question` refuses
     # both as well; these run first because they can name the line and the flag.
+    if unsupported and admissible:
+        raise QuestionSetError(
+            f"{where} is marked unsupported but names admissible entries {list(admissible)}. "
+            f"An admissible entry is one a citation may rest on; an unsupported question "
+            f"has none."
+        )
     if unsupported and expected:
         raise QuestionSetError(
             f"{where} is marked unsupported but names expected entries {list(expected)}. "
@@ -251,6 +290,7 @@ def _question(raw: object, where: str) -> Question:
         asked_properties=_terms(raw["asked_properties"], "asked_properties", where),
         asked_organisms=_terms(raw["asked_organisms"], "asked_organisms", where),
         expected_entries=expected,
+        admissible_entries=admissible,
         unsupported=unsupported,
         follows=follows,
         tags=_tags(raw.get("tags", []), where),
@@ -287,23 +327,26 @@ def _boolean(value: object, key: str, where: str) -> bool:
     return value
 
 
-def _entry_identifiers(value: object, where: str) -> tuple[int, ...]:
+def _entry_identifiers(value: object, where: str, key: str = "expected_entries") -> tuple[int, ...]:
+    """`key` names the list in every message: two lists share this reader now, and
+    a refusal that always said "expected_entries" would send a reader to the wrong
+    one."""
     if not isinstance(value, list):
-        raise QuestionSetError(f"{where}: expected_entries must be a list.")
+        raise QuestionSetError(f"{where}: {key} must be a list.")
     identifiers = []
     for item in value:
         # `isinstance(True, int)` is true, so booleans are excluded explicitly --
         # `[true]` would otherwise become entry 1.
         if isinstance(item, bool) or not isinstance(item, int):
             raise QuestionSetError(
-                f"{where}: expected_entries holds {item!r}. Entry identifiers are "
+                f"{where}: {key} holds {item!r}. Entry identifiers are "
                 f"written as bare integers, the way the corpus and the citation form "
                 f"carry them; a quoted one would never match a citation."
             )
         identifiers.append(item)
     duplicates = sorted({i for i in identifiers if identifiers.count(i) > 1})
     if duplicates:
-        raise QuestionSetError(f"{where}: expected_entries repeats {duplicates}.")
+        raise QuestionSetError(f"{where}: {key} repeats {duplicates}.")
     return tuple(identifiers)
 
 
@@ -409,6 +452,25 @@ def check_against_corpus(questions: tuple[Question, ...], entries: tuple[Entry, 
             f"The corpus does not hold every expected entry: {listed}. Either the set "
             f"predates this corpus or an identifier is wrong; nothing can be scored "
             f"against an entry that is not there."
+        )
+
+    # Checked with the same force as the expected list, and for the same reason: an
+    # admissible identifier the corpus does not hold stops a citation being called
+    # unexpected only for an entry nothing can cite, so the list silently does
+    # nothing. Reported apart because the fix differs -- an expected entry that has
+    # gone means the question lost support, an admissible one means the exemption
+    # lapsed.
+    unheld = {
+        question.question_id: sorted(set(question.admissible_entries) - set(held))
+        for question in questions
+        if set(question.admissible_entries) - set(held)
+    }
+    if unheld:
+        listed = "; ".join(f"{qid} admits {ids}" for qid, ids in sorted(unheld.items()))
+        problems.append(
+            f"The corpus does not hold every admissible entry: {listed}. An admissible "
+            f"entry exempts a citation from being reported as unexpected, and one the "
+            f"corpus lacks exempts nothing."
         )
 
     # Only the identifiers the corpus holds: the absent ones are already reported,
