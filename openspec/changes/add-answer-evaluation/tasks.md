@@ -500,6 +500,23 @@ a checker (ADR-0510).
 - [ ] 6.9 Review the branch before merging (see 1.5). The judge is the component whose output a
       reader is least able to check, so brief the reviewer on the agreement gate specifically
 
+- [x] 5.7 Write the answer sheet: every answer and the entries that bear on it, as HTML or PDF,
+      behind `scinumbers-eval report --sheet`. The figures say what happened; this is what a person
+      reads to decide whether the figures mean anything — which is what 5.4 asks for by hand and
+      what 5.6 gives a reviewer when the question is whether the *set* measures the right thing
+  - **The recorded context is deliberately absent**, and a test asserts it: three quarters of a
+    results file is the verbatim text the agent was shown, kept so a changed scoring rule or a judge
+    can run again without re-asking a paid question. Reproducing it would bury the answer.
+  - **It carries corpus text through the entries it tabulates, so it goes through the same
+    refusal the results file does.** The group 3-4 review recorded that every later artefact of a
+    run needs that guard; this is the first one to arrive since. Both directions are tested — a
+    path git would track is refused, and a path outside is written.
+  - PDF needs `weasyprint`, which is its own extra rather than part of `eval`: it needs system
+    libraries a machine may not have, and a native dependency that can fail at import has no place
+    being mandatory for a harness whose job is asking questions. HTML needs nothing.
+  - **ADR-0420's test caught the column header.** "BNID" in a live string is the source database's
+    notation in a second module; the sheet uses "ID", which is what both drivers already print.
+
 ## 7. Documentation and conformance
 
 - [ ] 7.1 `README.md`: how to run an evaluation, resume one, judge one, and read the report — the task

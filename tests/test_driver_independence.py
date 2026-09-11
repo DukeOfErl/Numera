@@ -32,7 +32,7 @@ DRIVERS = {"cli", "web"}
 # as each module lands, and `test_every_named_adapter_exists` refuses a name with no
 # file: a guard listing a module that was renamed protects nothing, and nothing else
 # would say so.
-HARNESS = {"question_set", "evaluation", "scoring", "report", "eval_cli"}
+HARNESS = {"question_set", "evaluation", "scoring", "report", "answer_sheet", "eval_cli"}
 ADAPTERS = DRIVERS | HARNESS
 # `autobuild` joins them: it decides whether to build a corpus, which is a driver's
 # policy and not the agent's, and it is the one module allowed to import the

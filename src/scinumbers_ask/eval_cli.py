@@ -19,9 +19,16 @@ import sys
 
 from . import autobuild, messages
 from .agent import AskAgent
+from .answer_sheet import SheetUnavailable, write_answer_sheet
 from .config import Config, NotConfigured, env_setting, format_usd, refuse_retired_env
 from .corpus import CorpusUnavailable, load
-from .evaluation import ResultsFileError, provenance_for, read_results, run_evaluation
+from .evaluation import (
+    ResultsFileError,
+    ResultsWouldBeCommitted,
+    provenance_for,
+    read_results,
+    run_evaluation,
+)
 from .events import EndReason
 from .question_set import QuestionSetError, load_question_set
 from .report import render
@@ -92,6 +99,13 @@ def main(argv: list[str] | None = None) -> None:
         default=1,
         help="how many repeats the run asked for, so a partial file can say so",
     )
+    shown.add_argument(
+        "--sheet",
+        default="",
+        help="also write every answer and the entries that bear on it to this path "
+        "(.html, or .pdf where weasyprint is installed); it carries corpus text, so "
+        "it is refused on any path git would track",
+    )
     shown.add_argument("--by-tag", action="store_true", help="figures per question tag")
     shown.add_argument("--by-shape", action="store_true", help="figures per entry shape")
 
@@ -144,6 +158,12 @@ def main(argv: list[str] | None = None) -> None:
             ),
             end="",
         )
+        if args.sheet:
+            try:
+                write_answer_sheet(args.sheet, results, questions, entries or ())
+            except (SheetUnavailable, ResultsWouldBeCommitted) as exc:
+                raise SystemExit(f"{PROG}: {exc}") from exc
+            print(f"Answers and their entries written to {args.sheet}.")
         return
 
     followups = sum(1 for question in questions if question.follows is not None)

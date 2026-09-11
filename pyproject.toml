@@ -40,6 +40,15 @@ ingest = [
 eval = [
     "deepeval>=4.2",
 ]
+# `scinumbers-eval report --sheet` writes HTML with no dependency at all; this
+# extra only adds the PDF renderer. Kept out of `eval` deliberately: weasyprint
+# needs system libraries (pango, cairo) that a given machine may not have, and a
+# native dependency that can fail at import has no business being mandatory for a
+# harness whose actual job is asking questions. The command says so when asked
+# for a PDF without it.
+sheet = [
+    "weasyprint>=60",
+]
 
 # All three entry points are declared here so no branch has to edit this table.
 # Console scripts are metadata resolved when invoked, so the ones whose modules
