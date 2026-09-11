@@ -153,6 +153,11 @@ reads a number out of the answer's prose, except 4.3, which only asks whether a 
 - [x] 4.1 Score by comparing cited entries against expected entries, reporting unexpected citations
       separately rather than as errors, and splitting the expected entries not cited into retrieved and
       passed over versus never retrieved
+  - **Reworked by ADR-0530; see 4.13.** The four figures this task produced disagree about what
+    `expected_entries` means — three read it as a required set, `unexpected` reads it as a floor —
+    and the smoke run's remedy for the too-narrow lists would have broken the sound three to fix
+    the one that was not hurting. What ships is the identifier comparison; what changes is which
+    figure is the headline.
 - [x] 4.2 Score whether the agent searched for the asked organism and property — a public resolution
       method on the repository, the same one `search` uses, applied to each `Retrieval`'s arguments — and
       what fraction of cited entries carry the asked organism and property in their fields; the two
@@ -242,6 +247,21 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
   unhashable once it carries a retrieval and every synthetic test record had none. A double that is
   simpler than the real thing in a load-bearing way hides the path it stands in for.
 
+- [ ] 4.13 Rework the citation scoring to ADR-0530, over the raw material already recorded — no
+      re-run is needed for any of it. The headline pass becomes *every expected entry reached the
+      entries table* (expected ⊆ retrieved), renamed from `all_expected_cited` to say so; prose
+      citation stays as a secondary figure. Add the rank of each expected entry within `rows_for`
+      order as a continuous figure beside it, because "reached the table" passes an entry ranked
+      fortieth and a ranking failure needs a different fix from a search failure. Read
+      `admissible_entries` from the question set, not from the result record, so a borderline case
+      found while hand-labelling costs nothing to add. Report a cited entry outside both lists as
+      unexpected, as now
+  - **Do not score a driver's truncation.** `TERMINAL_ROWS` is 5 in the CLI and the web's cut
+    differs; scoring it would make one answer score differently depending on who asked (ADR-0110).
+  - **Both directions, as 4.10 requires of any classifying rule.** Widening the expected set moves
+    `passed_over` up by construction — a good answer cites four of nine — so count it before and
+    after and check the increase is the benign kind rather than evidence the widening went too far.
+
 - [x] 4.12 Review the branch before merging (see 1.5). The review of groups 3-4 found ten
       defects, including a results file that would have committed corpus text
 
@@ -268,6 +288,25 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     a retired identifier, a shape it no longer exercises, an unsupported question the corpus has since
     learned to answer — and all three are silent, because the run still completes and the figures are
     simply about something else.
+- [ ] 5.1b Widen every question's expected entries to every spelling of the asked property, and add
+      `admissible_entries` where a *different* property still answers (ADR-0530). **This is the one
+      item that must land before 5.3**: expected entries are copied into each result at run time, so
+      a list fixed afterwards does not repair the records it was scored into, and the only remedy is
+      re-asking at cost. Everything else ADR-0530 asks for is recomputable at report time
+  - Build the lists from the corpus vocabulary — `resolve_property` returns 14 spellings of
+    "Nuclear volume" alone — and **never from what the agent cited in the smoke run**. Widening a
+    set to what the system found makes it a set the system passes by construction.
+  - Worked example, already measured: `yeast-nuclear-volume` lists 3 entries where 9 of the 52
+    nucleus-mentioning yeast entries record a nuclear volume in volume units. Fractions, radii,
+    diameters and surface areas are deliberately excluded — those are a different property, and the
+    ones that still answer the question belong in `admissible_entries`.
+  - The two lists behave differently on purpose and the reader needs telling: `expected_entries`
+    freezes into each record, `admissible_entries` is read from the question set at report time so a
+    borderline case found during 5.4 costs nothing. Extend `check_against_corpus` to validate the
+    new list, and `tests/test_first_question_set.py` to keep it from going stale.
+  - Each widened list is a hand judgement with no controlled vocabulary behind it, so a wrong one is
+    invisible until someone reads an answer against it. That is what 5.6 asks a reviewer to do.
+
 - [~] 5.2 Measure the two retrieval bounds rather than defending them. `TOOL_CALL_LIMIT` (20) and
       `RUN_CALL_LIMIT` (12) were both chosen from a handful of observations — answers that satisfied their
       question used about five retrievals, one runaway used twenty-nine — and neither has been reached in
@@ -299,6 +338,13 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     scoring rule, which the raw material lets us recompute. Fix it from the corpus vocabulary and
     **not from what the agent cited** — widening a set to what the system found is how a set becomes
     one the system passes by construction.
+  - **Corrected 2026-09-11, ADR-0530: widening alone would have made the scoring worse.** The
+    remedy above is right about the lists and wrong about what they then have to prove. Under the
+    scoring as written, a widened list makes `all_expected_cited` unreachable — no good answer to
+    the yeast nuclear-volume question cites nine entries — and fills `passed_over` with entries the
+    answer sensibly declined. Widening is only sound together with the change of target: an
+    expected entry discharges its obligation by reaching the **entries table**, not the prose. See
+    4.13 for the scoring and 5.1b for the lists; do not do one without the other.
   - Two smaller findings, both real: `ecoli-nucleus` refused a question entry 100013 answers, having
     searched the organism and never a matching property; and a correct follow-up is reported as a
     grounding failure, because the agent's `unretrieved` warning means "not retrieved in *this*
@@ -384,6 +430,18 @@ a checker (ADR-0510).
       as a judge miss; mark every judged figure unvalidated while agreement is below the configured floor
 - [ ] 6.8 Set the floor from what 6.7 shows, not from the design's placeholder, and write an ADR only if
       the reading changes a decision
+
+- [ ] 6.10 Judge whether a passed-over entry's *omission* changed the answer — an unmentioned
+      growth condition, a value an order of magnitude from everything cited — rather than whether it
+      fits the question. Under ADR-0530's widened expected set, fit is settled by construction: the
+      entry is expected because it records the asked property, and an answer citing four of nine
+      with the table carrying the rest is the intended shape, so "do they fit?" costs a judge call
+      to confirm what the set already says
+  - **Gate it behind a deterministic spread check** between the cited and passed-over values, so
+    the judge is paid only where the numbers actually differ. That gate is the same comparison
+    ADR-0520 needs rebuilt around (entries the question's property terms select, restricted to the
+    cited entry's organism); build one implementation and use it for both, rather than two
+    comparisons of the same kind that can drift apart.
 
 - [ ] 6.9 Review the branch before merging (see 1.5). The judge is the component whose output a
       reader is least able to check, so brief the reviewer on the agreement gate specifically

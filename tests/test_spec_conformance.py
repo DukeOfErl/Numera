@@ -75,12 +75,6 @@ COVERED: dict[str, tuple[str, ...]] = {
     # structure-only wording, which appears in no clause of the requirement. A
     # mapping that names a test checking something else is exactly the failure this
     # file admits it cannot detect, so it is worth not making by hand.
-    "Scoring is based on cited entries, not answer text": (
-        "test_scoring.py::test_an_answer_citing_every_expected_entry_scores_as_such",
-        "test_scoring.py::test_an_unexpected_citation_is_reported_and_is_not_an_error",
-        "test_scoring.py::test_a_missed_entry_is_split_by_whether_it_was_ever_retrieved",
-        "test_report.py::test_the_two_kinds_of_missed_entry_are_reported_apart",
-    ),
     "The asked property and organism are recognised": (
         "test_scoring.py::test_an_abbreviated_search_counts_as_searching_for_the_organism",
         "test_scoring.py::test_searching_for_another_organism_does_not_count",
@@ -470,10 +464,22 @@ AWAITING_THE_PROMPT = (
     "Leading with a figure does not displace what qualifies it",
 )
 
+# ADR-0530 rewrote this requirement and 4.13 has not yet rebuilt the scoring under
+# it. The tests that used to be listed here still pass -- they assert the old
+# semantics, where an expected entry had to be cited in the prose -- so leaving
+# them mapped would let the three new clauses (reaching the table, the rank
+# figure, the admissible list) read as covered by tests that never mention them.
+# That is precisely the failure this file admits it cannot detect, so the
+# requirement is recorded as a gap until 4.13 lands.
+AWAITING_THE_TABLE_SCORING = ("Scoring is based on entry identifiers, not answer text",)
+
 UNMAPPED: dict[str, str] = {
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_HARNESS, "add-answer-evaluation is unbuilt; no harness yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),
+    **dict.fromkeys(
+        AWAITING_THE_TABLE_SCORING, "ADR-0530 rewrote it; the scoring is rebuilt in task 4.13"
+    ),
 }
 
 

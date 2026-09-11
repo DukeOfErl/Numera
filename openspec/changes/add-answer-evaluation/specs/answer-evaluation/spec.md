@@ -45,27 +45,71 @@ measures the happy path and says nothing about the behaviour most questions will
 - **THEN** it holds questions whose expected entries have no scalar value, an unclassified unit, a fused range, no measurement method, and a hedged range
 - **AND** the report gives its figures for each of those shapes apart from the complete ones
 
-### Requirement: Scoring is based on cited entries, not answer text
+### Requirement: Scoring is based on entry identifiers, not answer text
 
-The evaluation SHALL score an answer by comparing the entry identifiers it cited against those
-recorded for the question, reporting how many expected entries were cited and how many cited
-entries were not expected. It SHALL NOT score by string comparison of the answer prose.
+The evaluation SHALL score an answer by comparing entry identifiers, never by string comparison of
+the answer prose.
 
-Of the expected entries an answer did not cite, the evaluation SHALL report separately those the
-agent retrieved and passed over from those it never retrieved. The two are different failures — one
-of selection, one of search — and a single "missed" count would hide which is happening.
+A question's **expected entries** SHALL be every entry in the corpus recording the asked property
+for the asked organism, whatever spelling of that property it uses. `property` is free text, so one
+quantity is recorded under many spellings, and a set naming one of them describes the search that
+built it rather than the corpus. The set SHALL be built from the corpus vocabulary and SHALL NOT be
+widened to what an agent cited: a set grown to what the system found is one the system passes by
+construction.
 
-#### Scenario: Answer cites the expected entries
-- **WHEN** an answer cites every entry recorded for the question
-- **THEN** it is scored as citing all expected entries
+An expected entry discharges its obligation by **reaching the entries table** — the table lists
+every retrieved entry, the cited ones first — rather than by being cited in the prose. Requiring
+prose citation of every expected entry would fail every good answer to a question the corpus
+answers many times over. The evaluation SHALL therefore report, separately:
 
-#### Scenario: Answer cites unexpected entries
-- **WHEN** an answer cites entries not recorded for the question
+- whether every expected entry reached the table, and which did not;
+- the rank of each expected entry within the table's ordering, because an entry ranked far down is
+  one a reader never sees, and a search failure and a ranking failure need different fixes;
+- how many expected entries the prose cited.
+
+Where a driver truncates the table for display SHALL NOT be scored: the cut differs between drivers,
+and scoring it would make one answer score differently depending on which driver asked.
+
+A question MAY also record **admissible entries**: entries recording a *different* property that
+nonetheless answers the question — the nucleoid where a bacterium was asked for a nucleus, cell
+width where a rod was asked for a diameter. Citing one SHALL NOT be reported as unexpected, and
+failing to cite one SHALL NOT be reported as a miss. A cited entry that is neither expected nor
+admissible SHALL be reported as unexpected.
+
+Of the expected entries an answer did not cite in prose, the evaluation SHALL report separately
+those the agent retrieved and passed over from those it never retrieved. The two are different
+failures — one of selection, one of search — and a single "missed" count would hide which is
+happening. A passed-over entry SHALL NOT on its own be counted as an error: with the expected set
+covering every spelling of a property, an answer citing some of them and leaving the rest to the
+table is the intended shape.
+
+#### Scenario: Every expected entry reaches the table
+- **WHEN** every entry recorded for the question was retrieved during the question
+- **THEN** the answer is scored as having brought every expected entry to the table, whether or not the prose cited each one
+
+#### Scenario: An expected entry is never retrieved
+- **WHEN** an entry recorded for the question was not retrieved during the question
+- **THEN** it is reported as never retrieved, and the question fails the table check
+
+#### Scenario: An expected entry reaches the table far down the ordering
+- **WHEN** an expected entry was retrieved but is ranked below the entries the answer cited
+- **THEN** its rank is reported, so a ranking failure is distinguishable from a search failure
+
+#### Scenario: The display truncates the table
+- **WHEN** a driver shows fewer rows than the table holds
+- **THEN** the score is unchanged, because the cut belongs to the driver and not to the answer
+
+#### Scenario: Answer cites an admissible entry
+- **WHEN** an answer cites an entry recorded for the question as admissible rather than expected
+- **THEN** it is not reported as unexpected, and not counted towards the expected entries
+
+#### Scenario: Answer cites entries recorded as neither expected nor admissible
+- **WHEN** an answer cites entries the question set does not record
 - **THEN** those are reported separately rather than counted as errors, since the corpus may support the answer through entries the question set does not list
 
 #### Scenario: An expected entry was retrieved and passed over
 - **WHEN** an expected entry was returned by a retrieval during the question and the answer did not cite it
-- **THEN** it is reported as passed over, apart from expected entries that were never retrieved
+- **THEN** it is reported as passed over, apart from expected entries that were never retrieved, and is not on its own counted as an error
 
 ### Requirement: The asked property and organism are recognised
 
