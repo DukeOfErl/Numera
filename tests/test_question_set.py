@@ -327,7 +327,7 @@ def test_the_two_halves_of_the_unsupported_flag_are_refused_apart(tmp_path):
     """Different mistakes, and the fix for one is not the fix for the other."""
     with pytest.raises(QuestionSetError, match="marked unsupported but names expected"):
         load_question_set(write_set(tmp_path, {**SUPPORTED, "unsupported": True}), None)
-    with pytest.raises(QuestionSetError, match="names no expected entries"):
+    with pytest.raises(QuestionSetError, match="neither expected nor admissible"):
         load_question_set(write_set(tmp_path, {**SUPPORTED, "expected_entries": []}), None)
 
 
@@ -596,8 +596,11 @@ def test_a_question_built_in_code_carries_the_same_invariants_as_one_read(tmp_pa
         asked_properties=("Cell volume",),
         asked_organisms=("Bacteria Escherichia coli",),
     )
-    with pytest.raises(QuestionSetError, match="names no expected entries"):
+    with pytest.raises(QuestionSetError, match="neither expected nor admissible"):
         Question(**valid)
+    # The third state: admissible entries alone are support enough, because a
+    # false-premise question has no expected entry and is not unsupported either.
+    Question(**valid, admissible_entries=(1,))
     with pytest.raises(QuestionSetError, match="unsupported and names expected entries"):
         Question(**valid, unsupported=True, expected_entries=(1,))
     with pytest.raises(QuestionSetError, match="no asked property or organism"):
@@ -827,3 +830,26 @@ def test_a_question_built_directly_also_refuses_unsupported_with_admissible():
             admissible_entries=(100003,),
         )
     assert "admissible" in str(raised.value)
+
+
+def test_a_false_premise_question_may_rest_on_admissible_entries_alone(tmp_path):
+    """The third state the set needs, and neither of the other two fits it.
+
+    "What is the volume of the nucleus of an E. coli cell?" has no expected entry,
+    because nothing records the volume of a thing that does not exist. It is not
+    unsupported either: the corpus holds the nucleoid, and marking it unsupported
+    would score the correct answer -- cite the nucleoid, say the premise does not
+    hold -- as a failure to decline.
+    """
+    false_premise = {
+        "question_id": "ecoli-nucleus",
+        "question": "What is the volume of the nucleus of an E. coli cell?",
+        "asked_properties": "Nuclear",
+        "asked_organisms": "Bacteria Escherichia coli",
+        "admissible_entries": [100013, 107009],
+        "tags": ["false-premise"],
+    }
+    (question,) = load_question_set(write_set(tmp_path, false_premise), None)
+    assert question.expected_entries == ()
+    assert question.admissible_entries == (100013, 107009)
+    assert not question.unsupported

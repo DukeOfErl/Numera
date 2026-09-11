@@ -76,6 +76,14 @@ width where a rod was asked for a diameter. Citing one SHALL NOT be reported as 
 failing to cite one SHALL NOT be reported as a miss. A cited entry that is neither expected nor
 admissible SHALL be reported as unexpected.
 
+A question MAY record admissible entries and **no** expected entries. This is the false-premise
+shape, and neither of the other two states describes it: nothing records the asked property, because
+the thing asked about does not exist, yet the corpus holds material that answers what was meant.
+Marking such a question unsupported would score the desired answer — cite the related entries and
+say the premise does not hold — as a failure to decline. A question SHALL record at least one of the
+two lists, or be marked unsupported; a question with neither would score as citing none of none,
+which reads as a pass.
+
 Of the expected entries an answer did not cite in prose, the evaluation SHALL report separately
 those the agent retrieved and passed over from those it never retrieved. The two are different
 failures — one of selection, one of search — and a single "missed" count would hide which is
@@ -98,6 +106,10 @@ table is the intended shape.
 #### Scenario: The display truncates the table
 - **WHEN** a driver shows fewer rows than the table holds
 - **THEN** the score is unchanged, because the cut belongs to the driver and not to the answer
+
+#### Scenario: A question rests on admissible entries alone
+- **WHEN** a question's premise is false and the corpus records only material answering what was meant
+- **THEN** the question records those entries as admissible, records no expected entries, and is not marked unsupported
 
 #### Scenario: Answer cites an admissible entry
 - **WHEN** an answer cites an entry recorded for the question as admissible rather than expected

@@ -72,6 +72,13 @@ class Question:
     # reading a run's answers (task 5.4) and freezing it would price every
     # discovery at a fresh run. The two lists therefore behave differently, which
     # is a wart accepted deliberately and recorded in the ADR.
+    #
+    # A question may rest on this list **alone**, and that is the third state the
+    # set needs: a false premise. "What is the volume of the nucleus of an E. coli
+    # cell?" has no expected entry, because nothing records the volume of a thing
+    # that does not exist, and it is not unsupported either, because the corpus
+    # holds the nucleoid. Marking it unsupported would score a correct answer --
+    # cite the nucleoid, say the premise does not hold -- as a failure to decline.
     admissible_entries: tuple[int, ...] = ()
     unsupported: bool = False
     # The question this one follows, asked in that question's session.
@@ -107,10 +114,11 @@ class Question:
                 f"-- expected is a miss, admissible is not -- so an entry in both makes "
                 f"the score depend on which list is read first."
             )
-        if not self.unsupported and not self.expected_entries:
+        if not self.unsupported and not (self.expected_entries or self.admissible_entries):
             raise QuestionSetError(
-                f"{self.question_id!r} names no expected entries and is not marked "
-                f"unsupported; it would score as citing 0 of 0, which reads as a pass."
+                f"{self.question_id!r} names neither expected nor admissible entries and "
+                f"is not marked unsupported; it would score as citing 0 of 0, which reads "
+                f"as a pass."
             )
         if self.follows == self.question_id:
             raise QuestionSetError(f"{self.question_id!r} follows itself.")
@@ -271,11 +279,11 @@ def _question(raw: object, where: str) -> Question:
             f"An unsupported question is one the corpus cannot answer; if these entries "
             f"do support it, drop the flag."
         )
-    if not unsupported and not expected:
+    if not unsupported and not (expected or admissible):
         raise QuestionSetError(
-            f"{where} names no expected entries and is not marked unsupported. "
-            f"Nothing could be scored for it: add the entries that should support "
-            f"the answer, or mark it unsupported."
+            f"{where} names neither expected nor admissible entries and is not marked "
+            f"unsupported. Nothing could be scored for it: add the entries that should "
+            f"support the answer, or mark it unsupported."
         )
 
     follows = raw.get("follows")

@@ -317,11 +317,16 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     the same as "Number of ribosomes/cell". Not one of them contains the asked property as a
     substring, so `resolve_property` finds none of them and neither did the search that built the
     original lists.
-  - **One call worth knowing about.** `ecoli-nucleus` now expects both 100013 ("Nuclear (DNA+protein)
-    volume", 0.16 um^3) and 107009 ("Volume of nucleoid", 0.2) rather than treating the nucleoid as
-    admissible. They are one property under two spellings and their values agree, which is the case
-    the widening rule is *for*; putting them in different lists would split one quantity by wording,
-    which is the mistake ADR-0530 exists to stop.
+  - **`ecoli-nucleus` rests on admissible entries alone, and that is a third state the format did
+    not have.** Both nucleoid entries were first made expected, on the reasoning that 100013
+    ("Nuclear (DNA+protein) volume", 0.16 um^3) and 107009 ("Volume of nucleoid", 0.2) are one
+    property under two spellings. That was wrong about which list they belong in: nothing records
+    the volume of an *E. coli* nucleus, because there is no such thing, so the question has no
+    expected entry — and it is not unsupported either, since the corpus holds the nucleoid.
+    Marking it unsupported would score the desired answer, which cites them and says the premise
+    does not hold, as a failure to decline. So a question may now name admissible entries and no
+    expected ones; the refusal that used to demand expected-or-unsupported now demands
+    expected-or-admissible-or-unsupported, which keeps the "0 of 0 reads as a pass" protection.
   - **`admissible_entries` is kept deliberately narrow**, and the direction was chosen rather than
     fallen into: too generous and a genuinely off-topic citation goes unflagged, too narrow and a
     reasonable one is listed as unexpected — which is reported and never counted as an error. The
