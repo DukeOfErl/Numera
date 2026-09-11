@@ -22,6 +22,7 @@ from dataclasses import dataclass
 
 from .citations import citations
 from .corpus import Entry
+from .entries_table import rows_for
 from .evaluation import Result
 from .events import EndReason, QuestionEnded
 from .messages import STOP_THE_RUN
@@ -31,36 +32,84 @@ from .repository import CorpusRepository
 
 @dataclass(frozen=True)
 class CitationScore:
-    """What an answer cited, against what the question expected. Task 4.1."""
+    """What an answer brought to the reader, against what the question expected.
+
+    Tasks 4.1 and 4.13, under ADR-0530. **An expected entry discharges by reaching
+    the entries table, not by being cited in the prose.** The table lists every
+    retrieved entry, cited ones first, so reaching it is what the reader actually
+    gets; requiring prose citation of every expected entry fails every good answer
+    to a question the corpus answers ten times over -- and after the expected lists
+    were widened to cover every spelling of a property, that is most of them.
+
+    Both figures are kept. Prose citation is what a reader follows, so it stays as
+    a secondary; it is simply no longer the pass.
+    """
 
     expected: int
-    cited_expected: int
-    #: Cited but not expected. Reported, never counted as an error: the corpus may
-    #: support the answer through entries the question set does not list, and a set
-    #: is a claim about which entries suffice rather than about which exist.
-    unexpected: tuple[int, ...]
-    #: Expected, retrieved, and not cited. A failure of selection.
-    passed_over: tuple[int, ...]
-    #: Expected and never retrieved. A failure of search. Kept apart from the
-    #: above because they are different failures and a single "missed" count would
-    #: hide which is happening.
+    #: Expected and retrieved, so the reader was shown it. The headline.
+    reached_the_table: int
+    #: Expected and never retrieved. A failure of *search*.
     never_retrieved: tuple[int, ...]
+    #: Expected and cited in the prose. Secondary to reaching the table.
+    cited_expected: int
+    #: Expected, retrieved, not cited. **Not an error on its own**: with the
+    #: expected set covering every spelling of a property, an answer citing some
+    #: and leaving the rest to the table is the intended shape. Task 6.10 asks a
+    #: judge whether a particular omission changed the answer.
+    passed_over: tuple[int, ...]
+    #: Cited and recorded as admissible -- a different property that still answers.
+    #: Neither a hit nor an error; counted apart so `unexpected` means something.
+    admissible_cited: tuple[int, ...]
+    #: Cited and in neither list. Reported, never counted as an error: the corpus
+    #: may support an answer through entries the set does not record.
+    unexpected: tuple[int, ...]
+    #: Where each expected entry sits in the table the reader would have seen,
+    #: ascending. An entry at rank 40 reached the table and no reader will see it,
+    #: which is a *ranking* failure and needs a different fix from a search one.
+    ranks: tuple[int, ...]
 
     @property
-    def all_expected_cited(self) -> bool:
-        return self.expected > 0 and self.cited_expected == self.expected
+    def all_expected_reached_the_table(self) -> bool:
+        """The pass. False when a question expects nothing -- a false-premise
+        question is scored on its admissible list, not on this."""
+        return self.expected > 0 and not self.never_retrieved
+
+    @property
+    def deepest_rank(self) -> int | None:
+        """How far down a reader would have had to look. `None` when none reached."""
+        return max(self.ranks) if self.ranks else None
 
 
-def citation_score(result: Result) -> CitationScore:
+def citation_score(result: Result, question: Question, repo: CorpusRepository) -> CitationScore:
+    """The question and the repository are required, not optional.
+
+    `admissible_entries` lives on the question and is deliberately not copied into
+    a result, and the rank comes from the table's own ordering. A signature that
+    defaulted either would let a caller silently score without them -- every
+    admissible citation reported as unexpected, every rank absent -- and the
+    figures would look ordinary.
+    """
     expected = set(result.expected_entries)
     cited = set(result.cited)
     retrieved = set(result.retrieved)
+    admissible = set(question.admissible_entries)
+
+    # The table as a reader would have seen it, from the module that builds it
+    # rather than a second ordering that can drift from the first.
+    order = [
+        row.entry_id for row in rows_for(repo, result.cited, result.retrieved, result.question)
+    ]
+    place = {entry_id: index + 1 for index, entry_id in enumerate(order)}
+
     return CitationScore(
         expected=len(expected),
-        cited_expected=len(expected & cited),
-        unexpected=tuple(sorted(cited - expected)),
-        passed_over=tuple(sorted((expected & retrieved) - cited)),
+        reached_the_table=len(expected & retrieved),
         never_retrieved=tuple(sorted(expected - retrieved)),
+        cited_expected=len(expected & cited),
+        passed_over=tuple(sorted((expected & retrieved) - cited)),
+        admissible_cited=tuple(sorted(cited & admissible)),
+        unexpected=tuple(sorted(cited - expected - admissible)),
+        ranks=tuple(sorted(place[e] for e in expected & retrieved if e in place)),
     )
 
 

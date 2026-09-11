@@ -43,6 +43,32 @@ class QuestionSetError(Exception):
     """A question set that cannot be scored against, and what to do about it."""
 
 
+class Tier(StrEnum):
+    """What a question demands of the agent, so a gain in one kind is not paid for
+    out of another.
+
+    The report gives its figures per tier because the tiers fail differently and
+    the trade between them is real: a prompt that makes the agent search harder for
+    a comparison can easily cost it precision on the single-property questions that
+    are most of what anyone asks. A headline averaged over all three hides exactly
+    that.
+
+    **A closed vocabulary, unlike `tags`.** Tags are free-form because the report
+    merely groups by them; a tier is compared against the same tier in an earlier
+    run, and a typo would silently open a fourth bucket with one question in it and
+    leave the one it should have joined looking improved.
+    """
+
+    #: One property, one organism, answered from what was retrieved.
+    BASIC = "basic"
+    #: More than one organism or property, a figure that has to be computed, or a
+    #: follow-up that depends on what an earlier question established.
+    COMPOUND = "compound"
+    #: The corpus cannot answer it as asked -- absent organism, or a false premise.
+    #: Scored on whether the agent declines rather than on what it brings back.
+    DECLINING = "declining"
+
+
 @dataclass(frozen=True)
 class Question:
     """One question, its expected support, and what it is in the set to exercise."""
@@ -87,6 +113,7 @@ class Question:
     # Free-form on purpose: the report gives its figures per tag, and a fixed
     # vocabulary here would have to be widened by whoever adds the next kind of
     # question, which is the moment they are least likely to touch this file.
+    tier: Tier = Tier.BASIC
     tags: tuple[str, ...] = ()
     notes: str = ""
 
@@ -235,6 +262,7 @@ _REQUIRED = ("question_id", "question", "asked_properties", "asked_organisms")
 _OPTIONAL = (
     "expected_entries",
     "admissible_entries",
+    "tier",
     "unsupported",
     "follows",
     "tags",
@@ -294,6 +322,7 @@ def _question(raw: object, where: str) -> Question:
 
     return Question(
         question_id=identifier,
+        tier=_tier(raw.get("tier", Tier.BASIC), where),
         question=_text(raw["question"], "question", where),
         asked_properties=_terms(raw["asked_properties"], "asked_properties", where),
         asked_organisms=_terms(raw["asked_organisms"], "asked_organisms", where),
@@ -356,6 +385,27 @@ def _entry_identifiers(value: object, where: str, key: str = "expected_entries")
     if duplicates:
         raise QuestionSetError(f"{where}: {key} repeats {duplicates}.")
     return tuple(identifiers)
+
+
+def _tier(value: object, where: str) -> Tier:
+    """Refused by name against the closed vocabulary, with the choices listed.
+
+    A tier the reader does not know cannot be defaulted: silently filing a
+    mistyped "compund" question under `basic` moves it into the bucket whose whole
+    purpose is to stay honest about the simple questions.
+    """
+    if isinstance(value, Tier):
+        return value
+    if not isinstance(value, str):
+        raise QuestionSetError(f"{where}: tier must be a string, not {type(value).__name__}.")
+    try:
+        return Tier(value.strip().lower())
+    except ValueError:
+        raise QuestionSetError(
+            f"{where}: tier {value!r} is not one of {[str(t) for t in Tier]}. The "
+            f"report compares a tier against the same tier in an earlier run, so an "
+            f"unknown one would open a bucket of its own rather than join a figure."
+        ) from None
 
 
 def _tags(value: object, where: str) -> tuple[str, ...]:

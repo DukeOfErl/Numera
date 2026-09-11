@@ -122,32 +122,76 @@ def an_entry(**kwargs) -> Entry:
 # -- 4.1: cited against expected -------------------------------------------------
 
 
-def test_an_answer_citing_every_expected_entry_scores_as_such():
-    score = citation_score(a_result(expected_entries=(1, 2), cited=(1, 2), retrieved=(1, 2)))
-    assert score.all_expected_cited
-    assert (score.expected, score.cited_expected) == (2, 2)
+def a_repo(*entry_ids: int) -> CorpusRepository:
+    """A corpus holding exactly these identifiers, so `rows_for` can rank them.
+    `rows_for` drops an identifier the corpus does not hold, and a rank silently
+    absent is the shape of a ranking figure that reports nothing."""
+    return CorpusRepository(tuple(an_entry(entry_id=i) for i in entry_ids))
 
 
-def test_an_unexpected_citation_is_reported_and_is_not_an_error():
-    """The corpus may support the answer through entries the set does not list: a
-    question set is a claim about which entries suffice, not about which exist."""
-    score = citation_score(a_result(expected_entries=(1,), cited=(1, 9), retrieved=(1, 9)))
-    assert score.unexpected == (9,)
-    assert score.all_expected_cited
+def test_every_expected_entry_reaching_the_table_is_the_pass():
+    """ADR-0530: the table lists every retrieved entry, so reaching it is what the
+    reader gets. Prose citation is reported beside it and is no longer the pass."""
+    score = citation_score(
+        a_result(expected_entries=(1, 2), cited=(1,), retrieved=(1, 2)),
+        a_question(expected_entries=(1, 2)),
+        a_repo(1, 2),
+    )
+    assert score.all_expected_reached_the_table
+    assert (score.expected, score.reached_the_table) == (2, 2)
+    # The half that used to be the pass: one of two, and not a failure.
+    assert (score.cited_expected, score.passed_over) == (1, (2,))
 
 
-def test_a_missed_entry_is_split_by_whether_it_was_ever_retrieved():
-    """Two different failures -- one of selection, one of search -- and a single
-    "missed" count would hide which is happening."""
-    score = citation_score(a_result(expected_entries=(1, 2), cited=(), retrieved=(1,)))
-    assert score.passed_over == (1,)
+def test_an_expected_entry_never_retrieved_fails_the_table_check():
+    """A failure of search, and the only thing that fails the headline."""
+    score = citation_score(
+        a_result(expected_entries=(1, 2), cited=(1,), retrieved=(1,)),
+        a_question(expected_entries=(1, 2)),
+        a_repo(1, 2),
+    )
+    assert not score.all_expected_reached_the_table
     assert score.never_retrieved == (2,)
+    assert score.passed_over == ()
 
 
-def test_a_question_expecting_nothing_is_not_reported_as_fully_cited():
-    """An unsupported question expects no entries, and "0 of 0" must not read as a
-    pass in the same column as an answer that cited everything asked of it."""
-    assert not citation_score(a_result(expected_entries=(), cited=())).all_expected_cited
+def test_an_admissible_citation_is_neither_a_hit_nor_unexpected():
+    """Its whole job: a different property that still answers, so that a citation
+    outside both lists means something."""
+    score = citation_score(
+        a_result(expected_entries=(1,), cited=(1, 5, 9), retrieved=(1, 5, 9)),
+        a_question(expected_entries=(1,), admissible_entries=(5,)),
+        a_repo(1, 5, 9),
+    )
+    assert score.admissible_cited == (5,)
+    assert score.unexpected == (9,)
+    assert score.cited_expected == 1
+
+
+def test_the_rank_of_each_expected_entry_in_the_table_is_reported():
+    """Reaching the table is not being seen. `rows_for` puts cited entries first,
+    so an expected entry the answer passed over sits behind every cited one --
+    and a driver showing five rows would not show it."""
+    score = citation_score(
+        a_result(expected_entries=(7,), cited=(1, 2, 3), retrieved=(1, 2, 3, 7)),
+        a_question(expected_entries=(7,)),
+        a_repo(1, 2, 3, 7),
+    )
+    assert score.ranks == (4,)
+    assert score.deepest_rank == 4
+
+
+def test_a_question_expecting_nothing_does_not_pass_the_table_check():
+    """An unsupported question expects no entries, and a false-premise question
+    expects none either. "0 of 0" must not read as a pass in the same column as an
+    answer that brought every expected entry to the reader."""
+    score = citation_score(
+        a_result(expected_entries=(), cited=()),
+        a_question(expected_entries=(), unsupported=True),
+        a_repo(),
+    )
+    assert not score.all_expected_reached_the_table
+    assert score.deepest_rank is None
 
 
 # -- 4.2: the asked organism and property ----------------------------------------

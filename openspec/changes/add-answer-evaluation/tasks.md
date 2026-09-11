@@ -247,7 +247,7 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
   unhashable once it carries a retrieval and every synthetic test record had none. A double that is
   simpler than the real thing in a load-bearing way hides the path it stands in for.
 
-- [ ] 4.13 Rework the citation scoring to ADR-0530, over the raw material already recorded — no
+- [x] 4.13 Rework the citation scoring to ADR-0530, over the raw material already recorded — no
       re-run is needed for any of it. The headline pass becomes *every expected entry reached the
       entries table* (expected ⊆ retrieved), renamed from `all_expected_cited` to say so; prose
       citation stays as a secondary figure. Add the rank of each expected entry within `rows_for`
@@ -261,6 +261,21 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
   - **Both directions, as 4.10 requires of any classifying rule.** Widening the expected set moves
     `passed_over` up by construction — a good answer cites four of nine — so count it before and
     after and check the increase is the benign kind rather than evidence the widening went too far.
+  - **Done 2026-09-11, and the baseline was re-scored from the same file without re-asking** —
+    which is the property the whole records-hold-no-scores shape was for. On the 30-result baseline:
+    140 of 219 expected entries reached the table (64%), every one of them in 9 of 21 results,
+    79 never retrieved, deepest expected entry at median rank 17 and worst 29. The old prose figure
+    survives beside it at 74 of 219 (34%) — the same run, and the two numbers say different things.
+  - **The admissible list immediately moved three citations out of "unexpected"** (17 → 14) on the
+    baseline, which is the whole reason it exists: a citation outside both lists now means something.
+  - **A question tier was added with it** (`basic` / `compound` / `declining`), because the aggregate
+    hides the trade that matters: basic questions reached 90% and compound 24%, and a prompt change
+    that searched harder for two-organism comparisons could move the 64% up while the simple
+    questions — most of what anyone asks — got worse. A closed vocabulary, unlike tags: a tier is
+    compared against the same tier in an earlier run, so a typo would open a bucket of its own.
+  - **One regression caught by an existing test.** Filtering to results whose question the set still
+    holds made every citation figure vanish for a results file that outlived its set, rather than
+    saying so. The report now names the count and, where nothing is scorable, says that plainly.
 
 - [x] 4.12 Review the branch before merging (see 1.5). The review of groups 3-4 found ten
       defects, including a results file that would have committed corpus text

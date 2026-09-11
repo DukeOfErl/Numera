@@ -19,9 +19,10 @@ from .config import format_usd
 from .corpus import Entry
 from .evaluation import Result
 from .messages import STOP_THE_RUN
-from .question_set import Question, shapes_of
+from .question_set import Question, Tier, shapes_of
 from .repository import CorpusRepository
 from .scoring import (
+    CitationScore,
     asked,
     asked_terms,
     bounds_reached,
@@ -152,22 +153,64 @@ def _figures(
     unsupported = [r for r in scored if _question_of(r, by_id).unsupported]
 
     if supported:
-        scores = [citation_score(r) for r in supported]
+        # Only results whose question the current set still holds: the admissible
+        # list lives on the question, and a stand-in would score every admissible
+        # citation as unexpected. A results file outlives the set that produced it,
+        # so this is a normal state and not an error -- but it is said out loud,
+        # because figures that quietly cover fewer results than the header claims
+        # are the thing this module exists to prevent.
+        scorable = [r for r in supported if r.question_id in by_id]
+        left_the_set = len(supported) - len(scorable)
+        if left_the_set:
+            lines.append(
+                f"{left_the_set} answered result(s) name a question the set no longer "
+                f"holds and are scored in no citation figure below"
+            )
+        if not scorable:
+            lines.append("no citation figures: no answered result's question is in the current set")
+            return lines + _cost(results) + _endings(results)
+        scores = [citation_score(r, by_id[r.question_id], repo) for r in scorable]
         expected_total = sum(score.expected for score in scores)
+        reached_total = sum(score.reached_the_table for score in scores)
         cited_total = sum(score.cited_expected for score in scores)
+        passes = sum(1 for s in scores if s.all_expected_reached_the_table)
+        with_expected = sum(1 for s in scores if s.expected > 0)
+        # The headline, per ADR-0530: an expected entry discharges by reaching the
+        # table a reader sees, not by appearing in the prose.
         lines.append(
-            f"expected entries cited: {cited_total} of {expected_total} "
-            f"({_percent(cited_total, expected_total)})"
+            f"expected entries that reached the table: {reached_total} of "
+            f"{expected_total} ({_percent(reached_total, expected_total)})"
         )
         lines.append(
-            f"  passed over (retrieved, not cited): "
-            f"{sum(len(s.passed_over) for s in scores)}; never retrieved: "
-            f"{sum(len(s.never_retrieved) for s in scores)}"
+            f"  questions where every expected entry reached it: {passes} of {with_expected}"
         )
         lines.append(
-            f"  cited but not expected: {sum(len(s.unexpected) for s in scores)} "
-            f"(reported, not counted as errors)"
+            f"  never retrieved: {sum(len(s.never_retrieved) for s in scores)} "
+            f"(a failure of search)"
         )
+        deepest = [s.deepest_rank for s in scores if s.deepest_rank is not None]
+        if deepest:
+            # Reaching the table is not being seen. A driver cuts the table for
+            # display -- the CLI at five rows -- and where it cuts is not scored,
+            # but how far down an expected entry sits is, because that is a
+            # ranking failure and needs a different fix from a search failure.
+            deepest.sort()
+            middle = deepest[len(deepest) // 2]
+            lines.append(
+                f"  deepest expected entry in the table: median {middle}, worst "
+                f"{deepest[-1]} of {max(len(r.retrieved) for r in scorable)} rows"
+            )
+        lines.append(
+            f"  and cited in the prose: {cited_total} of {expected_total} "
+            f"({_percent(cited_total, expected_total)}); passed over: "
+            f"{sum(len(s.passed_over) for s in scores)} (not an error on its own)"
+        )
+        admitted = sum(len(s.admissible_cited) for s in scores)
+        lines.append(
+            f"  cited and admissible: {admitted}; cited and in neither list: "
+            f"{sum(len(s.unexpected) for s in scores)} (reported, not counted as errors)"
+        )
+        lines += _per_tier(scorable, scores, by_id)
 
         # Only questions the current set still holds. A stand-in question asks
         # about "(unknown)", which resolves to nothing, so every such result was
@@ -282,6 +325,45 @@ def _figures(
     lines += _cost(results)
     lines += _endings(results)
     return lines
+
+
+def _per_tier(
+    scored: list[Result],
+    scores: list[CitationScore],
+    by_id: dict[str, Question],
+) -> list[str]:
+    """The same headline, split by what the question demands of the agent.
+
+    Always given rather than hidden behind a flag, because the trade it exposes is
+    the one most likely to be made by accident: a prompt that searches harder for a
+    two-organism comparison can cost precision on the single-property questions
+    that are most of what anyone asks, and an average over both moves the right way
+    while the basic questions get worse. A tier with no questions is omitted; a
+    tier whose questions expect nothing -- `declining` -- is reported as such rather
+    than as nought per cent.
+    """
+    per: dict[Tier, list[CitationScore]] = {}
+    for result, score in zip(scored, scores, strict=True):
+        per.setdefault(by_id[result.question_id].tier, []).append(score)
+    lines = []
+    for tier in Tier:
+        group = per.get(tier)
+        if not group:
+            continue
+        expected = sum(s.expected for s in group)
+        if not expected:
+            lines.append(
+                f"    {tier}: {len(group)} result(s), no expected entries — scored on "
+                f"declining, not on what was brought back"
+            )
+            continue
+        reached = sum(s.reached_the_table for s in group)
+        passes = sum(1 for s in group if s.all_expected_reached_the_table)
+        lines.append(
+            f"    {tier}: {reached} of {expected} reached the table "
+            f"({_percent(reached, expected)}), every one in {passes} of {len(group)} result(s)"
+        )
+    return ["  by what the question demands:"] + lines if lines else []
 
 
 def _cost(results: tuple[Result, ...]) -> list[str]:

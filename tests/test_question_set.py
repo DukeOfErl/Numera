@@ -33,6 +33,7 @@ from scinumbers_ask.question_set import (
     EntryShape,
     Question,
     QuestionSetError,
+    Tier,
     check_against_corpus,
     load_question_set,
     shapes_of,
@@ -853,3 +854,26 @@ def test_a_false_premise_question_may_rest_on_admissible_entries_alone(tmp_path)
     assert question.expected_entries == ()
     assert question.admissible_entries == (100013, 107009)
     assert not question.unsupported
+
+
+# -- The tier: what a question demands of the agent -----------------------------
+
+
+def test_a_question_without_a_tier_is_basic(tmp_path):
+    (question,) = load_question_set(write_set(tmp_path, SUPPORTED), None)
+    assert question.tier is Tier.BASIC
+
+
+def test_a_tier_is_read_and_is_case_insensitive(tmp_path):
+    (question,) = load_question_set(write_set(tmp_path, {**SUPPORTED, "tier": "Compound"}), None)
+    assert question.tier is Tier.COMPOUND
+
+
+def test_an_unknown_tier_is_refused_by_name_with_the_choices(tmp_path):
+    """Unlike a tag, a tier is compared against the same tier in an earlier run.
+    Defaulting a mistyped one to `basic` would file it in the bucket whose whole
+    purpose is to stay honest about the simple questions."""
+    with pytest.raises(QuestionSetError) as raised:
+        load_question_set(write_set(tmp_path, {**SUPPORTED, "tier": "compund"}), None)
+    assert "compund" in str(raised.value)
+    assert "basic" in str(raised.value) and "compound" in str(raised.value)
