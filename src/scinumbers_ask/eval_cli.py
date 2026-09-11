@@ -215,3 +215,11 @@ def _run(args, questions, corpus: str, entries) -> None:
             if advice:
                 print(advice)
             print("Run again once that is resolved; it resumes where this stopped.")
+
+
+if __name__ == "__main__":  # pragma: no cover
+    # `python -m scinumbers_ask.<module>` imported this and exited 0 without it --
+    # a command that does nothing and reports success, which is how a baseline run
+    # came to be "finished" in seconds having asked no questions. `main` raises
+    # `SystemExit` itself on every failure, so there is no status to forward.
+    main()
