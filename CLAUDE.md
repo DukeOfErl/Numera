@@ -2,6 +2,45 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Who each rule is addressed to
+
+This file reaches a subagent exactly as it reaches the session that spawned one:
+the CLAUDE.md hierarchy is part of a subagent's context, and nothing in it says
+which role is reading. So a rule written to stop the orchestrator hesitating gets
+executed by six workers in parallel — and the forceful wording that makes it work
+on the orchestrator is what makes it dangerous in a worker. "Do not ask first"
+overcomes a hesitancy a worker does not have.
+
+**Orchestrator only.** A subagent must not act on these. `.claude/agents/writer.md`
+repeats the list, because a marker here is a weaker signal than an instruction in
+the agent's own prompt — and most of these rules live in the user-level
+conventions, which this file cannot annotate.
+
+| Rule | Where | What a worker does with it |
+|---|---|---|
+| A green suite at a section boundary *is* the commit | user-level | Several writers committing into one worktree, racing |
+| Suggest `/code-review` before a merge; a retro after | user-level | Six suggestions, nobody owning the merge |
+| Periodically ask what work exists only on this disk | user-level | Noise, once per agent |
+| Scout and fundraise probes at a lull | user-level | A funding probe mid-task |
+| Update README, CHANGELOG, diagrams and specs together | Documentation upkeep | Parallel edits to shared files, conflicting by construction |
+| ADR block allocation | Parallel branches and ADR numbers | Every worker claims the same next number |
+| Run mutation testing at the end of a task | Testing the tests | Six mutation runs, hours of compute |
+
+**Everyone, orchestrator and worker alike:** the Architecture section, the
+dependency direction, `Running the tests`, `Lint and format`, the spec-delta
+rules, and the comment register. Those describe the code and how to touch it
+safely, which is the same job whoever is doing it.
+
+**One rule is missing rather than misaddressed:** nothing here says *do not run
+the full suite*. It takes about a minute, and a fan-out of workers each running
+it repeatedly is pure waste. The orchestrator runs it once at the end; a worker
+verifies its own file with the one test file it was given, or an import.
+
+A subagent receives its own system prompt, the task it was sent, this hierarchy,
+and a git-status snapshot — **not** the conversation, and not the orchestrator's
+memory. Anything a worker needs, its brief has to carry: see
+`docs/subagent-brief-template.md`.
+
 ## Documentation upkeep — project override
 
 This project follows the user-level documentation-upkeep conventions with one substitution: there is no `docs/REQUIREMENTS.md`. The behavioral spec — what the app must do, kept implementation-agnostic — lives in **`openspec/specs/`**, maintained through the OpenSpec workflow rather than as a hand-written document. Write behavioral requirements as spec deltas on a change; they are promoted into `openspec/specs/` when the change is archived. See [ADR-0030](docs/decisions/0030-openspec-specs-as-the-behavioral-record.md). Wherever the conventions say to update `docs/REQUIREMENTS.md`, update the OpenSpec specs instead.
