@@ -27,6 +27,14 @@ ask = [
     "langgraph-checkpoint-sqlite",
     "langchain-openai",
     "streamlit",
+    # The usage and feedback store. Streamlit's own `st.connection("sql")` is
+    # SQLAlchemy-backed, and it is preferred over a hand-rolled connection
+    # because it caches the engine at global scope across sessions -- without
+    # that, every rerun would pay TCP, TLS and Postgres auth before its INSERT.
+    "sqlalchemy>=2.0",
+    # `[binary]` for the prebuilt wheel: the host has no libpq to build against,
+    # and a source build would fail at deploy time rather than here.
+    "psycopg[binary]>=3.2",
 ]
 ingest = [
     "pydantic>=2.6",
