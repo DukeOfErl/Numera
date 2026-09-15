@@ -150,6 +150,8 @@ elif question := st.chat_input("Ask a question", submit_mode="disable", key=web.
             after_prose=lambda: web.draw_feedback(items, session),
         )
 
+    # Unconditional, and it settles two things this run decided too early.
+    #
     # The ending only exists now, and the branch above decided whether the run was
     # over *before* this question ran. Streamlit reruns on the next interaction and
     # not when a script finishes, so without this the reader is left looking at a
@@ -158,12 +160,26 @@ elif question := st.chat_input("Ask a question", submit_mode="disable", key=web.
     # the deployed app's very first question: a spent key, and nothing on the page to
     # say a new one was needed.
     #
+    # `answering` was likewise decided at the top of this run and was true for all
+    # of it, so every older answer's rating was drawn inert -- correctly, while the
+    # agent was working. Nothing re-drew them once it stopped, so the last frame of
+    # the answering run stayed on screen and those ratings were dead until the
+    # reader clicked something else. A reader reported exactly that. `st.rerun()`
+    # clears the submitted question, so the redraw has `answering` false and the
+    # ratings come back.
+    #
     # A rerun rather than drawing the banner here: the input has already been created
     # by the time the ending arrives and cannot be taken back within one run, and a
     # closed run that still offers an input is the other half of the same confusion.
-    # It costs one redraw from the transcript -- no question, no model call.
-    if web.run_is_over(web.transcript(st.session_state)):
-        st.rerun()
+    # It costs one redraw from the transcript -- no question, no model call, and the
+    # same cost this page already pays on every thumb, expander and text entry.
+    #
+    # Unconditional. A condition was tried -- only redraw when an older turn exists
+    # to revive -- on the strength of a timing that turned out to be measured with
+    # other test runs competing for the machine. Measured alone: 38.4s with the
+    # redraw against 41.0s without it, so it costs nothing and the condition bought
+    # nothing. What it did buy was a second rule about when the page is fresh.
+    st.rerun()
 
 # The side panel carries the newest answer's entries, whole and openable -- the
 # main column's table is the first few rows of the same set. Written after the

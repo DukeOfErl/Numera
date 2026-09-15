@@ -177,3 +177,56 @@ reading, and is named here so the next person knows which link is unpinned.
 A chat input is a trigger widget — its value is cleared after each run, and a
 value written into session state by hand does not survive to the next one — which
 is why the mid-run page state cannot be staged even artificially.
+
+### A fifth: inert *while* a question runs, not inert until something else happens
+
+The disabling above worked, and then stopped working in the other direction.
+Reported by the same reader: after asking a second question, the first answer's
+rating stayed dead, and came back only when they clicked something — pressing a
+thumb on the *new* answer was what woke it.
+
+`answering` is decided at the top of a run and is true for all of it. Nothing
+re-drew the page once the agent stopped, so the last frame of the answering run
+was the one left on screen, with every older rating in it disabled. Streamlit
+re-runs on the next interaction, not when a script finishes.
+
+This is the "run is over" banner's fault exactly — a state decided before the
+thing that changes it, left standing until the reader happens to interact. That
+branch already ended in `st.rerun()` for its own version of the problem, so the
+fix is to stop making it conditional: after a question is answered, the page
+re-runs unconditionally. A programmatic re-run clears the submitted question
+(verified — a chat input is a trigger widget), so the redraw has `answering`
+false and the ratings come back.
+
+**It costs one extra script run per question**, and the redraw is from the
+transcript: no question, no model call. That is the same cost this page already
+pays for every thumb, expander and text entry, so it is in line with how the app
+already behaves rather than a new kind of expense.
+
+**A cost was claimed here that did not exist, and the claim nearly bought a rule.**
+The suite appeared to go from about two minutes to 9m12s, and the re-run was made
+conditional on there being an older turn to revive. Both timings had been taken
+with other test runs competing for the machine. Measured alone, one file: 38.4s
+with the redraw, 41.0s without it. The re-run costs nothing, and the condition was
+removed again.
+
+Recorded rather than quietly deleted, because the failure is the interesting part.
+A timing is a measurement, and a measurement taken on a loaded machine is not one
+— the number looked authoritative enough to justify a second rule about when the
+page is fresh, which is exactly the kind of rule that outlives its reason. Time a
+suite alone, or do not quote the figure.
+
+### What the re-run exposed
+
+The replay path drew a *finished* search under the running label: `show` created
+the box with the present-tense "Searching the corpus…" and never relabelled it,
+where the live path updates it to "Retrieval" when the answer completes. Every
+redrawn turn therefore claimed to still be searching.
+
+It had always been that way and was invisible, because the live render was what a
+reader saw after asking and the replay render only appeared on turns they had
+scrolled back to. Making the page re-run put the replay render on screen
+immediately, and a test that had only ever exercised the live path failed.
+
+Both paths now take the label from one of two constants, so they cannot drift
+again — which is what two literals for one string had already done.

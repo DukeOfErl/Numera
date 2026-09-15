@@ -730,8 +730,26 @@ def draw(item: Item) -> None:
         st.caption(as_text(item.text))
 
 
-def _retrieval_box(expanded: bool, state: str = "running"):
-    return st.status("Searching the corpus…", expanded=expanded, state=state)
+#: The retrieval box, running and finished. Two names because the box outlives
+#: the search: the live path opens it on the first retrieval and relabels it when
+#: the answer is done, and the replay path draws it already finished.
+#:
+#: Constants rather than two literals, because they drifted. The replay path was
+#: drawing a search that had finished under the present-tense label, so every past
+#: turn claimed to still be searching. Invisible while the live render was the one
+#: the reader saw after asking; the rerun that revives older ratings replaced it
+#: with the replay render, and a test that had only ever covered the live path
+#: failed.
+RETRIEVAL_RUNNING = "Searching the corpus…"
+RETRIEVAL_DONE = "Retrieval"
+
+
+def _retrieval_box(expanded: bool, state: str = "running", label: str = RETRIEVAL_RUNNING):
+    # `as_text` although both callers pass a constant of this project's own words:
+    # the escaping scan reads the call, not the call sites, and a parameter is
+    # exactly the shape it cannot clear. Wrapping is free -- neither constant holds
+    # a dollar -- and the alternative is teaching the scan to chase defaults.
+    return st.status(as_text(label), expanded=expanded, state=state)
 
 
 def _column_for(item: Item, prose: Any, evidence: Any) -> Any:
@@ -825,7 +843,7 @@ def answer(
             draw(item)
         drawn.append(item)
     if box is not None:
-        box.update(label="Retrieval", state="complete", expanded=False)
+        box.update(label=RETRIEVAL_DONE, state="complete", expanded=False)
     if after_prose is not None:
         # The generator is spent by now, so there is nothing left for a click to
         # interrupt. A turn that never reached the seam gets the foot of its own
@@ -1055,7 +1073,7 @@ def show(items: Iterable[Item], after_prose: Callable[[], None] | None = None) -
     prose, evidence = st.columns(READING_SPLIT, gap="large")
     progress = [item for item in items if item.kind is Kind.PROGRESS]
     if progress:
-        with prose, _retrieval_box(expanded=False, state="complete"):
+        with prose, _retrieval_box(expanded=False, state="complete", label=RETRIEVAL_DONE):
             for item in progress:
                 draw(item)
     for item in items:

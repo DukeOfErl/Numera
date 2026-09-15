@@ -504,3 +504,26 @@ def test_a_comment_in_progress_is_disabled_rather_than_dropped(tmp_path):
     assert at.text_area[0].disabled, "the comment box stayed live mid-question"
     assert at.button[0].disabled, "Send stayed live mid-question"
     assert "102345" in at.text_area[0].value, "the draft was lost"
+
+
+def test_older_ratings_come_back_to_life_once_the_answer_is_finished(app):
+    """Inert *while* a question runs, not inert until something else happens.
+
+    Reported by a reader: after asking a second question, the first answer's
+    rating stayed dead, and only came back when they clicked something — pressing
+    a thumb on the new answer was what woke it. The disabling worked; nothing
+    re-drew the page once the reason for it had passed, so the last frame of the
+    answering run was the one left on screen.
+
+    The same shape as the "run is over" banner, which was decided before the
+    input existed and so arrived one interaction late: a page that stops re-running
+    when the script ends keeps whatever the script last said.
+    """
+    at = ask(app.run(), "how many ribosomes?")
+    assert not at.get("feedback")[0].disabled
+
+    at = ask(at, "and in yeast?")
+    live = at.get("feedback")
+    assert len(live) == 2, "two answers, two ratings"
+    assert not live[0].disabled, "the older answer's rating stayed dead after the run finished"
+    assert not live[1].disabled, "the new answer's rating is not offered"

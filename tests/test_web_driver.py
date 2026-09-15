@@ -1074,3 +1074,24 @@ def test_the_page_refuses_a_retired_variable_before_it_looks_for_a_corpus(monkey
     assert any("SCINUMBERS_CORPUS" in text for text in errors), errors
     assert not any("No corpus path supplied" in text for text in errors), errors
     assert not at.exception, "the page raised instead of explaining"
+
+
+def test_a_finished_search_is_not_labelled_as_still_running(monkeypatch, repo, config, tmp_path):
+    """Both paths name the finished box the same thing.
+
+    The live path opens the box on the first retrieval and relabels it when the
+    answer is done; the replay path draws it already finished. They had two
+    literals and had drifted, so every redrawn turn claimed to still be searching
+    a corpus it had finished with. It stayed invisible while the live render was
+    what a reader saw after asking — the rerun that revives older ratings replaced
+    it with the replay render, and that is what exposed it.
+    """
+    model = scripted(
+        tool_call("search_entries", property="Cell"), says("about 1 micrometre (BNID 100002)")
+    )
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+    assert [box.label for box in at.status] == [web.RETRIEVAL_DONE]
+
+    # And still so after another turn puts it through the replay path a second time.
+    at = ask(at, "and in yeast?")
+    assert web.RETRIEVAL_RUNNING not in [box.label for box in at.status]
