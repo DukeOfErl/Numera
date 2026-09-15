@@ -103,11 +103,15 @@ fails open (ADR-0710).
 
 - [x] 5.1 Spec-conformance mapping entries for all five requirements, in this
       change. A requirement whose scenarios only execute is a gap, not a pass —
-      say which is which. **Two are mapped and three are in
-      `AWAITING_THE_WIDGET`**; groups 3 and 4 have since landed, so those three
-      are now closable and 5.1 should be revisited rather than assumed done.
-- [x] 5.2 `openspec validate add-answer-feedback --strict`. Passing; re-run
-      before the archive, since 5.1's mappings may still move.
+      say which is which. **Now genuinely five of five**: the three that sat in
+      `AWAITING_THE_WIDGET` are mapped to the driver tests groups 3 and 4 built,
+      and `AWAITING_THE_WIDGET` is gone rather than left empty. Closing the third
+      needed a test that did not exist — that a broken sink does not stop the
+      *page* — since the operation-level fail-open tests establish that
+      `record_verdict` does not raise and say nothing about the conversation
+      carrying on.
+- [x] 5.2 `openspec validate add-answer-feedback --strict`. Passing, re-run after
+      the group 7 spec edits.
 - [ ] 5.3 CLAUDE.md: the new capability in the module table if a module is added.
 - [ ] 5.4 `README.md` and `CHANGELOG.md`: that answers can be rated, that rating
       is optional, and that comments are read by the operators and never sent to
@@ -122,6 +126,36 @@ fails open (ADR-0710).
       ratings per question, and every comment mentioning an entry identifier.
       Without these the data is collected and never looked at, which is the
       failure the previous change was about one level up.
-- [ ] 6.2 Record in ADR-0740 that a thumbs-down rate is **not** an error rate:
+- [x] 6.2 Record in ADR-0740 that a thumbs-down rate is **not** an error rate:
       people who rate are not a sample of people who read. The first person to
-      quote a percentage should meet that sentence first.
+      quote a percentage should meet that sentence first. (Written with the ADR
+      itself; this task was a check that it had been, and it had.)
+
+## 7. What the first real use found
+
+Three defects, all reported by the first person to use the deployed page and none
+visible to a green suite — the expected division of labour for a driver, and the
+reason this change carries `AppTest` coverage rather than a seeding budget.
+
+- [x] 7.1 The comment box opened after approval as well as disapproval, under a
+      hint reading "What was wrong?". Now disapproval alone opens it; approval is
+      recorded and acknowledged and asks for nothing further. Spec requirement
+      renamed accordingly, and its scenarios split in two.
+- [x] 7.2 The rating was drawn after everything, so it sat below a table that one
+      answer can fill the screen with. Now between the prose and the entries, by
+      one predicate (`_ends_the_prose`) shared by the live path and the replay
+      path — a seam computed twice is a seam that moves. Canary: making the
+      predicate return `False` fails both placement tests.
+- [x] 7.3 Sending a comment took two actions — the first committed the text, the
+      second sent it — and `disabled=not text.strip()` made it worse, the first
+      click landing on a disabled control. The text and its button are now a
+      form; the thumb stays outside one, for the reason ADR-0740 gives. `AppTest`
+      cannot see the two-action problem, so the test asserts the structure that
+      prevents it: text area and Send sharing a form id.
+- [x] 7.4 ADR-0740 records all three, including why softening the hint was
+      rejected and why the form does not contradict the "no form" trap.
+- [x] 7.5 Canary on the new fail-open driver test: narrowing `feedback._record`'s
+      `except Exception` to `ZeroDivisionError` fails it. The first draft of that
+      test installed the raising handler *before* the question and failed for the
+      wrong reason — every trace record raised, which is the question's path and
+      not the rating's.

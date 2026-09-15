@@ -274,6 +274,34 @@ COVERED: dict[str, tuple[str, ...]] = {
     # account of the rating" is not separately asserted; it holds structurally,
     # since `feedback` cannot reach the agent at all, which is what the
     # independence test pins.
+    # The three that were AWAITING_THE_WIDGET. Each is mapped to the driver tests
+    # that answer the half a function cannot: what is *offered*, and where.
+    "A reader can rate an answer, and rating is never required": (
+        "test_web_driver_feedback.py::test_an_answered_question_offers_a_rating",
+        "test_web_driver_feedback.py::test_the_control_appears_on_the_run_that_answered",
+        "test_web_driver_feedback.py::test_each_answer_is_offered_exactly_one_control",
+        "test_web_driver_feedback.py::test_the_rating_sits_between_the_prose_and_the_table",
+        "test_web_driver_feedback.py::test_a_redrawn_turn_puts_the_rating_in_the_same_place",
+        "test_web_driver_feedback.py::test_an_unrated_answer_records_nothing_and_the_page_goes_on",
+        "test_feedback.py::test_a_verdict_is_recorded_against_its_question",
+    ),
+    "A rating may carry a comment, offered only once an answer has been disapproved of": (
+        "test_web_driver_feedback.py::test_a_comment_box_appears_only_after_a_rating",
+        "test_web_driver_feedback.py::test_approval_is_not_asked_what_went_wrong",
+        "test_web_driver_feedback.py::test_approval_is_still_recorded",
+        "test_web_driver_feedback.py::test_the_control_is_settled_once_a_rating_is_given",
+        "test_web_driver_feedback.py::test_the_comment_and_its_button_submit_together",
+        "test_web_driver_feedback.py::test_a_comment_is_recorded_against_the_same_answer",
+        "test_feedback.py::test_a_comment_without_a_rating_is_refused",
+    ),
+    "Recording a rating never disrupts the reader": (
+        "test_web_driver_feedback.py::"
+        "test_a_store_that_cannot_be_written_to_does_not_reach_the_reader",
+        "test_web_driver_feedback.py::test_the_page_survives_a_rating",
+        "test_feedback.py::test_a_rating_that_cannot_be_stored_does_not_raise",
+        "test_feedback.py::test_a_handler_that_raises_does_not_reach_the_reader",
+        "test_feedback.py::test_rating_the_same_answer_again_records_nothing",
+    ),
     "The model is never shown a rating or a comment": (
         "test_feedback.py::test_neither_a_verdict_nor_a_comment_reaches_the_model",
         "test_feedback.py::test_a_comment_written_as_an_instruction_is_stored_as_given",
@@ -534,22 +562,11 @@ AWAITING_THE_HARNESS = (
 # system prompt, not a harness, and the live-model check can only ever assert the
 # weak form of them -- that an opening is quantitative and attributed, not that it
 # carries the right conclusion. Kept apart so the list says which gap is which.
-# `add-answer-feedback`'s, and a fourth kind of gap: these are not unbuilt, they
-# are half-built. The recording side exists and is asserted; the widget side --
-# that a control is offered with every answer, that the comment box appears only
-# after a rating, that a failed write is invisible mid-conversation -- can only be
-# asserted by driving the real script, which is groups 3 and 4 of that change.
-#
-# Listed rather than mapped to the tests that exist, because those tests cover the
-# operation and not the requirement: "a comment without a rating is refused" is
-# the function's rule, and the requirement is about what a reader is *offered*.
-# Mapping one to the other would put the requirement's words next to a test that
-# does not check them, which is the one failure this file cannot catch.
-AWAITING_THE_WIDGET = (
-    "A reader can rate an answer, and rating is never required",
-    "A rating may carry a comment, offered only once rating has happened",
-    "Recording a rating never disrupts the reader",
-)
+# `add-answer-feedback`'s three widget requirements were listed here while the
+# widget did not exist -- the recording side was asserted, and what a reader is
+# *offered* needs the real script. Groups 3 and 4 built it, so they are mapped
+# above rather than recorded as gaps. The comment saying why they could not be is
+# gone with them; `git log` has it.
 
 AWAITING_THE_PROMPT = (
     "An answer leads with its quantitative conclusion",
@@ -560,10 +577,6 @@ UNMAPPED: dict[str, str] = {
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_HARNESS, "add-answer-evaluation is unbuilt; no harness yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),
-    **dict.fromkeys(
-        AWAITING_THE_WIDGET,
-        "recording is asserted; the widget half needs AppTest -- groups 3 and 4",
-    ),
 }
 
 

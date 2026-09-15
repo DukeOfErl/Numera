@@ -22,7 +22,7 @@ import pytest
 from conftest import FIXTURE, agent_with
 from streamlit.testing.v1 import AppTest
 
-from agent_doubles import says, scripted
+from agent_doubles import says, scripted, tool_call
 from scinumbers_ask import feedback, trace, web
 
 APP = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
@@ -58,6 +58,20 @@ def ask(at: AppTest, question: str) -> AppTest:
 
 def _recorded(at: AppTest) -> dict:
     return feedback.ratings(at.session_state)
+
+
+def _element_order(block) -> list[str]:
+    """Every element on the page, depth first, in the order it was drawn.
+
+    Order is the whole question for `test_the_rating_sits_between_the_prose_and_the
+    _table`, and no per-element accessor can answer it: `at.get("feedback")` and
+    `at.dataframe` each return their own kind, with nothing relating the two.
+    """
+    order: list[str] = []
+    for child in getattr(block, "children", {}).values():
+        order.append(getattr(child, "type", type(child).__name__))
+        order.extend(_element_order(child))
+    return order
 
 
 # --- the control is offered, once ------------------------------------------
@@ -167,3 +181,139 @@ def test_an_unrated_answer_records_nothing_and_the_page_goes_on(app):
     at = ask(at, "and in yeast?")
     assert not at.exception
     assert _recorded(at) == {}
+
+
+# --- where the rating sits ---------------------------------------------------
+
+
+@pytest.fixture
+def cites(monkeypatch, repo, config, tmp_path):
+    """An app whose answer cites an entry, so the turn has a table to sit above."""
+    model = scripted(
+        tool_call("get_entry", entry_id=100002),
+        says("about 1 micrometre (BNID 100002)"),
+        says("second answer (BNID 100002)"),
+    )
+    agent = agent_with(repo, config, tmp_path, model)
+    monkeypatch.setattr(web, "resources", lambda corpus=None: (repo, agent))
+    monkeypatch.setenv("SCINUMBERS_CORPUS", FIXTURE)
+    return AppTest.from_file(APP, default_timeout=TIMEOUT)
+
+
+def test_the_rating_sits_between_the_prose_and_the_table(cites):
+    """Below the answer it is about, above a table that can run off the screen.
+
+    Drawn last -- which is where it was -- the control is under the cited table,
+    the uncited table and the dimension note, and a reader who has finished
+    reading the prose has to scroll past all three to find it.
+    """
+    at = ask(cites.run(), "how wide?")
+    order = _element_order(at.main)
+    assert "dataframe" in order, "the fixture drew no table, so this proves nothing"
+    assert order.index("feedback") < order.index("dataframe")
+    assert order.index("markdown") < order.index("feedback"), "the prose came after the rating"
+
+
+def test_a_redrawn_turn_puts_the_rating_in_the_same_place(cites):
+    """The live path and the replay path draw the same turn in two places.
+
+    If only one of them moved, scrolling back would change the layout -- and the
+    replay path is the one the reader sees for every turn but the newest.
+    """
+    at = ask(ask(cites.run(), "how wide?"), "and in yeast?")
+    order = _element_order(at.main)
+    assert order.count("feedback") == 2
+    first_table = order.index("dataframe")
+    assert order.index("feedback") < first_table, "the redrawn turn's rating fell below its table"
+
+
+# --- approval asks for nothing further ---------------------------------------
+
+
+def test_approval_is_not_asked_what_went_wrong(app):
+    """`answer-feedback`: only disapproval opens the comment box.
+
+    The hint asks what was *wrong*, which is unanswerable about an answer just
+    approved -- a reader who thumbs up and is then asked that reads it as the page
+    not having registered the click.
+    """
+    at = ask(app.run(), "how many ribosomes?")
+    at = at.get("feedback")[0].set_value(1).run()
+    assert not at.text_area, "approval was asked what went wrong"
+    assert any(web.FEEDBACK_THANKS in c.value for c in at.caption), "approval was not acknowledged"
+
+
+def test_approval_is_still_recorded(app):
+    """The box not opening must not mean the thumb stopped counting."""
+    at = ask(app.run(), "how many ribosomes?")
+    at = at.get("feedback")[0].set_value(1).run()
+    recorded = _recorded(at)
+    assert len(recorded) == 1
+    assert next(iter(recorded.values())).verdict is feedback.Verdict.UP
+
+
+# --- one action sends a comment ----------------------------------------------
+
+
+def test_the_comment_and_its_button_submit_together(app):
+    """One action sends, which is a property of them sharing a form.
+
+    A plain text area beside a plain button takes two: typing leaves the text
+    uncommitted, the first click or Ctrl+Enter commits it and reruns, and only a
+    second one presses Send. `AppTest` cannot see that -- it sets widget values
+    directly and never blurs anything -- so what is asserted is the structure that
+    makes it true, which is what a revert would break.
+    """
+    at = ask(app.run(), "how many ribosomes?")
+    at = at.get("feedback")[0].set_value(0).run()
+
+    form = at.text_area[0].proto.form_id
+    assert form, "the comment box is not in a form, so sending it takes two actions"
+    send = at.button[0]
+    assert send.proto.is_form_submitter, "Send is not the form's submit button"
+    assert send.proto.form_id == form, "Send submits a different form from the comment box"
+
+
+def test_send_with_nothing_typed_records_nothing_and_does_not_break(app):
+    """The button cannot be disabled on empty text without costing the extra action."""
+    at = ask(app.run(), "how many ribosomes?")
+    at = at.get("feedback")[0].set_value(0).run()
+    at = at.button[0].click().run()
+    assert not at.exception
+    question_id = web.question_id_of(web.transcript(at.session_state)[0][1])
+    assert not _recorded(at)[question_id].commented
+
+
+# --- a failed write is invisible to the reader -------------------------------
+
+
+def test_a_store_that_cannot_be_written_to_does_not_reach_the_reader(app):
+    """`answer-feedback`: recording fails open, and the conversation goes on.
+
+    The operation-level tests establish that `record_verdict` does not raise. This
+    is the other half of the requirement — that the *page* carries on: no error
+    panel, and the input still there to ask the next question with. It needs the
+    real script, because "the conversation continues to accept questions" is not a
+    property any function has.
+
+    A handler that raises, rather than a store that fails: `logging` catches
+    nothing on its own — `Handler.handle` does not wrap `emit` — so this is the
+    shape that actually reaches a caller.
+    """
+
+    class Raises(logging.Handler):
+        def emit(self, record):
+            raise RuntimeError("the trail is on fire")
+
+    at = ask(app.run(), "how many ribosomes?")
+    # Installed only now, so the *rating* is what meets the broken sink. Installed
+    # before the question, every trace record raises and the failure is the
+    # question's, not the rating's -- a test that fails for the wrong reason and
+    # would keep failing after this requirement was satisfied.
+    logging.getLogger(trace.LOGGER_NAME).addHandler(Raises())
+
+    at = at.get("feedback")[0].set_value(1).run()
+
+    assert not at.exception, "a failed write raised into the page"
+    assert not at.error, "a failed write put an error on screen"
+    assert at.chat_input, "the conversation stopped taking questions"

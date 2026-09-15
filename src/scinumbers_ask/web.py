@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from collections.abc import Iterable, Iterator, MutableMapping
+from collections.abc import Callable, Iterable, Iterator, MutableMapping
 from contextlib import nullcontext
 from dataclasses import dataclass, replace
 from enum import StrEnum
@@ -694,10 +694,24 @@ def _retrieval_box(expanded: bool, state: str = "running"):
     return st.status("Searching the corpus…", expanded=expanded, state=state)
 
 
+def _ends_the_prose(item: Item) -> bool:
+    """Whether this item is the first thing after the answer's prose.
+
+    The turn arrives as prose, then any warning about that prose, then the table
+    of entries, then the ending. The rating goes at this seam: with the answer it
+    is about, and above a table that can be long enough to push it off the screen.
+
+    Shared by the live path and the replay path deliberately. They draw the same
+    turn in two different places, and a seam computed twice is a seam that moves.
+    """
+    return item.kind in (Kind.ENTRIES, Kind.ENDING)
+
+
 def answer(
     events: Iterable[Event],
     repo: CorpusRepository | None = None,
     into: list[Item] | None = None,
+    after_prose: Callable[[], None] | None = None,
 ) -> list[Item]:
     """Draw a question's items as they arrive, recording each into `into` as it goes.
 
@@ -721,17 +735,27 @@ def answer(
     Opening it late also places it where the first retrieval falls rather than
     always at the top, so a warning raised before any tool call now appears above
     it instead of below. That is the order the events actually arrived in.
+
+    `after_prose` is called once, at the seam `_ends_the_prose` names -- or at the
+    end, for a turn that never reaches one. It runs inside the live loop rather
+    than after it because a generator is being consumed: there is no "after the
+    prose" to return to once the whole turn has been drawn.
     """
     box = None
     drawn: list[Item] = [] if into is None else into
     for item in items_for(events, repo):
         if item.kind is Kind.PROGRESS and box is None:
             box = _retrieval_box(expanded=True)
+        if after_prose is not None and _ends_the_prose(item):
+            after_prose()
+            after_prose = None
         with box if item.kind is Kind.PROGRESS else nullcontext():
             draw(item)
         drawn.append(item)
     if box is not None:
         box.update(label="Retrieval", state="complete", expanded=False)
+    if after_prose is not None:
+        after_prose()
     return drawn
 
 
@@ -812,7 +836,12 @@ def draw_feedback(items: Iterable[Item], session_id: str, state: Any = None) -> 
     )
     if given is None:
         return
-    if given.commented:
+    # Only disapproval opens the box. The hint asks what was *wrong*, which is a
+    # question nobody can answer about an answer they just approved -- a reader
+    # who thumbs up and is then asked what went wrong reads it as the page not
+    # having registered the click. Approval is the cheap signal, and the whole
+    # point of it being cheap is that it asks for nothing further.
+    if given.verdict is not feedback.Verdict.DOWN or given.commented:
         st.caption(FEEDBACK_THANKS)
         return
     _draw_comment_box(question_id, session_id, state)
@@ -839,10 +868,19 @@ def _took_a_verdict(question_id: str, session_id: str, state: Any) -> None:
 
 
 def _draw_comment_box(question_id: str, session_id: str, state: Any) -> None:
-    """The comment, offered only after a rating and never inside a form.
+    """The comment, offered only after disapproval, and inside a form of its own.
 
-    Inside an `st.form` the thumb above would read `None` until the form
-    submitted, so this box could never appear conditionally on it at all.
+    **The thumb must stay outside this form** -- inside one it would read `None`
+    until the form submitted, so the box could never appear conditionally on it
+    at all. The form holds the text and its button, which is what a form is for:
+    several widgets submitted as one act.
+
+    It is a form rather than a text area beside a button because the plain pair
+    takes two actions to send. Typing leaves the text uncommitted; the first
+    click or Ctrl+Enter commits it and reruns; only a second one presses Send.
+    A `disabled=` on the button made that worse rather than better -- the first
+    click landed on a disabled control and did nothing at all. A form submits the
+    text and the press together, so one action sends.
 
     The draft lives in the widget's own key, which is safe *here* because the box
     keeps being rendered for as long as the rating stands -- Streamlit only
@@ -850,18 +888,27 @@ def _draw_comment_box(question_id: str, session_id: str, state: Any) -> None:
     is what guarantees it keeps drawing.
     """
     key = _comment_key(question_id)
-    text = st.text_area(FEEDBACK_HINT, key=key, height=80)
-    if st.button("Send", key=f"{key}.send", disabled=not text.strip()):
+    with st.form(key=f"{key}.form", border=False):
+        text = st.text_area(FEEDBACK_HINT, key=key, height=80)
+        sent = st.form_submit_button("Send")
+    # Empty is a no-op rather than a refusal: the button cannot be disabled for it
+    # without reintroducing the two-action problem above, and there is nothing to
+    # tell a reader who pressed Send with nothing typed that they do not know.
+    if sent and text.strip():
         feedback.record_comment(state, question_id=question_id, session_id=session_id, text=text)
         st.rerun()
 
 
-def show(items: Iterable[Item]) -> None:
+def show(items: Iterable[Item], after_prose: Callable[[], None] | None = None) -> None:
     """Put a finished question's items back on screen after a re-run.
 
     Retrieval is collapsed here, where the live path leaves it open: while a
     question is running the progress is the only thing to look at, and once it
     has an answer the progress is the thing in the way.
+
+    `after_prose` lands at the same seam as on the live path, by the same
+    predicate -- a past turn and the turn just answered must not put the rating in
+    two different places, or scrolling back changes the layout.
     """
     items = list(items)
     progress = [item for item in items if item.kind is Kind.PROGRESS]
@@ -870,5 +917,11 @@ def show(items: Iterable[Item]) -> None:
             for item in progress:
                 draw(item)
     for item in items:
-        if item.kind is not Kind.PROGRESS:
-            draw(item)
+        if item.kind is Kind.PROGRESS:
+            continue
+        if after_prose is not None and _ends_the_prose(item):
+            after_prose()
+            after_prose = None
+        draw(item)
+    if after_prose is not None:
+        after_prose()

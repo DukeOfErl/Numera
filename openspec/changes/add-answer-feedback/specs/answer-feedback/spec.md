@@ -14,6 +14,11 @@ Every answer SHALL offer the reader a way to record approval or disapproval of
 it. Recording one SHALL be optional, and an answer that is never rated SHALL
 behave exactly as it does today.
 
+It SHALL be offered between the answer's prose and the entries presented with it.
+The entries are unbounded — one answer's table can fill the screen — so a control
+placed after them is one a reader who has finished reading has to go looking for,
+at exactly the moment they have formed the view it is asking about.
+
 A rating SHALL be recorded at the moment it is given, and SHALL NOT depend on the
 reader completing any further step. Most people who rate will do nothing else,
 and a design that waits for a second action to commit the first collects nothing
@@ -22,6 +27,7 @@ from them.
 #### Scenario: An answer is given
 - **WHEN** an answer is shown to a reader
 - **THEN** a way to record approval or disapproval is offered with it
+- **AND** it is offered below the answer's prose and above the entries shown alongside it
 
 #### Scenario: A reader rates and does nothing further
 - **WHEN** a reader records a rating and takes no further action
@@ -32,12 +38,24 @@ from them.
 - **THEN** nothing is recorded for that answer
 - **AND** the answer, the conversation and the next question are unaffected
 
-### Requirement: A rating may carry a comment, offered only once rating has happened
+### Requirement: A rating may carry a comment, offered only once an answer has been disapproved of
 
-A reader who has rated an answer SHALL be able to add free text about it. That
-opportunity SHALL NOT be presented before a rating has been given: an empty text
-box beside every answer is a standing demand on the reader's attention, and the
-rating is the cheap signal that most people will give.
+A reader who has recorded disapproval of an answer SHALL be able to add free text
+about it. That opportunity SHALL NOT be presented before a rating has been given:
+an empty text box beside every answer is a standing demand on the reader's
+attention, and the rating is the cheap signal that most people will give.
+
+It SHALL NOT be presented after approval either. The invitation asks what was
+wrong, which is a question nobody can answer about an answer they have just
+approved — a reader who approves and is then asked what went wrong reads it as
+the click not having registered. Approval is the cheap signal, and the point of
+it being cheap is that it asks for nothing further. Free text about an answer
+that was right is not what this exists to collect.
+
+Sending a comment SHALL take one action of the reader's. A text box whose send
+must be pressed once to commit the text and again to send it loses the comments
+of everyone who presses once and believes they are done — and those are comments
+from readers who had already decided to write, the most expensive ones to lose.
 
 The invitation to comment SHALL ask the reader to name the identifier of any
 entry they believe is wrong. Per-entry rating is not built, and what readers
@@ -57,10 +75,19 @@ being written.
 - **WHEN** an answer has not been rated
 - **THEN** no means of commenting on it is presented
 
-#### Scenario: A reader rates an answer
-- **WHEN** a reader records a rating
+#### Scenario: A reader disapproves of an answer
+- **WHEN** a reader records disapproval
 - **THEN** they are invited to add free text about that answer
 - **AND** the invitation asks them to name the identifier of any entry they believe is wrong
+
+#### Scenario: A reader approves of an answer
+- **WHEN** a reader records approval
+- **THEN** no means of commenting on it is presented
+- **AND** the approval is recorded and acknowledged
+
+#### Scenario: A reader writes a comment and sends it
+- **WHEN** a reader has written a comment and performs the action that sends it
+- **THEN** the comment is recorded without any further action from them
 
 #### Scenario: A reader tries to change a rating already given
 - **WHEN** an answer has been rated and the reader attempts to rate it again

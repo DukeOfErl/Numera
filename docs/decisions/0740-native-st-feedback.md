@@ -74,3 +74,48 @@ The numbers here support "what do people complain about", and will not support
 
 Recorded in the decision rather than beside the query, because the first person
 to quote a percentage from this data will have found it somewhere else.
+
+## Three corrections after the first real use
+
+The design above was right about the widget and wrong about three things around
+it. All three were found by a person using the deployed page, not by the suite —
+which is the expected division of labour for a driver, and the reason this change
+carries `AppTest` coverage rather than a seeding budget.
+
+**The comment box now opens on disapproval alone.** It opened on either thumb,
+and the hint reads *"What was wrong?"* — a question nobody can answer about an
+answer they have just approved, and which reads as the click not having
+registered. The alternative was to soften the hint to cover both, which was
+rejected: the hint's job is to ask for an entry identifier from the one reader
+who has a specific complaint, and a wording vague enough to suit approval asks
+that reader for nothing in particular. Approval stays the cheap signal, and the
+point of a cheap signal is that it asks for nothing further.
+
+The cost is that free text praising an answer can no longer be given. Nobody had
+offered any, and the evidence this is collected for — which entries readers say
+are wrong — does not come from there.
+
+**The rating sits between the prose and the entries table, not after everything.**
+The table is unbounded: one answer can fill the screen with it, so a control below
+it is one the reader has to go looking for at exactly the moment they have formed
+the view it asks about. Both drawing paths use one predicate (`_ends_the_prose`),
+because the live path and the replay path draw the same turn in two places and a
+seam computed twice is a seam that moves.
+
+**The comment box is a form, which is the only way one action sends it.** A plain
+text area beside a plain button takes two: typing leaves the value uncommitted,
+the first Ctrl+Enter or click commits it and re-runs, and only a second press
+sends. `disabled=not text.strip()` on the button made it worse rather than better
+— the first click then landed on a disabled control and did nothing at all, so the
+reader saw no response whatsoever.
+
+This does not contradict trap 2 above. The *thumb* must stay outside a form, or
+it reads `None` until submit and the box can never appear conditionally. The text
+and its button are a different matter: submitting several widgets as one act is
+what a form is for, and it is the framework's own answer rather than a hand-rolled
+one. The button is left enabled on empty text, because disabling it is what costs
+the extra action; pressing Send with nothing typed records nothing.
+
+`AppTest` cannot see the two-action problem — it sets widget values directly and
+never blurs anything — so what the test asserts is the structure that prevents it:
+that the text area and the Send button share a form id.
