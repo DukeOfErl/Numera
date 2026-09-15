@@ -777,6 +777,45 @@ FEEDBACK_HINT = "What was wrong? If an entry is incorrect, please give its ID (e
 
 FEEDBACK_THANKS = "Thanks — recorded."
 
+# The thumbs, in orange. `st.feedback` has no colour parameter in 1.61.1 -- its
+# whole signature is options, key, default, disabled, on_change, args, kwargs,
+# width -- so this is CSS over the rendered control.
+#
+# Orange rather than red, though both were offered. Red on a thumbs *up* reads as
+# an alarm about the thing the reader just approved of; orange is an attention
+# colour and not an error one, so the same rule can cover both thumbs without one
+# of them saying something wrong.
+#
+# **This degrades to nothing.** Both test ids are Streamlit's own, verified
+# against 1.61.1's frontend bundle; if a future version renames either, the rule
+# matches nothing and the thumbs keep their default colour. Nothing moves and
+# nothing breaks -- a strictly safer failure than the prototype banner's, which
+# falls back to sitting in the page.
+#
+# The settled look after a rating is left to Streamlit, which dims a disabled
+# control by opacity: that keeps the hue, so the thumb a reader chose stays
+# legible as the one they chose. A colour rule of our own for the disabled state
+# would have to guess which half of the pair is selected.
+FEEDBACK_CSS = """
+<style>
+[data-testid="stButtonGroup"] [data-testid="stIconMaterial"] { color: #ff9d3c; }
+@media (prefers-color-scheme: light) {
+  [data-testid="stButtonGroup"] [data-testid="stIconMaterial"] { color: #c2410c; }
+}
+</style>
+"""
+
+
+def draw_feedback_style() -> None:
+    """Emit the thumbs' colour rule, once for the page.
+
+    Once, not per rating: `draw_feedback` runs for every turn in the transcript,
+    and a `<style>` block per turn is the same rule repeated as many times as the
+    conversation is long. It is a page-level element, so it is drawn where the
+    page's other one is.
+    """
+    st.markdown(FEEDBACK_CSS, unsafe_allow_html=True)
+
 
 def question_id_of(items: Iterable[Item]) -> str:
     """The question a turn's items came from, or "" if none say.

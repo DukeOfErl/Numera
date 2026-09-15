@@ -317,3 +317,30 @@ def test_a_store_that_cannot_be_written_to_does_not_reach_the_reader(app):
     assert not at.exception, "a failed write raised into the page"
     assert not at.error, "a failed write put an error on screen"
     assert at.chat_input, "the conversation stopped taking questions"
+
+
+# --- the thumbs are coloured, once ------------------------------------------
+
+
+def test_the_colour_rule_is_emitted_once_however_long_the_conversation(app):
+    """Once for the page, not once per rated turn.
+
+    `draw_feedback` runs for every turn in the transcript, so a `<style>` block
+    emitted from inside it would be repeated as many times as the conversation is
+    long. Two questions is enough to tell the two placements apart; one is not.
+    """
+    at = ask(ask(app.run(), "how many ribosomes?"), "and in yeast?")
+    blocks = [m.value for m in at.markdown if "stButtonGroup" in m.value]
+    assert len(blocks) == 1, f"{len(blocks)} copies of the colour rule"
+
+
+def test_the_colour_rule_names_the_element_it_colours(app):
+    """A selector that matches nothing is a silent no-op, and no test here can see
+    the browser. What is asserted is that the rule names Streamlit's own test ids
+    — both verified against 1.61.1's bundle — so a rename shows up as this test
+    failing rather than as thumbs quietly going grey.
+    """
+    at = app.run()
+    rule = next(m.value for m in at.markdown if "stButtonGroup" in m.value)
+    assert 'data-testid="stIconMaterial"' in rule
+    assert "prefers-color-scheme: light" in rule, "one colour cannot suit both themes"

@@ -48,6 +48,9 @@ session = web.session_id(st.session_state, st.query_params)
 
 # Pinned to the viewport, before anything that could scroll it away.
 web.draw_prototype_banner()
+# Page-level, and here for the same reason the banner is: drawn once, above
+# everything that uses it, rather than once per turn from inside `draw_feedback`.
+web.draw_feedback_style()
 
 st.title("SciNumbers ask")
 st.caption(web.as_text(f"{len(repo)} entries · session {session}"))
