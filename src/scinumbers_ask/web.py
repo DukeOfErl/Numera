@@ -30,7 +30,7 @@ from typing import Any
 
 import streamlit as st
 
-from . import bionumbers, entries_table, messages, trace, trail_store
+from . import bionumbers, entries_table, feedback, messages, trace, trail_store
 from .agent import AskAgent
 from .config import Config, env_setting, refuse_retired_env
 from .corpus import load
@@ -733,6 +733,127 @@ def answer(
     if box is not None:
         box.update(label="Retrieval", state="complete", expanded=False)
     return drawn
+
+
+#: Shown above the comment box. Short on purpose: a hint that wraps into a
+#: paragraph is one nobody reads, and this one has to survive being skimmed.
+#:
+#: It asks for an identifier by name because per-entry rating is not built, and
+#: what readers choose to write about entries is the evidence for whether it
+#: should be (ADR-0740). "e.g. 102345" rather than "e.g. BNID 102345": readers
+#: copy the format they are shown, and the bare number is what a query can find
+#: either way.
+FEEDBACK_HINT = "What was wrong? If an entry is incorrect, please give its ID (e.g. 102345)."
+
+FEEDBACK_THANKS = "Thanks — recorded."
+
+
+def question_id_of(items: Iterable[Item]) -> str:
+    """The question a turn's items came from, or "" if none say.
+
+    Empty rather than raising: an item drawn before this field existed, or a turn
+    that produced nothing but an ending, is a turn with no rating rather than a
+    crash on a page somebody is reading.
+    """
+    for item in items:
+        if item.question_id:
+            return item.question_id
+    return ""
+
+
+def is_ratable(items: Iterable[Item]) -> bool:
+    """Whether this turn has something a reader could form a view about.
+
+    An answer. Not an ending alone: a question that stopped at a spend ceiling or
+    a missing key produced nothing the reader can judge, and offering a thumb
+    there collects a verdict on the infrastructure while looking like a verdict on
+    the science.
+    """
+    items = list(items)
+    return bool(question_id_of(items)) and any(item.kind is Kind.ANSWER for item in items)
+
+
+def draw_feedback(items: Iterable[Item], session_id: str, state: Any = None) -> None:
+    """Offer a rating for one answered turn, and a comment once it has been rated.
+
+    **Drawn once per turn per script run**, which is a property of where it is
+    called rather than of anything here: the transcript loop redraws past turns
+    and the live branch draws the new one, and the new turn joins the transcript
+    only after that loop has finished. Move the append above the loop and this
+    draws twice, which is a `DuplicateWidgetID` and not a subtle failure --
+    `test_web_driver_feedback.py` pins it anyway, because the subtle version is
+    what happens if the keys ever stop being unique.
+
+    Keys derive from the question identifier, never from the turn's position.
+    Position looks stable because the transcript is append-only, but it lives in
+    session state alone -- reopening the same `?session=` restarts it at 0 while
+    the conversation continues, so two different questions would share a key. The
+    loud version of that is a duplicate-key error; the quiet version is a rating
+    landing on the wrong answer with no error at all.
+    """
+    state = st.session_state if state is None else state
+    items = list(items)
+    if not is_ratable(items):
+        return
+    question_id = question_id_of(items)
+    given = feedback.rating_for(state, question_id)
+
+    st.feedback(
+        "thumbs",
+        key=_verdict_key(question_id),
+        # Disabled once given, rather than left live. Clicking a selected thumb
+        # clears it, and Streamlit discards the state of a widget it did not
+        # render -- so an un-disabled control lets a reader wipe the comment box
+        # out from under their own half-typed comment. A rating is final for the
+        # answer (`answer-feedback`), and the control should look final too.
+        disabled=given is not None,
+        on_change=_took_a_verdict,
+        args=(question_id, session_id, state),
+    )
+    if given is None:
+        return
+    if given.commented:
+        st.caption(FEEDBACK_THANKS)
+        return
+    _draw_comment_box(question_id, session_id, state)
+
+
+def _verdict_key(question_id: str) -> str:
+    return f"scinumbers_ask.verdict.{question_id}"
+
+
+def _comment_key(question_id: str) -> str:
+    return f"scinumbers_ask.comment.{question_id}"
+
+
+def _took_a_verdict(question_id: str, session_id: str, state: Any) -> None:
+    """Record on the click, not on the comment.
+
+    Most readers who rate will do nothing else, and a design that waits for a
+    second action to commit the first collects nothing from them.
+    """
+    verdict = feedback.Verdict.from_widget(state.get(_verdict_key(question_id)))
+    if verdict is None:
+        return
+    feedback.record_verdict(state, question_id=question_id, session_id=session_id, verdict=verdict)
+
+
+def _draw_comment_box(question_id: str, session_id: str, state: Any) -> None:
+    """The comment, offered only after a rating and never inside a form.
+
+    Inside an `st.form` the thumb above would read `None` until the form
+    submitted, so this box could never appear conditionally on it at all.
+
+    The draft lives in the widget's own key, which is safe *here* because the box
+    keeps being rendered for as long as the rating stands -- Streamlit only
+    discards the state of a widget it did not draw, and the thumb being disabled
+    is what guarantees it keeps drawing.
+    """
+    key = _comment_key(question_id)
+    text = st.text_area(FEEDBACK_HINT, key=key, height=80)
+    if st.button("Send", key=f"{key}.send", disabled=not text.strip()):
+        feedback.record_comment(state, question_id=question_id, session_id=session_id, text=text)
+        st.rerun()
 
 
 def show(items: Iterable[Item]) -> None:

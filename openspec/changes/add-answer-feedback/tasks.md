@@ -64,29 +64,29 @@ fails open (ADR-0710).
 
 ## 3. The widget
 
-- [ ] 3.1 `st.feedback` with thumbs, keyed on `question_id`, **outside** any
+- [x] 3.1 `st.feedback` with thumbs, keyed on `question_id`, **outside** any
       `st.form` — inside one it returns `None` until submit and the conditional
       text area can never appear.
-- [ ] 3.2 The verdict commits on the click via the change callback, not on
+- [x] 3.2 The verdict commits on the click via the change callback, not on
       comment submit. Most readers who rate will do nothing else.
-- [ ] 3.3 The text area appears only once a verdict exists, and carries the hint
+- [x] 3.3 The text area appears only once a verdict exists, and carries the hint
       asking for a problematic entry's ID by name. Keep it short — a hint that
       wraps into a paragraph is one nobody reads.
-- [ ] 3.4 Disable the control once a verdict is held, and keep the comment out of
+- [x] 3.4 Disable the control once a verdict is held, and keep the comment out of
       widget state: clicking the selected thumb clears it, and Streamlit discards
       the state of a widget it did not render, taking a half-typed comment along.
-- [ ] 3.5 Acknowledge a received rating on screen.
+- [x] 3.5 Acknowledge a received rating on screen.
 
 ## 4. Through the real script
 
-- [ ] 4.1 `AppTest`: rate the **second** of two answers and assert the first is
+- [x] 4.1 `AppTest`: rate the **second** of two answers and assert the first is
       untouched. Rating the first would pass under a shared-key bug, which is the
       failure that produces no error at all.
-- [ ] 4.2 `AppTest`: interacting again after rating does not record a second time.
-- [ ] 4.3 `AppTest`: the widget is drawn once per answer per run — the transcript
+- [x] 4.2 `AppTest`: interacting again after rating does not record a second time.
+- [x] 4.3 `AppTest`: the widget is drawn once per answer per run — the transcript
       loop and the live turn must not both draw the newest one. That is currently
       true by ordering rather than by design, which is why it needs pinning.
-- [ ] 4.4 `AppTest`: an unrated answer records nothing and leaves the conversation
+- [x] 4.4 `AppTest`: an unrated answer records nothing and leaves the conversation
       able to take another question.
 - [ ] 4.5 Hand group 3 and 4 to a `verifier`. Ask it in particular whether any
       `AppTest` assertion would still pass with the widget removed entirely.

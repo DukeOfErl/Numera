@@ -45,6 +45,15 @@ APP = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 # from a hang in the agent.
 TIMEOUT = 30
 
+# The session-state keys feedback is allowed to keep, named exactly rather than
+# matched by a wildcard: a rule that permitted anything under a namespace would
+# permit the copies of the conversation and the spend it exists to forbid.
+FEEDBACK_PREFIXES = (
+    "scinumbers_ask.feedback",
+    "scinumbers_ask.verdict.",
+    "scinumbers_ask.comment.",
+)
+
 
 def app(monkeypatch, repo, agent) -> AppTest:
     """The real script, with the corpus and agent a test chose.
@@ -216,12 +225,24 @@ def test_session_state_holds_the_identifier_and_what_was_drawn_and_nothing_else(
     monkeypatch, repo, config, tmp_path
 ):
     """A copy of the conversation, the spend or the ceiling here would be a
-    second source of truth for something the checkpoint already owns."""
+    second source of truth for something the checkpoint already owns.
+
+    Feedback is the one exception, and it is allowed by name rather than by
+    loosening the rule. What a reader has rated *in this session* is not
+    something the checkpoint owns: the durable record is a row in the trail, and
+    this is only what stops a redraw recording the same judgement twice. It
+    disappears with the session, and losing it costs at most one duplicate.
+
+    The rule keeps its teeth: anything else namespaced here still fails, and the
+    allowance is a prefix rather than a wildcard, so `scinumbers_ask.spend` or a
+    second copy of the conversation would still be caught.
+    """
     model = scripted(says("an answer"))
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
     kept = {k for k in at.session_state.filtered_state if k.startswith("scinumbers_ask.")}
-    assert kept == {web.SESSION_KEY, web.TRANSCRIPT_KEY}
+    feedback_keys = {k for k in kept if k.startswith(FEEDBACK_PREFIXES)}
+    assert kept - feedback_keys == {web.SESSION_KEY, web.TRANSCRIPT_KEY}
 
 
 def test_a_missing_corpus_is_explained_rather_than_raised(monkeypatch):

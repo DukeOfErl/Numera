@@ -80,6 +80,11 @@ for asked, drawn in web.transcript(st.session_state):
         st.markdown(web.as_text(asked))
     with st.chat_message("assistant"):
         web.show(drawn)
+        # Inside the message, so a rating sits with the answer it is about rather
+        # than floating between turns. Every past turn gets one, not just the
+        # newest: a reader who reads three answers and then decides the second was
+        # wrong is the case this exists for.
+        web.draw_feedback(drawn, session)
 
 # Some endings close the run: the budget is spent, the conversation is past its
 # token bound, nothing is configured, or the key funding the calls is out of credit.
@@ -111,6 +116,12 @@ elif question := st.chat_input("Ask a question", submit_mode="disable"):
     web.transcript(st.session_state).append((question, items))
     with st.chat_message("assistant"):
         web.answer(agent.ask(session, question), repo, items)
+        # Drawn here as well as in the loop above, and for the reason the "run is
+        # over" banner had to be: this turn joined the transcript after that loop
+        # had already run, so without this the rating appears one interaction late
+        # -- never, for the reader who reads the answer and stops. It is not drawn
+        # twice in one run, because the append is below the loop and not above it.
+        web.draw_feedback(items, session)
 
     # The ending only exists now, and the branch above decided whether the run was
     # over *before* this question ran. Streamlit reruns on the next interaction and
