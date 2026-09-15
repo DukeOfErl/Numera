@@ -19,33 +19,33 @@ fails open (ADR-0710).
 
 ## 1. What gets recorded
 
-- [ ] 1.1 Claim ADR-0740 with a stub: `st.feedback` over the trubrics component,
+- [x] 1.1 Claim ADR-0740 with a stub: `st.feedback` over the trubrics component,
       with that component's staleness as the reason, and the three behaviours of
       the installed widget the design has to accommodate.
-- [ ] 1.2 Claim ADR-0750 with a stub: the tracer receives a copy and is not the
+- [x] 1.2 Claim ADR-0750 with a stub: the tracer receives a copy and is not the
       record — free-tier trace expiry, feedback being a child of the run, and the
       retention cut of 2026-09-14.
-- [ ] 1.3 A `feedback` event written through `trail_store`, carrying the verdict
+- [x] 1.3 A `feedback` event written through `trail_store`, carrying the verdict
       and the `question_id`. A new `event` value, not a schema change.
-- [ ] 1.4 A comment is a **second** event naming the same question, never an
+- [x] 1.4 A comment is a **second** event naming the same question, never an
       update to the first row. Append-only means the sequence is the evidence.
-- [ ] 1.5 Rating state per question in session state, outside widget state, so
+- [x] 1.5 Rating state per question in session state, outside widget state, so
       "already recorded" is answerable on a redraw.
 
 ## 2. Verification of group 1
 
-- [ ] 2.1 Tests: a verdict is recorded with the right `question_id`; a comment is
+- [x] 2.1 Tests: a verdict is recorded with the right `question_id`; a comment is
       a separate record naming the same question; a second rating of the same
       answer does not write twice.
-- [ ] 2.2 A test that **neither a verdict nor a comment reaches the model**:
+- [x] 2.2 A test that **neither a verdict nor a comment reaches the model**:
       assert over the stored conversation and the messages a later question is
       answered from, not over the answer's text. The property is what the model
       was shown; "the next answer is unchanged" is a counterfactual about a
       non-deterministic run and cannot be asserted at all.
-- [ ] 2.3 A test with a comment written as an instruction to the model -- stored
+- [x] 2.3 A test with a comment written as an instruction to the model -- stored
       as given, and absent from every prompt. Free text is the one input here
       authored by a stranger, and this is the route it must not take.
-- [ ] 2.4 A test that a failed write is invisible to the reader — inherited from
+- [x] 2.4 A test that a failed write is invisible to the reader — inherited from
       `trail_store`, asserted here because this is the first caller where a
       failure would reach someone mid-conversation.
 - [ ] 2.5 Hand group 1 to a `verifier` subagent before believing it. Give it the

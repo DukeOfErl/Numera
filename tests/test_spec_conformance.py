@@ -247,6 +247,28 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_trail_store_live.py::test_an_unreachable_host_does_not_raise_out_of_record",
         "test_trail_store_live.py::test_the_schema_and_the_insert_are_valid_sql",
     ),
+    # add-answer-feedback's, mapped with the change that adds them. Only the two
+    # that are genuinely asserted; the other three are in AWAITING_THE_WIDGET
+    # until the real script can be driven.
+    #
+    # The second is the one to compare against its words hardest. It is stated as
+    # what the model was *shown*, because the alternative phrasing -- "the next
+    # answer is unchanged" -- is a counterfactual about a non-deterministic run
+    # that nothing can assert. Its test carries a positive control for the same
+    # reason: every other assertion in it is a `not in`, which an empty haystack
+    # satisfies.
+    "A rating names the question it is about, and outlives the session": (
+        "test_feedback.py::test_a_verdict_is_recorded_against_its_question",
+        "test_feedback.py::test_two_answers_rated_in_one_session_name_different_questions",
+        "test_feedback.py::test_a_comment_is_a_second_record_naming_the_same_question",
+        "test_feedback.py::test_one_session_s_ratings_do_not_suppress_another_s",
+        "test_trail_store.py::test_a_record_carries_every_identifier_it_was_given",
+    ),
+    "The model is never shown a rating or a comment": (
+        "test_feedback.py::test_neither_a_verdict_nor_a_comment_reaches_the_model",
+        "test_feedback.py::test_a_comment_written_as_an_instruction_is_stored_as_given",
+        "test_driver_independence.py::test_the_agent_cannot_reach_a_reader_s_feedback",
+    ),
 }
 
 # Requirements with no test named yet. Listed rather than omitted: the point of this
@@ -501,6 +523,23 @@ AWAITING_THE_HARNESS = (
 # system prompt, not a harness, and the live-model check can only ever assert the
 # weak form of them -- that an opening is quantitative and attributed, not that it
 # carries the right conclusion. Kept apart so the list says which gap is which.
+# `add-answer-feedback`'s, and a fourth kind of gap: these are not unbuilt, they
+# are half-built. The recording side exists and is asserted; the widget side --
+# that a control is offered with every answer, that the comment box appears only
+# after a rating, that a failed write is invisible mid-conversation -- can only be
+# asserted by driving the real script, which is groups 3 and 4 of that change.
+#
+# Listed rather than mapped to the tests that exist, because those tests cover the
+# operation and not the requirement: "a comment without a rating is refused" is
+# the function's rule, and the requirement is about what a reader is *offered*.
+# Mapping one to the other would put the requirement's words next to a test that
+# does not check them, which is the one failure this file cannot catch.
+AWAITING_THE_WIDGET = (
+    "A reader can rate an answer, and rating is never required",
+    "A rating may carry a comment, offered only once rating has happened",
+    "Recording a rating never disrupts the reader",
+)
+
 AWAITING_THE_PROMPT = (
     "An answer leads with its quantitative conclusion",
     "Leading with a figure does not displace what qualifies it",
@@ -510,6 +549,10 @@ UNMAPPED: dict[str, str] = {
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_HARNESS, "add-answer-evaluation is unbuilt; no harness yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),
+    **dict.fromkeys(
+        AWAITING_THE_WIDGET,
+        "recording is asserted; the widget half needs AppTest -- groups 3 and 4",
+    ),
 }
 
 

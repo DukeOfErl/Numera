@@ -37,7 +37,7 @@ ADAPTERS = DRIVERS | HARNESS
 # `autobuild` joins them: it decides whether to build a corpus, which is a driver's
 # policy and not the agent's, and it is the one module allowed to import the
 # ingester. Putting it on this side is what keeps that dependency out of the core.
-PRESENTATION = ADAPTERS | {"messages", "entries_table", "autobuild"}
+PRESENTATION = ADAPTERS | {"messages", "entries_table", "autobuild", "feedback"}
 
 AGENT_CORE = sorted(
     path.stem
@@ -66,6 +66,27 @@ def imports_of(module: str) -> set[str]:
 def test_the_agent_core_is_not_empty():
     """A path typo would otherwise make every test below pass over nothing."""
     assert "agent" in AGENT_CORE and "tools" in AGENT_CORE and len(AGENT_CORE) > 5
+
+
+def test_the_agent_cannot_reach_a_reader_s_feedback():
+    """`answer-feedback` requires that the model is never shown a rating or a
+    comment. This is where that requirement has teeth.
+
+    `feedback` sits in `PRESENTATION`, which is the opposite call from
+    `trail_store` and for a principled reason: the core legitimately records its
+    own trail, but feedback is a stranger's judgement *of* the core, and a
+    comment is the only input in this system authored by someone outside it. An
+    `import feedback` in `agent.py` or `tools.py` -- the plausible future edit
+    being "improve the agent by feeding ratings back" -- fails
+    `test_no_agent_module_reaches_for_a_driver` rather than passing silently.
+
+    Asserted by name here as well, because membership of `PRESENTATION` is a line
+    in a set that a later edit could quietly remove.
+    """
+    assert "feedback" in PRESENTATION
+    assert "feedback" not in AGENT_CORE
+    for module in ("agent", "tools", "spend"):
+        assert "feedback" not in imports_of(module)
 
 
 def test_the_durable_trail_sink_is_core_and_that_is_deliberate():
