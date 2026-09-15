@@ -58,9 +58,17 @@ fails open (ADR-0710).
       actually minted. Every other test passes a literal `"q1"`, so a widget
       reading the wrong field off an item would write rows that are well formed
       and join to nothing.
-- [ ] 2.5 Hand group 1 to a `verifier` subagent before believing it. Give it the
+- [x] 2.5 Hand group 1 to a `verifier` subagent before believing it. Give it the
       spec scenarios and ask specifically which are asserted and which merely
-      execute.
+      execute. **Done, and it found five things a green 1200-test suite did
+      not**: the guard named in `feedback.py`'s docstring did not exist (it
+      cited a test checking `ADAPTERS`, and `feedback` is in `PRESENTATION`, a
+      superset); task 2.4 was ticked with no test behind it; nothing asserted a
+      feedback record reaches `TrailStore` at all, because the fixture every
+      test uses calls `trace.configure`, which clears every handler; a spec
+      scenario was unreachable and so could never fail; and `logging` catches
+      nothing on its own, so the fail-open guarantee rested on one handler
+      happening to swallow. All five closed in `2a58215` and `b6b388f`.
 
 ## 3. The widget
 
@@ -93,10 +101,13 @@ fails open (ADR-0710).
 
 ## 5. The record
 
-- [ ] 5.1 Spec-conformance mapping entries for all five requirements, in this
+- [x] 5.1 Spec-conformance mapping entries for all five requirements, in this
       change. A requirement whose scenarios only execute is a gap, not a pass —
-      say which is which.
-- [ ] 5.2 `openspec validate add-answer-feedback --strict`.
+      say which is which. **Two are mapped and three are in
+      `AWAITING_THE_WIDGET`**; groups 3 and 4 have since landed, so those three
+      are now closable and 5.1 should be revisited rather than assumed done.
+- [x] 5.2 `openspec validate add-answer-feedback --strict`. Passing; re-run
+      before the archive, since 5.1's mappings may still move.
 - [ ] 5.3 CLAUDE.md: the new capability in the module table if a module is added.
 - [ ] 5.4 `README.md` and `CHANGELOG.md`: that answers can be rated, that rating
       is optional, and that comments are read by the operators and never sent to
