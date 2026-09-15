@@ -47,7 +47,17 @@ fails open (ADR-0710).
       authored by a stranger, and this is the route it must not take.
 - [x] 2.4 A test that a failed write is invisible to the reader — inherited from
       `trail_store`, asserted here because this is the first caller where a
-      failure would reach someone mid-conversation.
+      failure would reach someone mid-conversation. **Was ticked once with no
+      test behind it**; a verifier found that, and it now installs a failing
+      handler and asserts the failure count moved.
+- [x] 2.6 A test that a feedback record reaches `TrailStore` at all. Every other
+      test here uses a fixture calling `trace.configure`, which *clears every
+      handler* — so they all ran with the durable sink detached, and nothing
+      established that the thing this change collects is collected.
+- [x] 2.7 A test that the identifier a rating carries is one `start_question`
+      actually minted. Every other test passes a literal `"q1"`, so a widget
+      reading the wrong field off an item would write rows that are well formed
+      and join to nothing.
 - [ ] 2.5 Hand group 1 to a `verifier` subagent before believing it. Give it the
       spec scenarios and ask specifically which are asserted and which merely
       execute.

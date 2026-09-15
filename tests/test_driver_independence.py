@@ -80,13 +80,24 @@ def test_the_agent_cannot_reach_a_reader_s_feedback():
     being "improve the agent by feeding ratings back" -- fails
     `test_no_agent_module_reaches_for_a_driver` rather than passing silently.
 
-    Asserted by name here as well, because membership of `PRESENTATION` is a line
-    in a set that a later edit could quietly remove.
+    The enforcement is `test_no_agent_module_reaches_for_presentation`, not the
+    parametrized test above it: that one checks `ADAPTERS`, which is the drivers
+    and the harness, and `feedback` is in `PRESENTATION` — a superset. An earlier
+    version of this module's docstring named the wrong test and so described a
+    guarantee that did not exist.
+
+    What is left here is the membership itself, which no other test states and
+    which a later edit could quietly drop — and `PRESENTATION` shapes
+    `AGENT_CORE` by subtraction, so dropping it would silently move `feedback`
+    into the core rather than fail anything.
     """
     assert "feedback" in PRESENTATION
+    assert "feedback" not in ADAPTERS, (
+        "`feedback` is neither a driver nor a harness; if it is added to either, "
+        "`test_no_harness_module_reaches_for_an_interactive_driver` starts asserting "
+        "something untrue of it"
+    )
     assert "feedback" not in AGENT_CORE
-    for module in ("agent", "tools", "spend"):
-        assert "feedback" not in imports_of(module)
 
 
 def test_the_durable_trail_sink_is_core_and_that_is_deliberate():
@@ -131,6 +142,33 @@ def test_no_agent_module_reaches_for_a_driver(module):
     assert not reached, (
         f"{module} imports {sorted(reached)} -- {kind}. The agent would no longer "
         f"be replaceable under one driver"
+    )
+
+
+@pytest.mark.parametrize("module", AGENT_CORE)
+def test_no_agent_module_reaches_for_presentation(module):
+    """The rest of the presentation side, which the test above does not cover.
+
+    `ADAPTERS` is the drivers plus the harness. `PRESENTATION` is those *plus*
+    `messages`, `entries_table`, `autobuild` and `feedback` — and until this
+    test existed, nothing checked the core against that difference. Membership of
+    `PRESENTATION` shaped `AGENT_CORE` by subtraction and enforced nothing
+    directly, so a core module importing `messages` for a bit of wording, or
+    `agent.py` importing `feedback`, passed the suite.
+
+    `feedback` is why this was noticed. `answer-feedback` requires that the model
+    is never shown a rating or a comment, and the plausible regression is someone
+    improving the agent by feeding ratings back. That has to fail here, not be
+    described as failing somewhere it would not.
+
+    Verified to add no failures when written: no core module imports any of the
+    four today. It codifies a rule CLAUDE.md already states rather than inventing
+    one.
+    """
+    reached = imports_of(module) & (PRESENTATION - ADAPTERS)
+    assert not reached, (
+        f"{module} imports {sorted(reached)}, which is presentation. The agent "
+        f"would depend on what an interface shows, or on what a reader said about it"
     )
 
 

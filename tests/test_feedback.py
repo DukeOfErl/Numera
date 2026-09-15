@@ -9,13 +9,55 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 
 import pytest
 from conftest import agent_with
 
 from agent_doubles import says, scripted
-from scinumbers_ask import feedback, trace
+from scinumbers_ask import feedback, trace, trail_store
+from scinumbers_ask.events import QuestionStarted
 from scinumbers_ask.feedback import Verdict
+
+
+class _Conn:
+    def __init__(self, fail=None):
+        self.fail = fail
+        self.params: list[dict] = []
+
+    def execute(self, statement, params=None):
+        if self.fail is not None:
+            raise self.fail
+        if params is not None:
+            self.params.append(dict(params))
+        return None
+
+
+class _Engine:
+    """Enough of an engine to read back what a feedback record actually wrote."""
+
+    def __init__(self, fail_on_begin=None):
+        self.fail_on_begin = fail_on_begin
+        self.conns: list[_Conn] = []
+
+    def begin(self):
+        if self.fail_on_begin is not None:
+            raise self.fail_on_begin
+        conn = _Conn()
+        self.conns.append(conn)
+
+        class _Ctx:
+            def __enter__(self_inner):
+                return conn
+
+            def __exit__(self_inner, *exc):
+                return False
+
+        return _Ctx()
+
+    @property
+    def written(self) -> list[dict]:
+        return [p for c in self.conns for p in c.params if "event" in p]
 
 
 @pytest.fixture
@@ -166,6 +208,79 @@ def test_neither_a_verdict_nor_a_comment_reaches_the_model(repo, config, tmp_pat
     assert "5 micrometres" not in shown
     assert "feedback" not in shown.lower()
     assert "thumbs" not in shown.lower()
+
+
+# --- the durable sink, which every test above deliberately removes ---------
+
+
+def test_a_verdict_reaches_the_durable_store(state):
+    """The `written` fixture calls `trace.configure`, which clears every handler.
+
+    So every test above runs with the durable sink detached and asserts only the
+    file-shaped record. Nothing established that a feedback record reaches
+    `TrailStore` at all -- the thing the whole change exists to collect. This
+    installs the real handler and reads the row back.
+    """
+    engine = _Engine()
+    store = trail_store.install(engine, logger_name=trace.LOGGER_NAME)
+    assert store is not None and store.ready
+    try:
+        feedback.record_verdict(state, question_id="q9", session_id="s9", verdict=Verdict.DOWN)
+    finally:
+        logging.getLogger(trace.LOGGER_NAME).handlers.clear()
+
+    (row,) = engine.written
+    assert row["event"] == feedback.VERDICT_EVENT
+    assert row["question_id"] == "q9"
+    assert row["session_id"] == "s9"
+    assert json.loads(row["detail"])["verdict"] == "down"
+
+
+def test_a_rating_that_cannot_be_stored_does_not_raise(state):
+    """Fail-open, at this caller.
+
+    Inherited from `trail_store` (ADR-0710) and asserted here because this is the
+    first caller where a failure would reach someone mid-conversation: a reader
+    who clicks a thumb and gets a traceback has lost the answer they were reading.
+    """
+    engine = _Engine(fail_on_begin=OSError("gone"))
+    store = trail_store.TrailStore(engine=engine)
+    store.ready = True
+    logging.getLogger(trace.LOGGER_NAME).addHandler(trail_store.TrailHandler(store))
+    try:
+        assert feedback.record_verdict(state, question_id="q1", session_id="s1", verdict=Verdict.UP)
+        assert feedback.record_comment(state, question_id="q1", session_id="s1", text="why")
+    finally:
+        logging.getLogger(trace.LOGGER_NAME).handlers.clear()
+
+    assert store.failures == 2, "the test did not exercise a failing write"
+
+
+def test_the_identifier_recorded_is_the_one_the_question_s_trail_uses(
+    repo, config, tmp_path, state
+):
+    """The join this data exists for, asserted rather than assumed.
+
+    Every other test here passes a literal "q1". Nothing tied a feedback record
+    to an identifier `trace.start_question` actually minted -- so a widget reading
+    the wrong field off an item would produce rows that look perfectly well formed
+    and join to nothing.
+    """
+    stream = io.StringIO()
+    trace.configure(stream)
+    agent = agent_with(repo, config, tmp_path, scripted(says("an answer")))
+    started = [e for e in agent.ask("s1", "how many?") if isinstance(e, QuestionStarted)]
+    (start,) = started
+
+    feedback.record_verdict(
+        state, question_id=start.question_id, session_id="s1", verdict=Verdict.UP
+    )
+
+    records = [json.loads(line) for line in stream.getvalue().splitlines() if line.strip()]
+    asked = {r["question_id"] for r in records if r["event"] != feedback.VERDICT_EVENT}
+    rated = {r["question_id"] for r in records if r["event"] == feedback.VERDICT_EVENT}
+    assert rated, "no feedback record was written"
+    assert rated <= asked, f"the rating names {rated}, which no record of the question uses"
 
 
 def test_a_comment_written_as_an_instruction_is_stored_as_given(state, written):

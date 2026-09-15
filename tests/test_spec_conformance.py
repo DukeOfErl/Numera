@@ -257,17 +257,28 @@ COVERED: dict[str, tuple[str, ...]] = {
     # that nothing can assert. Its test carries a positive control for the same
     # reason: every other assertion in it is a `not in`, which an empty haystack
     # satisfies.
+    # Three of four scenarios. "A conversation is reopened and an answer rated"
+    # is **not** held: `test_one_session_s_ratings_do_not_suppress_another_s` is
+    # two session dictionaries sharing one identifier, which is state isolation
+    # and not the position-instability the scenario is about. Recorded here rather
+    # than left to read as covered, because that scenario needs the driver.
     "A rating names the question it is about, and outlives the session": (
         "test_feedback.py::test_a_verdict_is_recorded_against_its_question",
         "test_feedback.py::test_two_answers_rated_in_one_session_name_different_questions",
         "test_feedback.py::test_a_comment_is_a_second_record_naming_the_same_question",
-        "test_feedback.py::test_one_session_s_ratings_do_not_suppress_another_s",
-        "test_trail_store.py::test_a_record_carries_every_identifier_it_was_given",
+        "test_feedback.py::test_the_identifier_recorded_is_the_one_the_question_s_trail_uses",
+        "test_feedback.py::test_a_verdict_reaches_the_durable_store",
+        "test_trail_store_live.py::test_the_schema_and_the_insert_are_valid_sql",
     ),
+    # "An answer is rated down -> no further retrieval or model call is made on
+    # account of the rating" is not separately asserted; it holds structurally,
+    # since `feedback` cannot reach the agent at all, which is what the
+    # independence test pins.
     "The model is never shown a rating or a comment": (
         "test_feedback.py::test_neither_a_verdict_nor_a_comment_reaches_the_model",
         "test_feedback.py::test_a_comment_written_as_an_instruction_is_stored_as_given",
         "test_driver_independence.py::test_the_agent_cannot_reach_a_reader_s_feedback",
+        "test_driver_independence.py::test_no_agent_module_reaches_for_presentation",
     ),
 }
 

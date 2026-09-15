@@ -11,10 +11,16 @@ which is what actually happened.
 requirement rather than a filing decision.** `trail_store` is core because the
 agent legitimately records its own trail; feedback is the opposite direction --
 it is a stranger's judgement of the agent, and `answer-feedback` requires that
-the model never sees it. Listing this module in `test_driver_independence.py`'s
-`PRESENTATION` set turns that requirement into a test: an `import feedback` in
-`agent.py` or `tools.py` fails the suite. A comment asking the model to disregard
-its instructions must not arrive by this route.
+the model never sees it. A comment asking the model to disregard its instructions
+must not arrive by this route.
+
+The test that enforces it is `test_no_agent_module_reaches_for_presentation`,
+which checks the core against `PRESENTATION - ADAPTERS`. An earlier version of
+this paragraph named `test_no_agent_module_reaches_for_a_driver` instead, which
+checks `ADAPTERS` -- the drivers and the harness -- and would not have caught an
+`import feedback` in `agent.py` at all. The guarantee was described here before
+anything provided it, which is the shape of claim this project treats as worse
+than silence.
 
 Nothing here holds the store. Records go to `trace`'s logger, which is where the
 durable sink is already attached, so feedback inherits the fail-open policy

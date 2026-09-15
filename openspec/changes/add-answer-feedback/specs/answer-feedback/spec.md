@@ -43,8 +43,15 @@ The invitation to comment SHALL ask the reader to name the identifier of any
 entry they believe is wrong. Per-entry rating is not built, and what readers
 choose to write about entries is the evidence for whether it should be.
 
-A comment in progress SHALL NOT be lost by the reader changing or clearing their
-rating.
+A rating, once recorded, SHALL be final for that answer, and the interface SHALL
+show it as settled rather than appearing to invite a change. Two contradicting
+ratings of one answer would need a rule about which counts, the store is
+append-only so both would persist, and no reader has asked to change their mind.
+
+A comment in progress SHALL NOT be lost when the page is redrawn. The page is
+redrawn on every interaction, including the reader's own first keystroke
+elsewhere, so a draft held only by the interface is a draft that disappears while
+being written.
 
 #### Scenario: A reader has not yet rated
 - **WHEN** an answer has not been rated
@@ -55,9 +62,14 @@ rating.
 - **THEN** they are invited to add free text about that answer
 - **AND** the invitation asks them to name the identifier of any entry they believe is wrong
 
-#### Scenario: A reader changes their mind while writing
-- **WHEN** a reader is writing a comment and alters or withdraws their rating
-- **THEN** the text they have written so far is not discarded
+#### Scenario: A reader tries to change a rating already given
+- **WHEN** an answer has been rated and the reader attempts to rate it again
+- **THEN** the recorded rating does not change
+- **AND** no second rating is recorded for that answer
+
+#### Scenario: The page is redrawn while a comment is being written
+- **WHEN** a reader has written part of a comment and the page is redrawn
+- **THEN** the text they have written so far is still there
 
 ### Requirement: A rating names the question it is about, and outlives the session
 
