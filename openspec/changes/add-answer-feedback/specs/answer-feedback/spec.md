@@ -14,10 +14,10 @@ Every answer SHALL offer the reader a way to record approval or disapproval of
 it. Recording one SHALL be optional, and an answer that is never rated SHALL
 behave exactly as it does today.
 
-It SHALL be offered between the answer's prose and the entries presented with it.
-The entries are unbounded — one answer's table can fill the screen — so a control
-placed after them is one a reader who has finished reading has to go looking for,
-at exactly the moment they have formed the view it is asking about.
+It SHALL be offered at the foot of the answer's prose, and SHALL NOT be placed
+after the entries presented alongside it. A reader forms a view at the end of the
+prose, and that is where the control should be waiting; a control below the
+entries is one they have to go looking for at exactly that moment.
 
 A rating SHALL be recorded at the moment it is given, and SHALL NOT depend on the
 reader completing any further step. Most people who rate will do nothing else,
@@ -27,7 +27,7 @@ from them.
 #### Scenario: An answer is given
 - **WHEN** an answer is shown to a reader
 - **THEN** a way to record approval or disapproval is offered with it
-- **AND** it is offered below the answer's prose and above the entries shown alongside it
+- **AND** it is offered below that answer's prose, not below the entries shown alongside it
 
 #### Scenario: A reader rates and does nothing further
 - **WHEN** a reader records a rating and takes no further action

@@ -20,7 +20,11 @@ from scinumbers_ask.config import (
 )
 from scinumbers_ask.corpus import CorpusUnavailable
 
-st.set_page_config(page_title="SciNumbers ask", page_icon=":material/biotech:")
+# Wide, because each answer is now two columns: the prose and the entries it
+# rests on, side by side. The entries table is fixed-width and needs about
+# 640px before it grows a horizontal scrollbar that hides the ID column, which
+# the centred layout's ~700px main area cannot give half of. See READING_SPLIT.
+st.set_page_config(page_title="SciNumbers ask", page_icon=":material/biotech:", layout="wide")
 
 try:
     # Before the corpus is resolved. A reader who still exports the old variable
@@ -83,11 +87,11 @@ for asked, drawn in web.transcript(st.session_state):
         st.markdown(web.as_text(asked))
     with st.chat_message("assistant"):
         # Inside the message, so a rating sits with the answer it is about rather
-        # than floating between turns -- and `after_prose` places it between the
-        # prose and the table of entries, which is long enough to push it off the
-        # screen. Every past turn gets one, not just the newest: a reader who
-        # reads three answers and then decides the second was wrong is the case
-        # this exists for.
+        # than floating between turns -- and `after_prose` places it at the foot
+        # of the prose column, beside the entries rather than under them. Every
+        # past turn gets one, not just the newest: a reader who reads three
+        # answers and then decides the second was wrong is the case this exists
+        # for.
         # `drawn=drawn` binds this turn's items rather than the loop variable. The
         # callback is in fact called before the next iteration, but a lambda that
         # reads the loop variable is one refactor away from being called after it.

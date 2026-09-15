@@ -95,12 +95,18 @@ The cost is that free text praising an answer can no longer be given. Nobody had
 offered any, and the evidence this is collected for — which entries readers say
 are wrong — does not come from there.
 
-**The rating sits between the prose and the entries table, not after everything.**
-The table is unbounded: one answer can fill the screen with it, so a control below
-it is one the reader has to go looking for at exactly the moment they have formed
-the view it asks about. Both drawing paths use one predicate (`_ends_the_prose`),
+**The rating sits at the foot of the prose, not after everything.** The table was
+unbounded — one answer could fill the screen with it — so a control below it was
+one the reader had to go looking for at exactly the moment they had formed the
+view it asks about. Both drawing paths use one predicate (`_ends_the_prose`),
 because the live path and the replay path draw the same turn in two places and a
 seam computed twice is a seam that moves.
+
+That reasoning is now partly spent: [ADR-0760](0760-an-answer-is-two-columns.md)
+moved the table into its own column, so it no longer pushes anything downwards.
+The placement is kept for the plainer reason — a reader forms a view at the end of
+the prose — and the ADR records the demotion rather than leaving an argument
+standing that the layout has retired.
 
 **The comment box is a form, which is the only way one action sends it.** A plain
 text area beside a plain button takes two: typing leaves the value uncommitted,

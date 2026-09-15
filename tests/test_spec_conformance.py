@@ -280,7 +280,7 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_web_driver_feedback.py::test_an_answered_question_offers_a_rating",
         "test_web_driver_feedback.py::test_the_control_appears_on_the_run_that_answered",
         "test_web_driver_feedback.py::test_each_answer_is_offered_exactly_one_control",
-        "test_web_driver_feedback.py::test_the_rating_sits_between_the_prose_and_the_table",
+        "test_web_driver_feedback.py::test_the_rating_sits_with_the_prose_and_not_with_the_evidence",
         "test_web_driver_feedback.py::test_a_redrawn_turn_puts_the_rating_in_the_same_place",
         "test_web_driver_feedback.py::test_an_unrated_answer_records_nothing_and_the_page_goes_on",
         "test_feedback.py::test_a_verdict_is_recorded_against_its_question",

@@ -159,3 +159,30 @@ reason this change carries `AppTest` coverage rather than a seeding budget.
       test installed the raising handler *before* the question and failed for the
       wrong reason — every trace record raised, which is the question's path and
       not the rating's.
+
+## 8. The layout the placement fixes kept pointing at
+
+Three fixes in group 7 were the same fix — move the useful thing above the table
+— which is a symptom of the layout rather than three placement bugs. ADR-0760.
+
+- [x] 8.1 Each answered turn draws into two columns: prose, warnings, rating and
+      ending on the left; the entries table, its legend and the corpus summary on
+      the right. One `_column_for`, called by both the live path and the replay
+      path, because a split computed twice is a split that drifts.
+- [x] 8.2 `layout="wide"`, and `READING_SPLIT = (5, 6)` giving the larger share to
+      the evidence. Not taste: the table's widths are fixed pixels summing to 640,
+      and below that it grows a horizontal scrollbar whose first casualty is the
+      ID column. No split of the centred layout's ~700px leaves 640 on one side.
+- [x] 8.3 Rewrite the two placement tests. They still passed after the split and
+      had stopped testing anything: the prose column is drawn first, so "the
+      rating comes before the table" is true however the turn is divided. They now
+      assert which column each landed in. Canaries: drawing everything into one
+      column fails the first, and drawing the rating into the evidence column
+      fails the second.
+- [x] 8.4 Correct the two arguments the split retired — the rating's placement and
+      the uncited fold — in ADR-0740, in the code comments that made them, and in
+      the spec requirement, rather than leaving them standing.
+- [x] 8.5 ADR-0760, including the cost: Streamlit columns do not stack until the
+      viewport is narrow, so a small laptop gets a cramped page rather than the
+      single column it replaces. Named as the first thing to look at if a reader
+      reports one.

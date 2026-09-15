@@ -60,6 +60,20 @@ def _recorded(at: AppTest) -> dict:
     return feedback.ratings(at.session_state)
 
 
+def _turn_columns(at: AppTest) -> list[tuple]:
+    """Each turn's (prose, evidence) pair, in the order the turns were drawn.
+
+    `at.main.columns` flattens every column on the page into one list, so the
+    pairing is positional: two columns per turn, prose first. Asserted rather than
+    assumed — an odd count means a turn drew one column or three, and silently
+    reading them in twos would then pair one turn's prose with the next turn's
+    table and still pass.
+    """
+    columns = at.main.columns
+    assert len(columns) % 2 == 0, f"{len(columns)} columns is not a whole number of turns"
+    return [(columns[i], columns[i + 1]) for i in range(0, len(columns), 2)]
+
+
 def _element_order(block) -> list[str]:
     """Every element on the page, depth first, in the order it was drawn.
 
@@ -200,31 +214,41 @@ def cites(monkeypatch, repo, config, tmp_path):
     return AppTest.from_file(APP, default_timeout=TIMEOUT)
 
 
-def test_the_rating_sits_between_the_prose_and_the_table(cites):
-    """Below the answer it is about, above a table that can run off the screen.
+def test_the_rating_sits_with_the_prose_and_not_with_the_evidence(cites):
+    """At the foot of the prose column, beside the table rather than under it.
 
-    Drawn last -- which is where it was -- the control is under the cited table,
-    the uncited table and the dimension note, and a reader who has finished
-    reading the prose has to scroll past all three to find it.
+    Document order alone no longer says this. The prose column is drawn first, so
+    "the rating comes before the table" is true however the two are split -- it
+    stayed true when the table moved into its own column, which means it had
+    stopped testing anything. What is asserted now is which column each landed in,
+    and that the prose is above the rating *within* that column.
     """
     at = ask(cites.run(), "how wide?")
-    order = _element_order(at.main)
-    assert "dataframe" in order, "the fixture drew no table, so this proves nothing"
-    assert order.index("feedback") < order.index("dataframe")
-    assert order.index("markdown") < order.index("feedback"), "the prose came after the rating"
+    prose, evidence = _turn_columns(at)[0]
+
+    assert prose.get("feedback"), "no rating in the prose column"
+    assert not evidence.get("feedback"), "the rating went to the evidence column"
+    assert evidence.dataframe, "the fixture drew no table, so this proves nothing"
+    assert not prose.dataframe, "the table stayed in the prose column"
+
+    inside = _element_order(prose)
+    assert inside.index("markdown") < inside.index("feedback"), "the prose came after the rating"
 
 
 def test_a_redrawn_turn_puts_the_rating_in_the_same_place(cites):
     """The live path and the replay path draw the same turn in two places.
 
     If only one of them moved, scrolling back would change the layout -- and the
-    replay path is the one the reader sees for every turn but the newest.
+    replay path is the one the reader sees for every turn but the newest. The
+    first pair below was drawn by the replay path on the second run; the second
+    pair is the live one.
     """
     at = ask(ask(cites.run(), "how wide?"), "and in yeast?")
-    order = _element_order(at.main)
-    assert order.count("feedback") == 2
-    first_table = order.index("dataframe")
-    assert order.index("feedback") < first_table, "the redrawn turn's rating fell below its table"
+    turns = _turn_columns(at)
+    assert len(turns) == 2, f"{len(turns)} turns drawn, expected 2"
+    for index, (prose, evidence) in enumerate(turns):
+        assert prose.get("feedback"), f"turn {index} has no rating in its prose column"
+        assert not evidence.get("feedback"), f"turn {index} rated in the evidence column"
 
 
 # --- approval asks for nothing further ---------------------------------------

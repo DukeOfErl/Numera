@@ -23,7 +23,6 @@ from __future__ import annotations
 import os
 import uuid
 from collections.abc import Callable, Iterable, Iterator, MutableMapping
-from contextlib import nullcontext
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
@@ -111,6 +110,19 @@ COLUMN_WIDTHS = {
     "ID": 60,
     "Reference": 120,
 }
+
+#: How the turn's width is split: the prose on the left, the entries it rests on
+#: to the right of it. Two columns rather than one tall one, so a reader checking
+#: a number against the table is looking at both at once instead of scrolling
+#: between them.
+#:
+#: **The right-hand share has a floor, and it is not a matter of taste.** The
+#: table's widths above are fixed pixels summing to 640; below roughly that the
+#: dataframe grows a horizontal scrollbar, which hides the ID column -- the one
+#: cell a reader is checking. So the evidence column takes the larger share, and
+#: the page is `layout="wide"` to give it the room: in the centred layout the
+#: whole main area is about 700px, and half of that would scroll from the start.
+READING_SPLIT = (5, 6)
 
 
 class Kind(StrEnum):
@@ -553,9 +565,13 @@ def _draw_table(table: Table) -> None:
         # Folded away, where the cited table is not. These rows are what the answer
         # *did not* stand on: context for a reader who wants to know what else was
         # there, and length in front of one who is checking the prose against its
-        # evidence. Collapsed, the cited table and this heading both fit above the
-        # fold; open, nothing is lost. The label is the heading, so what is behind
-        # it is legible without opening it.
+        # evidence. The label is the heading, so what is behind it is legible
+        # without opening it.
+        #
+        # Splitting the turn into columns weakened the original argument -- these
+        # rows no longer push anything downwards, they sit beside the prose. It
+        # still holds in the weaker form that matters: the page is as tall as its
+        # tallest column, so an unfolded second table scrolls the prose too.
         with st.expander(entries_table.UNCITED_BANNER.capitalize()):
             _dataframe(rest)
 
@@ -700,12 +716,28 @@ def _retrieval_box(expanded: bool, state: str = "running"):
     return st.status("Searching the corpus…", expanded=expanded, state=state)
 
 
+def _column_for(item: Item, prose: Any, evidence: Any) -> Any:
+    """Which of the turn's two columns this item belongs in.
+
+    Everything the reader reads goes left -- prose, the warnings about it, the
+    rating, the ending. Only the entries table goes right, because it is the one
+    thing they check the prose *against*, and side by side is the whole reason
+    for splitting the turn at all.
+    """
+    return evidence if item.kind is Kind.ENTRIES else prose
+
+
 def _ends_the_prose(item: Item) -> bool:
     """Whether this item is the first thing after the answer's prose.
 
     The turn arrives as prose, then any warning about that prose, then the table
-    of entries, then the ending. The rating goes at this seam: with the answer it
-    is about, and above a table that can be long enough to push it off the screen.
+    of entries, then the ending. The rating goes at this seam, at the foot of the
+    prose it is about.
+
+    It used to earn its place by keeping the rating above a table long enough to
+    push it off the screen. The table is in the next column now, so that argument
+    is gone and the seam is kept for the plainer one: a reader forms a view at the
+    end of the prose, and that is where the control should be waiting.
 
     Shared by the live path and the replay path deliberately. They draw the same
     turn in two different places, and a seam computed twice is a seam that moves.
@@ -748,20 +780,28 @@ def answer(
     prose" to return to once the whole turn has been drawn.
     """
     box = None
+    prose, evidence = st.columns(READING_SPLIT, gap="medium")
     drawn: list[Item] = [] if into is None else into
     for item in items_for(events, repo):
         if item.kind is Kind.PROGRESS and box is None:
-            box = _retrieval_box(expanded=True)
+            # Created inside the column, drawn into afterwards. A Streamlit
+            # container is bound to the place it was made, so `with box` works
+            # from anywhere once it exists -- which is what lets the loop keep
+            # one flat shape while writing into two columns.
+            with prose:
+                box = _retrieval_box(expanded=True)
         if after_prose is not None and _ends_the_prose(item):
-            after_prose()
+            with prose:
+                after_prose()
             after_prose = None
-        with box if item.kind is Kind.PROGRESS else nullcontext():
+        with box if item.kind is Kind.PROGRESS else _column_for(item, prose, evidence):
             draw(item)
         drawn.append(item)
     if box is not None:
         box.update(label="Retrieval", state="complete", expanded=False)
     if after_prose is not None:
-        after_prose()
+        with prose:
+            after_prose()
     return drawn
 
 
@@ -956,17 +996,21 @@ def show(items: Iterable[Item], after_prose: Callable[[], None] | None = None) -
     two different places, or scrolling back changes the layout.
     """
     items = list(items)
+    prose, evidence = st.columns(READING_SPLIT, gap="medium")
     progress = [item for item in items if item.kind is Kind.PROGRESS]
     if progress:
-        with _retrieval_box(expanded=False, state="complete"):
+        with prose, _retrieval_box(expanded=False, state="complete"):
             for item in progress:
                 draw(item)
     for item in items:
         if item.kind is Kind.PROGRESS:
             continue
         if after_prose is not None and _ends_the_prose(item):
-            after_prose()
+            with prose:
+                after_prose()
             after_prose = None
-        draw(item)
+        with _column_for(item, prose, evidence):
+            draw(item)
     if after_prose is not None:
-        after_prose()
+        with prose:
+            after_prose()
