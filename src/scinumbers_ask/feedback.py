@@ -23,13 +23,20 @@ anything provided it, which is the shape of claim this project treats as worse
 than silence.
 
 Nothing here holds the store. Records go to `trace`'s logger, which is where the
-durable sink is already attached, so feedback inherits the fail-open policy
-(ADR-0710) rather than restating it: a rating that cannot be written must never
-interrupt a reader mid-conversation.
+durable sink is already attached, so a rating reaches both sinks with no new
+plumbing.
+
+It does **not** simply inherit the fail-open policy, which an earlier version of
+this paragraph claimed. `logging` catches nothing on its own -- `Handler.handle`
+does not wrap `emit` -- so the guarantee rests on `TrailHandler` happening to
+delegate to a `record` that swallows, which is a property of one handler rather
+than of the path. `_record` guards independently, because this is the one place
+in the system where a stray exception lands in front of a person mid-conversation.
 """
 
 from __future__ import annotations
 
+import sys
 from collections.abc import MutableMapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -113,12 +120,31 @@ def _record(event: str, question_id: str, session_id: str, **fields: Any) -> Non
     A `QuestionTrace` built directly rather than `start_question`, because the
     question already happened and already has an identifier. Minting a new one
     here would produce a rating that names a question nobody asked.
+
+    **The swallow here is not redundant with `TrailStore`'s, and that was
+    established by trying it rather than reasoned about.** `logging` provides no
+    protection of its own: `Handler.handle` does not wrap `emit`, and only
+    individual implementations such as `StreamHandler` catch and divert to
+    `handleError`. A handler whose `emit` raises therefore propagates straight out
+    through `logger.info` -- verified by installing one and watching the
+    `RuntimeError` arrive here intact.
+
+    Today nothing raises, because `TrailHandler.emit` delegates to a `record` that
+    swallows. That is a property of one handler, not of the path, and
+    `answer-feedback` requires that recording a rating never disrupts the reader.
+    This is the one place in the system where a stray exception lands in front of
+    somebody mid-conversation, holding an answer they were reading.
     """
-    trace.QuestionTrace(
-        question_id=question_id,
-        session_id=session_id,
-        run_label=env_setting("SCINUMBERS_RUN", "").strip() or "dev",
-    ).record(event, **fields)
+    try:
+        trace.QuestionTrace(
+            question_id=question_id,
+            session_id=session_id,
+            run_label=env_setting("SCINUMBERS_RUN", "").strip() or "dev",
+        ).record(event, **fields)
+    except Exception as exc:  # noqa: BLE001 - see above; the reader must not see this
+        # Not `BaseException`: a person pressing Ctrl-C must not be absorbed by
+        # telemetry, which is the same line `TrailStore.record` draws.
+        print(f"feedback record dropped: {type(exc).__name__}: {exc}", file=sys.stderr)
 
 
 def record_verdict(

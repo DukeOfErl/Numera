@@ -256,6 +256,37 @@ def test_a_rating_that_cannot_be_stored_does_not_raise(state):
     assert store.failures == 2, "the test did not exercise a failing write"
 
 
+def test_a_handler_that_raises_does_not_reach_the_reader(state, capsys):
+    """`logging` is not a safety net, which was established by trying it.
+
+    `Handler.handle` does not wrap `emit`; only implementations like
+    `StreamHandler` catch and divert to `handleError`. So a handler whose `emit`
+    raises propagates straight out through `logger.info` and into the caller --
+    and this caller is a person who has just clicked a thumb while reading an
+    answer.
+
+    Today nothing raises, because `TrailHandler.emit` delegates to a `record`
+    that swallows. That is a property of one handler and not of the path, which
+    is why `feedback` guards it independently rather than relying on it.
+    """
+
+    class _Exploding(logging.Handler):
+        def emit(self, record):
+            raise RuntimeError("handler is broken")
+
+    logger = logging.getLogger(trace.LOGGER_NAME)
+    logger.addHandler(_Exploding())
+    try:
+        assert feedback.record_verdict(state, question_id="q1", session_id="s1", verdict=Verdict.UP)
+    finally:
+        logger.handlers.clear()
+
+    err = capsys.readouterr().err
+    assert "feedback record dropped" in err
+    assert "RuntimeError" in err, "the type is what tells an operator which handler broke"
+    assert "handler is broken" in err
+
+
 def test_the_identifier_recorded_is_the_one_the_question_s_trail_uses(
     repo, config, tmp_path, state
 ):
