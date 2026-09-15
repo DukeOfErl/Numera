@@ -79,3 +79,24 @@ measured, which is the same self-defeating shape that ruled out Supabase.
 We also accept a second place a secret lives: the connection URL carries a
 password, held in `.streamlit/secrets.toml` and the Community Cloud secrets box,
 never in the repository.
+
+## Open after deployment
+
+Two measurements belong to this decision and could not be taken before it was
+deployed. They are recorded here rather than in the change's task list, because
+that list is archived when the change completes and this file is not.
+
+1. **INSERT latency from the deployed app.** The figures above are from a
+   developer machine in Europe against `us-east-2`; Community Cloud is US-hosted
+   and same-region, so they are an upper bound and not the number. Replace them
+   here when measured, and say which is which — an unmeasured reassurance in a
+   decision record is worse than an admitted gap.
+2. **The first write after a genuinely idle week.** Free-plan branches archive to
+   S3 when inactive and Neon publishes no restore latency. This is read out of
+   `prev_write_ms` paired with the gap between row timestamps, never by a
+   scheduled probe: pinging on a timer keeps the database warm and destroys the
+   condition being measured.
+
+A heartbeat reporting whether anything was recorded in the last seven days is
+worth adding **after** (2) has a figure, and not before — a heartbeat is traffic,
+and adding it first forecloses the measurement permanently.

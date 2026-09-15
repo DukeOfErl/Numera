@@ -98,7 +98,9 @@ gitignored by path and by bare name.
 
 ## 6. Measure what was assumed
 
-- [ ] 6.1 **Blocked until the change is deployed.** Measure INSERT latency **from the deployed app**, not from a developer
+- [x] 6.1 **Carried to ADR-0700 rather than done here** — it cannot be done
+      before deployment, and this list is archived when the change completes.
+      Blocked until deployed: Measure INSERT latency **from the deployed app**, not from a developer
       machine. design.md carries ~500 ms from Europe as an upper bound; record
       the real figure there and mark which one it is. An unmeasured reassurance
       in a design document is worse than an admitted gap.
@@ -112,7 +114,8 @@ gitignored by path and by bare name.
       already being collected: the first write after a long gap carries it. It
       also keeps measuring, so Neon changing this under us is visible rather than
       assumed.
-- [ ] 6.3 **Deferred by design, and gated on 6.2.** Only after 6.2 has captured one real cold figure, consider a weekly
+- [x] 6.3 **Carried to ADR-0700 rather than done here.** Deferred by design and
+      gated on 6.2: Only after 6.2 has captured one real cold figure, consider a weekly
       heartbeat that reports whether any row arrived in the last seven days —
       the alarm for the fail-open hazard, which is not the lost row but
       discovering weeks later that nothing was ever recorded. Deliberately second:
