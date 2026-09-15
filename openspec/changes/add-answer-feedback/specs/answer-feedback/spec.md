@@ -1,0 +1,142 @@
+## Purpose
+
+What a reader may record about an answer they have been given, what must be kept
+alongside it so the judgement can be understood later, and what the system must
+not do with it. Feedback is the only judgement available here that is not
+mechanical: every other check can say an answer cited nothing or compared
+incompatible units, and none can say it was wrong in a way that mattered.
+
+## ADDED Requirements
+
+### Requirement: A reader can rate an answer, and rating is never required
+
+Every answer SHALL offer the reader a way to record approval or disapproval of
+it. Recording one SHALL be optional, and an answer that is never rated SHALL
+behave exactly as it does today.
+
+A rating SHALL be recorded at the moment it is given, and SHALL NOT depend on the
+reader completing any further step. Most people who rate will do nothing else,
+and a design that waits for a second action to commit the first collects nothing
+from them.
+
+#### Scenario: An answer is given
+- **WHEN** an answer is shown to a reader
+- **THEN** a way to record approval or disapproval is offered with it
+
+#### Scenario: A reader rates and does nothing further
+- **WHEN** a reader records a rating and takes no further action
+- **THEN** the rating is kept
+
+#### Scenario: A reader ignores the rating entirely
+- **WHEN** a reader reads an answer without rating it
+- **THEN** nothing is recorded for that answer
+- **AND** the answer, the conversation and the next question are unaffected
+
+### Requirement: A rating may carry a comment, offered only once rating has happened
+
+A reader who has rated an answer SHALL be able to add free text about it. That
+opportunity SHALL NOT be presented before a rating has been given: an empty text
+box beside every answer is a standing demand on the reader's attention, and the
+rating is the cheap signal that most people will give.
+
+The invitation to comment SHALL ask the reader to name the identifier of any
+entry they believe is wrong. Per-entry rating is not built, and what readers
+choose to write about entries is the evidence for whether it should be.
+
+A comment in progress SHALL NOT be lost by the reader changing or clearing their
+rating.
+
+#### Scenario: A reader has not yet rated
+- **WHEN** an answer has not been rated
+- **THEN** no means of commenting on it is presented
+
+#### Scenario: A reader rates an answer
+- **WHEN** a reader records a rating
+- **THEN** they are invited to add free text about that answer
+- **AND** the invitation asks them to name the identifier of any entry they believe is wrong
+
+#### Scenario: A reader changes their mind while writing
+- **WHEN** a reader is writing a comment and alters or withdraws their rating
+- **THEN** the text they have written so far is not discarded
+
+### Requirement: A rating names the question it is about, and outlives the session
+
+Every rating SHALL record which question it concerns, using the same identifier
+the deterministic trail records for that question, so a rating can be read
+alongside what the question actually retrieved.
+
+A rating SHALL NOT be identified by its position in the conversation. Position is
+not stable: a conversation reloaded from its identifier begins counting again
+while the conversation itself continues, so the same position names two different
+questions.
+
+Ratings SHALL outlive the process that collected them, and SHALL be retained
+where a restart or redeployment does not discard them. A rating that is lost on
+the next deploy is not evidence.
+
+A rating SHALL record space for the person who gave it, left empty while the
+system has no notion of who that is. A record written before identity exists is
+the one that can never be attributed afterwards.
+
+#### Scenario: A rating is recorded
+- **WHEN** a reader rates an answer
+- **THEN** the record names the question that answer came from
+- **AND** that identifier is the one the question's trail records
+
+#### Scenario: Two answers in one conversation are rated
+- **WHEN** a reader rates two different answers in the same conversation
+- **THEN** the two records name different questions
+
+#### Scenario: A conversation is reopened and an answer rated
+- **WHEN** a conversation is reopened from its identifier and a new answer is rated
+- **THEN** the record does not collide with a rating from before the reopening
+
+#### Scenario: The application is redeployed
+- **WHEN** the application is restarted or redeployed
+- **THEN** ratings recorded beforehand remain readable
+
+### Requirement: Recording a rating never disrupts the reader
+
+A failure to record a rating SHALL NOT raise an error to the reader, interrupt
+the conversation, or prevent further questions. The reader SHALL be told that
+their rating was received.
+
+This follows the same policy as the deterministic trail and for the same reason:
+the cost of losing one rating is one missing row, and the cost of failing closed
+is a reader blocked from asking anything further by a telemetry fault. The
+contrast with the spend limits, which must fail closed, is deliberate.
+
+A rating SHALL NOT be recorded more than once for one act of rating. The page is
+redrawn whenever the reader interacts with it, and a redraw is not a new
+judgement.
+
+#### Scenario: The store cannot be written to
+- **WHEN** a reader rates an answer and the rating cannot be recorded
+- **THEN** no error is shown to the reader
+- **AND** the conversation continues to accept questions
+
+#### Scenario: The page is redrawn after a rating
+- **WHEN** a reader rates an answer and then interacts with the page again
+- **THEN** the rating is not recorded a second time
+
+#### Scenario: A rating is given
+- **WHEN** a reader records a rating
+- **THEN** the interface acknowledges it
+
+### Requirement: A rating changes nothing about the answer it rates
+
+A rating SHALL NOT cause the answer to be retried, revised, re-retrieved or
+withdrawn, and SHALL NOT alter how subsequent questions are answered.
+
+Stated because the opposite is the obvious next idea and would be a different
+system: an agent that reacts to disapproval is one whose answers depend on who is
+watching, and the record of what it did would no longer describe what it does.
+
+#### Scenario: An answer is rated down
+- **WHEN** a reader records disapproval of an answer
+- **THEN** the answer shown is unchanged
+- **AND** no further retrieval or model call is made on account of the rating
+
+#### Scenario: A later question follows a rating
+- **WHEN** a further question is asked after an answer has been rated
+- **THEN** it is answered exactly as it would have been without the rating
