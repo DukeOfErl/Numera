@@ -99,12 +99,15 @@ flowchart TB
         tools[tools.py]
         spend[spend.py]
         events[events.py]
+        trace[trace.py]
+        store[trail_store.py]
     end
     subgraph data["Corpus"]
         corpus[corpus.py]
         repo[repository.py]
         units[units.py]
     end
+    pg[("Postgres<br/>append-only trail")]
 
     cli --> messages
     web --> messages
@@ -115,10 +118,24 @@ flowchart TB
     agent --> tools
     agent --> spend
     agent --> events
+    agent --> trace
     tools --> repo
     repo --> corpus
     corpus --> units
+    trace -. "logging handler" .-> store
+    store -. "best-effort" .-> pg
+    web -- "supplies the engine" --> store
 ```
+
+**The dotted arrows are the trail, and neither is a dependency.** `trace.py` does
+not import `trail_store`: the store attaches itself as a second handler on
+`trace`'s logger, which is why no call site changed when it was added. And the
+write to Postgres fails open — the question is answered whether or not the row
+lands (ADR-0710).
+
+`web.py` supplies the engine because only a driver may know about `st.connection`;
+`trail_store` itself imports no framework, which is what keeps it on the core side
+of the line rather than beside `autobuild` in presentation.
 
 **The one rule with a direction: no arrow runs from the core back into
 presentation.** Nothing in Python enforces it — an `import streamlit` in the tool

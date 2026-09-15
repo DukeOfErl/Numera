@@ -68,6 +68,30 @@ def test_the_agent_core_is_not_empty():
     assert "agent" in AGENT_CORE and "tools" in AGENT_CORE and len(AGENT_CORE) > 5
 
 
+def test_the_durable_trail_sink_is_core_and_that_is_deliberate():
+    """`trail_store` is on the agent's side of the line, chosen rather than fallen into.
+
+    It arrives there by subtraction -- it is not in `PRESENTATION` -- and
+    subtraction is silent, so a reader cannot tell a decision from an oversight.
+    This test is where the decision is written down.
+
+    The argument for the other side is real: recording to an external database
+    looks like a driver's policy, which is why `autobuild` sits in `PRESENTATION`.
+    What settles it is what the dependency rule protects against -- the agent
+    becoming unrunnable without an interface. `trail_store` is a `logging.Handler`
+    over an engine it is handed; it imports no framework and needs no terminal, so
+    the core recording its own trail costs the core nothing. The driver supplies
+    the engine and decides nothing else.
+
+    `trace` is already core for exactly this reason, and a sink for the trail
+    living on the far side of the line from the trail itself would be the odder
+    arrangement.
+    """
+    assert "trail_store" in AGENT_CORE
+    assert "streamlit" not in imports_of("trail_store")
+    assert not imports_of("trail_store") & ADAPTERS
+
+
 def test_every_named_adapter_exists():
     """A name in these sets with no file behind it is a guard over nothing.
 

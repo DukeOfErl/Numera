@@ -105,6 +105,40 @@ measurement.
 | `SCINUMBERS_CHECKPOINTS` | `checkpoints/ask.sqlite` | where sessions persist |
 | `SCINUMBERS_TRACE` | `logs/trace.jsonl` | the structured trail; `-` for stderr, empty to discard |
 
+### The durable trail (hosted deployments only)
+
+`SCINUMBERS_TRACE` writes to a file, which is enough on your own machine and
+nothing at all on a host whose container filesystem does not survive a redeploy.
+There, every record from every real session is discarded — the trail is written
+correctly and then thrown away, which is the failure it exists to prevent, one
+layer further out.
+
+To keep it, add a Postgres connection to `.streamlit/secrets.toml` (and to the
+hosting platform's own secrets box). `.streamlit/secrets.toml.example` carries
+the shape and the three things a URL copied from a provider's console usually
+gets wrong:
+
+```toml
+[connections.usage]
+url = "postgresql+psycopg://USER:PASSWORD@HOST-pooler.REGION.provider.tech/DB?sslmode=require"
+```
+
+The table is created on first use; there is nothing to migrate. **Configure
+nothing and the app behaves exactly as it does today** — refusing to start
+without a telemetry database would make the absence of telemetry an outage.
+
+Two properties worth knowing before you rely on it:
+
+- **A failed write never fails a question.** This is the deliberate opposite of
+  the spend limits, which stop work when they cannot be established: proceeding
+  past a spend limit costs unbounded real money, proceeding past a failed
+  telemetry write costs one row. Failures are reported to the operator's log and
+  counted, never to the person asking
+  ([ADR-0710](docs/decisions/0710-recording-fails-open.md)).
+- **Conversations are still ephemeral.** The trail outlives a redeploy; the
+  checkpoints do not. A hosted session that survives a restart is a separate
+  decision and has not been made.
+
 Spend is enforced, not merely reported: a question stops at its ceiling and presents what it had
 established, marked incomplete, rather than being cut off mid-sentence. A limit is configured where
 it binds — the number you set is the one that stops work
