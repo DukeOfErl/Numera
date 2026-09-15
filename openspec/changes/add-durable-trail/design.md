@@ -151,7 +151,12 @@ questions.
   record the number rather than the reassurance.
 - **Neon free-plan branches archive to S3 when inactive, with no published
   restore latency** → after a quiet week the first write may cost far more than
-  the warm figure. Measure once after a real idle period.
+  the warm figure. Mitigated by recording each write's duration on the row, not
+  by a scheduled probe: a job that pings the database on a timer keeps it warm
+  and so destroys the condition it exists to measure — the same self-defeating
+  shape as the keep-alive cron that ruled out Supabase in D1. A heartbeat that
+  checks whether anything is being recorded at all is worth having, but it is
+  traffic too, so it comes after one real cold figure has been captured.
 - **A write on the render path is still a write on the render path** → bounded by
   an explicit short timeout and no retry, so the worst case is bounded rather
   than absent.

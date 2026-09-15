@@ -97,9 +97,23 @@ gitignored by path and by bare name.
       machine. design.md carries ~500 ms from Europe as an upper bound; record
       the real figure there and mark which one it is. An unmeasured reassurance
       in a design document is worse than an admitted gap.
-- [ ] 6.2 After a genuine idle period of several days, measure the first write.
-      Neon free-plan branches archive when inactive and publish no restore
-      latency; this is the one number nobody has.
-- [ ] 6.3 Run mutation testing over the new sink module via the
+- [ ] 6.2 Record the **duration of every write** as a field on the row itself,
+      rather than measuring idle-restore latency on a schedule. Neon free-plan
+      branches archive when inactive and publish no restore latency, and that is
+      the one number nobody has — but a scheduled probe cannot get it, because
+      pinging the database on a timer keeps it warm and destroys the condition
+      being measured. (The same self-defeating shape as the keep-alive cron that
+      ruled out Supabase.) Instrumented instead, the figure falls out of data
+      already being collected: the first write after a long gap carries it. It
+      also keeps measuring, so Neon changing this under us is visible rather than
+      assumed.
+- [ ] 6.3 **Only after 6.2 has captured one real cold figure**, consider a weekly
+      heartbeat that reports whether any row arrived in the last seven days —
+      the alarm for the fail-open hazard, which is not the lost row but
+      discovering weeks later that nothing was ever recorded. Deliberately second:
+      a heartbeat is itself traffic, so adding it first forecloses 6.2 permanently.
+      A counter that only an operator reads is the cheap half of this and is
+      already task 1.4.
+- [ ] 6.4 Run mutation testing over the new sink module via the
       `mutation-test-module` skill. Orchestrator only — one run at the end, not
       per task, and not over the package.
