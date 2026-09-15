@@ -211,6 +211,42 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_web_driver.py::test_an_ending_a_new_session_cannot_fix_replaces_that_advice",
         "test_web_driver.py::test_the_advice_names_the_remedy_without_addressing_anyone",
     ),
+    # add-durable-trail's, mapped with the change that adds it. The requirement
+    # inverts the spend gate deliberately (ADR-0710), so the tests to compare
+    # against its words hardest are the two failure ones: they vary *where* the
+    # write failed, which is the dimension the code branches on.
+    #
+    # There were three, and the third was withdrawn rather than kept. It passed a
+    # `TimeoutError` while leaving the double's delay at zero, so what it varied
+    # was the exception class and not the duration -- the `_is_out_of_credit`
+    # shape recorded in CLAUDE.md, found by a review pass and not by the suite.
+    #
+    # The "destination is slow" scenario is closed by the `network` tests at the
+    # end of this list rather than by a faked one, because `record` has no
+    # client-side deadline to exercise: a slow write is bounded by `SET LOCAL
+    # statement_timeout`, which the *server* enforces, so a sleep in a double
+    # would have measured the double. Those four are deselected by default
+    # (`pytest -m network`), so this requirement is the one place in this file
+    # where part of the evidence does not run in an ordinary green suite.
+    "Recording is best-effort and never fails a question": (
+        "test_trail_store.py::test_a_failure_to_open_the_transaction_is_swallowed_and_counted",
+        "test_trail_store.py::test_a_failure_to_execute_the_statement_is_swallowed_and_counted",
+        "test_trail_store.py::test_a_failed_write_is_attempted_exactly_once",
+        "test_trail_store.py::test_no_exception_type_escapes_record",
+        "test_trail_store.py::test_a_direct_caller_needs_no_error_handling",
+        "test_trail_store.py::test_the_failure_counter_answers_whether_anything_is_landing",
+        "test_trail_store.py::test_the_process_wide_counter_sees_failures_from_any_store",
+        "test_trail_store.py::test_a_dropped_record_is_reported_to_stderr",
+        "test_trail_store.py::test_the_report_carries_no_traceback",
+        "test_trail_store.py::test_a_schema_failure_is_reported_and_counted_apart_from_dropped_writes",
+        "test_trail_store.py::test_the_handler_never_raises_so_logging_never_reaches_handle_error",
+        "test_trail_store.py::test_install_when_the_schema_cannot_be_created_adds_no_handler",
+        "test_trail_store.py::test_a_store_whose_schema_is_absent_does_not_connect_per_call",
+        "test_trail_store_live.py::test_a_statement_that_runs_too_long_is_cancelled_rather_than_waited_out",
+        "test_trail_store_live.py::test_the_timeout_does_not_leak_onto_the_next_pooled_transaction",
+        "test_trail_store_live.py::test_an_unreachable_host_does_not_raise_out_of_record",
+        "test_trail_store_live.py::test_the_schema_and_the_insert_are_valid_sql",
+    ),
 }
 
 # Requirements with no test named yet. Listed rather than omitted: the point of this

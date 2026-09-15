@@ -13,42 +13,42 @@ gitignored by path and by bare name.
 
 ## 1. The sink, and the refusal that belongs to it
 
-- [ ] 1.1 Claim ADR-0700 by copying the template and committing the stub. It
+- [x] 1.1 Claim ADR-0700 by copying the template and committing the stub. It
       records choosing Neon over Supabase, Turso, Firestore and Sheets, with the
       disqualifying property of each — write it now, while the rejected options
       are still in view, not at the end when only the choice survives.
-- [ ] 1.2 Claim ADR-0710 for the fail-open decision, and say in it that it
+- [x] 1.2 Claim ADR-0710 for the fail-open decision, and say in it that it
       inverts the spend gate deliberately. This is the ADR that stops someone
       later making the two consistent in the wrong direction.
-- [ ] 1.3 New module owning the durable sink: connection, schema
+- [x] 1.3 New module owning the durable sink: connection, schema
       (`CREATE TABLE IF NOT EXISTS`), and one `record(...)` entry point. The
       append-only shape is in design.md D5, `user_email` nullable from the start.
-- [ ] 1.4 The swallow goes **inside** `record(...)`, not at any call site — broad
+- [x] 1.4 The swallow goes **inside** `record(...)`, not at any call site — broad
       `except Exception`, one line naming the exception type and message to the
       trail and stderr, no traceback. A module-level failure counter, readable
       without grepping.
-- [ ] 1.5 An explicit short connect/statement timeout, and **no retry**. Both are
+- [x] 1.5 An explicit short connect/statement timeout, and **no retry**. Both are
       requirements, not tuning: a hung rerun is worse for the reader than a
       missing row.
-- [ ] 1.6 Configuration is absence-tolerant: no destination configured means the
+- [x] 1.6 Configuration is absence-tolerant: no destination configured means the
       app behaves exactly as today, and the absence is reported once rather than
       per question.
 
 ## 2. Verification of group 1, before anything depends on it
 
-- [ ] 2.1 Tests for the fail-open contract. **The negative case must differ in
+- [x] 2.1 Tests for the fail-open contract. **The negative case must differ in
       the dimension the code actually reads**: a store that raises on connect, a
       store that raises on execute, and a store that hangs are three different
       paths, and a single `Exception` double proves only one of them. Check
       CLAUDE.md's `_is_out_of_credit` note before writing these — that mutant
       passed 905 tests.
-- [ ] 2.2 A test asserting a **direct caller** of `record(...)` — not through a
+- [x] 2.2 A test asserting a **direct caller** of `record(...)` — not through a
       driver — needs no error handling to keep working. This is the spec scenario
       "Something other than a driver records", and it is what makes the guard
       belong to the operation.
-- [ ] 2.3 A test that the failure counter moves, so "nothing recorded for three
+- [x] 2.3 A test that the failure counter moves, so "nothing recorded for three
       weeks" is answerable.
-- [ ] 2.4 Fault-seed group 1 into a **copy** of the source, never the working
+- [x] 2.4 Fault-seed group 1 into a **copy** of the source, never the working
       tree: make `record()` swallow silently without counting, and confirm 2.3
       fails. Name the mutant that died in the commit message. Per CLAUDE.md, no
       coverage claim before that happens.
@@ -97,7 +97,7 @@ gitignored by path and by bare name.
       machine. design.md carries ~500 ms from Europe as an upper bound; record
       the real figure there and mark which one it is. An unmeasured reassurance
       in a design document is worse than an admitted gap.
-- [ ] 6.2 Record the **duration of every write** as a field on the row itself,
+- [x] 6.2 Record the **duration of every write** as a field on the row itself,
       rather than measuring idle-restore latency on a schedule. Neon free-plan
       branches archive when inactive and publish no restore latency, and that is
       the one number nobody has — but a scheduled probe cannot get it, because
