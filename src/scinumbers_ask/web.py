@@ -550,8 +550,14 @@ def _draw_table(table: Table) -> None:
     for line in _legend(shown):
         st.caption(as_text(line))
     if rest:
-        st.markdown(f"**{entries_table.UNCITED_BANNER.capitalize()}**")
-        _dataframe(rest)
+        # Folded away, where the cited table is not. These rows are what the answer
+        # *did not* stand on: context for a reader who wants to know what else was
+        # there, and length in front of one who is checking the prose against its
+        # evidence. Collapsed, the cited table and this heading both fit above the
+        # fold; open, nothing is lost. The label is the heading, so what is behind
+        # it is legible without opening it.
+        with st.expander(entries_table.UNCITED_BANNER.capitalize()):
+            _dataframe(rest)
 
     note = entries_table.dimension_note(table.rows)
     if note:

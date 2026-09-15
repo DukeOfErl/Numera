@@ -773,7 +773,37 @@ def test_an_answer_that_cited_nothing_says_so_where_the_cited_table_would_be(
 
     headings = [m.value for m in at.markdown]
     assert any(entries_table.NOTHING_CITED in h for h in headings), headings
-    assert any(entries_table.UNCITED_BANNER.capitalize() in h for h in headings)
+    # The uncited rows are folded away, so their banner is an expander's label
+    # rather than a heading. Still asserted: folded is not the same as unlabelled,
+    # and a reader has to be able to tell what is behind it without opening it.
+    assert any(entries_table.UNCITED_BANNER.capitalize() in e.label for e in at.expander)
+
+
+def test_the_uncited_rows_are_folded_away_and_the_cited_ones_are_not(
+    monkeypatch, repo, config, tmp_path
+):
+    """The asymmetry is the point, not the folding.
+
+    The cited rows are what the prose stands on: a reader checking an answer
+    against its evidence must not have to open anything to see them. The uncited
+    rows are what it did *not* stand on — context, and length in front of that
+    reader. Folding both would hide the evidence; folding neither is what put the
+    rating and the summary below a screenful of rows nobody asked for.
+    """
+    model = scripted(
+        tool_call("search_entries", property="Cell"), says("about 1 micrometre (BNID 100002)")
+    )
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    folded = at.main.expander
+    assert len(folded) == 1, [e.label for e in folded]
+    assert entries_table.UNCITED_BANNER.capitalize() in folded[0].label
+    assert not folded[0].proto.expanded, "the uncited rows were not folded away"
+    assert folded[0].dataframe, "the fold is empty -- the rows went somewhere else"
+    assert any("Cited in the answer" in m.value for m in at.main.markdown), (
+        "the cited heading is gone"
+    )
+    assert len(at.main.dataframe) == 2, "the cited table is behind the fold too"
 
 
 def test_the_uncited_heading_says_what_the_rows_are_not_only_what_they_are_not():

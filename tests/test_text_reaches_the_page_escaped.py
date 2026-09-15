@@ -26,8 +26,63 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = [ROOT / "src" / "scinumbers_ask" / "web.py", ROOT / "streamlit_app.py"]
 
-# Streamlit calls whose argument is rendered as markdown.
-RENDERS_MARKDOWN = {"markdown", "caption", "warning", "error", "info", "success", "header"}
+# Streamlit calls whose first argument is rendered as markdown. Two kinds: the
+# body of a text element, and the *label* of a widget or container -- Streamlit
+# renders both, so a `$` is eaten either way.
+#
+# The labels were missing, and the omission was invisible until a call moved from
+# one group to the other: folding the uncited rows into an expander turned
+# `st.markdown("**Possibly relevant…**")` into `st.expander("Possibly relevant…")`
+# and the scan stopped checking it, with nothing failing. The count of collected
+# parameters went down by one, which is the only thing that said so.
+#
+# Listed wider than what the page uses today, deliberately. A name here that is
+# never called costs nothing; a name missing costs a silent hole exactly like the
+# one above, and "widen it when a new call appears" is a rule nobody will apply,
+# for the same reason this whole file exists.
+RENDERS_MARKDOWN = {
+    # Text elements: the argument is the text.
+    "markdown",
+    "caption",
+    "warning",
+    "error",
+    "info",
+    "success",
+    "header",
+    "subheader",
+    "title",
+    "toast",
+    # Containers and widgets: the argument is the label, rendered the same way.
+    "expander",
+    "status",
+    "popover",
+    "button",
+    "form_submit_button",
+    "download_button",
+    "link_button",
+    "checkbox",
+    "toggle",
+    "radio",
+    "selectbox",
+    "multiselect",
+    "slider",
+    "select_slider",
+    "text_input",
+    "text_area",
+    "number_input",
+    "date_input",
+    "time_input",
+    "file_uploader",
+    "color_picker",
+    "metric",
+}
+
+# `st.progress` is deliberately absent, and it is the one call that proves the
+# scan keys on the *first argument*: progress takes a number there and puts its
+# label in `text=`. Including it failed on `st.progress(spent / cap)`, which is
+# the widening moving something in the direction nobody looks at. A `$` in a
+# progress label would still be eaten; nothing passes one today, and covering
+# keyword labels is a different scan from this one.
 
 # `as_text` is the boundary; `st.markdown` with a literal is the page's own HTML and
 # carries no corpus text. A call is safe when its first argument is a plain literal,
