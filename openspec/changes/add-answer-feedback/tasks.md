@@ -37,10 +37,18 @@ fails open (ADR-0710).
 - [ ] 2.1 Tests: a verdict is recorded with the right `question_id`; a comment is
       a separate record naming the same question; a second rating of the same
       answer does not write twice.
-- [ ] 2.2 A test that a failed write is invisible to the reader — inherited from
+- [ ] 2.2 A test that **neither a verdict nor a comment reaches the model**:
+      assert over the stored conversation and the messages a later question is
+      answered from, not over the answer's text. The property is what the model
+      was shown; "the next answer is unchanged" is a counterfactual about a
+      non-deterministic run and cannot be asserted at all.
+- [ ] 2.3 A test with a comment written as an instruction to the model -- stored
+      as given, and absent from every prompt. Free text is the one input here
+      authored by a stranger, and this is the route it must not take.
+- [ ] 2.4 A test that a failed write is invisible to the reader — inherited from
       `trail_store`, asserted here because this is the first caller where a
       failure would reach someone mid-conversation.
-- [ ] 2.3 Hand group 1 to a `verifier` subagent before believing it. Give it the
+- [ ] 2.5 Hand group 1 to a `verifier` subagent before believing it. Give it the
       spec scenarios and ask specifically which are asserted and which merely
       execute.
 

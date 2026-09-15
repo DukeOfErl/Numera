@@ -123,20 +123,45 @@ judgement.
 - **WHEN** a reader records a rating
 - **THEN** the interface acknowledges it
 
-### Requirement: A rating changes nothing about the answer it rates
+### Requirement: The model is never shown a rating or a comment
+
+Neither a rating nor the text accompanying it SHALL reach the model. It SHALL NOT
+be added to the conversation, included in a prompt, or carried in the state a
+later question is answered from.
+
+Stated as what the model is *shown* rather than as how it behaves, because the
+second cannot be checked. "The next answer is what it would have been anyway" is
+a claim about a counterfactual run of a non-deterministic system; no test can
+assert it, and a requirement nothing can fail is a guarantee in appearance only.
+What can be established is whether the rating is in the material the model
+received.
+
+Three reasons, and the first alone is sufficient:
+
+- **A comment is text a stranger wrote.** Everything else the model is given is
+  either the corpus or a question; feedback is the one input authored to be read
+  by the people running the system. Text asking the model to disregard its
+  instructions must not arrive by this route, in a tool whose wrong answers look
+  no different from its right ones.
+- **An agent that reacts to disapproval answers differently depending on who is
+  watching**, and its recorded trail stops describing what it does.
+- **A reader criticising an answer is addressing the people who built it.** Using
+  that text as model input is not what they were offered.
 
 A rating SHALL NOT cause the answer to be retried, revised, re-retrieved or
-withdrawn, and SHALL NOT alter how subsequent questions are answered.
-
-Stated because the opposite is the obvious next idea and would be a different
-system: an agent that reacts to disapproval is one whose answers depend on who is
-watching, and the record of what it did would no longer describe what it does.
+withdrawn.
 
 #### Scenario: An answer is rated down
 - **WHEN** a reader records disapproval of an answer
 - **THEN** the answer shown is unchanged
 - **AND** no further retrieval or model call is made on account of the rating
 
-#### Scenario: A later question follows a rating
-- **WHEN** a further question is asked after an answer has been rated
-- **THEN** it is answered exactly as it would have been without the rating
+#### Scenario: A later question follows a rating and a comment
+- **WHEN** an answer is rated and commented on, and a further question is asked
+- **THEN** neither the rating nor the comment appears in what the model is shown
+- **AND** neither appears in the stored conversation the question is answered from
+
+#### Scenario: A comment contains an instruction addressed to the model
+- **WHEN** a comment is written that reads as an instruction to the model
+- **THEN** it is stored as given
+- **AND** it is not included in any prompt
