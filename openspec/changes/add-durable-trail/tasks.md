@@ -55,13 +55,13 @@ gitignored by path and by bare name.
 
 ## 3. Session and question identity
 
-- [ ] 3.1 `session_id` into `QuestionTrace`'s records and into the metadata dict
+- [x] 3.1 `session_id` into `QuestionTrace`'s records and into the metadata dict
       returned by `run_config()`, beside `question_id` and `run_label`.
-- [ ] 3.2 `question_id` onto `web.Item`, and stop `web.item_for` dropping it.
-- [ ] 3.3 Tests: two questions in one session share a session identifier and
+- [x] 3.2 `question_id` onto `web.Item`, and stop `web.item_for` dropping it.
+- [x] 3.3 Tests: two questions in one session share a session identifier and
       differ in question identifier, and the order they were asked is recoverable
       from records alone.
-- [ ] 3.4 A test that a rendered item names the question that produced it.
+- [x] 3.4 A test that a rendered item names the question that produced it.
 
 ## 4. Wiring, and the driver-level check
 

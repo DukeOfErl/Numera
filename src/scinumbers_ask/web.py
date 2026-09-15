@@ -24,7 +24,7 @@ import os
 import uuid
 from collections.abc import Iterable, Iterator, MutableMapping
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
 
@@ -156,6 +156,17 @@ class Item:
     stop_advice: str = ""
     run_spend: int = 0
     run_budget: int = 0
+    # The question that produced this item. Carried so a thing on screen can be
+    # traced back to the question behind it -- which is what a rating on an answer
+    # will have to name, and what joins it to that question's trail.
+    #
+    # It cannot be retrofitted: an item already drawn has no record of where it
+    # came from, and the alternative keys are wrong rather than merely awkward.
+    # The transcript's list index looks stable because the list is append-only,
+    # but the transcript lives in session state alone -- reload the same
+    # `?session=` and indices restart at 0 while the conversation continues, so
+    # `(session, 0)` would name two different questions.
+    question_id: str = ""
 
 
 def item_for(event: Event, repo: CorpusRepository | None = None) -> Item | None:
@@ -164,7 +175,20 @@ def item_for(event: Event, repo: CorpusRepository | None = None) -> Item | None:
     Every event the agent emits produces an item, warnings included: a warning that
     reaches this function and falls through is a fact the agent established and the
     page never said, which is worse than an ugly one.
+
+    The question identifier is stamped here, once, rather than passed at each of
+    the branches below. Every event carries it, so there is nothing to decide --
+    and a branch added later would otherwise drop it silently, producing an item
+    that cannot be traced to its question and nothing that would say so.
     """
+    item = _item_without_identity(event, repo)
+    if item is None:
+        return None
+    return replace(item, question_id=getattr(event, "question_id", ""))
+
+
+def _item_without_identity(event: Event, repo: CorpusRepository | None = None) -> Item | None:
+    """What kind of thing this event is. `item_for` adds which question it was."""
     if isinstance(event, Retrieval):
         return Item(Kind.PROGRESS, messages.retrieval_text(event))
     if isinstance(event, AnswerEntries):
