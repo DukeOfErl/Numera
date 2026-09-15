@@ -61,6 +61,16 @@ Two branches that each number ADRs from the current highest id will both claim t
 | `add-answer-evaluation` | `0500`–`0550` — `0500`, `0510`, `0520` written |
 | `add-answer-shape` | `0560`–`0590` |
 | `add-provider-limit-ending` | `0600`–`0640` — `0600` written |
+| `add-durable-trail` | `0700`–`0730` |
+| `add-answer-feedback` | `0740`–`0770` — reserved, change not yet proposed |
+| `add-user-identity` | `0780`–`0830` — reserved, change not yet proposed |
+
+The gap at `0650`–`0690` is deliberate: it leaves
+`add-provider-limit-ending` room to widen without renumbering, which is what the
+paragraph below says to do when a block runs out. The last two rows are **reserved
+before their changes exist**, because the three are one line of work and the second
+will be proposed while the first is still open — which is exactly the moment a
+branch allocates against a ceiling it can no longer see.
 
 **This table is the authority, not a scan of `docs/decisions/`.** A scan cannot see uncommitted ADRs on another branch: `git ls-tree` reads committed trees, and each branch is checked out in its own worktree, so a number can be spent and still invisible from here. `add-ask-agent` has written `0100`–`0190` and holds a second range, `0260`–`0290`, because its first block ran out while the change was still open. A block is extended rather than renumbered: the ADRs already written are referenced from code comments and commit messages, and renumbering would break every one of those references to buy contiguity that nothing needs. Its first block was also uncommitted for two sessions, which is how a scan came to report those numbers as free. Never conclude a number is free because no file for it turns up.
 
