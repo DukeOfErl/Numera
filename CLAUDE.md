@@ -147,7 +147,42 @@ core, and a test there refuses a name with no file behind it.
 | `scoring.py` | Every score needing no model and no prose parser, as pure functions; the outlier check (ADR-0520) |
 | `report.py` | Figures read out of a results file, never combined across model, prompt or corpus |
 | `eval_cli.py` | The evaluation command (`scinumbers-eval`): `check`, `run` and `report` |
-| `trace.py` | The structured trail, one question id throughout |
+| `trace.py` | The structured trail, one question id and one session id throughout |
+| `trail_store.py` | The trail's durable destination: one append-only table, written best-effort (ADR-0700, ADR-0710) |
+
+**The trail has two sinks, and one of them fails open.** `trace.py` writes to a
+logger; `trail_store.py` attaches to that logger as a second handler, so no call
+site knows about it. The file sink lives in a container whose disk does not
+survive a redeploy, which is why the second one exists — every record from every
+real session used to be discarded, satisfying the requirement to log under a
+per-question identifier while defeating its stated purpose.
+
+Three things about it that reading one module will not tell you:
+
+- **A failed write is swallowed, and that inverts the spend gate deliberately.**
+  `SpendGate` fails closed because proceeding costs unbounded real money;
+  recording fails open because proceeding costs one row of a dataset read by eye.
+  Both are "a write that did not happen", so a reader who notices the
+  inconsistency will make them agree — and one of the two directions is badly
+  wrong. ADR-0710, and the requirement is in `agent-session` for the same reason.
+- **The install must come after `trace.to_file`.** `to_file` calls `configure`,
+  which clears the logger's handlers, so installing above it attaches the sink
+  and then discards it — an app that looks configured and records nothing.
+  `tests/test_web_driver_trail.py` pins the order; nothing below the driver can
+  see it.
+- **`trail_store` is core, not presentation, and that was a decision.** The
+  dependency rule guards against the agent becoming unrunnable without an
+  interface, and a logging handler over an engine it is handed does not do that.
+  Classification here is by subtraction from `PRESENTATION`, which is silent, so
+  a named test records the choice rather than leaving it to be inferred.
+
+**Guards belong to the operation — with one honest exception here.** The
+statement timeout is applied by `trail_store` itself (`SET LOCAL`, inside its own
+transaction, because Neon's pooler refuses the startup-parameter form and Neon's
+default is `0` — unlimited). The *connect* timeout cannot be: libpq takes it at
+construction, so it belongs to whoever built the engine. That is the one guard in
+this arrangement the caller owns, and it is named in both places rather than
+left to a default.
 
 **Patterns, named where they are used.** Ports and adapters (above). Repository
 (`repository.py`). Middleware, LangChain's own rather than hand-rolled — the spend

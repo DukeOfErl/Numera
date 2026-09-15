@@ -177,6 +177,25 @@ Additive throughout; there is nothing to migrate. The table is created on demand
 Rollback is removing the configuration: with no destination configured the app
 runs as it does today, which is the same path exercised by every existing test.
 
+### One thing this branch cannot do for itself
+
+`deploy/streamlit-cloud` is never merged back and carries four changes `main`
+must not have. The first of them is that **the `ask` extra's packages are
+promoted into `[project].dependencies`**, because Community Cloud picks `uv.lock`
+by precedence and runs `uv sync`, which does not install extras and cannot be
+asked to.
+
+`sqlalchemy` and `psycopg[binary]` were added to the `ask` extra here. They must
+be promoted the same way when `main` is next merged into that branch, or **the
+deployed app starts without SQLAlchemy and fails at import** — not at the first
+question, at boot.
+
+Recorded here rather than on that branch because this branch cannot write to it,
+and recorded at all because "documented in a contract" and "remembered during a
+merge" are different things. The same merge is also when the connection URL has
+to reach Community Cloud's secrets box; a deploy with the dependency and without
+the secret is the harmless direction, and a deploy with neither is today.
+
 ## Open Questions
 
 - Retention. Rows are small and the volume is an alpha's, so nothing needs

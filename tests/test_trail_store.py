@@ -23,6 +23,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import time
 
 import pytest
 
@@ -40,12 +41,20 @@ class _Conn:
     change's central property, asserted by nothing.
     """
 
-    def __init__(self, fail_on_execute: Exception | None = None):
+    def __init__(self, fail_on_execute: Exception | None = None, delay: float = 0.0):
         self.fail_on_execute = fail_on_execute
+        # Used by exactly one test, and only because there is arithmetic to get
+        # wrong: `record` converts an elapsed duration into milliseconds. An
+        # earlier version of this parameter existed for a test that claimed to
+        # exercise a slow *write*, where there is no client-side code path at
+        # all -- that one was withdrawn, and this one is not the same thing.
+        self.delay = delay
         self.statements: list[str] = []
         self.params: list[dict] = []
 
     def execute(self, statement, params=None):
+        if self.delay:
+            time.sleep(self.delay)
         self.statements.append(str(statement))
         if params is not None:
             self.params.append(dict(params))
@@ -62,9 +71,10 @@ class _Engine:
     leave one of the two untested while looking thorough.
     """
 
-    def __init__(self, fail_on_begin=None, fail_on_execute=None):
+    def __init__(self, fail_on_begin=None, fail_on_execute=None, delay=0.0):
         self.fail_on_begin = fail_on_begin
         self.fail_on_execute = fail_on_execute
+        self.delay = delay
         self.conns: list[_Conn] = []
         self.begins = 0
 
@@ -72,7 +82,7 @@ class _Engine:
         self.begins += 1
         if self.fail_on_begin is not None:
             raise self.fail_on_begin
-        conn = _Conn(self.fail_on_execute)
+        conn = _Conn(self.fail_on_execute, self.delay)
         self.conns.append(conn)
 
         class _Ctx:
@@ -318,6 +328,98 @@ def test_the_detail_is_serialised_rather_than_handed_over_raw():
     assert json.loads(written["detail"]) == {"when": "2026-09-15"}
 
 
+def test_the_counters_accumulate_rather_than_being_set():
+    """`+= 1`, not `= 1`. Found by mutation testing, not by review.
+
+    Every earlier counter test wrote or failed exactly once, so `self.writes = 1`
+    and `_WRITES = 1` were indistinguishable from the real thing -- and a counter
+    that never passes one answers "is this container writing?" with a number that
+    looks fine and means nothing.
+    """
+    store = _store()
+    for _ in range(3):
+        store.record("searched")
+    assert store.writes == 3
+    assert trail_store.writes() == 3
+
+    broken = _store(fail_on_begin=OSError("down"))
+    for _ in range(2):
+        broken.record("searched")
+    assert broken.failures == 2
+    assert trail_store.failures() == 2
+
+
+def test_a_second_schema_failure_is_counted_too():
+    """Same defect, the other counters: `_FAILURES = 1` and `schema_failures = 1`.
+
+    Retried on one store as well as across two, because the per-instance counter
+    and the process-wide one are separate lines and only the second was covered.
+    """
+    first = TrailStore(engine=_Engine(fail_on_begin=OSError("down")))
+    second = TrailStore(engine=_Engine(fail_on_begin=OSError("down")))
+    first.ensure_schema()
+    second.ensure_schema()
+    assert trail_store.failures() == 2
+
+    first.ensure_schema()
+    assert first.schema_failures == 2, "the per-store counter did not accumulate"
+
+
+def test_a_schema_failure_names_the_exception_type_too(capsys):
+    """The type is what separates a bad URL from a bad password from a dead host.
+
+    `_complain("trail store unavailable", None)` survived: the existing test
+    asserted only the message, so the exception could have been dropped on the
+    way and the line would still have read as a report.
+    """
+    TrailStore(engine=_Engine(fail_on_begin=OSError("refused"))).ensure_schema()
+    err = capsys.readouterr().err
+    assert "OSError" in err
+    assert "refused" in err
+
+
+def test_install_uses_the_table_it_was_given():
+    """`table=None` and the default both survived: nothing read it back."""
+    store = install(_Engine(), table="trail_elsewhere", logger_name="test.trail.table")
+    assert store is not None
+    assert store.table == "trail_elsewhere"
+    logging.getLogger("test.trail.table").handlers.clear()
+
+
+def test_the_table_named_is_the_table_written_to():
+    """Both statements carry it, and neither test could see it before.
+
+    The double accepts any string, so `_SCHEMA.format(table=None)` and
+    `_INSERT.format(table=None)` both survived -- offline nothing read the SQL,
+    and the live tests that would are deselected by default.
+    """
+    store = TrailStore(engine=_Engine(), table="trail_elsewhere")
+    assert store.ensure_schema()
+    store.record("searched")
+
+    statements = " ".join(s for c in store.engine.conns for s in c.statements)
+    assert "trail_elsewhere" in statements
+    assert statements.count("trail_elsewhere") >= 2, "schema and insert must both name it"
+    assert "None" not in statements
+
+
+def test_the_handler_carries_a_user_when_there_is_one():
+    """Null until people can sign in, which is exactly why it needs a test now.
+
+    `user_email=None` hardcoded in `emit` survived everything: no test set the
+    attribute, because nothing sets it in production yet. The column exists so
+    that rows written before identity arrives are not the only unattributable
+    ones -- a guarantee that silently stops holding the day identity lands.
+    """
+    store = _store()
+    handler = TrailHandler(store)
+    record = logging.LogRecord("x", logging.INFO, "f", 1, "searched", None, None)
+    record.user_email = "someone@example.com"
+    handler.emit(record)
+    (written,) = store.engine.written
+    assert written["user_email"] == "someone@example.com"
+
+
 def test_the_previous_write_duration_travels_on_the_next_row():
     """The first row has none; the second carries the first's duration.
 
@@ -332,6 +434,28 @@ def test_the_previous_write_duration_travels_on_the_next_row():
     first, second = store.engine.written
     assert first["prev_write_ms"] is None
     assert isinstance(second["prev_write_ms"], int)
+
+
+def test_the_duration_is_in_milliseconds_and_not_some_other_unit():
+    """`* 1000`, not `/ 1000`. Found by mutation testing.
+
+    The assertion above was `isinstance(..., int)`, which `0` satisfies for ever
+    -- so dividing instead of multiplying survived, and the figure task 6.2 exists
+    to collect would have been zero on every row with nothing to say so. The
+    number is the whole point of the column; its type is not.
+
+    This uses a deliberate delay, unlike the withdrawn `test_a_slow_write_...`.
+    The difference is that there is arithmetic here to get wrong: `record`
+    converts an elapsed duration into a unit, and a double can make the elapsed
+    duration large enough to read. There was no equivalent code path for the
+    timeout, which is why faking one there would have measured the fake.
+    """
+    store = _store(delay=0.05)
+    store.record("first")
+    store.record("second")
+    _, second = store.engine.written
+    # 50 ms of sleep, generously bounded: the assertion is the unit, not the clock.
+    assert 25 <= second["prev_write_ms"] <= 5_000, second["prev_write_ms"]
 
 
 def test_the_handler_never_raises_so_logging_never_reaches_handle_error():

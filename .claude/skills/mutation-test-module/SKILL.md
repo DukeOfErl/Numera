@@ -92,7 +92,7 @@ makes real API calls, needs a corpus, and gets *slower*. Measured here: 63s defa
 1m41s with `-m "not slow"`, 34s with the full expression. The failure is silent; it
 looks like the exclusion simply did not help.
 
-## Four things that break first
+## Five things that break first
 
 1. **`source_paths`, not `paths_to_mutate`.** The latter is deprecated in 3.7.0. Published docs and
    search results still say otherwise — check the installed source, not the web.
@@ -124,6 +124,23 @@ looks like the exclusion simply did not help.
    editable install, mutating a single file leaves an incomplete namespace package that loses to the
    real one, and the tests silently run against unmutated source. Mutmut catches this and says *"no
    test covers any mutant"* rather than reporting a fake score — if you see that, this is why.
+
+   Note the copy already has a `pythonpath` line further down its `[tool.pytest.ini_options]`
+   block. Inserting a second one does not merge — the later wins, so an insert at the top of
+   the block is silently discarded. Edit the existing line.
+
+5. **Deselect anything that asks git about its own working tree.** The copy is not a
+   repository, so `bionumbers_ingest.guard.committable_repo_for` returns `None` — "not a
+   repository" — and the refusal it exists to make never fires. That is the guard behaving
+   correctly, and it fails the baseline, which aborts the run before a single mutant is tried:
+
+   ```toml
+   "--deselect", "tests/test_evaluation.py::test_a_results_file_git_would_track_is_refused_before_it_is_written",
+   ```
+
+   The tell is a baseline failure in a test whose name mentions git, tracking or committing.
+   Same family as gotchas 2 and 3: a test that reads its own environment rather than its
+   inputs cannot survive being moved.
 
 ## Reading the results
 

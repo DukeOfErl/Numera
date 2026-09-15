@@ -86,19 +86,19 @@ gitignored by path and by bare name.
 
 ## 5. Spec conformance and the record
 
-- [ ] 5.1 Add the mapping entries in `tests/test_spec_conformance.py` for the
+- [x] 5.1 Add the mapping entries in `tests/test_spec_conformance.py` for the
       modified requirement and the added one — in this change, not a later one.
-- [ ] 5.2 `openspec validate add-durable-trail --strict`.
-- [ ] 5.3 Update the `CLAUDE.md` Architecture table with the new module, and the
+- [x] 5.2 `openspec validate add-durable-trail --strict`.
+- [x] 5.3 Update the `CLAUDE.md` Architecture table with the new module, and the
       ADR allocation table with `0700`–`0730` plus the two reserved blocks.
-- [ ] 5.4 `README.md` and `CHANGELOG.md`: what a deployer must now configure, and
+- [x] 5.4 `README.md` and `CHANGELOG.md`: what a deployer must now configure, and
       that conversations remain ephemeral while the trail does not.
-- [ ] 5.5 Note in the deploy branch's contract that the two new dependencies must
+- [x] 5.5 Note in the deploy branch's contract that the two new dependencies must
       reach `[project].dependencies` before the next deploy.
 
 ## 6. Measure what was assumed
 
-- [ ] 6.1 Measure INSERT latency **from the deployed app**, not from a developer
+- [ ] 6.1 **Blocked until the change is deployed.** Measure INSERT latency **from the deployed app**, not from a developer
       machine. design.md carries ~500 ms from Europe as an upper bound; record
       the real figure there and mark which one it is. An unmeasured reassurance
       in a design document is worse than an admitted gap.
@@ -112,13 +112,13 @@ gitignored by path and by bare name.
       already being collected: the first write after a long gap carries it. It
       also keeps measuring, so Neon changing this under us is visible rather than
       assumed.
-- [ ] 6.3 **Only after 6.2 has captured one real cold figure**, consider a weekly
+- [ ] 6.3 **Deferred by design, and gated on 6.2.** Only after 6.2 has captured one real cold figure, consider a weekly
       heartbeat that reports whether any row arrived in the last seven days —
       the alarm for the fail-open hazard, which is not the lost row but
       discovering weeks later that nothing was ever recorded. Deliberately second:
       a heartbeat is itself traffic, so adding it first forecloses 6.2 permanently.
       A counter that only an operator reads is the cheap half of this and is
       already task 1.4.
-- [ ] 6.4 Run mutation testing over the new sink module via the
+- [x] 6.4 Run mutation testing over the new sink module via the
       `mutation-test-module` skill. Orchestrator only — one run at the end, not
       per task, and not over the package.

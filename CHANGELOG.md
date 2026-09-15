@@ -12,6 +12,31 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **The structured trail can outlive the container that wrote it.** The trail was
+  written to a file inside a hosted container whose disk does not survive a
+  reboot or redeploy, so every search, alias resolution and spend increment from
+  every real session was discarded — the requirement to log under a per-question
+  identifier satisfied, and its stated purpose, being investigable after the
+  fact, defeated. A Postgres destination can now be configured alongside the
+  file, and the table is created on first use. Configure nothing and the app
+  behaves exactly as before; refusing to start without a telemetry database would
+  make the absence of telemetry an outage ([ADR-0700]).
+- **A failed recording never fails a question**, which is the deliberate opposite
+  of the spend limits. A spend limit fails closed because proceeding costs
+  unbounded real money; recording fails open because proceeding costs one row of
+  a dataset read by eye. One attempt, no retry — an unreachable database hangs
+  rather than failing fast, and a question held open to record a row is worse for
+  the reader than the missing row. Failures are reported to the operator and
+  counted, never shown to the person asking ([ADR-0710]).
+- **Records name the session as well as the question**, so a sequence of
+  questions asked by one person can be reassembled. Without it, one person asking
+  ten questions is indistinguishable from ten people asking one. The session also
+  reaches the metadata a tracing tool reads, so one added later inherits it.
+- **What the page draws names the question that produced it.** Each rendered item
+  carries its question's identifier, which is what a rating on an answer will
+  have to name. Neither this nor the session above can be added to records
+  already written, which is why both precede the feature that needs them.
+
 - **A spent API key ends a question as a limit, and says whose limit it is.** Where
   the provider refuses a request for lack of credit, the question ends as
   `provider_limit` rather than as an indistinguishable `provider_failure`, and both
@@ -223,3 +248,5 @@ number rather than an error:
 [ADR-0240]: docs/decisions/0240-stamp-every-ingest.md
 [ADR-0250]: docs/decisions/0250-guards-belong-to-the-operation.md
 [ADR-0600]: docs/decisions/0600-a-spent-key-is-its-own-ending.md
+[ADR-0700]: docs/decisions/0700-neon-for-the-durable-trail.md
+[ADR-0710]: docs/decisions/0710-recording-fails-open.md
