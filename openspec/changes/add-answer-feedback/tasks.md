@@ -122,10 +122,15 @@ fails open (ADR-0710).
 
 ## 6. What the collected feedback is for
 
-- [ ] 6.1 Write the handful of SQL queries that read it back: ratings per day,
+- [x] 6.1 Write the handful of SQL queries that read it back: ratings per day,
       ratings per question, and every comment mentioning an entry identifier.
       Without these the data is collected and never looked at, which is the
-      failure the previous change was about one level up.
+      failure the previous change was about one level up. `sql/feedback.sql`,
+      five queries — the three asked for, plus the unfiltered comment population
+      to compare the third against, plus a "is anything arriving at all" query.
+      **Unverified against a real database**, which the file says in its own
+      header: they were written from `trail_store._SCHEMA` and the two event
+      names, and this machine cannot reach Neon.
 - [x] 6.2 Record in ADR-0740 that a thumbs-down rate is **not** an error rate:
       people who rate are not a sample of people who read. The first person to
       quote a percentage should meet that sentence first. (Written with the ADR
