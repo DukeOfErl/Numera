@@ -50,6 +50,12 @@ except (CorpusUnavailable, NotConfigured) as exc:
 
 session = web.session_id(st.session_state, st.query_params)
 
+# Asked before anything is drawn, because every control drawn below is live in the
+# browser for as long as this run takes. A click on any of them re-runs the script,
+# and a re-run abandons the agent's generator mid-tool-call -- so while a question
+# is being answered, the ratings on past answers are drawn inert.
+answering = web.question_pending(st.session_state)
+
 # Pinned to the viewport, before anything that could scroll it away.
 web.draw_prototype_banner()
 # Page-level, and here for the same reason the banner is: drawn once, above
@@ -95,7 +101,10 @@ for asked, drawn in web.transcript(st.session_state):
         # `drawn=drawn` binds this turn's items rather than the loop variable. The
         # callback is in fact called before the next iteration, but a lambda that
         # reads the loop variable is one refactor away from being called after it.
-        web.show(drawn, after_prose=lambda drawn=drawn: web.draw_feedback(drawn, session))
+        web.show(
+            drawn,
+            after_prose=lambda drawn=drawn: web.draw_feedback(drawn, session, answering=answering),
+        )
 
 # Some endings close the run: the budget is spent, the conversation is past its
 # token bound, nothing is configured, or the key funding the calls is out of credit.
@@ -117,7 +126,7 @@ if web.run_is_over(web.transcript(st.session_state)):
     )
 # `submit_mode="disable"` because a question runs for as long as the agent takes:
 # leaving the input live invites a second question into the middle of the first.
-elif question := st.chat_input("Ask a question", submit_mode="disable"):
+elif question := st.chat_input("Ask a question", submit_mode="disable", key=web.ASK_KEY):
     with st.chat_message("user"):
         st.markdown(web.as_text(question))
     # Recorded before it is drawn, and filled in place. The agent persists the turn

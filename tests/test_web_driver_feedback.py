@@ -24,6 +24,7 @@ from streamlit.testing.v1 import AppTest
 
 from agent_doubles import says, scripted, tool_call
 from scinumbers_ask import feedback, trace, web
+from scinumbers_ask.events import Answer, AnswerEntries, EndReason, QuestionEnded
 
 APP = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 TIMEOUT = 30
@@ -368,3 +369,138 @@ def test_the_colour_rule_names_the_element_it_colours(app):
     rule = next(m.value for m in at.markdown if "stButtonGroup" in m.value)
     assert 'data-testid="stIconMaterial"' in rule
     assert "prefers-color-scheme: light" in rule, "one colour cannot suit both themes"
+
+
+# --- nothing interactive exists while the agent is still working -------------
+
+
+def test_the_rating_is_not_drawn_until_the_answer_is_finished(repo):
+    """The defect a reader found by clicking, and the one `AppTest` cannot see.
+
+    A widget is live in the browser the moment it renders. A click re-runs the
+    script, and a re-run abandons the agent's generator at whatever yield it had
+    reached -- so a thumbs-down pressed while the answer was still arriving
+    cancelled the tool call it was in the middle of and left the turn unfinished.
+
+    `AppTest` runs scripts to completion and can never click mid-run, so what is
+    asserted is the structural property that closes the window: the rating is
+    drawn only after the last item has been consumed. Placement is a separate
+    test, because a fix that put it in the wrong place would pass this one.
+    """
+    events = [
+        Answer(question_id="q1", text="an answer"),
+        AnswerEntries(question_id="q1", cited=(100002,), retrieved=(100002, 100001)),
+        QuestionEnded(
+            question_id="q1",
+            reason=EndReason.ANSWERED,
+            spend=10,
+            run_spend=10,
+            model="m",
+            tool_calls=1,
+        ),
+    ]
+    consumed: list[int] = []
+    drawn: list[web.Item] = []
+    web.answer(iter(events), repo, drawn, after_prose=lambda: consumed.append(len(drawn)))
+
+    assert consumed == [len(events)], (
+        f"the rating was drawn after {consumed} of {len(events)} items, with the "
+        "generator still live -- a click there abandons the turn"
+    )
+
+
+def test_a_turn_that_never_reaches_the_seam_still_offers_a_rating(repo):
+    """No entries and no ending: the seat is never reserved, and the fallback at
+    the foot of the column is what offers the control at all."""
+    drawn: list[web.Item] = []
+    calls: list[int] = []
+    web.answer(
+        iter([Answer(question_id="q1", text="an answer")]),
+        repo,
+        drawn,
+        after_prose=lambda: calls.append(len(drawn)),
+    )
+    assert calls == [1], "a turn with no entries and no ending was never offered a rating"
+
+
+def test_the_question_box_is_readable_before_the_page_draws_anything(app):
+    """Half of what makes past ratings inert: the key exists to be read early.
+
+    Streamlit restores widget state at the top of a run, so a keyed question box
+    is readable before the `st.chat_input` call that returns it — which is what
+    lets the page know a question is coming *before* it redraws the transcript.
+    Lose the key and `question_pending` is silently False for ever, and every past
+    rating goes back to being clickable mid-answer.
+    """
+    at = ask(app.run(), "how many ribosomes?")
+    assert at.chat_input[0].key == web.ASK_KEY
+
+
+def test_a_pending_question_is_what_question_pending_reports():
+    """The other reading of the same key. Kept as a unit test because `AppTest`
+    cannot hold a run open: a chat input is a trigger widget, its value is cleared
+    after each run, and a value written into session state by hand does not
+    survive to the next one. So the mid-run page state is unreachable from here,
+    and the two halves are checked separately — this one, and the disabling below.
+    """
+    assert not web.question_pending({})
+    assert not web.question_pending({web.ASK_KEY: ""})
+    assert web.question_pending({web.ASK_KEY: "and in yeast?"})
+
+
+def test_nothing_in_a_rating_is_clickable_while_a_question_is_answered():
+    """A click on any of these re-runs the script, and a re-run abandons the
+    agent's generator mid-tool-call — so the answer being asked for right now is
+    what a thumb on a *past* answer would cost. This predates the live control's
+    own version of the defect.
+
+    `AppTest.from_function` runs the function in a fresh namespace, so the page
+    imports for itself. That is the price of reaching a state the real script
+    cannot be held in.
+    """
+
+    def page():
+        import streamlit as st
+
+        from scinumbers_ask import web
+
+        items = [web.Item(web.Kind.ANSWER, "an answer", question_id="q1")]
+        web.draw_feedback(items, "s1", st.session_state, answering=True)
+
+    at = AppTest.from_function(page, default_timeout=TIMEOUT).run()
+    assert at.get("feedback")[0].disabled, "a past answer's rating stayed live mid-question"
+
+
+def test_a_comment_in_progress_is_disabled_rather_than_dropped(tmp_path):
+    """Streamlit discards the state of a widget it did not render, so leaving the
+    box out for the duration of a run would take a half-typed comment with it —
+    the loss the rating is disabled rather than hidden to avoid."""
+    flag = tmp_path / "answering"
+
+    def page():
+        import pathlib
+
+        import streamlit as st
+
+        from scinumbers_ask import feedback, web
+
+        items = [web.Item(web.Kind.ANSWER, "an answer", question_id="q1")]
+        st.session_state.setdefault(feedback.STATE_KEY, {})["q1"] = feedback.Rating(
+            feedback.Verdict.DOWN
+        )
+        answering = pathlib.Path(st.session_state["flag"]).exists()
+        web.draw_feedback(items, "s1", st.session_state, answering=answering)
+
+    at = AppTest.from_function(page, default_timeout=TIMEOUT)
+    at.session_state["flag"] = str(flag)
+    at = at.run()
+    at = at.text_area[0].set_value("BNID 102345 looks 10x high").run()
+    assert "102345" in at.text_area[0].value
+    assert not at.text_area[0].disabled, "the box was inert with no question running"
+
+    flag.touch()
+    at = at.run()
+    assert at.text_area, "the comment box vanished while a question was running"
+    assert at.text_area[0].disabled, "the comment box stayed live mid-question"
+    assert at.button[0].disabled, "Send stayed live mid-question"
+    assert "102345" in at.text_area[0].value, "the draft was lost"

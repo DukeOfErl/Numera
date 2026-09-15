@@ -233,6 +233,13 @@ def test_session_state_holds_the_identifier_and_what_was_drawn_and_nothing_else(
     this is only what stops a redraw recording the same judgement twice. It
     disappears with the session, and losing it costs at most one duplicate.
 
+    The question box's key is the second exception, and a different kind. It is
+    not state this driver keeps at all -- it is a Streamlit widget's own value,
+    which lands in session state because the widget was given a key. It is given
+    one so the page can read, before it draws anything, whether a question is
+    about to run: every control already on screen is live while that run works,
+    and a click on one abandons the agent's generator mid-tool-call.
+
     The rule keeps its teeth: anything else namespaced here still fails, and the
     allowance is a prefix rather than a wildcard, so `scinumbers_ask.spend` or a
     second copy of the conversation would still be caught.
@@ -242,7 +249,7 @@ def test_session_state_holds_the_identifier_and_what_was_drawn_and_nothing_else(
 
     kept = {k for k in at.session_state.filtered_state if k.startswith("scinumbers_ask.")}
     feedback_keys = {k for k in kept if k.startswith(FEEDBACK_PREFIXES)}
-    assert kept - feedback_keys == {web.SESSION_KEY, web.TRANSCRIPT_KEY}
+    assert kept - feedback_keys == {web.SESSION_KEY, web.TRANSCRIPT_KEY, web.ASK_KEY}
 
 
 def test_a_missing_corpus_is_explained_rather_than_raised(monkeypatch):

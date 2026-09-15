@@ -76,6 +76,12 @@ PROTOTYPE_BANNER_CSS = """
 """
 
 SESSION_KEY = "scinumbers_ask.session"
+
+# The question box's widget key. Named so the page can ask, before it draws
+# anything, whether a question is about to run -- Streamlit restores widget state
+# at the top of the run, so the submitted question is readable there, ahead of the
+# `st.chat_input` call that returns it. `question_pending` is that question.
+ASK_KEY = "scinumbers_ask.question"
 TRANSCRIPT_KEY = "scinumbers_ask.transcript"
 
 # The session identifier lives in the URL as well as in session state. Session
@@ -102,13 +108,18 @@ UNCITED_ROWS = 4
 # column rather than to the content on purpose: a table you have to scroll
 # sideways hides the identifier, which is the one cell a reader is checking. A
 # truncated cell opens in full on a double click, so nothing is lost.
+# Property and Reference are 20% narrower than the terminal's proportions would
+# give them, and they are the two that can afford it: both hold prose that
+# truncates gracefully and opens in full on a double click, where Value, Units
+# and ID hold short strings that either fit or are unreadable. The 62px this
+# frees is what pays for the wider gutter between the columns.
 COLUMN_WIDTHS = {
-    "Property": 190,
+    "Property": 152,
     "Organism": 115,
     "Value": 85,
     "Units": 70,
     "ID": 60,
-    "Reference": 120,
+    "Reference": 96,
 }
 
 #: How the turn's width is split: the prose on the left, the entries it rests on
@@ -117,12 +128,19 @@ COLUMN_WIDTHS = {
 #: between them.
 #:
 #: **The right-hand share has a floor, and it is not a matter of taste.** The
-#: table's widths above are fixed pixels summing to 640; below roughly that the
-#: dataframe grows a horizontal scrollbar, which hides the ID column -- the one
-#: cell a reader is checking. So the evidence column takes the larger share, and
-#: the page is `layout="wide"` to give it the room: in the centred layout the
-#: whole main area is about 700px, and half of that would scroll from the start.
-READING_SPLIT = (5, 6)
+#: table's widths above are fixed pixels; below their sum the dataframe grows a
+#: horizontal scrollbar, and the first column it takes away is the identifier --
+#: the one cell a reader is checking. `layout="wide"` follows from the same
+#: arithmetic: the centred layout's main area is about 700px, which no split
+#: divides into a side wide enough.
+#:
+#: Even, rather than the 5:6 it started at, and that is the most the evidence
+#: column can give back. Narrowing it further undoes the 20% the table's own
+#: columns just gave up and then some -- at 6:5 the layout would need a wider
+#: browser than it did before either change. `test_web_driver.py` does that
+#: arithmetic against a stated target width rather than leaving it here as prose
+#: nobody recomputes.
+READING_SPLIT = (1, 1)
 
 
 class Kind(StrEnum):
@@ -774,13 +792,23 @@ def answer(
     always at the top, so a warning raised before any tool call now appears above
     it instead of below. That is the order the events actually arrived in.
 
-    `after_prose` is called once, at the seam `_ends_the_prose` names -- or at the
-    end, for a turn that never reaches one. It runs inside the live loop rather
-    than after it because a generator is being consumed: there is no "after the
-    prose" to return to once the whole turn has been drawn.
+    `after_prose` gets a *seat* at the seam `_ends_the_prose` names, and is called
+    into it once the generator is exhausted. **It must not be called at the seam
+    itself**, which is what this did first and is a defect a reader found by
+    clicking: a widget is live in the browser the moment it renders, a click on it
+    re-runs the script, and a re-run abandons this generator at whatever yield it
+    had reached. The agent persists the turn as it goes, so a rating pressed while
+    the answer was still arriving cancelled the tool call it was in the middle of
+    and left the turn half-finished.
+
+    A Streamlit container is bound to the place it was made, so reserving one at
+    the seam and filling it later puts the control exactly where calling at the
+    seam did -- without it existing while there is still work to interrupt. The
+    same trick the retrieval box already used, for the same reason.
     """
     box = None
-    prose, evidence = st.columns(READING_SPLIT, gap="medium")
+    seat = None
+    prose, evidence = st.columns(READING_SPLIT, gap="large")
     drawn: list[Item] = [] if into is None else into
     for item in items_for(events, repo):
         if item.kind is Kind.PROGRESS and box is None:
@@ -790,17 +818,19 @@ def answer(
             # one flat shape while writing into two columns.
             with prose:
                 box = _retrieval_box(expanded=True)
-        if after_prose is not None and _ends_the_prose(item):
+        if after_prose is not None and seat is None and _ends_the_prose(item):
             with prose:
-                after_prose()
-            after_prose = None
+                seat = st.container()
         with box if item.kind is Kind.PROGRESS else _column_for(item, prose, evidence):
             draw(item)
         drawn.append(item)
     if box is not None:
         box.update(label="Retrieval", state="complete", expanded=False)
     if after_prose is not None:
-        with prose:
+        # The generator is spent by now, so there is nothing left for a click to
+        # interrupt. A turn that never reached the seam gets the foot of its own
+        # column, which is where the seam would have put it anyway.
+        with seat if seat is not None else prose:
             after_prose()
     return drawn
 
@@ -882,7 +912,21 @@ def is_ratable(items: Iterable[Item]) -> bool:
     return bool(question_id_of(items)) and any(item.kind is Kind.ANSWER for item in items)
 
 
-def draw_feedback(items: Iterable[Item], session_id: str, state: Any = None) -> None:
+def question_pending(state: Any) -> bool:
+    """Whether a question has been submitted and is about to be answered.
+
+    True for the whole of the run that answers it, including the part before the
+    agent is called -- which is the point. Every control already on the page is
+    live in the browser while that run is working, and a click on any of them
+    re-runs the script, abandoning the agent's generator mid-tool-call. So the
+    page needs to know this *before* it redraws the transcript, not after.
+    """
+    return bool(state.get(ASK_KEY))
+
+
+def draw_feedback(
+    items: Iterable[Item], session_id: str, state: Any = None, *, answering: bool = False
+) -> None:
     """Offer a rating for one answered turn, and a comment once it has been rated.
 
     **Drawn once per turn per script run**, which is a property of where it is
@@ -910,12 +954,17 @@ def draw_feedback(items: Iterable[Item], session_id: str, state: Any = None) -> 
     st.feedback(
         "thumbs",
         key=_verdict_key(question_id),
+        # `or answering`: inert for the whole of a run that is answering a
+        # question. Everything on the page is clickable while the agent works, and
+        # a click re-runs the script, which abandons the generator at whatever
+        # yield it had reached -- so a thumb on a *past* answer could cancel the
+        # tool call of the question being asked now.
         # Disabled once given, rather than left live. Clicking a selected thumb
         # clears it, and Streamlit discards the state of a widget it did not
         # render -- so an un-disabled control lets a reader wipe the comment box
         # out from under their own half-typed comment. A rating is final for the
         # answer (`answer-feedback`), and the control should look final too.
-        disabled=given is not None,
+        disabled=given is not None or answering,
         on_change=_took_a_verdict,
         args=(question_id, session_id, state),
     )
@@ -929,7 +978,7 @@ def draw_feedback(items: Iterable[Item], session_id: str, state: Any = None) -> 
     if given.verdict is not feedback.Verdict.DOWN or given.commented:
         st.caption(FEEDBACK_THANKS)
         return
-    _draw_comment_box(question_id, session_id, state)
+    _draw_comment_box(question_id, session_id, state, answering=answering)
 
 
 def _verdict_key(question_id: str) -> str:
@@ -952,7 +1001,9 @@ def _took_a_verdict(question_id: str, session_id: str, state: Any) -> None:
     feedback.record_verdict(state, question_id=question_id, session_id=session_id, verdict=verdict)
 
 
-def _draw_comment_box(question_id: str, session_id: str, state: Any) -> None:
+def _draw_comment_box(
+    question_id: str, session_id: str, state: Any, *, answering: bool = False
+) -> None:
     """The comment, offered only after disapproval, and inside a form of its own.
 
     **The thumb must stay outside this form** -- inside one it would read `None`
@@ -974,8 +1025,13 @@ def _draw_comment_box(question_id: str, session_id: str, state: Any) -> None:
     """
     key = _comment_key(question_id)
     with st.form(key=f"{key}.form", border=False):
-        text = st.text_area(FEEDBACK_HINT, key=key, height=80)
-        sent = st.form_submit_button("Send")
+        # Drawn while a question is being answered, not skipped -- only disabled.
+        # Streamlit discards the state of a widget it did not render, so leaving
+        # this out for the duration of a run would take a half-typed comment with
+        # it, which is exactly what the rating is disabled rather than hidden to
+        # avoid.
+        text = st.text_area(FEEDBACK_HINT, key=key, height=80, disabled=answering)
+        sent = st.form_submit_button("Send", disabled=answering)
     # Empty is a no-op rather than a refusal: the button cannot be disabled for it
     # without reintroducing the two-action problem above, and there is nothing to
     # tell a reader who pressed Send with nothing typed that they do not know.
@@ -996,7 +1052,7 @@ def show(items: Iterable[Item], after_prose: Callable[[], None] | None = None) -
     two different places, or scrolling back changes the layout.
     """
     items = list(items)
-    prose, evidence = st.columns(READING_SPLIT, gap="medium")
+    prose, evidence = st.columns(READING_SPLIT, gap="large")
     progress = [item for item in items if item.kind is Kind.PROGRESS]
     if progress:
         with prose, _retrieval_box(expanded=False, state="complete"):

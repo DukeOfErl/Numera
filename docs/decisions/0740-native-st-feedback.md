@@ -125,3 +125,55 @@ the extra action; pressing Send with nothing typed records nothing.
 `AppTest` cannot see the two-action problem — it sets widget values directly and
 never blurs anything — so what the test asserts is the structure that prevents it:
 that the text area and the Send button share a form id.
+
+## A fourth correction: a rating must not be clickable while the agent works
+
+Reported by a reader, who pressed thumbs-down while an answer was still arriving
+and watched the turn stop — the tool call it was in the middle of cancelled, no
+further progress, the turn left half-finished.
+
+The mechanism is Streamlit's, and it is not specific to feedback. **A widget is
+live in the browser the moment it renders, and a click re-runs the script.** A
+re-run abandons the generator `web.answer` is consuming, at whatever `yield` it
+had reached — and `agent.py` persists each turn as it goes, so the conversation
+the model remembers advances past what the page shows. `answer`'s own docstring
+had noted that the generator "can be abandoned at any yield" as a property of
+callers; it is also a property of the page, and nothing had drawn the conclusion.
+
+Two windows existed, and only the first was new:
+
+- **The live turn's own control**, drawn at the seam inside the streaming loop.
+  Closed by reserving an `st.container()` at the seam and filling it once the
+  generator is exhausted. A Streamlit container is bound to where it was made, so
+  the control lands exactly where calling at the seam put it, without existing
+  while there is still work to interrupt — the same trick the retrieval box
+  already used, for the same reason.
+- **Every past turn's control**, redrawn by the transcript loop before the new
+  question runs. This one predates the columns and shipped with the feature: those
+  thumbs were clickable throughout every answer. Closed by asking
+  `question_pending` before anything is drawn and passing `answering` down, so the
+  whole rating block — thumb, comment box and Send — is drawn inert for the
+  duration of the run.
+
+`st.chat_input` is given a key for that question. Streamlit restores widget state
+at the top of a run, so the submitted question is readable *before* the
+`st.chat_input` call that returns it, which is what lets the page know a question
+is coming before it redraws the transcript.
+
+**Disabled, not hidden.** Streamlit discards the state of a widget it did not
+render, so skipping the comment box for the duration of a run would take a
+half-typed comment with it — the same loss the rating is disabled rather than
+re-clickable to avoid.
+
+### What no test here can see
+
+`AppTest` runs a script to completion and cannot click during one, so the defect
+itself is unreachable from the suite. Three checkable halves stand in for it: that
+the live control is drawn only after the last item is consumed, that
+`question_pending` reads a submitted question, and that `answering=True` disables
+every control in the block. The wiring between the second and third is verified by
+reading, and is named here so the next person knows which link is unpinned.
+
+A chat input is a trigger widget — its value is cleared after each run, and a
+value written into session state by hand does not survive to the next one — which
+is why the mid-run page state cannot be staged even artificially.
