@@ -221,6 +221,44 @@ def test_the_app_runs_when_the_destination_refuses_every_connection(
     assert not any(isinstance(h, trail_store.TrailHandler) for h in clean_logger.handlers)
 
 
+def test_a_broken_connection_url_is_reported_rather_than_swallowed(monkeypatch, capsys):
+    """Configured-but-wrong must not look like not-configured.
+
+    The likeliest mistake is the first one `secrets.toml.example` warns about:
+    pasting the provider's `postgresql://` instead of `postgresql+psycopg://`.
+    That raises inside `create_engine` -- before any connection is attempted --
+    so it never reaches the store's own reporting. Swallowed here, the operator
+    sees nothing at all, and "looks configured, records nothing" is this change's
+    own failure reinstated at the one place it is hardest to notice.
+    """
+
+    def explode(*args, **kwargs):
+        raise ModuleNotFoundError("No module named 'psycopg2'")
+
+    monkeypatch.setattr(web.st, "connection", explode)
+    assert web.trail_destination() is None
+    err = capsys.readouterr().err
+    assert "trail destination unusable" in err
+    assert "psycopg2" in err, "the operator needs to know which mistake it was"
+
+
+def test_no_configuration_at_all_is_silent(monkeypatch, capsys):
+    """The ordinary case on a developer's machine says nothing.
+
+    Distinguished by exception type, not by message text: the wording is
+    Streamlit's to change, and a rule matching on prose goes quietly false the
+    day it does.
+    """
+    from streamlit.errors import StreamlitSecretNotFoundError
+
+    def missing(*args, **kwargs):
+        raise StreamlitSecretNotFoundError("no secrets")
+
+    monkeypatch.setattr(web.st, "connection", missing)
+    assert web.trail_destination() is None
+    assert capsys.readouterr().err == ""
+
+
 def test_a_question_is_still_answered_when_every_write_fails(monkeypatch, script, clean_logger):
     """Fail-open, through the whole script rather than through one function.
 

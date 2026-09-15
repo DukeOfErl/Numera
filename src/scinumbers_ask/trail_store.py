@@ -62,6 +62,29 @@ STATEMENT_TIMEOUT_MS = 2000
 #: left for someone to discover.
 CONNECT_TIMEOUT_S = 5
 
+#: Seconds before a pooled connection is discarded and remade.
+#:
+#: Named here rather than written twice, because `web.trail_destination` builds
+#: its engine through `st.connection` and cannot share the construction. Two
+#: hard-coded copies are two things that can drift, and one had already grown a
+#: comment that did not explain its value.
+POOL_RECYCLE_S = 300
+
+#: Consecutive failed writes after which this store stops trying.
+#:
+#: Without it, "one attempt, never a retry" holds within a write and is defeated
+#: across them. A question emits one record per retrieved entry plus its searches,
+#: aliases and spend increments -- 25 is ordinary -- so a destination that dies
+#: *after* install costs 25 connection attempts, each bounded only by
+#: `CONNECT_TIMEOUT_S`. Two minutes added to one question, which is exactly the
+#: delay the spec forbids, arrived at by retrying across records instead of
+#: within one.
+#:
+#: Low, because the cost of giving up too early is some missing rows and the cost
+#: of giving up too late is the reader waiting. That asymmetry is the whole design
+#: (ADR-0710), and it points the same way here.
+FAILURES_BEFORE_GIVING_UP = 3
+
 DEFAULT_TABLE = "trail"
 
 #: Failures across every store in this process, so an operator asking "is this
@@ -151,6 +174,9 @@ class TrailStore:
     failures: int = 0
     schema_failures: int = 0
     writes: int = 0
+    #: Reset by any success. Only a *run* of failures means the destination is
+    #: gone; one is an ordinary blip and must not close a working store.
+    consecutive_failures: int = 0
     ready: bool = False
     _last_write_ms: int | None = None
 
@@ -170,7 +196,7 @@ class TrailStore:
             global _FAILURES
             self.schema_failures += 1
             _FAILURES += 1
-            _complain("trail store unavailable", exc)
+            complain("trail store unavailable", exc)
             self.ready = False
             return False
         self.ready = True
@@ -228,17 +254,36 @@ class TrailStore:
         except Exception as exc:  # noqa: BLE001 - see the module docstring
             global _FAILURES
             self.failures += 1
+            self.consecutive_failures += 1
             _FAILURES += 1
-            _complain("trail record dropped", exc)
+            complain("trail record dropped", exc)
+            if self.consecutive_failures >= FAILURES_BEFORE_GIVING_UP:
+                # The destination died after install, and every further record
+                # would pay a connection attempt to rediscover that. Stopping is
+                # the same decision as `record`'s early refusal above, reached by
+                # evidence rather than by configuration.
+                self.ready = False
+                complain(
+                    f"trail store giving up after {self.consecutive_failures}"
+                    " consecutive failures; restart to retry",
+                    exc,
+                )
             return False
+        finally:
+            # In `finally`, so a *failed* write's duration is recorded too. It is
+            # the slow ones that fail, and the figure ADR-0700 exists to collect --
+            # the first write after a long quiet period -- is the likeliest of all
+            # to be both. Recording only successes discards exactly that case and
+            # leaves the next row claiming a duration from some earlier write.
+            self._last_write_ms = int((time.perf_counter() - started) * 1000)
         global _WRITES
         self.writes += 1
         _WRITES += 1
-        self._last_write_ms = int((time.perf_counter() - started) * 1000)
+        self.consecutive_failures = 0
         return True
 
 
-def _complain(what: str, exc: BaseException) -> None:
+def complain(what: str, exc: BaseException) -> None:
     """Report to the operator, never to the reader, and never a traceback.
 
     A traceback here would be several screens of SQLAlchemy per failed question,
@@ -265,14 +310,20 @@ class TrailHandler(logging.Handler):
         """Never raises, so `logging`'s own error path is never reached.
 
         `logging.Handler.handleError` would print a traceback per failure to
-        stderr, which is the noise `_complain` exists to avoid.
+        stderr, which is the noise `complain` exists to avoid.
         """
+        # `or None` on each, so an absent identifier becomes NULL rather than an
+        # empty string. `QuestionTrace.session_id` defaults to `""` and is always
+        # put in `extra`, so without this a sessionless record writes `''` --
+        # `where session_id is null` then returns nothing on a table full of
+        # them, and `count(distinct session_id)` reports a phantom session. The
+        # file sink already omits the key when falsy; the two must agree.
         self.store.record(
             record.getMessage(),
-            session_id=getattr(record, "session_id", None),
-            question_id=getattr(record, "question_id", None),
-            run_label=getattr(record, "run_label", None),
-            user_email=getattr(record, "user_email", None),
+            session_id=getattr(record, "session_id", None) or None,
+            question_id=getattr(record, "question_id", None) or None,
+            run_label=getattr(record, "run_label", None) or None,
+            user_email=getattr(record, "user_email", None) or None,
             detail=getattr(record, "fields", {}) or {},
         )
 
@@ -324,9 +375,7 @@ def engine_from_url(url: str, **kwargs: Any) -> Any:
     return create_engine(
         url,
         pool_pre_ping=True,
-        # The container sleeps after 12 hours of no traffic, by which time the far
-        # side has dropped every connection the pool believes it holds.
-        pool_recycle=300,
+        pool_recycle=POOL_RECYCLE_S,
         connect_args=connect_args,
         **kwargs,
     )

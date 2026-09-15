@@ -298,17 +298,44 @@ def trail_destination() -> Any | None:
             TRAIL_CONNECTION,
             type="sql",
             pool_pre_ping=True,
-            # The container sleeps after 12 hours of no traffic, by which time the
+            # Both figures come from `trail_store` rather than being written here
+            # as well: this engine cannot be built by `engine_from_url`, but the
+            # two must provably agree, and a duplicated literal is a thing that
+            # drifts. The container sleeps after 12 hours of no traffic, so the
             # far side has dropped every connection the pool believes it holds.
-            pool_recycle=300,
+            pool_recycle=trail_store.POOL_RECYCLE_S,
             connect_args={"connect_timeout": trail_store.CONNECT_TIMEOUT_S},
         ).engine
-    except Exception:  # noqa: BLE001 - absence and misconfiguration both mean "no sink"
-        # Deliberately not narrowed to Streamlit's "missing configuration" error.
-        # A malformed URL raises something else entirely, and the two have the
-        # same consequence here: no destination. Telling them apart would matter
-        # if either stopped the app, and neither does.
+    except Exception as exc:  # noqa: BLE001 - neither absence nor a bad URL stops the app
+        # Both mean "no sink", and neither stops the app -- but they are not the
+        # same thing to an operator, and an earlier version reported neither.
+        #
+        # Absence is the ordinary case on a developer's machine and says nothing.
+        # A configured-but-broken destination is a mistake somebody wants told
+        # about, and the likeliest one is the first thing
+        # `.streamlit/secrets.toml.example` warns against: pasting the provider's
+        # `postgresql://` rather than `postgresql+psycopg://`. That raises inside
+        # `create_engine`, here, before any connection is attempted -- so it never
+        # reaches the store's own reporting, and the operator would see nothing at
+        # all. "Looks configured, records nothing" is this change's own failure.
+        if _is_not_configured(exc):
+            return None
+        trail_store.complain("trail destination unusable", exc)
         return None
+
+
+def _is_not_configured(exc: BaseException) -> bool:
+    """Whether this means "no section in secrets" rather than "a broken one".
+
+    By type, not by message text: the wording is Streamlit's to change, and a
+    rule matching on prose goes quietly false the day it does. The two directions
+    cost differently -- a misconfiguration misread as absence is silent, which is
+    the failure being fixed, while absence misread as a misconfiguration is one
+    stray line in a log. So anything unrecognised is reported.
+    """
+    from streamlit.errors import StreamlitAPIException, StreamlitSecretNotFoundError
+
+    return isinstance(exc, StreamlitAPIException | StreamlitSecretNotFoundError)
 
 
 def install_trail(engine: Any | None) -> Any | None:

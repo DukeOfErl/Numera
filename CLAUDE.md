@@ -47,9 +47,14 @@ This project follows the user-level documentation-upkeep conventions with one su
 
 ## Parallel branches and ADR numbers
 
-Two branches that each number ADRs from the current highest id will both claim the same numbers, and the second to merge conflicts. Before parallel work starts, give each branch a disjoint block.
+Two branches numbering ADRs from the current highest id both claim the same
+numbers, and the second to merge conflicts. Give each branch a disjoint block
+before parallel work starts.
 
-**This file is the allocation's source of truth.** Recording it only in each change's `tasks.md` is what let the blocks drift: no branch can see another's copy, so a change that outgrows its block updates its own note and nothing else, and the next branch allocates against a stale ceiling. Keep the block in the change's `tasks.md` too — that is where someone implementing reads it — but reconcile against this table, and widen a block here first.
+**This file is the allocation's source of truth.** Keep the block in the change's
+`tasks.md` too — that is where an implementer reads it — but reconcile against
+this table and widen a block *here* first. Recording it only in `tasks.md` is
+what let the blocks drift: no branch can see another's copy.
 
 | Change | Block |
 |---|---|
@@ -65,21 +70,30 @@ Two branches that each number ADRs from the current highest id will both claim t
 | `add-answer-feedback` | `0740`–`0770` — reserved, change not yet proposed |
 | `add-user-identity` | `0780`–`0830` — reserved, change not yet proposed |
 
-The gap at `0650`–`0690` is deliberate: it leaves
-`add-provider-limit-ending` room to widen without renumbering, which is what the
-paragraph below says to do when a block runs out. The last two rows are **reserved
-before their changes exist**, because the three are one line of work and the second
-will be proposed while the first is still open — which is exactly the moment a
-branch allocates against a ceiling it can no longer see.
+Gaps between blocks are deliberate — room to widen without renumbering. The last
+two rows are reserved **before their changes exist**, because a change gets
+proposed while the previous one is still open, which is exactly when a branch
+allocates against a ceiling it can no longer see.
 
-**This table is the authority, not a scan of `docs/decisions/`.** A scan cannot see uncommitted ADRs on another branch: `git ls-tree` reads committed trees, and each branch is checked out in its own worktree, so a number can be spent and still invisible from here. `add-ask-agent` has written `0100`–`0190` and holds a second range, `0260`–`0290`, because its first block ran out while the change was still open. A block is extended rather than renumbered: the ADRs already written are referenced from code comments and commit messages, and renumbering would break every one of those references to buy contiguity that nothing needs. Its first block was also uncommitted for two sessions, which is how a scan came to report those numbers as free. Never conclude a number is free because no file for it turns up.
+**This table is the authority, never a scan of `docs/decisions/`.** A scan cannot
+see uncommitted ADRs on another branch — `git ls-tree` reads committed trees, and
+each branch has its own worktree — so a number can be spent and invisible from
+here. `add-ask-agent`'s first block was uncommitted for two sessions, which is how
+a scan came to report those numbers as free. **Never conclude a number is free
+because no file for it turns up.**
 
-**Allocate by creating the file.** Copy the template to the number you are claiming and commit that stub early, rather than writing the ADR at the end of the change. A ceiling only holds if claiming the number and writing the file are the same step; a block widened in a note that only your own branch reads is how the last drift happened. Reconcile each change's `tasks.md` against this table when it merges.
+**Allocate by creating the file**, committing the stub early: a ceiling only holds
+if claiming the number and writing the file are the same step.
 
-**Write each ADR with the change that makes the decision, never as a batch at the end.** A task
-list that defers all of them to a documentation group produces retroactive ADRs, and by then the
-options that were rejected -- the part worth recording -- are gone, and what survives is a
-description of the code.
+**Widen, never renumber.** `add-ask-agent` holds `0100`–`0190` *and* `0260`–`0290`
+because its first block ran out mid-change. Written ADRs are cited from code
+comments and commit messages; renumbering breaks every citation to buy contiguity
+nothing needs.
+
+**Write each ADR with the change that makes the decision, never as a batch at the
+end.** Deferring them to a documentation group produces retroactive ADRs, by which
+time the rejected options — the part worth recording — are gone, and what survives
+is a description of the code.
 
 ## Architecture
 
@@ -150,39 +164,21 @@ core, and a test there refuses a name with no file behind it.
 | `trace.py` | The structured trail, one question id and one session id throughout |
 | `trail_store.py` | The trail's durable destination: one append-only table, written best-effort (ADR-0700, ADR-0710) |
 
-**The trail has two sinks, and one of them fails open.** `trace.py` writes to a
-logger; `trail_store.py` attaches to that logger as a second handler, so no call
-site knows about it. The file sink lives in a container whose disk does not
-survive a redeploy, which is why the second one exists — every record from every
-real session used to be discarded, satisfying the requirement to log under a
-per-question identifier while defeating its stated purpose.
+**The trail has two sinks.** `trace.py` writes to a logger; `trail_store.py`
+attaches to that logger as a second handler, so no call site knows about it. Two
+things a reader will otherwise get wrong:
 
-Three things about it that reading one module will not tell you:
+- **Recording fails open, deliberately inverting the spend gate** — the reasoning,
+  and why it is a spec requirement rather than a code convention, is ADR-0710.
+- **`install` must come after `trace.to_file`**, which calls `configure`, which
+  clears the logger's handlers. Above it, the sink is attached and then discarded:
+  an app that looks configured and records nothing. `test_web_driver_trail.py`
+  pins the order; nothing below the driver can see it.
 
-- **A failed write is swallowed, and that inverts the spend gate deliberately.**
-  `SpendGate` fails closed because proceeding costs unbounded real money;
-  recording fails open because proceeding costs one row of a dataset read by eye.
-  Both are "a write that did not happen", so a reader who notices the
-  inconsistency will make them agree — and one of the two directions is badly
-  wrong. ADR-0710, and the requirement is in `agent-session` for the same reason.
-- **The install must come after `trace.to_file`.** `to_file` calls `configure`,
-  which clears the logger's handlers, so installing above it attaches the sink
-  and then discards it — an app that looks configured and records nothing.
-  `tests/test_web_driver_trail.py` pins the order; nothing below the driver can
-  see it.
-- **`trail_store` is core, not presentation, and that was a decision.** The
-  dependency rule guards against the agent becoming unrunnable without an
-  interface, and a logging handler over an engine it is handed does not do that.
-  Classification here is by subtraction from `PRESENTATION`, which is silent, so
-  a named test records the choice rather than leaving it to be inferred.
-
-**Guards belong to the operation — with one honest exception here.** The
-statement timeout is applied by `trail_store` itself (`SET LOCAL`, inside its own
-transaction, because Neon's pooler refuses the startup-parameter form and Neon's
-default is `0` — unlimited). The *connect* timeout cannot be: libpq takes it at
-construction, so it belongs to whoever built the engine. That is the one guard in
-this arrangement the caller owns, and it is named in both places rather than
-left to a default.
+`trail_store` is core rather than presentation by decision, not by subtraction —
+`test_driver_independence.py` names it and says why. The connect timeout is the
+one guard here the *caller* owns, because libpq takes it at engine construction;
+the statement timeout belongs to the operation as usual.
 
 **Patterns, named where they are used.** Ports and adapters (above). Repository
 (`repository.py`). Middleware, LangChain's own rather than hand-rolled — the spend
@@ -197,44 +193,15 @@ and reported when it is reached (ADR-0180).
 
 ### `bionumbers_ingest` — the corpus pipeline
 
-A **pipeline**, and the shape is load-bearing: the two ends are the only modules that know a file
-format, and nothing between them knows either.
+A **pipeline**: the two ends are the only modules that know a file format, and
+nothing between them knows either. Its own `CLAUDE.md` lives in
+`src/bionumbers_ingest/` — a module table, and five things reading one module
+will not tell you, including that `cleaning.py` has been the densest source of
+defects in the project. **Read it before changing anything in that package.**
 
-| Module | Role |
-|---|---|
-| `parsing/html_table.py` | source format in — streams `<tr>` rows, preserving raw inner HTML |
-| `cleaning.py` | one raw row → one record; the only place that unescapes or strips |
-| `model.py` | the record, plus `EXPECTED_HEADERS` |
-| `validation.py` | the run report |
-| `provenance.py` | source fingerprint and manifest |
-| `io.py` | JSONL out, renamed into place on success |
-| `ingest.py` | wires the pipeline together |
-| `guard.py` | the refusal to write where git would track the output |
-| `resolve.py` | find a corpus, or the export that would produce one |
-| `cli.py` | the command |
-
-Five things about it that reading one module will not tell you:
-
-- **The reader preserves raw HTML deliberately.** The export's injected markup arrives
-  HTML-escaped, so a reader that unescaped would hand cleaning a live tag and destroy the evidence of
-  which form the source used. Unescaping happens once, in `cleaning`, before markup is stripped.
-- **An angle bracket is not evidence of markup.** The export contains exactly one HTML element and
-  uses `<` as a less-than sign in prose. A tag is recognised only by a real HTML element name.
-- **Records are buffered, not streamed, between cleaning and the writer**, because each carries a
-  digest of the whole source, which is unknown until the last byte. Roughly 70 MB; ADR-0240.
-- **Four booleans are the contract with `scinumbers_ask`**, not the flag names: `range_fused`,
-  `range_qualified`, `range_one_sided` and `range_approximate`. `parse_flags` is cleaning's own
-  vocabulary and may change — the last two became fields because the consumer was reading them out of
-  that list by name, where a rename would have turned them silently false. ADR-0230.
-- **The git-tracking refusal is in `guard.py`, called by `ingest()`, not by the command.** It lived
-  in `cli.py` and so protected one caller; the operation invoked as a library wrote 20 MB onto a
-  committable path in silence. A guard in a driver is a guard for one
-  driver; ADR-0250.
-- **`cleaning.py` has been the densest source of defects in the project**, and every one of them
-  produced a plausible number rather than an error. Seven review passes, fault seeding and mutation
-  testing each found more; treat a change there as needing all three, and **measure both directions**
-  — a fix that stops over-flagging usually starts under-flagging, and only the second is dangerous.
-
+It is there rather than here because it warns about a package the other two work
+packages never touch, and this file is loaded into every session and every
+subagent.
 
 ## Specs and the code that is meant to satisfy them
 
@@ -245,47 +212,38 @@ answering a single question" while the code bounded *model* calls, and the two
 only came apart when a model batched several tool calls into one hop.
 
 `tests/test_spec_conformance.py` maps each requirement to the tests that assert
-it, and fails when a requirement is neither mapped nor explicitly recorded as a
-gap. **Add the mapping entry in the same change that adds the requirement**, the
-way ADRs are written with the decision rather than collected at the end.
+it, and fails when a requirement is neither mapped nor recorded as a gap. **Add
+the mapping entry in the same change that adds the requirement**, the way ADRs
+are written with the decision rather than collected at the end.
 
 Be clear about what it proves. It catches a requirement nothing claims, and a
-claim naming a test that no longer exists. It does not catch a test that claims a
-requirement and checks the wrong thing -- which is exactly what happened above.
-What it buys is that the requirement's words sit next to the name of the test
-asserting them, where a reader comparing the two can see the mismatch. A review
-aid, not a proof.
-
-It reads `openspec/specs/` plus the deltas of changes still **open** — not
-`changes/` recursively, which is what it read until the project's first archive.
-An archived change keeps its deltas under `changes/archive/`, so a recursive read
-counts every promoted requirement twice, and once a second change modifies one it
-keeps finding the *superseded* wording next to the name of the test asserting the
-current one. Comparing those two is the whole point, so it has to read the version
-in force.
+claim naming a test that no longer exists. It does **not** catch a test that
+claims a requirement and checks the wrong thing — which is exactly what happened
+above. What it buys is the requirement's words sitting next to the name of the
+test asserting them, where a reader comparing the two can see the mismatch. A
+review aid, not a proof. (Which files it reads, and why not recursively, is in
+that file's own docstring.)
 
 ### A spec delta is the requirement's full new text
 
-A `MODIFIED` block is the **entire requirement as it will now read**, not the part
-being changed. Write it by copying the current requirement out of
-`openspec/specs/` and editing that copy. Writing out the paragraphs the change
-cares about produces a deletion of everything else, and the delta file has no
-baseline to diff against, so the diff looks like an addition.
+A `MODIFIED` block is the **entire requirement as it will now read**, not the
+part being changed. Copy the current requirement out of `openspec/specs/` and
+edit that copy. Writing out only the paragraphs a change cares about deletes
+everything else, and the delta has no baseline to diff against, so it reads as an
+addition.
 
-`openspec archive` refuses a `MODIFIED` block that drops a **scenario**, and that
-refusal is the only thing between a hand-written delta and a silent deletion — it
-says nothing about dropped **prose**. `rename-to-scinumbers`'s own delta for the
-corpus contract was caught dropping three scenarios; the same block also dropped
-three paragraphs of requirement text (the range-`null` prohibition, the
-string-or-`null` rule for the remaining keys, the paragraph licensing extra
-fields) and nothing would have reported that.
+**`openspec archive` refuses a dropped scenario and says nothing about dropped
+prose.** That is the whole exposure. `rename-to-scinumbers`'s delta was caught
+dropping three scenarios; the same block silently dropped three paragraphs of
+requirement text, and nothing would ever have reported it. So after writing a
+`MODIFIED` block, diff it against the current requirement mechanically —
+scenarios *and* paragraphs.
 
-`MODIFIED` also requires its target to be in `openspec/specs/` already, so a
-change cannot be archived before the change that *added* the requirement it
-modifies. **Archive each change as it completes.** Letting several pile up turns
-that ordering into a blocker found at the end: `rename-to-scinumbers` cannot
-archive until `add-ask-agent` does, and `--skip-specs` is not the way out — it
-archives the change while promoting nothing, which is the only reason to archive.
+**Archive each change as it completes.** `MODIFIED` requires its target to be in
+`openspec/specs/` already, so changes archive in the order their requirements
+landed; letting several pile up turns that into a blocker discovered at the end.
+`--skip-specs` is not the way out — it archives the change while promoting
+nothing, which is the only reason to archive.
 
 ## Lint and format: automatic, and pinned in two places
 

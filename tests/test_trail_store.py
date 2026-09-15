@@ -233,9 +233,54 @@ def test_a_direct_caller_needs_no_error_handling():
 def test_the_failure_counter_answers_whether_anything_is_landing():
     """ "Nothing has been recorded for three weeks" has to be answerable."""
     store = _store(fail_on_begin=OSError("down"))
-    for _ in range(5):
+    for _ in range(trail_store.FAILURES_BEFORE_GIVING_UP):
         store.record("searched")
-    assert (store.failures, store.writes) == (5, 0)
+    assert (store.failures, store.writes) == (trail_store.FAILURES_BEFORE_GIVING_UP, 0)
+
+
+# --- a destination that dies after install --------------------------------
+
+
+def test_a_dead_destination_stops_being_attempted():
+    """The cost of failing open is per record, and a question emits many.
+
+    One per retrieved entry, plus searches, aliases and spend increments -- 25 is
+    ordinary. `record` refused early only when `ensure_schema` had failed at
+    install, so a store that installed cleanly and later lost its destination kept
+    trying for ever: 25 connection attempts, each bounded only by
+    `CONNECT_TIMEOUT_S`, is about two minutes added to one question.
+
+    That is "one attempt, never a retry" holding within a write and being defeated
+    across them -- and a delay the spec forbids in as many words.
+    """
+    store = _store(fail_on_begin=OSError("host is gone"))
+    for _ in range(25):
+        store.record("searched")
+
+    assert store.engine.begins == trail_store.FAILURES_BEFORE_GIVING_UP
+    assert store.ready is False
+    assert store.failures == trail_store.FAILURES_BEFORE_GIVING_UP
+
+
+def test_one_failure_does_not_close_a_working_store():
+    """A blip is not a dead host, and only a *run* of failures means it is.
+
+    The counter resets on success, so this varies the dimension the rule reads --
+    consecutive-ness -- rather than merely the number of failures. Without the
+    reset, any store that ever failed three times in its life would close.
+    """
+    engine = _Engine()
+    store = TrailStore(engine=engine)
+    store.ready = True
+
+    for _ in range(10):
+        engine.fail_on_begin = OSError("blip")
+        store.record("searched")
+        engine.fail_on_begin = None
+        store.record("searched")
+
+    assert store.ready is True, "an intermittent destination was closed"
+    assert store.writes == 10
 
 
 # --- configuration is absence-tolerant ------------------------------------
@@ -368,7 +413,7 @@ def test_a_second_schema_failure_is_counted_too():
 def test_a_schema_failure_names_the_exception_type_too(capsys):
     """The type is what separates a bad URL from a bad password from a dead host.
 
-    `_complain("trail store unavailable", None)` survived: the existing test
+    `complain("trail store unavailable", None)` survived: the existing test
     asserted only the message, so the exception could have been dropped on the
     way and the line would still have read as a report.
     """
@@ -403,6 +448,29 @@ def test_the_table_named_is_the_table_written_to():
     assert "None" not in statements
 
 
+def test_an_absent_identifier_is_written_as_null_not_as_an_empty_string():
+    """The two sinks must agree, and one of them omits the key entirely.
+
+    `QuestionTrace.session_id` defaults to `""` and is always put in `extra`, so
+    `getattr(record, "session_id", None)` returns `""` and never `None`. Written
+    through, a sessionless row gets `''` -- and then `where session_id is null`
+    returns nothing on a table full of them, while `count(distinct session_id)`
+    reports a phantom session. The file sink already omits the key when falsy.
+    """
+    store = _store()
+    handler = TrailHandler(store)
+    record = logging.LogRecord("x", logging.INFO, "f", 1, "searched", None, None)
+    record.session_id = ""
+    record.question_id = "q1"
+    record.run_label = ""
+    handler.emit(record)
+
+    (written,) = store.engine.written
+    assert written["session_id"] is None
+    assert written["run_label"] is None
+    assert written["question_id"] == "q1"
+
+
 def test_the_handler_carries_a_user_when_there_is_one():
     """Null until people can sign in, which is exactly why it needs a test now.
 
@@ -434,6 +502,32 @@ def test_the_previous_write_duration_travels_on_the_next_row():
     first, second = store.engine.written
     assert first["prev_write_ms"] is None
     assert isinstance(second["prev_write_ms"], int)
+
+
+def test_a_failed_write_s_duration_is_recorded_too():
+    """The slow writes are the ones that fail, and theirs is the figure wanted.
+
+    Updated in `finally`, so a failure's elapsed time still lands on the next
+    row. Recorded only on success, the first write after a long quiet period --
+    the likeliest to be both slow and failing, and the whole reason the column
+    exists (ADR-0700) -- is exactly the case discarded, leaving the next row
+    claiming a duration from some earlier, faster write.
+    """
+    engine = _Engine(delay=0.05)
+    store = TrailStore(engine=engine)
+    store.ready = True
+
+    engine.fail_on_execute = ValueError("nope")
+    store.record("doomed")
+    engine.fail_on_execute = None
+    store.record("fine")
+
+    # Two entries: the double records parameters before raising, so the failed
+    # write's own INSERT is visible too. The second is the one under test.
+    doomed, fine = engine.written
+    assert doomed["prev_write_ms"] is None, "nothing preceded the first write"
+    assert fine["prev_write_ms"] is not None, "the failed write's duration was discarded"
+    assert fine["prev_write_ms"] >= 25
 
 
 def test_the_duration_is_in_milliseconds_and_not_some_other_unit():
@@ -473,7 +567,7 @@ def test_the_handler_never_raises_so_logging_never_reaches_handle_error():
 def test_a_dropped_record_is_reported_to_stderr(capsys):
     """The spec's "the failure is reported to the operator".
 
-    Previously executed and unasserted: both `_complain` call sites could be
+    Previously executed and unasserted: both `complain` call sites could be
     deleted with the suite staying green, so "reported to the operator" was
     credited to tests blind to its removal.
     """
