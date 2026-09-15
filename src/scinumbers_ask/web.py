@@ -30,7 +30,7 @@ from typing import Any
 
 import streamlit as st
 
-from . import bionumbers, entries_table, messages, trace
+from . import bionumbers, entries_table, messages, trace, trail_store
 from .agent import AskAgent
 from .config import Config, env_setting, refuse_retired_env
 from .corpus import load
@@ -268,6 +268,60 @@ def transcript(state: MutableMapping[str, Any]) -> list[tuple[str, list[Item]]]:
     return state[TRANSCRIPT_KEY]
 
 
+#: The secrets section naming the durable trail's database.
+#: `[connections.usage]` in `.streamlit/secrets.toml`, or the same content pasted
+#: into Community Cloud's secrets box.
+TRAIL_CONNECTION = "usage"
+
+
+def trail_destination() -> Any | None:
+    """The engine for the durable trail, or None when none is configured.
+
+    None is the ordinary case on a developer's machine and must stay ordinary:
+    refusing to start without a telemetry database would make the absence of
+    telemetry an outage, which is a worse version of the problem the durable
+    trail was introduced to solve.
+
+    `st.connection` is used rather than a hand-built engine because it caches the
+    engine at global scope across sessions. Without that, every rerun would pay
+    TCP, TLS and Postgres auth before its INSERT -- which is the cost that would
+    make writing on the render path untenable.
+
+    The timeouts are passed here because `create_engine` takes them at
+    construction and they cannot be applied later from inside `record`. That
+    makes them the one guard in this arrangement belonging to the caller rather
+    than to the operation, which is why they are named here and in
+    `trail_store.CONNECT_TIMEOUT_S` rather than left to a default.
+    """
+    try:
+        return st.connection(
+            TRAIL_CONNECTION,
+            type="sql",
+            pool_pre_ping=True,
+            # The container sleeps after 12 hours of no traffic, by which time the
+            # far side has dropped every connection the pool believes it holds.
+            pool_recycle=300,
+            connect_args={"connect_timeout": trail_store.CONNECT_TIMEOUT_S},
+        ).engine
+    except Exception:  # noqa: BLE001 - absence and misconfiguration both mean "no sink"
+        # Deliberately not narrowed to Streamlit's "missing configuration" error.
+        # A malformed URL raises something else entirely, and the two have the
+        # same consequence here: no destination. Telling them apart would matter
+        # if either stopped the app, and neither does.
+        return None
+
+
+def install_trail(engine: Any | None) -> Any | None:
+    """Attach the durable sink. Separate from `resources` so a test can call it.
+
+    Thin on purpose: what it must not do is decide anything. The refusal to let a
+    failed write break a question lives in `trail_store`, not here -- a tolerance
+    written into this driver would protect this driver, and the terminal and the
+    evaluation harness would inherit an operation that raises.
+    """
+    return trail_store.install(engine, logger_name=trace.LOGGER_NAME)
+
+
 @st.cache_resource(show_spinner="Loading the corpus…")
 def resources(corpus: str | None = None) -> tuple[CorpusRepository, AskAgent]:
     """The corpus index and the agent, built once for the life of the server.
@@ -279,6 +333,13 @@ def resources(corpus: str | None = None) -> tuple[CorpusRepository, AskAgent]:
     """
     refuse_retired_env()
     trace.to_file(env_setting("SCINUMBERS_TRACE", trace.DEFAULT_FILE))
+    # **After `to_file`, and the order is load-bearing.** `to_file` calls
+    # `trace.configure`, which clears the logger's handlers -- so installing the
+    # durable sink first would attach it and then silently throw it away, leaving
+    # an app that looks configured and records nothing. Exactly the failure this
+    # whole change exists to end, reintroduced two lines further up.
+    # `test_web_driver_trail.py` pins the ordering rather than this comment.
+    install_trail(trail_destination())
     # The corpus path is resolved by the caller, outside this function. Anything
     # drawn inside a cached function is recorded and replayed on every cache hit,
     # so an `st.info` announcing a build would be redrawn at the top of the page

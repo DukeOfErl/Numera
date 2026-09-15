@@ -65,18 +65,23 @@ gitignored by path and by bare name.
 
 ## 4. Wiring, and the driver-level check
 
-- [ ] 4.1 The web driver passes the session identifier it already mints into the
+- [x] 4.1 The web driver passes the session identifier it already mints into the
       trail. It is read from `web.session_id(...)`, never from anything the
       browser can set independently.
-- [ ] 4.2 `tests/test_driver_independence.py`: confirm the new module sits on the
-      adapter side and that the agent core cannot reach it. If the module needs a
+- [x] 4.2 `tests/test_driver_independence.py`: **this task was written on a false
+      premise and the decision went the other way.** `trail_store` is on the
+      *agent* side, deliberately: what the dependency rule protects against is the
+      agent becoming unrunnable without an interface, and a logging handler over
+      an engine it is handed does not do that. `trace` is already core for the
+      same reason. Recorded in a named test rather than left to subtraction,
+      which is silent and cannot distinguish a decision from an oversight. If the module needs a
       name in `HARNESS`, add it — the set decides by subtraction which modules
       count as core, and it refuses a name with no file behind it.
-- [ ] 4.3 Drive the **real script** through `AppTest` to confirm recording
+- [x] 4.3 Drive the **real script** through `AppTest` to confirm recording
       happens once per question and not once per rerun. Per CLAUDE.md, when
       something is drawn — or written — relative to a script run cannot be seen
       below the driver; the banner incident is the precedent.
-- [ ] 4.4 Confirm the app starts and answers with no destination configured, and
+- [x] 4.4 Confirm the app starts and answers with no destination configured, and
       with a destination configured that refuses every connection.
 
 ## 5. Spec conformance and the record
