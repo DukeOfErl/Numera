@@ -166,10 +166,18 @@ def _tool_text(message: object) -> str:
     return _text_of(message) or str(content)
 
 
-def default_model(config: Config) -> BaseChatModel:
+def default_model(config: Config, api_key: str | None = None) -> BaseChatModel:
+    """The provider's model, funded by `api_key` -- or by the environment when None.
+
+    The key is a parameter so that a driver holding one credential per person can
+    hand each agent its own (ADR-0820). `None` reads `OPENROUTER_API_KEY` exactly
+    as before, which is what the terminal, the evaluation harness and a
+    deployment with no identity configured pass. The credential is the one
+    per-person fact the agent needs; who the person is never arrives here.
+    """
     from langchain_openai import ChatOpenAI
 
-    key = os.environ.get("OPENROUTER_API_KEY")
+    key = api_key or os.environ.get("OPENROUTER_API_KEY")
     if not key:
         # Raised as a named condition rather than a bare KeyError, so `ask` can
         # end the question properly instead of the driver seeing a question start
@@ -422,11 +430,26 @@ class AskAgent:
         config: Config,
         checkpoint_path: str,
         model: BaseChatModel | None = None,
+        api_key: str | None = None,
+        budget_scope: str | None = None,
     ) -> None:
         self._repo = repo
         self._config = config
         self._checkpoint_path = checkpoint_path
         self._model = model
+        # The credential, and nothing else about the person it was issued to. An
+        # agent is built per browser session so that each holds its own; the
+        # account and the role stay in the driver and are stamped onto the trail
+        # at the sink, where this class cannot see them (ADR-0820).
+        self._api_key = api_key
+        # An opaque string the run ledger is keyed under, beside the run label.
+        # `None` keeps one pot for the whole deployment, which is what the
+        # terminal, the harness and an unconfigured page want. A driver that
+        # funds each reader separately passes something per reader, so one
+        # reader's spend cannot close the door on another (ADR-0820). Opaque
+        # deliberately: this is a funding scope, not who anybody is, and nothing
+        # here can turn it back into a person.
+        self._budget_scope = budget_scope
 
     @contextmanager
     def _saver(self):
@@ -484,6 +507,12 @@ class AskAgent:
         question rather than only once spending has started."""
         return self._config.run_budget
 
+    def _ledger_key(self) -> str:
+        """What the run ledger counts under: the run, narrowed by who funds it."""
+        if not self._budget_scope:
+            return self._config.run_label
+        return f"{self._config.run_label}:{self._budget_scope}"
+
     def run_spend(self) -> int:
         """What this run has spent so far, across every session in it.
 
@@ -495,7 +524,7 @@ class AskAgent:
         deciding whether to offer another question needs this without building a
         model.
         """
-        return run_ledger.read(self._checkpoint_path, self._config.run_label)
+        return run_ledger.read(self._checkpoint_path, self._ledger_key())
 
     def ask(self, session_id: str, question: str) -> Iterator[Event]:
         """Answer a question, emitting events as the work happens.
@@ -548,7 +577,7 @@ class AskAgent:
         budget = ToolBudget(TOOL_CALL_LIMIT)
         tools = build_tools(self._repo, trace, pending.append, budget)
         try:
-            model = self._model or default_model(self._config)
+            model = self._model or default_model(self._config, self._api_key)
         except NotConfigured as exc:
             # Every path out of this generator that does not raise must end with a
             # QuestionEnded: a driver pairing starts with endings, or rendering
@@ -577,7 +606,7 @@ class AskAgent:
             # From the run's ledger, not this session's checkpoint: the budget
             # bounds the run, and a driver opening a session per question would
             # otherwise start every question at zero.
-            run_spend = run_ledger.read(self._checkpoint_path, self._config.run_label)
+            run_spend = run_ledger.read(self._checkpoint_path, self._ledger_key())
             # The ceiling a session was created with is the one it keeps. A session
             # resumed by a process with a different environment must not be handed a
             # larger budget part-way through; reconfiguring bounds new sessions.
@@ -656,7 +685,7 @@ class AskAgent:
 
             def record_spend(micro: int) -> None:
                 try:
-                    run_ledger.add(self._checkpoint_path, self._config.run_label, micro)
+                    run_ledger.add(self._checkpoint_path, self._ledger_key(), micro)
                 except Exception as exc:
                     # A locked or unwritable store is ours to fix, and unrecorded
                     # spend is worse than a failed question: the run budget would

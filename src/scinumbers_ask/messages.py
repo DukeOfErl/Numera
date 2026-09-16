@@ -27,23 +27,58 @@ from .events import (
     UngroundedRefusal,
 )
 
-# What is kept, in the reader's own view rather than in a policy nobody opens.
+# One line, and deliberately not an enumeration.
 #
-# The requirement is that a reader can learn it *from the interface*: the system
-# stores the words somebody typed, and a person discovering that by reading the
-# database afterwards has been told nothing. Shared by the drivers for the reason
-# every other sentence here is -- two interfaces making different claims about
-# what is kept are two different claims.
+# It named the question, the answer, the entries and -- once there was sign-in --
+# the account and the role. That is the honest list and it was too long to read:
+# a standing notice nobody finishes tells nobody anything, and it sat above the
+# controls a reader actually came for. So it says the thing that matters, which
+# is that what passes through here is recorded and why.
 #
-# Deliberately not folded into `web.PROTOTYPE_NOTE`: that banner is one line by
-# design, and a banner that wraps becomes a block a reader learns to skip.
+# **A fuller disclaimer is deferred, not dropped** (`docs/roadmap.md`). When
+# there are real users rather than invited testers, what is kept about a person
+# is shown once, before they use the app, where a person will read it -- which is
+# the right shape for that obligation and the wrong shape for a side panel.
 #
-# Says why, not only what. "Questions are logged" reads as surveillance; the
-# reason is that a rating on an answer nobody can read is worth nothing, which is
-# the whole of what this records.
-RECORDS_NOTE = (
-    "Questions, answers and the entries behind them are kept, so whoever runs "
-    "this can see where it goes wrong."
+# The same sentence whether or not sign-in is configured. It was a function of
+# that for one release; with both variants identical the parameter only invited
+# a caller to believe it changed something.
+RECORDS_NOTE = "All exchange in this app is logged for product development."
+
+# The door, before anything else is drawn. Each is a different sentence because
+# each asks the reader to do a different thing -- and "not enrolled" during an
+# outage would send a person to the operator, who finds them already enrolled.
+SIGN_IN_NEEDED = "Sign in to ask a question. Nothing is shown, and nothing is kept, until you do."
+NOT_ENROLLED = (
+    "This account is not enrolled. Ask whoever runs this to enrol it; there is nothing to do here."
+)
+NO_ACCOUNTS_DATABASE = (
+    "Sign-in is configured but the account list is not, so nobody can be admitted. "
+    "That is for whoever runs this deployment to fix; waiting will not help."
+)
+ENROLMENT_CHECK_UNAVAILABLE = (
+    "Enrolment cannot be checked right now, so nobody can be admitted. Try again shortly."
+)
+NO_CREDENTIAL = (
+    "No credential has been issued for this account yet, so it cannot ask a question. "
+    "Ask whoever runs this deployment to issue one — it is theirs to do, and nothing "
+    "here can."
+)
+CREDENTIAL_REJECTED = (
+    "The credential issued for this account was refused by the model provider, so no "
+    "question can be asked with it. Ask whoever runs this deployment to reissue it — "
+    "nothing here can, and asking anyway would only produce an answer with nothing "
+    "behind it."
+)
+NO_SIGN_IN_CONFIGURED = (
+    "No sign-in is configured: anyone with this address can ask, and records carry no account."
+)
+# Just who, and as what. The sign-out button sits beside it, which is what says
+# this is your account rather than a fact about somebody.
+SIGNED_IN_AS = "{email} ({role})"
+TRY_LATER = (
+    "Too many sessions are open right now, so this one cannot start. "
+    "Try again in a few minutes; nobody's session is ended to make room."
 )
 
 # Endings after which asking again cannot produce a different answer. What these
@@ -104,13 +139,38 @@ RUN_OVER_ADVICE: dict[EndReason, str] = {
 }
 
 
-def run_over_advice(reason: EndReason) -> str | None:
+# The same two endings, for a reader who is *not* the funder: a signed-in tester
+# on a hosted deployment, whose key was issued by an operator with a monthly cap.
+# Here the second person is right, because there is someone to ask who is not
+# the reader -- the absurdity the paragraph above avoids is exactly the case the
+# page can now tell apart (`web.identity_configured`). The terminal and the
+# harness never pass `signed_in`, so their wording is unchanged.
+SIGNED_IN_ADVICE: dict[EndReason, str] = {
+    EndReason.PROVIDER_LIMIT: (
+        "Your account's allowance for this app is spent, so a new session will not help. "
+        "It renews on its monthly schedule; to ask again sooner, ask whoever runs this "
+        "deployment to raise it."
+    ),
+    EndReason.NOT_CONFIGURED: (
+        "A new session will not help: this run stopped because something the app needs "
+        "is not configured. Tell whoever runs this deployment; there is nothing to do here."
+    ),
+}
+
+
+def run_over_advice(reason: EndReason, *, signed_in: bool = False) -> str | None:
     """What a driver should say about this ending, beyond its own generic line.
 
     `None` for every ending with no advice of its own, which is most of them: a
     driver falls back to its own wording rather than being handed a sentence for a
     case where its existing one is already correct.
+
+    `signed_in` selects the wording for a reader who is not the funder -- an
+    enrolled tester -- and is the web driver's to pass; nothing else has a reader
+    who could be one.
     """
+    if signed_in:
+        return SIGNED_IN_ADVICE.get(reason) or RUN_OVER_ADVICE.get(reason)
     return RUN_OVER_ADVICE.get(reason)
 
 

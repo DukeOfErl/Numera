@@ -16,7 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from conftest import FIXTURE, agent_with
+from conftest import FIXTURE, agent_with, ask_question
 from streamlit.testing.v1 import AppTest
 
 from agent_doubles import batched_tool_calls, costing, says, scripted, tool_call
@@ -62,12 +62,12 @@ def app(monkeypatch, repo, agent) -> AppTest:
     is cached for the life of the process: a second test would be served the
     first one's agent.
     """
-    monkeypatch.setattr(web, "resources", lambda corpus=None: (repo, agent))
+    monkeypatch.setattr(web, "resources", lambda corpus=None: repo)
+    monkeypatch.setattr(web, "agent_for", lambda state, repo, admission: agent)
     return AppTest.from_file(APP, default_timeout=TIMEOUT)
 
 
-def ask(at: AppTest, question: str) -> AppTest:
-    return at.chat_input[0].set_value(question).run()
+ask = ask_question
 
 
 # -- events become items --------------------------------------------------
@@ -240,6 +240,13 @@ def test_session_state_holds_the_identifier_and_what_was_drawn_and_nothing_else(
     about to run: every control already on screen is live while that run works,
     and a click on one abandons the agent's generator mid-tool-call.
 
+    The tab's own identifier is the third, and it is here for the reason the
+    session identifier is: it is an identity this driver mints and must keep,
+    because the session cap counts browser sessions and a browser session is
+    exactly what this dictionary outlives nothing of. It cannot come from the
+    URL -- that is the conversation's token, which anyone holding the link can
+    supply (ADR-0830).
+
     The rule keeps its teeth: anything else namespaced here still fails, and the
     allowance is a prefix rather than a wildcard, so `scinumbers_ask.spend` or a
     second copy of the conversation would still be caught.
@@ -249,7 +256,12 @@ def test_session_state_holds_the_identifier_and_what_was_drawn_and_nothing_else(
 
     kept = {k for k in at.session_state.filtered_state if k.startswith("scinumbers_ask.")}
     feedback_keys = {k for k in kept if k.startswith(FEEDBACK_PREFIXES)}
-    assert kept - feedback_keys == {web.SESSION_KEY, web.TRANSCRIPT_KEY, web.ASK_KEY}
+    assert kept - feedback_keys == {
+        web.SESSION_KEY,
+        web.TAB_KEY,
+        web.TRANSCRIPT_KEY,
+        web.ASK_KEY,
+    }
 
 
 def test_a_missing_corpus_is_explained_rather_than_raised(monkeypatch):
@@ -522,7 +534,7 @@ def test_a_follow_up_continues_the_conversation_after_a_restart(
     # The server restarts: a new agent over the same store, and a page that knows
     # only what the URL carried.
     restarted = AskAgent(repo, config, store, model=scripted(says("second answer")))
-    monkeypatch.setattr(web, "resources", lambda corpus=None: (repo, restarted))
+    monkeypatch.setattr(web, "agent_for", lambda state, repo, admission: restarted)
     after = AppTest.from_file(APP, default_timeout=TIMEOUT)
     after.query_params = {web.QUERY_KEY: session}
     after.run()
@@ -609,7 +621,7 @@ def test_the_openable_entries_are_in_the_side_panel_not_the_main_column(
 
     labels = [e.label for e in at.sidebar.expander]
     assert any("BNID 100002" in label for label in labels), labels
-    assert any("Full entries" in h.value for h in at.sidebar.header)
+    assert any(t.label == web.ENTRIES_TAB for t in at.sidebar.tabs)
 
 
 def test_an_opened_row_shows_the_entry_the_model_never_saw(monkeypatch, repo, config, tmp_path):
@@ -677,7 +689,7 @@ def test_the_side_panel_is_there_before_any_question(monkeypatch, repo, config, 
     """A panel that materialises after the first answer reads as a glitch."""
     at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
 
-    assert any("Full entries" in h.value for h in at.sidebar.header)
+    assert any(t.label == web.ENTRIES_TAB for t in at.sidebar.tabs)
     assert not at.sidebar.expander, "entries before anything was retrieved"
 
 
@@ -1015,7 +1027,10 @@ def test_the_prototype_caveat_is_on_the_page_and_stays_there(monkeypatch, repo, 
         "drawn as an ordinary element it scrolls away with the first answer, and the "
         "reader who has seen several answers is the one who most needs it"
     )
-    assert any(web.PROTOTYPE_SHORT in c.value for c in at.sidebar.caption), "missing in the panel"
+    assert not any(web.PROTOTYPE_SHORT in c.value for c in at.sidebar.caption), (
+        "the pinned banner already says this, above everything and unscrollable; "
+        "a second copy in the panel is the repetition a reader learns to skip"
+    )
 
 
 def test_the_page_and_the_readme_both_say_it_is_not_trustworthy_yet():

@@ -68,7 +68,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-provider-limit-ending` | `0600`–`0640` — `0600` written |
 | `add-durable-trail` | `0700`–`0730` |
 | `add-answer-feedback` | `0740`–`0770` — `0740`, `0750`, `0760` written |
-| `add-user-identity` | `0780`–`0830` — reserved, change not yet proposed |
+| `add-user-identity` | `0780`–`0830` — all written |
 | `add-question-and-answer-records` | `0840`–`0870` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
@@ -165,6 +165,9 @@ core, and a test there refuses a name with no file behind it.
 | `trace.py` | The structured trail, one question id and one session id throughout |
 | `trail_store.py` | The trail's durable destination: one append-only table, written best-effort (ADR-0700, ADR-0710) |
 | `feedback.py` | A reader's judgement of an answer, recorded to the trail. **Presentation, not core** — see below |
+| `permissions.py` | `Role`, `Permission`, `Identity`, and `GRANTS` — the default-deny table as data, with the pruning rule above it (ADR-0800) |
+| `authorization.py` | `allowed` / `require` / `Refused`: the one refusal, called inside the operation it guards, never by the page |
+| `accounts.py` | `lookup(engine, email)`: enrolment off one row, **fails closed** — the deliberate inverse of `trail_store` (ADR-0780) |
 
 **`ask` wraps `_ask`, and the wrapper is where the records are written.** The
 question, the answer and the evidence behind it are recorded as their events pass
@@ -175,16 +178,11 @@ generator mid-iteration on every rerun and code after a `yield` may never run
 (ADR-0840). Add a ninth ending and it records itself; add a record beside a
 `yield` and you have reintroduced the bug.
 
-**The trail has two sinks.** `trace.py` writes to a logger; `trail_store.py`
-attaches to that logger as a second handler, so no call site knows about it. Two
-things a reader will otherwise get wrong:
-
-- **Recording fails open, deliberately inverting the spend gate** — the reasoning,
-  and why it is a spec requirement rather than a code convention, is ADR-0710.
-- **`install` must come after `trace.to_file`**, which calls `configure`, which
-  clears the logger's handlers. Above it, the sink is attached and then discarded:
-  an app that looks configured and records nothing. `test_web_driver_trail.py`
-  pins the order; nothing below the driver can see it.
+**The trail has three sinks and a filter, all on one logger**, and identity
+stops at the driver. `.claude/rules/identity.md` carries both — where the
+refusal lives, what the agent may never be handed, why the session is keyed on
+the account rather than the link, and the install ordering that is load-bearing.
+It loads when you touch any file sign-in goes near.
 
 `feedback.py` sits on the **presentation** side of the dependency line, and that
 placement is the guarantee rather than a filing choice: a comment is text a
@@ -244,6 +242,7 @@ frontmatter matches, so these cost nothing on a session that never goes near the
 | `testing.md` | `tests/**`, `src/**/*.py` | how to run the suite (the `-m` trap), fault seeding, mutation testing, the negative-case rule |
 | `specs.md` | `openspec/**` | what a spec delta must contain, and why each change archives as it completes |
 | `streamlit-driver.md` | `streamlit_app.py`, `web.py`, their tests | why some things can only be seen through a whole script run |
+| `identity.md` | `web.py`, `permissions.py`, `authorization.py`, `accounts.py`, their tests | where the refusal lives, what the agent is never handed, how a session is keyed |
 | `lint-and-format.md` | `pyproject.toml`, `.pre-commit-config.yaml`, CI | the pin that must move in two places at once |
 
 `src/bionumbers_ingest/CLAUDE.md` loads when Claude reads a file in that package

@@ -327,6 +327,110 @@ COVERED: dict[str, tuple[str, ...]] = {
     # trail's shape rather than against these words; "The process that wrote the
     # records is replaced" needs a real restart against a real database and lives
     # behind the `network` marker, which the offline suite deselects.
+    # `add-user-identity`. Every requirement is claimed below; the scenarios that
+    # are *executed but not asserted* -- gaps, by this file's own rule -- are:
+    #   - "A reader signs out ... the next visit begins at sign-in": `st.logout`
+    #     is offered and its callback forgets the registry entry, but AppTest
+    #     cannot click through an OIDC logout; the next-visit half is unasserted.
+    #   - "An account is enrolled after being refused ... proceeds": the refusal
+    #     is held per session, so this needs a new session; not driven.
+    #   - "One tester's cap is exhausted ... another's is answered as usual": the
+    #     ending exists (ADR-0600) and keys are per agent, but the two are not
+    #     driven together against a 402 in one deployment.
+    #   - "A person's records can be found": `sql/feedback.sql` query 8, run by
+    #     hand against Neon, not a test.
+    #   - "The credential is never shown": asserted over the elements the tests
+    #     draw, not over every page state.
+    "A reader signs in before anything is shown, and identity comes from the provider": (
+        "test_web_driver_identity.py::"
+        "test_a_visitor_who_is_not_signed_in_is_offered_sign_in_and_nothing_else",
+        "test_web_driver_identity.py::"
+        "test_an_enrolled_account_is_admitted_and_its_records_carry_who_and_as_what",
+        "test_web_driver_identity.py::test_the_sidebar_says_who_is_signed_in_and_offers_sign_out",
+        "test_web_driver_identity.py::test_signing_out_forgets_the_session_s_identity",
+        "test_web_driver_identity.py::test_signed_in_email_is_none_without_is_logged_in",
+    ),
+    "An account must be enrolled, and enrolment happens outside the application": (
+        "test_web_driver_identity.py::"
+        "test_a_signed_in_account_that_is_not_enrolled_is_refused_and_recorded",
+        "test_web_driver_identity.py::test_a_refusal_is_recorded_once_per_session_not_once_per_rerun",
+        "test_web_driver_identity.py::"
+        "test_an_unreadable_accounts_table_admits_nobody_and_says_a_different_sentence",
+        "test_web_driver_identity.py::test_an_unavailable_check_is_retried_on_the_next_rerun",
+        "test_web_driver_identity.py::test_no_database_at_all_says_so_rather_than_asking_the_reader_to_wait",
+        "test_accounts.py::test_an_unreadable_table_raises_rather_than_answering_none",
+        "test_accounts.py::test_a_disabled_account_is_none_exactly_as_an_absent_one_is",
+    ),
+    "Every enrolled account holds one role, and permissions are granted by a default-deny table": (
+        "test_permissions.py::test_dev_and_admin_are_granted_the_dev_panel",
+        "test_permissions.py::test_each_tester_role_is_refused_the_dev_panel",
+        "test_permissions.py::test_no_identity_is_refused",
+        "test_permissions.py::test_the_two_populations_partition_the_roles",
+        "test_permissions.py::test_the_table_has_a_row_for_every_role_and_names_only_known_permissions",
+        "test_permissions.py::test_every_permission_is_refused_to_some_role",
+        "test_permissions.py::test_the_refusal_names_the_permission_and_nothing_about_the_account",
+        "test_identity_never_reaches_the_agent.py::"
+        "test_the_same_question_under_two_roles_hands_the_model_identical_inputs",
+        "test_driver_independence.py::test_identity_never_enters_the_agent_the_trail_or_the_feedback",
+        "test_web_driver_dev_panel.py::test_the_refusal_does_not_depend_on_the_caller",
+        "test_web_driver_dev_panel.py::test_a_tester_s_page_has_no_such_section",
+    ),
+    "Each tester's questions are funded by a credential of their own, capped, and never shown "
+    "to them": (
+        "test_identity_never_reaches_the_agent.py::test_two_agents_with_two_keys_send_two_keys",
+        "test_web_driver_identity.py::"
+        "test_an_enrolled_account_with_no_credential_meets_a_door_of_its_own",
+        "test_web_driver_identity.py::test_the_no_credential_door_is_its_own_state_not_an_open_one",
+        "test_web_driver_identity.py::"
+        "test_agent_for_refuses_rather_than_falling_back_to_the_environment",
+        "test_web_driver_identity.py::test_the_credential_is_never_on_the_page",
+        "test_web_driver_identity.py::test_two_sessions_get_two_agents_and_one_repository",
+    ),
+    "What is kept about a person, and that they are told": (
+        "test_identity_never_reaches_the_agent.py::"
+        "test_two_sessions_under_two_identities_each_carry_their_own",
+        "test_web_driver_identity.py::test_two_accounts_on_one_shared_link_get_two_sessions",
+        "test_web_driver_identity.py::"
+        "test_a_session_pruned_for_idleness_is_stamped_again_when_its_reader_returns",
+        "test_web_driver_identity.py::"
+        "test_ending_a_session_clears_the_identity_the_panel_and_the_place",
+        "test_identity_never_reaches_the_agent.py::test_the_role_is_written_as_it_was_at_record_time",
+        "test_identity_never_reaches_the_agent.py::"
+        "test_a_verdict_in_a_signed_in_session_carries_the_identity",
+        "test_trail_store.py::test_the_handler_carries_the_role_beside_the_email",
+        "test_web_driver_identity.py::test_the_sidebar_says_who_is_signed_in_and_offers_sign_out",
+        "test_web_driver_identity.py::test_the_note_is_one_short_sentence_whatever_is_configured",
+    ),
+    "An operator can see a session's own trail": (
+        "test_web_driver_dev_panel.py::test_an_operator_s_page_has_the_section",
+        "test_web_driver_dev_panel.py::test_a_tester_s_page_has_no_such_section",
+        "test_web_driver_dev_panel.py::test_a_fresh_operator_session_shows_the_section_empty",
+        "test_web_driver_dev_panel.py::test_the_table_names_the_question_just_asked",
+        "test_web_driver_dev_panel.py::test_the_entries_come_first_and_the_trail_second",
+        "test_web_driver_dev_panel.py::test_the_strip_is_below_the_run_status",
+        "test_web_driver_dev_panel.py::test_two_sessions_panels_show_only_their_own_records",
+        "test_web_driver_dev_panel.py::test_the_panel_s_contents_do_not_reach_the_model",
+    ),
+    "Concurrent sessions are capped for the whole deployment, not per client address": (
+        "test_web_driver_session_cap.py::test_the_session_past_the_cap_is_told_to_try_later",
+        "test_web_driver_session_cap.py::test_an_admitted_session_is_never_ended_to_make_room",
+        "test_web_driver_session_cap.py::test_a_session_that_goes_idle_frees_a_place",
+        "test_web_driver_session_cap.py::test_nothing_reads_the_client_s_address",
+        "test_web_driver_session_cap.py::test_a_refused_visitor_holds_no_place",
+        "test_web_driver_session_cap.py::"
+        "test_a_session_mid_conversation_is_not_turned_away_when_the_cap_fills",
+        "test_web_driver_session_cap.py::test_a_genuinely_new_session_is_still_refused_at_the_cap",
+        "test_web_driver_session_cap.py::test_a_visitor_who_has_not_passed_the_door_holds_no_place",
+    ),
+    "A deployment with no identity configured behaves as before": (
+        "test_web_driver_identity.py::"
+        "test_with_no_identity_configured_a_question_is_answered_without_signing_in",
+        "test_web_driver_identity.py::test_with_no_identity_configured_the_page_says_so",
+        "test_web_driver_dev_panel.py::test_the_developer_s_machine_sees_the_panel",
+        "test_identity_never_reaches_the_agent.py::test_no_key_reads_the_environment_exactly_as_before",
+        "test_identity_never_reaches_the_agent.py::"
+        "test_a_session_nobody_is_signed_in_to_writes_null_for_both",
+    ),
     "The deterministic layer is logged under a per-question identifier": (
         "test_question_and_answer_records.py::"
         "test_two_different_questions_record_what_each_actually_asked",

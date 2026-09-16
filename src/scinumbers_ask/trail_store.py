@@ -155,6 +155,15 @@ def reset_counters() -> None:
 #: It costs nothing now; added later, every row from the period most worth
 #: understanding would be permanently unattributable.
 #:
+#: `user_role` joined it with `add-user-identity`, the first change to this table
+#: since it was created -- so it appears twice below: in the `create`, for a
+#: fresh table, and as an `alter ... add column if not exists`, for the one that
+#: already existed. Both run on every start, in one transaction, and both are
+#: idempotent. A column rather than a key in `detail` because it is the join key
+#: the roles exist for, and `user_email` set the precedent (ADR-0810). Written
+#: when the row is, never looked up afterwards: a rating's weight is the weight
+#: the role carried when it was given.
+#:
 #: `prev_write_ms` is how long the *previous* write to this table took. The
 #: previous one, because a row cannot carry its own duration -- and the figure
 #: that matters is the first write after a long quiet period, which is knowable
@@ -169,17 +178,26 @@ create table if not exists {table} (
     question_id   text,
     run_label     text,
     user_email    text,
+    user_role     text,
     event         text not null,
     detail        jsonb not null default '{{}}'::jsonb,
     prev_write_ms integer
 )
 """
 
+#: Each statement is its own `execute`: psycopg refuses several statements in one
+#: query once parameters are involved, and a tuple avoids depending on whether an
+#: empty parameter set counts.
+_SCHEMA_STATEMENTS = (
+    _SCHEMA,
+    "alter table {table} add column if not exists user_role text",
+)
+
 _INSERT = """
 insert into {table}
-    (session_id, question_id, run_label, user_email, event, detail, prev_write_ms)
+    (session_id, question_id, run_label, user_email, user_role, event, detail, prev_write_ms)
 values
-    (:session_id, :question_id, :run_label, :user_email, :event,
+    (:session_id, :question_id, :run_label, :user_email, :user_role, :event,
      cast(:detail as jsonb), :prev_write_ms)
 """
 
@@ -226,7 +244,8 @@ class TrailStore:
 
             with self.engine.begin() as conn:
                 conn.execute(text(f"set local statement_timeout = {STATEMENT_TIMEOUT_MS}"))
-                conn.execute(text(_SCHEMA.format(table=self.table)))
+                for statement in _SCHEMA_STATEMENTS:
+                    conn.execute(text(statement.format(table=self.table)))
         except Exception as exc:  # noqa: BLE001 - see the module docstring
             global _FAILURES
             self.schema_failures += 1
@@ -285,6 +304,7 @@ class TrailStore:
         question_id: str | None = None,
         run_label: str | None = None,
         user_email: str | None = None,
+        user_role: str | None = None,
         detail: dict[str, Any] | None = None,
     ) -> bool:
         """Write one record. Returns whether it landed. **Never raises.**
@@ -321,6 +341,7 @@ class TrailStore:
                         "question_id": question_id,
                         "run_label": run_label,
                         "user_email": user_email,
+                        "user_role": user_role,
                         "event": event,
                         "detail": json.dumps(detail or {}, default=str),
                         "prev_write_ms": self._last_write_ms,
@@ -401,6 +422,7 @@ class TrailHandler(logging.Handler):
             question_id=getattr(record, "question_id", None) or None,
             run_label=getattr(record, "run_label", None) or None,
             user_email=getattr(record, "user_email", None) or None,
+            user_role=getattr(record, "user_role", None) or None,
             detail=getattr(record, "fields", {}) or {},
         )
 

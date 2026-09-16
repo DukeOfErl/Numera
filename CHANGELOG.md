@@ -12,6 +12,95 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **Sign-in, enrolment and a credential per tester, for hosted deployments.** With
+  `[auth]` in secrets every visitor signs in with Google and must be enrolled — a
+  row the operator inserts in an `accounts` table beside the trail, naming the
+  role and the tester's own capped OpenRouter key — before anything is drawn.
+  Signed in but not enrolled is refused with one sentence and recorded; an
+  unreadable accounts table admits nobody and says a different sentence, because
+  a check that failed open would let an outage open the door. Each session gets
+  an agent funded by its own credential; an enrolled account with no credential is
+  told so and no agent is built. Configure nothing and the app runs exactly as it
+  did ([ADR-0780], [ADR-0820]).
+- **Every record of a signed-in session carries the account and the role it held
+  at the time**, written when the row is and never looked up afterwards, so a
+  later change of role cannot rewrite what a rating weighed. `user_role` joins
+  `user_email` as a column; the first schema change since the table was created,
+  applied idempotently on every start. The role and the account are stamped onto
+  the trail at the sink by the web driver — the agent, the tracer and the feedback
+  module never hold them, and a test parses their source to keep it that way
+  ([ADR-0810]).
+- **Five roles and a default-deny grant table with one permission.** Student,
+  scientist, senior scientist, dev and admin; the table grants `dev panel` to dev
+  and admin and refuses it to the three tester roles, and lists nothing else,
+  because a permission exists only where some role is refused it. Reading and
+  rating are what enrolment grants ([ADR-0800]).
+- **A Dev tab in the side panel**, beside the entries, for dev and admin — and for a developer's
+  machine with no sign-in configured — showing this session's trail for its last
+  five questions. Absent, not disabled, for everyone else. Nothing in it reaches
+  the model.
+- **A cap on open sessions**, `SCINUMBERS_MAX_SESSIONS` (default 20), counted by
+  heartbeat and never by client address. The next visitor is told to try again
+  shortly; no open session is ended. It protects the host, not the budget, which
+  each tester's credential already bounds ([ADR-0790]).
+
+### Changed
+
+- The side panel names the signed-in account and role without the "Signed in as"
+  preamble — the sign-out button beside it says that — and its spend figure is
+  headed "Session budget", which is what it now scopes.
+- The side panel's statement of what is kept is one line — "All exchange in this
+  app is logged for product development" — rather than an enumeration of the
+  fields, which was accurate and too long to read. The fuller statement, shown
+  once before use, is deferred until there are users rather than invited testers.
+  The prototype caveat no longer appears twice: it stays in the pinned banner.
+- A signed-in tester whose allowance is spent, or who has no credential yet, is
+  told to ask whoever runs the deployment, and that the allowance renews monthly.
+  The funder-neutral wording stays for a developer on their own key.
+- **With sign-in configured, a session is keyed on the account rather than on the
+  `?session=` link.** The link is supplied by whoever holds it, and it had become
+  the key for the identity stamped on every record, the dev panel's rows and the
+  session cap — so two readers on one link overwrote each other's attribution, a
+  dev on a shared link could see another reader's trail, and the sign-in redirect,
+  which drops the query string, stranded the session it came from. One account is
+  now one conversation; a deployment without sign-in keeps the link as the session
+  ([ADR-0830]).
+- An enrolled account with no credential now meets a door of its own rather than a
+  page with its input removed, so the page has one gate and no code path can build
+  an agent that falls back on the deployment's own key.
+- Enrolment matches an address without regard to case, and the session cap counts
+  a reader once they are through the door rather than when they arrive — an
+  abandoned sign-in page no longer holds a place ([ADR-0790]).
+
+- **A credential the model provider refuses is caught at sign-in**, with a
+  sentence saying whose job it is to reissue. It used to surface only when a
+  reader asked something: the model call failed, nothing was retrieved, and the
+  answer reported finding nothing in the corpus — a broken key wearing the face
+  of a thin corpus. An unreachable provider is deliberately not treated the same
+  way, since that would lock every tester out over a blip.
+- **Each tester's run budget is their own**, keyed to the account that pays for
+  the questions rather than shared across the deployment, and the side panel
+  shows what the model provider says is left on that tester's key.
+
+### Fixed
+
+- A session pruned for idleness and returned to kept drawing "signed in as" while
+  recording no account at all; identity is re-established on every rerun.
+- Signing out cleared the identity but left the dev panel's rows, so the next
+  account on that tab could be shown the previous reader's questions. Ending a
+  session is now one operation over all three per-session stores.
+- A signed-in reader who filled a conversation could not start another: the
+  conversation key was a pure function of their address and is also the thread
+  the length limit applies to, so a full conversation refused every further
+  question with no way out. A fresh link starts a fresh conversation again.
+- One tester reaching the run budget refused every other tester's next question,
+  although each funds their own with a separate capped key.
+- A reader mid-conversation could be turned away at the cap after their heartbeat
+  was pruned, contradicting the promise that no open session is ended.
+- The enrolment-unavailable page offered nothing to click, so the retry it
+  promised needed a manual reload.
+- `authlib>=1.3.2` joins the `ask` extra, for `st.login`.
+
 - **The trail records the question as asked, the answer as given, and the entries
   the answer stood on.** A rating collected before this said "answer
   `c23c83c16324` was wrong" and there was no way to learn what it was answering.
@@ -294,4 +383,10 @@ number rather than an error:
 [ADR-0740]: docs/decisions/0740-native-st-feedback.md
 [ADR-0750]: docs/decisions/0750-feedback-is-recorded-here-not-at-the-tracer.md
 [ADR-0760]: docs/decisions/0760-an-answer-is-two-columns.md
+[ADR-0780]: docs/decisions/0780-accounts-live-in-the-trail-database.md
+[ADR-0790]: docs/decisions/0790-the-session-cap-is-a-heartbeat-registry.md
+[ADR-0800]: docs/decisions/0800-default-deny-and-the-pruning-rule.md
+[ADR-0810]: docs/decisions/0810-the-role-is-written-at-record-time.md
+[ADR-0830]: docs/decisions/0830-the-session-is-keyed-on-the-account-not-the-link.md
+[ADR-0820]: docs/decisions/0820-one-agent-per-session-handed-a-credential-not-an-identity.md
 [ADR-0840]: docs/decisions/0840-what-a-question-s-trail-keeps.md

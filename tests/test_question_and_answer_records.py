@@ -507,15 +507,16 @@ def test_the_page_says_that_questions_and_answers_are_kept(monkeypatch, repo, co
 
     from scinumbers_ask import web
 
-    # Literal fragments as well as the constant: `RECORDS_NOTE` is re-exported,
+    # Literal fragments as well as the sentence: `RECORDS_NOTE` is re-exported,
     # so an empty one would satisfy `in` everywhere and this would pass having
     # checked that the page contains the empty string.
-    assert "are kept" in web.RECORDS_NOTE and "goes wrong" in web.RECORDS_NOTE
+    note = web.RECORDS_NOTE
+    assert "is logged" in note and "All exchange" in note
 
     at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
     panel = " ".join(c.value for c in at.sidebar.caption)
-    assert web.RECORDS_NOTE in panel
-    assert "kept" in panel and "goes wrong" in panel
+    assert note in panel
+    assert "logged" in panel and "All exchange" in panel
 
 
 def test_the_terminal_says_it_too_including_for_a_single_question(
@@ -536,8 +537,8 @@ def test_the_terminal_says_it_too_including_for_a_single_question(
 
     captured = capsys.readouterr()
     assert messages.RECORDS_NOTE in captured.err
-    assert "kept" in captured.err and "goes wrong" in captured.err
-    assert "kept" not in captured.out, "stdout carries the answer, not this"
+    assert "logged" in captured.err and "All exchange" in captured.err
+    assert "logged" not in captured.out, "stdout carries the answer, not this"
 
 
 class _NoModel:
@@ -582,6 +583,6 @@ def test_the_terminal_does_not_claim_to_keep_what_it_discards(
 
     captured = capsys.readouterr()
     assert messages.RECORDS_NOTE not in captured.err
-    assert "kept" not in captured.err
+    assert "is logged" not in captured.err
     # Positive control: the run itself happened and said so.
     assert "no_answer" in captured.out

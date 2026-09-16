@@ -84,6 +84,55 @@ def test_the_schema_and_the_insert_are_valid_sql(store):
     assert row.detail == {"matched": 12, "terms": ["ribosome"]}
 
 
+def test_the_role_column_is_added_to_an_existing_table_and_the_addition_is_idempotent():
+    """The first schema change since the table was created, against real DDL.
+
+    Creates the table the way it looked *before* `user_role` -- the deployed
+    `trail` table's shape -- then runs `ensure_schema` twice. The column must
+    appear after the first and the second must not fail: `add column if not
+    exists` is the whole migration, and a double cannot tell whether Postgres
+    accepts it.
+    """
+    from sqlalchemy import text
+
+    engine = engine_from_url(_url())
+    table = f"trail_test_{uuid.uuid4().hex[:8]}"
+    old_shape = trail_store._SCHEMA.replace("    user_role     text,\n", "")
+    assert "user_role" not in old_shape, "the old shape was not reproduced"
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(old_shape.format(table=table)))
+
+        def columns() -> list[str]:
+            with engine.begin() as conn:
+                return [
+                    r.column_name
+                    for r in conn.execute(
+                        text(
+                            "select column_name from information_schema.columns "
+                            "where table_name = :t order by ordinal_position"
+                        ),
+                        {"t": table},
+                    )
+                ]
+
+        assert "user_role" not in columns()
+        store = TrailStore(engine=engine, table=table)
+        assert store.ensure_schema()
+        after_first = columns()
+        assert "user_role" in after_first
+        assert store.ensure_schema(), "the second run must be a no-op, not a failure"
+        assert columns() == after_first
+        assert store.record("searched", user_email="a@example.org", user_role="dev")
+        with engine.begin() as conn:
+            row = conn.execute(text(f"select user_email, user_role from {table}")).one()
+        assert (row.user_email, row.user_role) == ("a@example.org", "dev")
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f"drop table if exists {table}"))
+        engine.dispose()
+
+
 def test_a_statement_that_runs_too_long_is_cancelled_rather_than_waited_out(store):
     """The scenario "the destination is slow", closed against the real server.
 

@@ -40,7 +40,7 @@ try:
         env_setting("SCINUMBERS_CORPUS"),
         lambda text: st.info(web.as_text(text), icon=":material/build:"),
     )
-    repo, agent = web.resources(corpus)
+    repo = web.resources(corpus)
 except (CorpusUnavailable, NotConfigured) as exc:
     # Both are misconfiguration a person can fix, so the message is the point:
     # Streamlit's exception panel would bury it under a stack the reader did not
@@ -48,7 +48,62 @@ except (CorpusUnavailable, NotConfigured) as exc:
     st.error(web.as_text(str(exc)))
     st.stop()
 
-session = web.session_id(st.session_state, st.query_params)
+# The token in the URL. It continues a conversation on a developer's machine and
+# is what a bookmark carries -- but it is supplied by whoever holds the link, so
+# under sign-in it is not what the conversation is keyed on (see below).
+# The token in the URL. It names the conversation -- under sign-in together with
+# the account, so a link cannot carry one reader into another's (ADR-0830) -- and
+# it is what a reader changes to start a fresh one when the current conversation
+# has filled up. Kept in the address bar so that is possible.
+url_session = web.session_id(st.session_state, st.query_params)
+# This browser session's own identity, which the cap counts and the link cannot
+# supply.
+tab = web.tab_id(st.session_state)
+
+# The door, before anything is drawn. Where identity is configured a visitor who
+# is not signed in, not enrolled, or holding no credential is offered sign-in or
+# the one sentence that says why not -- no question, no answer, no record. Where
+# it is not configured the door is open and the page runs exactly as it did
+# before identity existed.
+admission = web.admit(
+    st.session_state, web.trail_destination, url_session, check_key=web.allowance.probe
+)
+if admission.door is not web.Door.OPEN:
+    web.draw_closed_door(admission, url_session, tab)
+    st.stop()
+
+# What the conversation, the identity stamp, the dev panel and the cap are all
+# keyed on. Derived from the account where one is signed in, so two readers on
+# one shared link cannot overwrite each other's attribution and the OAuth
+# redirect -- which drops the query string -- cannot strand a session (ADR-0830).
+session = web.effective_session(admission, url_session)
+
+# The cap, at the door rather than before it. Counting a visitor who has not yet
+# passed the door left a place held by every abandoned pre-sign-in visit; what
+# costs the host is a session with an agent behind it. Counted per *tab*, not per
+# conversation, because one account's five tabs are five Streamlit sessions and
+# five agents. A tab already holding a conversation is admitted whatever the
+# count, because no open session is ended to make room (ADR-0790).
+#
+# **Before the stamp below, and that order is load-bearing**: admitting prunes,
+# and pruning clears the stamp of any conversation whose last tab has gone. Set
+# the stamp first and a reader returning after the idle window had it wiped in
+# the same run, so the question they came back to ask was recorded against
+# nobody while the sidebar still named them.
+if not web.session_registry().admit(
+    tab, session, continuing=bool(web.transcript(st.session_state))
+):
+    web.draw_try_later()
+    st.stop()
+
+# Every rerun, not only at sign-in: a session pruned for idleness and returned to
+# would otherwise keep drawing "signed in as" while recording nobody.
+web.establish_identity(admission, session)
+
+# One agent per session, holding this account's credential and nothing else about
+# the person. Never None: an enrolled account with no credential met its own door
+# above, so nothing here can fall back on the environment's key.
+agent = web.agent_for(st.session_state, repo, admission)
 
 # Asked before anything is drawn, because every control drawn below is live in the
 # browser for as long as this run takes. A click on any of them re-runs the script,
@@ -71,12 +126,17 @@ st.caption(web.as_text(f"{len(repo)} entries · session {session}"))
 # answer. The entries below are unbounded -- one question can fill the panel -- and
 # a run budget pushed past the scroll is not a standing figure.
 with st.sidebar:
-    st.caption(web.PROTOTYPE_SHORT)
+    # No prototype line here: the pinned banner says it at the top of the page,
+    # where it cannot be scrolled away, and twice is once too many.
     # What is kept, where a reader can find it without being made to read it
     # before every question. Not in the pinned banner, which is one line by
     # design; the sidebar is the page's standing statement about itself, and
     # this belongs beside the other one.
-    st.caption(web.RECORDS_NOTE)
+    st.caption(web.as_text(web.RECORDS_NOTE))
+    # Who this page thinks you are, or that it is nobody's. A person reading
+    # under an account they did not expect is a person whose questions are being
+    # recorded against the wrong name.
+    web.draw_identity(admission, session, tab)
     # Always drawn, including before the first question, when it reads zero. The
     # panel must not gain a section the moment a question completes: a layout that
     # grows under the reader is a worse surprise than a bar showing nothing spent.
@@ -85,13 +145,22 @@ with st.sidebar:
     )
     if spent_and_cap:
         spent, cap = spent_and_cap
-        st.header("Run budget")
+        st.header("Session budget")
         st.progress(min(1.0, spent / cap) if cap else 0.0)
         # Escaped: two dollar signs in one caption are read as opening and closing
         # inline mathematics, so "$1.20 of $1.20" typeset the middle as an equation
         # and ate both currency signs. Same fault as the ending line's, same fix.
         st.caption(web.as_text(f"{format_usd(spent)} of {format_usd(cap)}"))
+    # What the provider still honours on this reader's own key, which is the
+    # figure they would act on when told their allowance is spent.
+    web.draw_allowance(admission)
     st.divider()
+    # The sidebar's two views, below the run status: the entries a reader came
+    # for, and -- only for roles the grant table allows -- this session's trail.
+    # Made here so the strip sits under the run budget, and filled at the foot of
+    # the script, where the newest question's entries and records both exist.
+    # The refusal is inside `dev_panel_rows`; this line decides nothing.
+    entries_seat, dev_seat = web.sidebar_tabs(admission, session)
 
 for asked, drawn in web.transcript(st.session_state):
     with st.chat_message("user"):
@@ -123,7 +192,7 @@ if web.run_is_over(web.transcript(st.session_state)):
     # screen, so wrong advice here outranks the answer that said otherwise.
     st.error(
         web.as_text(
-            web.run_over_advice(web.transcript(st.session_state))
+            web.run_over_advice(web.transcript(st.session_state), signed_in=admission.configured)
             or "This run has stopped taking questions. Start a new session to continue —"
             " reload with a fresh `?session=` or clear this one."
         ),
@@ -188,5 +257,6 @@ elif question := st.chat_input("Ask a question", submit_mode="disable", key=web.
 
 # The side panel carries the newest answer's entries, whole and openable -- the
 # main column's table is the first few rows of the same set. Written after the
-# conversation so it reflects the question just asked.
-web.draw_full_entries(web.latest_table(web.transcript(st.session_state)))
+# conversation so both tabs reflect the question just asked.
+web.draw_full_entries(web.latest_table(web.transcript(st.session_state)), entries_seat)
+web.draw_dev_panel(admission, session, dev_seat)

@@ -37,7 +37,7 @@ ADAPTERS = DRIVERS | HARNESS
 # `autobuild` joins them: it decides whether to build a corpus, which is a driver's
 # policy and not the agent's, and it is the one module allowed to import the
 # ingester. Putting it on this side is what keeps that dependency out of the core.
-PRESENTATION = ADAPTERS | {"messages", "entries_table", "autobuild", "feedback"}
+PRESENTATION = ADAPTERS | {"messages", "entries_table", "autobuild", "feedback", "allowance"}
 
 AGENT_CORE = sorted(
     path.stem
@@ -46,21 +46,48 @@ AGENT_CORE = sorted(
 )
 
 
+def _reached(dotted: str) -> str:
+    """The module a dotted import path reaches, with this package's own prefix
+    stripped -- so `scinumbers_ask.web` counts as `web`, not as `scinumbers_ask`.
+
+    This was the blind spot a verifier found: `import scinumbers_ask.web as _w`
+    inside `agent.py` passed every dependency-direction test here, because the
+    first segment was the package and never a sibling's name. The relative form
+    was caught; the absolute form of the same import was not. An absolute
+    intra-package import is legal Python and a one-line edit, which is exactly
+    the kind of thing this file exists to refuse.
+    """
+    parts = dotted.lstrip(".").split(".")
+    if parts and parts[0] == PACKAGE.name and len(parts) > 1:
+        return parts[1]
+    return parts[0]
+
+
 def imports_of(module: str) -> set[str]:
-    """Every module name reached by an import in this module, however written."""
+    """Every module name reached by an import in this module, however written --
+    at top level or inside a function, relative or absolute."""
     tree = ast.parse((PACKAGE / f"{module}.py").read_text())
     names: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            names.update(alias.name.split(".")[0] for alias in node.names)
+            names.update(_reached(alias.name) for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             # `from . import x, y` names the modules in the aliases; `from .x import y`
             # names it in the module. Both reach a sibling, so both count.
             if node.module:
-                names.add(node.module.lstrip(".").split(".")[0])
+                names.add(_reached(node.module))
             if node.level and not node.module:
                 names.update(alias.name for alias in node.names)
     return names
+
+
+def test_the_import_rule_sees_the_absolute_form_too():
+    """`import scinumbers_ask.web` and `from .web import x` reach the same module
+    and must be read the same way; only one of them was."""
+    assert _reached("scinumbers_ask.web") == "web"
+    assert _reached(".web") == "web"
+    assert _reached("scinumbers_ask") == "scinumbers_ask"
+    assert _reached("streamlit.testing.v1") == "streamlit"
 
 
 def test_the_agent_core_is_not_empty():
@@ -122,6 +149,41 @@ def test_the_durable_trail_sink_is_core_and_that_is_deliberate():
     assert "trail_store" in AGENT_CORE
     assert "streamlit" not in imports_of("trail_store")
     assert not imports_of("trail_store") & ADAPTERS
+
+
+# The identity modules. Core by decision, like `trail_store`, and for a sharper
+# reason: the refusal in `authorization` has to be reachable by a test or a second
+# caller with no browser, and the grant table in `permissions` is the data that
+# refusal reads. `accounts` reads enrolment off a row and imports no framework
+# either; the driver hands it the engine. `test_every_named_core_module_exists`
+# refuses a name here with no file behind it.
+IDENTITY_CORE = {"permissions", "authorization", "accounts"}
+
+
+def test_the_identity_modules_are_core_and_that_is_deliberate():
+    """Where a refusal lives decides who can be refused.
+
+    Put `authorization` on the presentation side and the only thing that can
+    call it is a page -- so the page's hiding of a control becomes the guard,
+    which is exactly the arrangement the spec forbids ("the refusal belongs to
+    the action, not to the page that offers it"). On the core side, the panel's
+    accessor calls `require` itself and every caller meets the same refusal.
+
+    Being core costs the core nothing: neither module imports a framework. The
+    parametrized tests below hold them to that, but only because they are in
+    `AGENT_CORE` by subtraction -- and subtraction is silent, so this is where
+    the decision is written down.
+    """
+    assert IDENTITY_CORE <= set(AGENT_CORE), sorted(IDENTITY_CORE - set(AGENT_CORE))
+    for module in IDENTITY_CORE:
+        assert "streamlit" not in imports_of(module)
+        assert not imports_of(module) & PRESENTATION
+
+
+def test_every_named_core_module_exists():
+    """The mirror of `test_every_named_adapter_exists`, for the same reason."""
+    missing = {name for name in IDENTITY_CORE if not (PACKAGE / f"{name}.py").exists()}
+    assert not missing, f"named as core but no such module: {sorted(missing)}"
 
 
 def test_every_named_adapter_exists():
@@ -221,3 +283,86 @@ def test_the_agent_takes_no_parameter_naming_its_caller():
         inspect.signature(AskAgent.__init__).parameters
     )
     assert not (taken & {"driver", "mode", "caller", "interactive", "web", "terminal"})
+    # Nor one naming the person. `add-user-identity` hands the agent a credential
+    # and nothing else about who holds it; the role and the account are stamped
+    # onto the trail at the sink, where this class cannot see them (ADR-0820).
+    assert not (taken & IDENTITY_TOKENS), sorted(taken & IDENTITY_TOKENS)
+
+
+# Identifiers that would mean identity had reached the code that decides an
+# answer, records the trail, or records a reader's judgement. Checked as
+# *identifiers* -- names, parameters, attributes, keywords, imports -- and not as
+# text, because `agent.py` legitimately writes `{"role": "user"}` as a string and
+# mentions an account in prose. A string is not a way for the role to arrive.
+IDENTITY_TOKENS = {
+    "Identity",
+    "identity",
+    "Role",
+    "role",
+    "email",
+    "account",
+    "user_role",
+    "user_email",
+}
+# The three modules identity must never enter. `agent.py` decides the answer;
+# `trace.py` builds the records; `feedback.py` records what a stranger said. All
+# three get stamped by the web driver's filter without knowing, which is the
+# design's whole point -- a parameter, a field or an import here would mean the
+# side door had been opened.
+IDENTITY_FREE = ("agent", "trace", "feedback")
+
+
+def identifiers_of(module: str) -> set[str]:
+    """Every identifier the module's source binds, reads, passes or imports."""
+    tree = ast.parse((PACKAGE / f"{module}.py").read_text())
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            names.add(node.attr)
+        elif isinstance(node, ast.arg):
+            names.add(node.arg)
+        elif isinstance(node, ast.keyword) and node.arg:
+            names.add(node.arg)
+        elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            names.add(node.name)
+        elif isinstance(node, ast.alias):
+            names.add((node.asname or node.name).split(".")[-1])
+    return names
+
+
+@pytest.mark.parametrize("module", IDENTITY_FREE)
+def test_identity_never_enters_the_agent_the_trail_or_the_feedback(module):
+    """The spec: "the role SHALL NOT reach the agent, and neither SHALL the
+    account" -- made structural, so that it is a property of the source and not
+    of the discipline of whoever edits it next.
+
+    A seeded `role` parameter on `AskAgent.__init__` fails this; so does
+    `from .permissions import Identity` in `trace.py`, or `feedback._record`
+    taking an `email`. Group 7 of `add-user-identity` seeds the first of those in
+    a copy and names this test as the one that must fail.
+    """
+    reached = identifiers_of(module) & IDENTITY_TOKENS
+    assert not reached, f"{module}.py names {sorted(reached)}; identity has a way in"
+    # And the modules themselves, whatever they are imported as. `permissions`
+    # and `authorization` are core, so the core-to-core rules above allow the
+    # import; this is the one place that forbids it for these three. A verifier
+    # seeded `from .permissions import Identity, Role` into all three and the
+    # suite stayed green until this line existed.
+    imported = imports_of(module) & IDENTITY_CORE
+    assert not imported, f"{module}.py imports {sorted(imported)}; identity has a way in"
+    # What is still invisible here, measured rather than guessed: `getattr(self,
+    # "role")`, `kwargs["role"]`, `globals()[...]` -- string keys. Each of them
+    # needs the value to have arrived first, by a parameter, a field or an
+    # import, and those three routes are what the two assertions above close.
+    # The registry itself lives in `web`, so reading it needs an import of `web`,
+    # which the dependency rule refuses in both spellings.
+
+
+def test_the_identity_free_modules_exist_and_are_core():
+    """A renamed module would make the test above pass over nothing."""
+    for module in IDENTITY_FREE:
+        assert (PACKAGE / f"{module}.py").exists(), module
+    assert {"agent", "trace"} <= set(AGENT_CORE)
+    assert "feedback" in PRESENTATION  # stamped from outside like the other two
