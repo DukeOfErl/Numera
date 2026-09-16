@@ -73,13 +73,14 @@ doubles, both populations of the table. Its brief already says so.
       user_role text`, in the same `ensure_schema` transaction. Test it runs
       idempotently on a table that already has the column and on one that does
       not (`test_trail_store_live.py`, network marker, for the real DDL).
-      *The live test is written but could not be run from the sandbox (no route
-      to 5432). The same DDL, insert and select were run by hand against Neon
-      `dev` over SQL-over-HTTP on a throwaway table created in the old shape:
-      column absent before, present after run 1, run 2 a no-op, row read back
-      with both columns; table dropped. `sql/accounts.sql`'s DDL and
-      `accounts._SELECT` likewise. Run `pytest -m network` from a machine that
-      can reach the pooler before merging.*
+      *Written, and now run: `.venv/bin/python -m pytest -m network` on the
+      developer's machine, 2026-09-16 — 18 passed, 1 skipped, with all five of
+      `test_trail_store_live.py` green, so the `alter ... add column if not
+      exists` is exercised against real Postgres on a table created in the
+      pre-`user_role` shape. It could not be run from the sandbox, which has no
+      route to 5432; while that was true the same DDL, insert and select were
+      run by hand against Neon `dev` over SQL-over-HTTP, along with
+      `sql/accounts.sql`'s DDL and `accounts._SELECT`.*
 - [x] 2.5 `TrailHandler.emit` reads `user_role` off the record the way it reads
       `user_email`; `_INSERT` writes it. Test: a record with identity writes both
       columns; one without writes NULL for both — not `''`.
