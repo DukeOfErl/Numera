@@ -203,6 +203,15 @@ It is there rather than here because it warns about a package the other two work
 packages never touch, and this file is loaded into every session and every
 subagent.
 
+## What is planned, and in what order
+
+`docs/roadmap.md` holds the work packages and their sequence — what is done, what
+is next, and the reasons that would otherwise live only in a session transcript.
+It records decisions already taken, not proposals. Read it before proposing a
+change, and reconcile it when one lands; it names the severe findings that gate
+later work (the SQLite ledger on Cloud Run, the LangSmith env var) where a change
+author will meet them rather than rediscover them.
+
 ## Where the rest of the rules live
 
 Under 200 lines is the target for this file, and everything below is either
