@@ -96,8 +96,31 @@ fails open (ADR-0710).
       true by ordering rather than by design, which is why it needs pinning.
 - [x] 4.4 `AppTest`: an unrated answer records nothing and leaves the conversation
       able to take another question.
-- [ ] 4.5 Hand group 3 and 4 to a `verifier`. Ask it in particular whether any
+- [x] 4.5 Hand group 3 and 4 to a `verifier`. Ask it in particular whether any
       `AppTest` assertion would still pass with the widget removed entirely.
+
+      **Answer: 17 of 27 fail with the widget gone, so the file is load-bearing.**
+      Of the 10 survivors, 8 legitimately bypass the page and 2 assert absence,
+      one of which needed a positive control and now has one.
+
+      Four items came back CONFIRMED. **Five mutants survived the whole
+      1243-test suite**, every one of them in the same blind spot — what the
+      *page* hands down, rather than what a function does with a literal:
+
+      - `draw_feedback(items, "wrong-session")` — every rating row would carry a
+        session that joins to no trail row. Well-formed, plausible, useless.
+      - `text="x"` in `_draw_comment_box` — every comment reads the same. The
+        expensive direction: comments cannot be reconstructed from anything else.
+      - `answering = False` — past turns' thumbs clickable mid-answer again, so a
+        click abandons the generator. The defect `994087c` fixed, silently back.
+      - `is_ratable -> True` — a reader thumbs down a spend-ceiling refusal and
+        that row is indistinguishable from "the science was wrong".
+      - `_column_for` in `answer()` only — the live path's layout was untested,
+        because `st.rerun()` means `AppTest` only ever inspects the replay render.
+
+      All five now die to a test, each with a canary. The lesson worth keeping:
+      every one passed because the tests exercised the functions with literals
+      and nothing asserted the wire between the page and them.
 
 ## 5. The record
 
