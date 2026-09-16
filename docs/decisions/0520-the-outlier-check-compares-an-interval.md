@@ -1,6 +1,6 @@
 # ADR-0520: An outlier is measured against its peers' interval, not their median
 
-- **Status:** accepted
+- **Status:** superseded by [ADR-0540](0540-peers-come-from-the-expected-entries.md)
 - **Date:** 2026-09-05
 - **Pull request:** _(not yet opened — branch `feat/eval-scoring`)_
 

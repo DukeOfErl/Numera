@@ -19,7 +19,7 @@ Two branches that each number ADRs from the current highest id will both claim t
 | `add-corpus-ingestion` | `0200`–`0250` — all written |
 | `add-corpus-autobuild` | `0300`–`0340` |
 | `rename-to-scinumbers` | `0400`–`0450` |
-| `add-answer-evaluation` | `0500`–`0550` — `0500`, `0510`, `0520`, `0530` written |
+| `add-answer-evaluation` | `0500`–`0550` — `0500`, `0510`, `0520`, `0530`, `0540` written |
 | `add-answer-shape` | `0560`–`0590` |
 | `add-provider-limit-ending` | `0600`–`0640` — `0600` written |
 | `add-judged-faithfulness` | `0650`–`0690` |

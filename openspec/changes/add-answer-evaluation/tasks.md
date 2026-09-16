@@ -216,7 +216,7 @@ reads a number out of the answer's prose, except 4.3, which only asks whether a 
       as a fabrication and becomes the evaluation's most-read number. Refuse rather than warn — a
       wrongly refused unsupported question costs one line of the set, a wrongly accepted one costs the
       headline figure — and count both directions. See the review note above group 3
-- [ ] 4.10 On the first run, count both directions of every classifying rule (flagged declines, outlier
+- [x] 4.10 On the first run, count both directions of every classifying rule (flagged declines, outlier
       flags, organism misses) and read them against the answers before trusting any figure
   - **Still open by design: it needs a real run.** Each rule now says in its own docstring which
     direction it errs and why, and each direction has a test, but a test proves the rule behaves as
@@ -225,6 +225,36 @@ reads a number out of the answer's prose, except 4.3, which only asks whether a 
     from the refusals-that-searched-first count, so two figures move together); the asked-property
     match (over-credits — a search for "Cell" agrees with an asked "Cell volume"); and the outlier
     factor of two over a tight interval (over-flags, ADR-0520).
+
+  - **Counted 2026-09-16 over the 30-result baseline. Two predictions were wrong and the third was
+    far worse than predicted.**
+  - **The digit rule never fired alone.** 24 answers carried both a citation and a digit, 6 carried
+    neither, **0 were digit-only**. The feared over-flag -- a refusal mentioning a number marked as
+    stating one -- did not occur once; the six refusals contain no digits at all. Leave the rule
+    alone: the risk is real in principle and absent here, and is worth re-counting on a set with
+    numeric refusals rather than acting on now.
+  - **The asked-property match over-credits almost always: 20 of 23 credits came from an argument
+    that is not the asked property.** The worst case is exact -- `yeast-vs-ecoli-volume` repeat 1
+    asked `Cell volume`, searched only `size` twice, reached **0 of 24** expected entries, and is
+    credited with having searched for the asked property. It earns that on **one** shared stored
+    property out of 492: *"Carbon:cell volume ratios ... in size-fractionated natural bacterial
+    assemblages"* -- one entry in 14,294 whose wording contains both terms.
+  - The overlap distribution is sharply bimodal -- 0.8%, 2.2%, 2.2%, 14.8% x3, then 100% x17, with
+    **nothing between 15% and 100%** -- so any threshold from ~20% to ~99% gives the same answer. The
+    strict form costs six credits: one plainly right to drop, five arguable, because
+    `ribosome-diameter` searching `size` really does find 102320 *"Size of 70s (intact) of
+    ribosome"*, an expected entry. **Two of the five are a fault in the set, not the rule**:
+    `asked_properties` of `Nuclear` and `diameter` are single words where the question asks a
+    compound property. Fix the set before tightening the rule.
+  - **The outlier check judged nothing at all: 0 of 91 citations judged, 91 unjudgeable.** Not
+    mostly -- all. Superseded by **ADR-0540**: peers become the question's own expected entries,
+    restricted to the cited entry's organism and an identical unit string. That judges 56 of 91 and
+    raises two flags, both surviving inspection, including 106356 -- the entry that motivated the
+    check and that the old rule could never reach.
+  - **A definition matched on unit *dimension* was measured and rejected**, and that is the finding
+    worth carrying: it put `1.8e-15 Liter` beside `2.95 um^3`, both volumes, spanning fifteen orders
+    of magnitude and destroying the lower bound. The project has dimensional compatibility (ADR-0160)
+    and no unit conversion, so sameness of unit has to mean the same string.
 
 **What the branch review of groups 3-4 found** (2026-09-07). Ten findings, all reproduced, all
 fixed on that branch. Four are worth carrying forward as lessons rather than as history:
@@ -283,6 +313,14 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
       meaning is what the judged layer is for. A phrase list here would be brittle in both directions
       and superseded the moment that layer lands. The evidence is in
       `docs/evaluations/2026-09-11-baseline.md`; nothing catches it until then, which is accepted.
+
+- [ ] 4.15 Implement ADR-0540's peer definition in `scoring.py`, replacing the property-string pool.
+      The measurement is done (4.10); this is the code. Keep the factor of two and the floor of four
+      peers -- only what counts as a peer changes -- and keep reporting the citations that could not
+      be judged, because an absence reading as a pass is the failure this check exists to avoid
+  - Both directions again once it lands: it can only flag an entry *in* the expected list, so one
+    cited from outside it is never judged -- and an entry the set did not anticipate is exactly the
+    kind most likely to be wrong. Count how many citations fall in that blind spot.
 
 - [x] 4.12 Review the branch before merging (see 1.5). The review of groups 3-4 found ten
       defects, including a results file that would have committed corpus text
