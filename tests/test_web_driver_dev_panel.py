@@ -147,6 +147,25 @@ def test_the_panel_holds_the_last_five_questions_and_drops_the_sixth_s_predecess
     assert kept == {f"question {n}" for n in range(2, 7)}
 
 
+def test_a_record_the_panel_cannot_render_is_dropped_not_raised():
+    """ "Never raises out of `emit`" was a docstring sentence with nothing behind
+    it; a verifier measured it and asked for the test. A panel that could break
+    a question would be a poor trade, so the guard is the property."""
+    handler = web.RecentTrail()
+
+    class _Unrenderable:
+        def __str__(self):
+            raise ValueError("cannot be shown")
+
+        __repr__ = __str__
+
+    rec = logging.LogRecord("x", logging.INFO, "f", 1, "%(missing)s", None, None)  # bad format
+    rec.session_id, rec.question_id, rec.fields = "s", "q1", {"question": _Unrenderable()}
+    rec.created = "not a number"
+    handler.emit(rec)  # must not raise
+    assert handler.rows("s") == []
+
+
 def test_rows_without_a_question_are_not_a_question_s_records():
     """A refused sign-in has a session and no question; it is not the panel's."""
     handler = web.RecentTrail()

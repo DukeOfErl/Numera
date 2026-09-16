@@ -372,6 +372,8 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_identity_never_reaches_the_agent.py::"
         "test_the_same_question_under_two_roles_hands_the_model_identical_inputs",
         "test_driver_independence.py::test_identity_never_enters_the_agent_the_trail_or_the_feedback",
+        "test_web_driver_dev_panel.py::test_the_refusal_does_not_depend_on_the_caller",
+        "test_web_driver_dev_panel.py::test_a_tester_s_page_has_no_such_section",
     ),
     "Each tester's questions are funded by a credential of their own, capped, and never shown "
     "to them": (
@@ -398,7 +400,6 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_web_driver_dev_panel.py::test_the_table_names_the_question_just_asked",
         "test_web_driver_dev_panel.py::test_two_sessions_panels_show_only_their_own_records",
         "test_web_driver_dev_panel.py::test_the_panel_s_contents_do_not_reach_the_model",
-        "test_web_driver_dev_panel.py::test_the_refusal_does_not_depend_on_the_caller",
     ),
     "Concurrent sessions are capped for the whole deployment, not per client address": (
         "test_web_driver_session_cap.py::test_the_session_past_the_cap_is_told_to_try_later",
