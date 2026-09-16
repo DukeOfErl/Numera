@@ -109,6 +109,18 @@ Searches, retrievals, alias resolutions, truncation decisions, and each spend in
 recorded, and every record for one question SHALL carry the same identifier so the question's trail
 can be reassembled.
 
+The question as asked and the answer as given SHALL also be recorded. Without them the trail says
+what was searched for and what it cost, and not what was wanted or what was said — so a judgement
+about an answer, whether from a reader or from whoever reads the records later, names something that
+cannot be read. A trail cannot be backfilled: records already written name a question whose words
+were never kept anywhere.
+
+The entries an answer was built on SHALL be recorded together, distinguishing those the answer cited
+from those merely retrieved. Both are already recoverable by reassembling individual search and
+retrieval records, which is the argument for recording them once, in the form the question actually
+resolved to: a reader asking "what evidence stood behind this answer" should not have to reconstruct
+it, and a reconstruction can disagree with what the answer was given.
+
 Several failures here are silent rather than loud — an alias resolving to the wrong stored value, a
 truncated result treated as complete, spend accumulated from a response that reported no cost — and a
 non-deterministic agent reproduces them only sometimes. The identifier is what makes an intermittent
@@ -129,10 +141,46 @@ Where records are retained SHALL be configurable, and the system SHALL run unimp
 durable destination is configured. A prototype on a developer's machine needs no such destination,
 and refusing to start without one would make the absence of telemetry an outage.
 
+**What is kept about a person, and why.** Recording the question keeps words somebody typed, and that
+is a decision rather than a side effect of plumbing. What is kept is the question, the answer, and
+the entries behind it — nothing about who asked, until identity exists and a requirement says so.
+They are kept because the judgements this system collects are unreadable without them, and they are
+read by whoever operates the system in order to improve it. A reader SHALL be able to learn this from
+the interface rather than by inspecting the records.
+
+Recording the question or the answer SHALL NOT change what the model is shown. These are records of a
+question that has already been answered, not context for the next one.
+
+Failure to record any of this SHALL follow the same policy as every other record here: it fails open,
+never failing a question.
+
 #### Scenario: A question is answered
 - **WHEN** a question completes
 - **THEN** its searches, retrievals, and spend increments are recorded
+- **AND** the question as asked and the answer as given are recorded
 - **AND** every record for that question carries the same identifier
+
+#### Scenario: Two questions ask different things
+- **WHEN** two different questions are answered
+- **THEN** the recorded question text differs between them
+
+#### Scenario: An answer rests on retrieved entries
+- **WHEN** a question completes having retrieved entries
+- **THEN** one record names the entries the answer cited and the entries it retrieved
+- **AND** the two sets are distinguishable from each other
+
+#### Scenario: A question ends without an answer
+- **WHEN** a question ends without producing an answer
+- **THEN** the question as asked is still recorded
+
+#### Scenario: The records cannot be written
+- **WHEN** the question or the answer cannot be recorded
+- **THEN** the question is answered exactly as it otherwise would be
+- **AND** no error reaches the person who asked
+
+#### Scenario: A further question follows a recorded one
+- **WHEN** a question has been recorded and another is asked in the same session
+- **THEN** neither the recorded question nor the recorded answer appears in what the model is shown
 
 #### Scenario: A search was truncated
 - **WHEN** a search matched more entries than were returned

@@ -151,6 +151,11 @@ the identifier they share. The agent has no arrow to it, and
 `test_driver_independence.py` asserts that no core module may acquire one — under
 `PRESENTATION`, which is wider than the driver set the older test checks.
 
+Those rows now include the question as asked, the answer as given and the entries
+behind it, written by `agent.ask` on the same logger (ADR-0840). The arrow is the
+same one; what travels along it grew. Nothing new points at the model — these are
+records of a question already answered, and the same test holds that line.
+
 **The one rule with a direction: no arrow runs from the core back into
 presentation.** Nothing in Python enforces it — an `import streamlit` in the tool
 layer would work perfectly and weld the agent to one interface — so

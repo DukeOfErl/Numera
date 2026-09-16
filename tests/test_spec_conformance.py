@@ -309,6 +309,56 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_driver_independence.py::test_the_agent_cannot_reach_a_reader_s_feedback",
         "test_driver_independence.py::test_no_agent_module_reaches_for_presentation",
     ),
+    # `add-question-and-answer-records`. Eleven scenarios. A scenario that merely
+    # executes is a gap, not a pass, so which is which is written out:
+    #
+    # **Passes (8).** "A question is answered", "Two questions ask different
+    # things", "An answer rests on retrieved entries", "A question ends without an
+    # answer", "The records cannot be written", "A further question follows a
+    # recorded one", "Two questions run in one session", "No durable destination is
+    # configured" (`test_trail_store.py::
+    # test_install_with_no_engine_returns_none_and_adds_no_handler`). The
+    # requirement's prose obligation -- that a reader can learn from the interface
+    # what is kept -- is held by the two interface tests named below.
+    #
+    # **Gaps (3)**, all pre-dating this change and none of them made worse by it:
+    # "A search was truncated" and "Two questions in one session are related
+    # afterwards" run inside `test_trace_tagging.py` but are asserted against the
+    # trail's shape rather than against these words; "The process that wrote the
+    # records is replaced" needs a real restart against a real database and lives
+    # behind the `network` marker, which the offline suite deselects.
+    "The deterministic layer is logged under a per-question identifier": (
+        "test_question_and_answer_records.py::"
+        "test_two_different_questions_record_what_each_actually_asked",
+        "test_question_and_answer_records.py::"
+        "test_a_question_that_ends_without_an_answer_still_recorded_what_was_asked",
+        "test_question_and_answer_records.py::"
+        "test_the_question_is_recorded_before_the_work_that_might_fail",
+        "test_question_and_answer_records.py::"
+        "test_two_different_answers_are_recorded_under_the_questions_that_produced_them",
+        "test_question_and_answer_records.py::"
+        "test_the_answer_is_recorded_verbatim_rather_than_shortened",
+        "test_question_and_answer_records.py::test_every_ending_that_gives_an_answer_records_it",
+        "test_question_and_answer_records.py::"
+        "test_the_answer_is_recorded_even_when_the_driver_abandons_the_generator",
+        "test_question_and_answer_records.py::"
+        "test_the_cited_set_and_the_retrieved_set_stay_apart_in_the_record",
+        "test_question_and_answer_records.py::"
+        "test_the_whole_retrieved_set_is_recorded_not_the_head_the_driver_shows",
+        "test_question_and_answer_records.py::"
+        "test_a_question_that_retrieved_nothing_records_no_evidence_row",
+        "test_question_and_answer_records.py::test_nothing_recorded_here_reaches_the_model",
+        "test_question_and_answer_records.py::"
+        "test_a_destination_that_cannot_be_written_does_not_fail_a_question",
+        "test_question_and_answer_records.py::"
+        "test_the_records_reach_the_durable_store_under_the_question_s_own_identifier",
+        "test_question_and_answer_records.py::test_no_driver_records_the_question_as_well",
+        "test_question_and_answer_records.py::"
+        "test_the_page_says_that_questions_and_answers_are_kept",
+        "test_question_and_answer_records.py::"
+        "test_the_terminal_says_it_too_including_for_a_single_question",
+        "test_trace_tagging.py::test_every_record_carries_the_run_label",
+    ),
 }
 
 # Requirements with no test named yet. Listed rather than omitted: the point of this
@@ -317,7 +367,6 @@ COVERED: dict[str, tuple[str, ...]] = {
 TESTED_BUT_UNNAMED = (
     "Events carry enough detail to show progress and to explain an ending",
     "A transient failure does not end a question",
-    "The deterministic layer is logged under a per-question identifier",
     "Follow-up questions inherit the conversation",
     "Citations in a follow-up stand on their own",
     "Search returns compact rows, bounded in number",

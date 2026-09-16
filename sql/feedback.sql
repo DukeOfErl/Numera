@@ -10,12 +10,18 @@
 -- Run these against the Neon database in `[connections.usage]`. Read-only; none
 -- of them writes.
 --
--- **All five verified against the `dev` branch on 2026-09-16**, which is how they
--- stopped being guesses: 25 verdicts, 12 comments, and query 3 correctly pulling
--- `100001` and `100002` out of free prose written as "checking entry 100001" and
--- "not sure about 100002". The header here previously said they had never been
--- run, and told the reader to treat a first run as part of checking them — which
--- was the right thing to say while it was true.
+-- **Every query here was run against the `dev` branch on 2026-09-16**, which is
+-- how they stopped being guesses: 25 verdicts, 12 comments, and query 3 correctly
+-- pulling `100001` and `100002` out of free prose written as "checking entry
+-- 100001" and "not sure about 100002".
+--
+-- What that run does *not* establish, for queries 2 and 2b: every rating on `dev`
+-- predates `add-question-and-answer-records`, so `question`, `answer`, `cited`
+-- and `retrieved` came back null on all 25 rows. The left joins were confirmed to
+-- keep those rows rather than drop them, and to return 25 rather than fanning
+-- out — but the populated case has only been exercised against the test suite,
+-- not against real rows. First rating collected after this change is the one to
+-- check them on.
 --
 -- Query 5 is still the one to run first when something looks wrong, because it
 -- filters on nothing: an empty result there means no feedback, not a bad query.
@@ -46,20 +52,72 @@ group by 1, 2
 order by 1 desc, 2;
 
 
--- 2. Ratings per question, with the comment if one was left and the question's
---    own trail beside it. A left join on the comment: most ratings have none, and
---    an inner join would silently answer a different question.
+-- 2. Ratings per question, beside the question that was asked and the answer
+--    that was rated. This is the query the feedback exists for: without the last
+--    two columns a row reads "answer c23c83c16324 was wrong" and stops there.
+--
+--    Left joins throughout, and deliberately. Most ratings carry no comment, so
+--    an inner join there would silently answer a different question; and ratings
+--    collected before `add-question-and-answer-records` landed have no
+--    `question.asked` or `answer.given` row at all — those questions were never
+--    kept anywhere and cannot be backfilled. An inner join would drop them
+--    without saying so, which is worse than a visible null.
+--
+--    `answered` is the column to filter on before counting anything. The
+--    `answer` column holds whatever the reader was shown, and seven of the eight
+--    things the agent can show are endings — "this run has spent $0.60 against a
+--    $0.60 budget", "the key has no credit left" — recorded deliberately, because
+--    a reader rates those too. But a thumbs-down on a budget notice is not a bad
+--    answer, and a tally that pooled them would say the model is worse than it
+--    is. `question.answered` is written on the ordinary path only, so its
+--    presence is the free discriminator.
 select
     v.at,
     v.question_id,
     v.session_id,
     v.run_label,
     v.detail ->> 'verdict' as verdict,
-    c.detail ->> 'comment' as comment
+    c.detail ->> 'comment'  as comment,
+    q.detail ->> 'question' as question,
+    a.detail ->> 'answer'   as answer,
+    (e.question_id is not null) as answered
 from trail v
 left join trail c
        on c.question_id = v.question_id
       and c.event = 'feedback.comment'
+left join trail q
+       on q.question_id = v.question_id
+      and q.event = 'question.asked'
+left join trail a
+       on a.question_id = v.question_id
+      and a.event = 'answer.given'
+left join trail e
+       on e.question_id = v.question_id
+      and e.event = 'question.answered'
+where v.event = 'feedback.verdict'
+order by v.at desc;
+
+
+-- 2b. What a rated answer actually stood on: the entries it cited, and the wider
+--     set it had retrieved. Separate from query 2 because the two sets are
+--     arrays and joining them in would repeat the answer text on every row a
+--     reader scrolls past.
+--
+--     `cited` is what the answer attributed a number to; `retrieved` is
+--     everything in front of it. A thumbs-down where the reader names an entry in
+--     `retrieved` but not in `cited` is the interesting case: the evidence was
+--     there and the answer did not use it.
+select
+    v.at,
+    v.question_id,
+    v.detail ->> 'verdict' as verdict,
+    e.detail -> 'cited'     as cited,
+    e.detail -> 'retrieved' as retrieved,
+    jsonb_array_length(e.detail -> 'retrieved') as retrieved_count
+from trail v
+left join trail e
+       on e.question_id = v.question_id
+      and e.event = 'answer.evidence'
 where v.event = 'feedback.verdict'
 order by v.at desc;
 

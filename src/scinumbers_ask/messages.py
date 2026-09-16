@@ -27,6 +27,25 @@ from .events import (
     UngroundedRefusal,
 )
 
+# What is kept, in the reader's own view rather than in a policy nobody opens.
+#
+# The requirement is that a reader can learn it *from the interface*: the system
+# stores the words somebody typed, and a person discovering that by reading the
+# database afterwards has been told nothing. Shared by the drivers for the reason
+# every other sentence here is -- two interfaces making different claims about
+# what is kept are two different claims.
+#
+# Deliberately not folded into `web.PROTOTYPE_NOTE`: that banner is one line by
+# design, and a banner that wraps becomes a block a reader learns to skip.
+#
+# Says why, not only what. "Questions are logged" reads as surveillance; the
+# reason is that a rating on an answer nobody can read is worth nothing, which is
+# the whole of what this records.
+RECORDS_NOTE = (
+    "Questions, answers and the entries behind them are kept, so whoever runs "
+    "this can see where it goes wrong."
+)
+
 # Endings after which asking again cannot produce a different answer. What these
 # share is that they are not about the question just asked: a spent run budget
 # stays spent, and a conversation over its token bound only grows. The per-question

@@ -53,7 +53,7 @@ from .spend import (
     project_question_cost,
 )
 from .tools import ToolBudget, build_tools
-from .trace import start_question
+from .trace import QuestionTrace, start_question
 
 # An f-string so the citation form is the one `citations.py` parses, not a copy of
 # it. It was a copy, and nothing tied the two together: the prompt could have asked
@@ -502,8 +502,42 @@ class AskAgent:
 
         A generator rather than a callback or a blocking call: the driver decides
         when to consume, so nothing here waits on an interface.
+
+        The question, the answer and the evidence behind it are recorded here
+        rather than at the eight places inside `_ask` that can yield an `Answer`.
+        A record written per branch would be a record the next branch forgets:
+        seven of those eight are endings -- a spend limit, a length bound, a
+        missing key -- and an ending is exactly the answer worth reading later.
+        Recording off the event stream makes the ninth branch record itself.
+
+        Each record is written *before* its event is handed on, because a driver
+        can abandon this generator mid-iteration -- Streamlit does, on every
+        rerun -- and code after a `yield` runs only if somebody asks for the next
+        item.
         """
         trace = start_question(self._config.run_label, session_id=session_id)
+        # At the start, not at the end. A question that hits a spend ceiling, a
+        # missing key or a crash still leaves a record of what was asked, and
+        # those are the runs worth investigating.
+        trace.record("question.asked", question=question)
+        for event in self._ask(session_id, question, trace):
+            if isinstance(event, Answer):
+                # Verbatim. A shortened answer cannot be compared against the
+                # rating a reader gave it, which is what this record is for.
+                trace.record("answer.given", answer=event.text)
+            elif isinstance(event, AnswerEntries):
+                # Cited and retrieved stay separable: "the answer stood on this"
+                # and "this was in front of it" are different statements, and
+                # merging them cannot be undone by a query.
+                trace.record(
+                    "answer.evidence",
+                    cited=list(event.cited),
+                    retrieved=list(event.retrieved),
+                )
+            yield event
+
+    def _ask(self, session_id: str, question: str, trace: QuestionTrace) -> Iterator[Event]:
+        """The work itself. See `ask`, which is the only caller."""
         yield QuestionStarted(
             question_id=trace.question_id, session_id=session_id, question=question
         )
