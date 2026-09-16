@@ -50,12 +50,21 @@ measures the happy path and says nothing about the behaviour most questions will
 The evaluation SHALL score an answer by comparing entry identifiers, never by string comparison of
 the answer prose.
 
-A question's **expected entries** SHALL be every entry in the corpus recording the asked property
-for the asked organism, whatever spelling of that property it uses. `property` is free text, so one
-quantity is recorded under many spellings, and a set naming one of them describes the search that
-built it rather than the corpus. The set SHALL be built from the corpus vocabulary and SHALL NOT be
-widened to what an agent cited: a set grown to what the system found is one the system passes by
-construction.
+A question's **expected entries** SHALL be every entry in the corpus that *records the quantity the
+question asks for*, for the asked organism, whatever spelling it uses. `property` is free text, so
+one quantity is recorded under many spellings, and a set naming one of them describes the search that
+built it rather than the corpus.
+
+**"Records the quantity" is not "names it".** An entry whose property mentions the quantity while
+measuring something else — a fraction of it, a ratio to it, a mass per unit of it, a dispersion
+statistic over it — SHALL NOT be expected, though a substring match on the property would select it.
+Membership is therefore a judgement made against the corpus by a person and reviewed, not a query;
+where such an entry nonetheless answers the question by a short derivation, it belongs in the
+admissible list instead. A **follow-up** narrows to the condition it asks about rather than
+inheriting its parent's whole expectation.
+
+The set SHALL be built from the corpus vocabulary and SHALL NOT be widened to what an agent cited: a
+set grown to what the system found is one the system passes by construction.
 
 An expected entry discharges its obligation by **reaching the entries table** — the table lists
 every retrieved entry, the cited ones first — rather than by being cited in the prose. Requiring
@@ -114,6 +123,10 @@ table is the intended shape.
 #### Scenario: Answer cites an admissible entry
 - **WHEN** an answer cites an entry recorded for the question as admissible rather than expected
 - **THEN** it is not reported as unexpected, and not counted towards the expected entries
+
+#### Scenario: An entry names the quantity but measures something else
+- **WHEN** an entry's property mentions the asked quantity while recording a fraction of it, a ratio to it, or a quantity per unit of it
+- **THEN** it is not an expected entry, although a substring match on the property would select it
 
 #### Scenario: Answer cites entries recorded as neither expected nor admissible
 - **WHEN** an answer cites entries the question set does not record

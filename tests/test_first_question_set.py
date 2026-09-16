@@ -73,3 +73,56 @@ def test_at_least_one_question_rests_only_on_complete_entries(entries):
         )
         for question in questions
     )
+
+
+# A phrase that marks an entry as measuring something *about* a quantity rather
+# than the quantity itself. Not a parser -- a tripwire, in the exact shape the
+# list has twice been rebuilt into and once been wrong about.
+ALSO_RECORDS_IT = {
+    # "Mass fraction of ribosome *and the number of ribosomes* in E. coli TG1 at
+    # different phases of growth" -- a compound property that names a fraction and
+    # records the count as well, so it is expected and the phrase list cannot tell.
+    # Exempted by name with the reason rather than by blunting the rule, because
+    # the rule's whole value is that it is sharp.
+    105780,
+}
+
+DERIVED_OF = (
+    "fraction of",
+    "percentage of",
+    "percent of",
+    "ratio between",
+    "ratios ",
+    "per unit ",
+    "standard deviation",
+    "relative ",
+)
+
+
+def test_no_expected_entry_merely_names_the_quantity(entries):
+    """The requirement says expected entries *record* the asked quantity, not that
+    their property names it.
+
+    A substring match on `property` selects "Fraction of nuclear volume out of cell
+    volume" for a cell-volume question, and "Dry mass per unit cell volume", and
+    "Ratio between diploid/haploid cell volume". None of them records a cell
+    volume. The lists were built by hand for exactly this reason, and this fires if
+    anyone later rebuilds them with a query -- which is how they were wrong the
+    first time.
+
+    Anything genuinely answering the question by a short derivation belongs in
+    `admissible_entries`, which this deliberately does not check.
+    """
+    held = {entry.entry_id: entry for entry in entries}
+    offenders = []
+    for question in load_question_set(FIRST_SET, entries):
+        for identifier in question.expected_entries:
+            if identifier in ALSO_RECORDS_IT:
+                continue
+            name = held[identifier].property.lower()
+            hit = next((phrase for phrase in DERIVED_OF if phrase in name), None)
+            if hit:
+                offenders.append(f"{question.question_id}: {identifier} ({hit!r}) {name[:60]}")
+    assert not offenders, (
+        "expected entries that measure something about the quantity:\n  " + "\n  ".join(offenders)
+    )

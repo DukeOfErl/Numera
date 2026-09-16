@@ -681,5 +681,26 @@ there.
     earning its place in the same session it exposed the stale wording.
 - [x] 7.6 Reconcile the ADR block against `CLAUDE.md` before archiving
 
-- [ ] 7.7 Review the whole change before archiving: the specs against the code that claims to
+- [x] 7.7 Review the whole change before archiving: the specs against the code that claims to
       satisfy them, not only the last group's diff (see 1.5)
+  - **Done 2026-09-16, by reading every SHALL clause of all fourteen requirements against what
+    satisfies it.** Two were worth the pass; the rest hold.
+  - **The expected-entries clause said something the set is not, and something nobody should build.**
+    It read "every entry in the corpus recording the asked property", which a reader implements as a
+    substring query — and that query sweeps in "Fraction of nuclear volume out of cell volume", "Dry
+    mass per unit cell volume" and "Ratio between diploid/haploid cell volume" for a cell-volume
+    question. None of them records a cell volume. Measured: the query selects 30 entries for
+    `ecoli-cell-volume` where the set lists 24, and 52 for the comparison where the set lists 45.
+    The requirement now says **records the quantity, not names it**, says that membership is a
+    judgement made against the corpus and reviewed rather than a query, points the short-derivation
+    cases at the admissible list, and allows a follow-up to narrow to its condition.
+  - A `corpus`-marked tripwire now guards it: no expected entry may carry "fraction of", "per unit",
+    "ratio between", "standard deviation" and the like. It fires if anyone rebuilds the lists with a
+    query, which is how they were wrong the first time. One entry is exempted **by name with its
+    reason** — 105780 is "Mass fraction of ribosome *and the number of ribosomes*", a compound
+    property that records the asked count as well — rather than blunting the rule, whose whole value
+    is that it is sharp.
+  - **The provenance clause holds, and was checked rather than assumed.** It requires every model
+    setting that shapes an answer, naming reasoning effort and sampling. `Config` carries neither, so
+    there is nothing unrecorded; `Provenance` already says in its docstring that effort joins it when
+    `Config` gains it.
