@@ -65,3 +65,56 @@ writing?" and not "has anything been recorded this month". The second question i
 answered by querying the table for a gap in timestamps, which is the only form of
 it that survives the restart this change exists to make survivable. Recording
 that here because the first is easy to mistake for the second.
+
+## Giving up was permanent, and that lost everything
+
+Reported by the operator: the trail had stopped reaching the database. It had, for
+every run, and nothing said so.
+
+`install` attempted the schema once and, on failure, **returned without attaching
+the handler at all**. It runs inside `web.resources`, which is
+`@st.cache_resource` — once per container. So a single failed connection at
+startup meant nothing was even trying to write for the life of the process, and
+the database being reachable two seconds later changed nothing.
+
+Neon's free tier suspends compute after minutes of inactivity, and a cold start
+can outrun `CONNECT_TIMEOUT_S`. Opening the app after a break was therefore the
+*ordinary* case and the failing one. It was silent by construction: recording
+fails open, so the only evidence was one `complain()` line on stderr at startup,
+and the file sink kept working — 292 records across 31 questions sat in
+`logs/trace.jsonl` while the table stayed empty.
+
+**Reproduced before it was fixed**, with an engine that refuses exactly one
+connection and then behaves: handler attached `False`, rows written by ten later
+records `0`. Against a healthy engine, `True` and 22.
+
+### What was right about the old reasoning, and what was not
+
+The cost argument holds and is kept: an unreachable database does not fail fast,
+so paying a connection attempt per question to rediscover a known-dead
+destination is exactly what this ADR's no-retry rule forbids. A reader would feel
+it as a stall on every question.
+
+The error was concluding "never retry" from "do not retry hard". A verdict about
+a destination has a lifetime, and this one had none. `_reachable` now retries the
+schema on a timed backoff — once a minute, doubling to a quarter of an hour, the
+wait extended *before* each attempt so a failure cannot retry on the next record,
+and reset on success so a recovered store keeps no punitive interval. One stalled
+question per interval while the destination is down, bounded and shrinking.
+
+Both routes to being unusable — the schema failing at install, and enough
+consecutive write failures to conclude the destination died — now clear the same
+flag and recover through the same path. The second had the identical defect: a
+container that idled overnight while the database slept would have given up for
+good.
+
+### Two tests asserted the broken behaviour
+
+`test_install_when_the_schema_cannot_be_created_adds_no_handler` and
+`test_a_store_whose_schema_is_absent_does_not_connect_per_call` both passed
+throughout, because both encoded the intent rather than the consequence. They are
+rewritten to the new contract and say in their docstrings what they used to claim.
+
+That is the lesson worth keeping: a test can be perfectly correct about what the
+code does and still be the reason nobody looks. Neither was wrong about
+behaviour — they were wrong about what the behaviour was *for*.

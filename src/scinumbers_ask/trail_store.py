@@ -85,6 +85,27 @@ POOL_RECYCLE_S = 300
 #: (ADR-0710), and it points the same way here.
 FAILURES_BEFORE_GIVING_UP = 3
 
+# How long a store that cannot reach its destination waits before trying again,
+# and the ceiling that wait doubles towards.
+#
+# **Giving up used to be permanent, and that lost every record this module was
+# written to keep.** `install` runs inside `web.resources`, which is
+# `@st.cache_resource` -- once per container. A single failed connection there and
+# the handler was never attached at all; the database being awake two seconds
+# later changed nothing until somebody restarted the app. Neon's free tier
+# suspends compute after minutes of inactivity and a cold start can outrun
+# `CONNECT_TIMEOUT_S`, so the ordinary case -- open the app after lunch -- was the
+# failing one. Nothing said so: recording fails open, so the only evidence was one
+# line on stderr at startup.
+#
+# The retry is timed rather than per-record because the original reasoning still
+# holds: an unreachable database does not fail fast, and paying a connection
+# attempt on every question to rediscover something already known is what the
+# no-retry rule forbids. Once a minute, doubling to a quarter of an hour, bounds
+# that cost to one stalled question per interval while the destination is down.
+SCHEMA_RETRY_AFTER_S = 60
+SCHEMA_RETRY_CEILING_S = 900
+
 DEFAULT_TABLE = "trail"
 
 #: Failures across every store in this process, so an operator asking "is this
@@ -178,6 +199,10 @@ class TrailStore:
     #: gone; one is an ordinary blip and must not close a working store.
     consecutive_failures: int = 0
     ready: bool = False
+    # Monotonic, so it is immune to the clock being set. Zero means "try now",
+    # which is what a store that has never succeeded should do on its first record.
+    retry_after: float = 0.0
+    retry_delay: float = SCHEMA_RETRY_AFTER_S
     _last_write_ms: int | None = None
 
     def ensure_schema(self) -> bool:
@@ -200,6 +225,31 @@ class TrailStore:
             self.ready = False
             return False
         self.ready = True
+        return True
+
+    def _reachable(self) -> bool:
+        """Whether to attempt a write, retrying the schema when its wait is up.
+
+        The one place that decides a store is usable. Both ways of becoming
+        unusable -- the schema failing at install, and enough consecutive write
+        failures to conclude the destination has died -- clear `ready`, so both
+        recover through here and neither needs its own revival path.
+
+        The wait is extended *before* the attempt, so a failure cannot retry on
+        the very next record, and reset on success, so an app that recovers does
+        not keep a punitive interval it no longer needs.
+        """
+        if self.ready:
+            return True
+        now = time.monotonic()
+        if now < self.retry_after:
+            return False
+        self.retry_after = now + self.retry_delay
+        self.retry_delay = min(self.retry_delay * 2, SCHEMA_RETRY_CEILING_S)
+        if not self.ensure_schema():
+            return False
+        self.retry_delay = SCHEMA_RETRY_AFTER_S
+        self.consecutive_failures = 0
         return True
 
     def record(
@@ -231,7 +281,7 @@ class TrailStore:
         restart, or another call to `ensure_schema`; deliberately not automatic,
         since retrying on the render path is what the paragraph above forbids.
         """
-        if not self.ready:
+        if not self._reachable():
             return False
         started = time.perf_counter()
         try:
@@ -263,9 +313,10 @@ class TrailStore:
                 # the same decision as `record`'s early refusal above, reached by
                 # evidence rather than by configuration.
                 self.ready = False
+                self.retry_after = time.monotonic() + self.retry_delay
                 complain(
-                    f"trail store giving up after {self.consecutive_failures}"
-                    " consecutive failures; restart to retry",
+                    f"trail store pausing after {self.consecutive_failures}"
+                    f" consecutive failures; retrying in {int(self.retry_delay)}s",
                     exc,
                 )
             return False
@@ -349,10 +400,13 @@ def install(engine: Any, *, table: str = DEFAULT_TABLE, logger_name: str) -> Tra
     if engine is None:
         return None
     store = TrailStore(engine=engine, table=table)
-    if not store.ensure_schema():
-        # Reported once, here, rather than once per question. A destination that
-        # is configured and broken is an operator's problem and not a reader's.
-        return store
+    # The schema is attempted here so the cost is paid once at startup rather than
+    # on a reader's first question -- but a failure here **must not** be the end of
+    # it. The handler is attached either way, and `_reachable` retries on a later
+    # record. Returning early without attaching is what made one timed-out
+    # connection at startup silently discard every record for the life of the
+    # container; see SCHEMA_RETRY_AFTER_S.
+    store.ensure_schema()
     logger = logging.getLogger(logger_name)
     for existing in [h for h in logger.handlers if isinstance(h, TrailHandler)]:
         logger.removeHandler(existing)

@@ -909,11 +909,23 @@ FEEDBACK_THANKS = "Thanks — recorded."
 # That also avoids naming which half of the pair is selected --
 # `stFeedbackButtonActive` is the markup most likely to move under us, and letting
 # Streamlit keep its own state styling means never having to track it.
+#: The settled look is set here rather than left to fall through, and that is a
+#: retreat from cleverness. Excluding the disabled state was supposed to let the
+#: icon's `color: inherit` resolve to the button's `&:disabled` colour. It did not
+#: — a reader rated an answer and the thumb stayed orange — and after being wrong
+#: twice about this bundle by reading it, the third attempt stops depending on an
+#: inheritance chain nothing here can observe.
+#:
+#: `opacity` on the button, not a colour on the icon: it cannot be defeated by
+#: whatever the icon's own colour turns out to compute to, it needs no second
+#: value chosen per theme, and it fades the chosen thumb without hiding *which*
+#: thumb was chosen — which a flat grey would.
 FEEDBACK_CSS = """
 <style>
 [data-testid="stFeedback"] button:not(:disabled) [data-testid="stIconMaterial"] {
   color: #ff9d3c;
 }
+[data-testid="stFeedback"] button:disabled { opacity: 0.45; }
 @media (prefers-color-scheme: light) {
   [data-testid="stFeedback"] button:not(:disabled) [data-testid="stIconMaterial"] {
     color: #c2410c;

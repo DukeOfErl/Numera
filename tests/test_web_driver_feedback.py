@@ -421,11 +421,16 @@ def test_the_colour_rule_leaves_a_settled_rating_looking_settled(app):
     """
     rule = next((m.value for m in app.run().markdown if "stIconMaterial" in m.value), None)
     assert rule, "no colour rule was emitted"
-    for selector in re.findall(r"\[data-testid=\"stFeedback\"\][^{]*", rule):
+
+    for selector in re.findall(r'\[data-testid="stFeedback"\][^{]*stIconMaterial[^{]*', rule):
         assert ":not(:disabled)" in selector, (
-            f"this selector paints a disabled thumb too, so a rated answer looks "
-            f"unrated: {selector.strip()}"
+            f"this selector colours a disabled thumb too: {selector.strip()}"
         )
+    assert re.search(r"button:disabled\s*\{[^}]*opacity", rule), (
+        "nothing fades a rated thumb. Excluding it from the colour was tried and "
+        "was not enough — the thumb stayed bright — so the settled look is set "
+        "here rather than inherited."
+    )
 
 
 # --- nothing interactive exists while the agent is still working -------------
@@ -584,3 +589,61 @@ def test_older_ratings_come_back_to_life_once_the_answer_is_finished(app):
     assert len(live) == 2, "two answers, two ratings"
     assert not live[0].disabled, "the older answer's rating stayed dead after the run finished"
     assert not live[1].disabled, "the new answer's rating is not offered"
+
+
+def test_the_live_path_splits_the_columns_the_same_way_the_replay_does():
+    """The placement tests above only ever see `show()`, and that is not obvious.
+
+    `streamlit_app.py` ends the live branch with `st.rerun()`, so by the time
+    `AppTest` settles, what it inspects is the *replay* render. Two mutants in
+    `answer()` — sending every item to the prose column, and sending the rating to
+    the evidence column — survived the entire suite because of it.
+
+    That is the mirror of the trap recorded at `RETRIEVAL_RUNNING`: there the
+    rerun exposed a replay-path defect loudly, here it hides a live-path one
+    silently. The reader sees the live render for the whole time an answer streams,
+    which is the moment the requirement is written about — a rating waiting at the
+    foot of the prose, never below the entries.
+
+    So this drives `web.answer` directly, with no page to re-run.
+    """
+
+    def page():
+        import streamlit as st
+
+        from scinumbers_ask import web
+        from scinumbers_ask.corpus import load
+        from scinumbers_ask.events import Answer, AnswerEntries, EndReason, QuestionEnded
+        from scinumbers_ask.repository import CorpusRepository
+
+        repo = CorpusRepository(load(st.session_state["corpus"]))
+        events = [
+            Answer(question_id="q1", text="about 1 micrometre"),
+            AnswerEntries(question_id="q1", cited=(100002,), retrieved=(100002, 100001)),
+            QuestionEnded(
+                question_id="q1",
+                reason=EndReason.ANSWERED,
+                spend=10,
+                run_spend=10,
+                model="m",
+                tool_calls=1,
+            ),
+        ]
+        items: list[web.Item] = []
+        web.answer(
+            iter(events),
+            repo,
+            items,
+            after_prose=lambda: web.draw_feedback(items, "s1", st.session_state),
+        )
+
+    at = AppTest.from_function(page, default_timeout=TIMEOUT)
+    at.session_state["corpus"] = FIXTURE
+    at = at.run()
+    assert not at.exception, at.exception
+
+    prose, evidence = _turn_columns(at)[0]
+    assert prose.get("feedback"), "the live path put no rating in the prose column"
+    assert not evidence.get("feedback"), "the live path rated in the evidence column"
+    assert evidence.dataframe, "the live path drew no table in the evidence column"
+    assert not prose.dataframe, "the live path left the table in the prose column"
