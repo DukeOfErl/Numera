@@ -48,28 +48,42 @@ except (CorpusUnavailable, NotConfigured) as exc:
     st.error(web.as_text(str(exc)))
     st.stop()
 
-session = web.session_id(st.session_state, st.query_params)
+# The token in the URL. It continues a conversation on a developer's machine and
+# is what a bookmark carries -- but it is supplied by whoever holds the link, so
+# under sign-in it is not what the conversation is keyed on (see below).
+url_session = web.session_id(st.session_state, st.query_params)
 
-# The cap, before the door: a deployment at its limit turns a new session away
-# with one sentence and offers nothing -- not even sign-in, so the cap also
-# bounds the OAuth round trips. A session already admitted is touched and never
-# ended; the count is by heartbeat, not by client address (ADR-0790).
-if not web.session_registry().admit(session):
+# The door, before anything is drawn. Where identity is configured a visitor who
+# is not signed in, not enrolled, or holding no credential is offered sign-in or
+# the one sentence that says why not -- no question, no answer, no record. Where
+# it is not configured the door is open and the page runs exactly as it did
+# before identity existed.
+admission = web.admit(st.session_state, web.trail_destination, url_session)
+if admission.door is not web.Door.OPEN:
+    web.draw_closed_door(admission, url_session)
+    st.stop()
+
+# What the conversation, the identity stamp, the dev panel and the cap are all
+# keyed on. Derived from the account where one is signed in, so two readers on
+# one shared link cannot overwrite each other's attribution and the OAuth
+# redirect -- which drops the query string -- cannot strand a session (ADR-0830).
+session = web.effective_session(admission, url_session)
+# Every rerun, not only at sign-in: a session pruned for idleness and returned to
+# would otherwise keep drawing "signed in as" while recording nobody.
+web.establish_identity(admission, session)
+
+# The cap, at the door rather than before it. Counting a visitor who has not yet
+# passed the door left a place held by every abandoned pre-sign-in visit; what
+# costs the host is a session with an agent behind it. A tab already holding a
+# conversation is admitted whatever the count, because no open session is ended
+# to make room (ADR-0790).
+if not web.session_registry().admit(session, continuing=bool(web.transcript(st.session_state))):
     web.draw_try_later()
     st.stop()
 
-# The door, before anything is drawn. Where identity is configured a visitor who
-# is not signed in, or not enrolled, is offered sign-in or the one sentence that
-# says why not -- no question, no answer, no record. Where it is not configured
-# the door is open and the page runs exactly as it did before identity existed.
-admission = web.admit(st.session_state, web.trail_destination(), session)
-if admission.door is not web.Door.OPEN:
-    web.draw_closed_door(admission, session)
-    st.stop()
-# One agent per session, holding this account's credential and nothing else
-# about the person. `None` means an enrolled account with no credential issued:
-# the input below is replaced by the sentence saying so, and no agent exists to
-# fall back on the environment's key.
+# One agent per session, holding this account's credential and nothing else about
+# the person. Never None: an enrolled account with no credential met its own door
+# above, so nothing here can fall back on the environment's key.
 agent = web.agent_for(st.session_state, repo, admission)
 
 # Asked before anything is drawn, because every control drawn below is live in the
@@ -107,8 +121,7 @@ with st.sidebar:
     # panel must not gain a section the moment a question completes: a layout that
     # grows under the reader is a worse surprise than a bar showing nothing spent.
     spent_and_cap = web.run_status(
-        web.transcript(st.session_state),
-        (agent.run_spend(), agent.run_budget) if agent is not None else None,
+        web.transcript(st.session_state), (agent.run_spend(), agent.run_budget)
     )
     if spent_and_cap:
         spent, cap = spent_and_cap
@@ -159,11 +172,6 @@ if web.run_is_over(web.transcript(st.session_state)):
         ),
         icon=":material/block:",
     )
-# An enrolled account with no credential issued: the operator's to fix, so the
-# input is replaced by the sentence saying so rather than left to fail on the
-# first question.
-elif agent is None:
-    st.error(web.as_text(web.messages.NO_CREDENTIAL), icon=":material/key_off:")
 # `submit_mode="disable"` because a question runs for as long as the agent takes:
 # leaving the input live invites a second question into the middle of the first.
 elif question := st.chat_input("Ask a question", submit_mode="disable", key=web.ASK_KEY):

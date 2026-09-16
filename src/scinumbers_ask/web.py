@@ -20,6 +20,7 @@ re-run after the next question.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -344,6 +345,7 @@ class Door(StrEnum):
     OPEN = "open"
     SIGN_IN = "sign in"
     NOT_ENROLLED = "not enrolled"
+    NO_CREDENTIAL = "no credential"
     UNAVAILABLE = "enrolment check unavailable"
 
 
@@ -393,48 +395,54 @@ def signed_in_email() -> str | None:
     return user.get("email") or None
 
 
-def admit(state: MutableMapping[str, Any], engine: Any | None, session_id: str) -> Admission:
-    """Decide the door for this session, reading enrolment once per account.
+def admit(
+    state: MutableMapping[str, Any],
+    engine: Any | Callable[[], Any | None] | None,
+    session_id: str,
+) -> Admission:
+    """Decide the door, reading enrolment once per account.
 
-    Held in session state keyed by the email, so a rerun does not pay a database
-    round trip and a different account signing in on the same tab is looked up
-    afresh. Two things are deliberately *not* held:
+    The enrolment row is held in session state keyed by the email, so a rerun
+    does not pay a database round trip and a different account signing in on the
+    same tab is looked up afresh. The unavailable check is deliberately *not*
+    held: a database that wakes up admits the reader on the next rerun, so a
+    person told "try again shortly" who tries again is actually retried.
 
-    - An unavailable check. It is retried on the next rerun, so a database that
-      wakes up admits the reader without a reload -- and a person told "try
-      again shortly" who tries again must actually be retried.
-    - Anything for a visitor who is not signed in. There is nothing to hold, and
-      the registry entry for this session is dropped so that a sign-out followed
-      by nothing leaves no identity behind it.
+    This decides the door only; it does not register identity. The caller maps
+    the account to its *effective* session (`effective_session`) and stamps
+    that, because under sign-in the conversation is keyed on the account and not
+    on the reader-supplied URL token (ADR-0830) -- so a session id passed here,
+    which comes from the URL, is not where identity is keyed.
+
+    `engine` may be an engine or a zero-argument callable returning one; the
+    callable is invoked only on the one path that needs it -- configured, signed
+    in, and not already held -- so an unconfigured or not-signed-in rerun pays
+    nothing, and a misconfigured trail URL does not `complain` on every click.
 
     **Fails closed.** No engine, or one that cannot be read, is `UNAVAILABLE`,
-    never `OPEN` and never `NOT_ENROLLED`: the accounts module says why the
-    trail's fail-open reasoning does not transfer, and the page says a different
-    sentence for it so the operator is not sent looking for a row that exists.
+    never `OPEN`: the accounts module says why the trail's fail-open reasoning
+    does not transfer, and the page says a different sentence so the operator is
+    not sent looking for a row that exists. An enrolled account with no
+    credential is `NO_CREDENTIAL`, a door of its own so the page has one gate and
+    never an agent that could fall back to the environment's key.
 
     A refused sign-in is recorded with the email in the record's own fields --
-    there is no session identity for the stamp to add, because the person was
-    refused one -- and no question id, because there is no question.
+    there is no identity to stamp, because the person was refused one.
     """
     if not identity_configured():
         return Admission(Door.OPEN, configured=False)
     email = signed_in_email()
     if email is None:
-        forget_identity(session_id)
         state.pop(ADMISSION_KEY, None)
         return Admission(Door.SIGN_IN, configured=True)
     held = state.get(ADMISSION_KEY)
     if held is not None and held[0] == email:
         return held[1]
-    # A different account on this session id, or the first: whatever identity the
-    # registry held for it is no longer this person's. Forgotten *before* the
-    # lookup, so a refusal recorded below is not stamped with the previous
-    # account -- a verifier produced exactly that row before this line existed.
-    forget_identity(session_id)
     try:
-        if engine is None:
+        resolved = engine() if callable(engine) else engine
+        if resolved is None:
             raise EnrolmentUnavailable("no accounts database is configured")
-        account = accounts.lookup(engine, email)
+        account = accounts.lookup(resolved, email)
     except EnrolmentUnavailable as exc:
         trail_store.complain("enrolment check unavailable", exc)
         return Admission(Door.UNAVAILABLE, configured=True)
@@ -442,14 +450,65 @@ def admit(state: MutableMapping[str, Any], engine: Any | None, session_id: str) 
         trace.QuestionTrace(
             question_id="",
             session_id=session_id,
-            run_label=env_setting("SCINUMBERS_RUN", "").strip() or "dev",
+            run_label=Config.from_env().run_label,
         ).record("signin.refused", email=email)
         admission = Admission(Door.NOT_ENROLLED, configured=True)
+    elif not account.openrouter_key:
+        admission = Admission(Door.NO_CREDENTIAL, configured=True, account=account)
     else:
-        remember_identity(session_id, Identity(account.email, account.role))
         admission = Admission(Door.OPEN, configured=True, account=account)
     state[ADMISSION_KEY] = (email, admission)
     return admission
+
+
+def effective_session(admission: Admission, url_session: str) -> str:
+    """The key the conversation, the identity stamp, the panel and the cap all use.
+
+    Where identity is configured and an account is signed in, it is derived from
+    the account and **not** from the URL token: the token is recovered from
+    `?session=` and is shared by anyone given the link, so keying identity on it
+    let a second reader on the same link overwrite the first's stamp, and let the
+    OAuth redirect -- which drops the query string -- strand the pre-sign-in
+    session. Deriving it from the email removes both by construction: two accounts
+    on one link get two sessions, and the key survives the redirect. One account
+    is then one conversation, across tabs and reloads, which for a tester is the
+    right default and is what the checkpoint thread already keys on (ADR-0830).
+
+    Where identity is not configured -- a developer's machine -- the URL token is
+    kept, so a session stays bookmarkable exactly as before.
+    """
+    if admission.configured and admission.account is not None:
+        digest = hashlib.sha256(admission.account.email.encode()).hexdigest()[:16]
+        return f"acct:{digest}"
+    return url_session
+
+
+def establish_identity(admission: Admission, session_id: str) -> None:
+    """Stamp this session with the signed-in account, or clear it if there is none.
+
+    Called by the driver every rerun of an open page, keyed on the *effective*
+    session, so a session pruned for idleness and then returned to is re-stamped
+    rather than silently losing its account on the next question -- the bug a
+    held admission that never re-registered used to have.
+    """
+    if admission.identity is not None:
+        remember_identity(session_id, admission.identity)
+    else:
+        forget_identity(session_id)
+
+
+def end_session(session_id: str) -> None:
+    """Forget everything this deployment holds for one session, in one place.
+
+    The identity stamp, the panel's rows and the cap's heartbeat are three
+    per-session stores; a sign-out that cleared only one left the next account on
+    the same tab able to see the last one's panel rows. One function so a new
+    store, or a new exit path, has one place to join rather than a checklist.
+    """
+    forget_identity(session_id)
+    if RECENT is not None:
+        RECENT.forget(session_id)
+    session_registry().drop(session_id)
 
 
 def checkpoint_path() -> str:
@@ -464,7 +523,7 @@ def checkpoint_path() -> str:
 
 def agent_for(
     state: MutableMapping[str, Any], repo: CorpusRepository, admission: Admission
-) -> AskAgent | None:
+) -> AskAgent:
     """One agent per browser session, funded by this account's credential.
 
     Built into session state rather than under `st.cache_resource`, because the
@@ -481,13 +540,16 @@ def agent_for(
     so whatever asks for an agent meets it.
 
     Where no identity is configured, `None` is the environment's key, exactly
-    as before this change.
+    as before this change. Called only for an `OPEN` admission -- an enrolled
+    account with no credential is `NO_CREDENTIAL`, a closed door -- so this never
+    returns `None` and the page never holds an optional agent. It raises rather
+    than fall back to the environment's key for a configured account that
+    reaches here without one, which the door should already have prevented.
     """
     if admission.configured:
         account = admission.account
         if account is None or not account.openrouter_key:
-            state.pop(AGENT_KEY, None)
-            return None
+            raise ValueError("agent_for called for a configured account with no credential")
         key: str | None = account.openrouter_key
     else:
         key = None
@@ -500,7 +562,7 @@ def agent_for(
 
 
 def _sign_out(session_id: str) -> None:
-    forget_identity(session_id)
+    end_session(session_id)
     st.logout()
 
 
@@ -514,8 +576,14 @@ def draw_closed_door(admission: Admission, session_id: str) -> None:
     elif admission.door is Door.NOT_ENROLLED:
         st.error(as_text(messages.NOT_ENROLLED), icon=":material/person_off:")
         st.button("Sign out", on_click=_sign_out, args=(session_id,))
+    elif admission.door is Door.NO_CREDENTIAL:
+        st.error(as_text(messages.NO_CREDENTIAL), icon=":material/key_off:")
+        st.button("Sign out", on_click=_sign_out, args=(session_id,))
     elif admission.door is Door.UNAVAILABLE:
         st.error(as_text(messages.ENROLMENT_CHECK_UNAVAILABLE), icon=":material/cloud_off:")
+        # A widget, so the retry the docstring promises can happen without the
+        # reader reloading: Streamlit only reruns on interaction.
+        st.button("Try again", on_click=lambda: None, icon=":material/refresh:")
 
 
 def draw_identity(admission: Admission, session_id: str) -> None:
@@ -734,19 +802,27 @@ class SessionRegistry:
         self.prune()
         return len(self._last_seen)
 
-    def admit(self, session_id: str) -> bool:
+    def admit(self, session_id: str, *, continuing: bool = False) -> bool:
         """Touch a known session, or admit a new one if there is room.
 
-        A known session is always admitted and never ended: the cap refuses the
-        door, it does not clear the room. A new one at the cap is refused and
-        **not recorded**, so a refused visitor's retry costs nothing and does
-        not hold a place they were not given.
+        A session already counted is always re-admitted and never ended: the cap
+        refuses the door, it does not clear the room. `continuing` says this tab
+        already holds a conversation -- so a session pruned for idleness while its
+        reader was mid-conversation is re-admitted rather than turned away at the
+        cap, which "no open session is ended" requires and pruning alone would
+        break. A genuinely new session at the cap is refused and **not recorded**,
+        so a refused visitor's retry costs nothing.
         """
         self.prune()
-        if session_id in self._last_seen or len(self._last_seen) < self.max_sessions:
+        known = session_id in self._last_seen
+        if known or continuing or len(self._last_seen) < self.max_sessions:
             self._last_seen[session_id] = self.clock()
             return True
         return False
+
+    def drop(self, session_id: str) -> None:
+        """Free a session's place immediately, on sign-out."""
+        self._last_seen.pop(session_id, None)
 
 
 @st.cache_resource

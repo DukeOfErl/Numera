@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from conftest import FIXTURE, agent_with
+from conftest import FIXTURE, agent_with, ask_question
 from streamlit.testing.v1 import AppTest
 
 from agent_doubles import says, scripted
@@ -70,6 +70,44 @@ def test_a_refused_visitor_holds_no_place(capped):
     assert web.session_registry().live() == 2
 
 
+def test_a_visitor_who_has_not_passed_the_door_holds_no_place(capped, monkeypatch):
+    """Counting before the door meant every abandoned sign-in page held a slot
+    for the idle window -- and Streamlit's OAuth callback drops the query string,
+    so each sign-in stranded exactly one. What costs the host is a session with
+    an agent behind it, which is what the cap now counts."""
+    monkeypatch.setattr(web, "identity_configured", lambda: True)
+    monkeypatch.setattr(web, "signed_in_email", lambda: None)
+    for _ in range(5):
+        at = capped().run()
+        assert not at.chat_input, "control: the door was closed"
+        assert not _turned_away(at)
+    assert web.session_registry().live() == 0
+
+
+def test_a_session_mid_conversation_is_not_turned_away_when_the_cap_fills(capped):
+    """ "No open session is ended" has to survive pruning: a reader who steps away
+    past the idle window loses their heartbeat, and without this comes back to a
+    try-later page with their transcript gone."""
+    reader = capped().run()
+    reader = ask_question(reader, "how many?")
+    registry = web.session_registry()
+    session = reader.session_state[web.SESSION_KEY]
+    registry.drop(session)  # what prune does after the idle window
+    for _ in range(registry.max_sessions):
+        capped().run()
+    assert registry.live() == registry.max_sessions
+
+    returned = reader.run()
+    assert not _turned_away(returned), "a reader mid-conversation was turned away"
+    assert returned.chat_input
+
+
+def test_a_genuinely_new_session_is_still_refused_at_the_cap(capped):
+    """The other direction: `continuing` must not become a way in for everyone."""
+    capped().run(), capped().run()
+    assert _turned_away(capped().run())
+
+
 def test_the_cap_is_read_from_the_environment(monkeypatch):
     monkeypatch.setenv(web.MAX_SESSIONS_ENV, "7")
     monkeypatch.setenv(web.SESSION_IDLE_ENV, "42")
@@ -88,6 +126,22 @@ def _registry(max_sessions=2, idle_s=600.0):
     now = {"t": 1000.0}
     registry = web.SessionRegistry(max_sessions=max_sessions, idle_s=idle_s, clock=lambda: now["t"])
     return registry, now
+
+
+def test_a_continuing_session_is_admitted_over_the_cap_but_a_new_one_is_not():
+    registry, _ = _registry(max_sessions=1)
+    assert registry.admit("a")
+    assert not registry.admit("b"), "a new session at the cap"
+    assert registry.admit("b", continuing=True), "a tab already holding a conversation"
+    assert registry.live() == 2
+
+
+def test_dropping_a_session_frees_its_place_at_once():
+    registry, _ = _registry(max_sessions=1)
+    assert registry.admit("a")
+    assert not registry.admit("b")
+    registry.drop("a")
+    assert registry.admit("b")
 
 
 def test_a_session_that_goes_idle_frees_a_place():

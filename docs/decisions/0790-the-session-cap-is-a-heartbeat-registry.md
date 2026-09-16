@@ -34,15 +34,32 @@ Two ways to count were on the table:
 ## Decision
 
 **`web.SessionRegistry`, one per server under `st.cache_resource`, keyed on the
-session identifier the page already carries.** Every rerun of an admitted session
-touches it. A new session arriving when the live count is at
-`SCINUMBERS_MAX_SESSIONS` (default 20) is shown one sentence — try again
-shortly — **before sign-in is offered**, so the cap also bounds OAuth round trips,
-and is not recorded, so a refused visitor holds no place. An admitted session is
-never ended to make room: the cap refuses the door, it does not clear the room.
-Entries idle longer than `SCINUMBERS_SESSION_IDLE_S` (default 600) are pruned, and
-pruning also evicts the session's entry in the identity registry and its rows in
-the dev panel's sink, which are keyed the same way.
+session's effective identifier** (ADR-0830 — the account where one is signed in,
+the URL token otherwise). Every rerun of an admitted session touches it. A new
+session arriving when the live count is at `SCINUMBERS_MAX_SESSIONS` (default 20)
+is shown one sentence — try again shortly — and is not recorded, so a refused
+visitor holds no place. An admitted session is never ended to make room: the cap
+refuses the door, it does not clear the room. Entries idle longer than
+`SCINUMBERS_SESSION_IDLE_S` (default 600) are pruned, and pruning also evicts the
+session's entry in the identity registry and its rows in the dev panel's sink,
+which are keyed the same way.
+
+**Counted at the door, not before it — revised 2026-09-16.** The first version
+counted every visitor before sign-in was offered, on the reasoning that the cap
+should also bound OAuth round trips. That claim is withdrawn. Streamlit's login
+callback returns to the bare base URL, so the pre-sign-in visit and the signed-in
+one are different sessions, and counting the first left a place held by every
+sign-in for the length of the idle window — the cap ran out with a fraction of
+its sessions real. What costs the host is a session with an agent behind it, and
+that is what is now counted. OAuth round trips are bounded by the provider, not
+here.
+
+**A tab already holding a conversation is admitted whatever the count.** Pruning
+is by heartbeat, so a reader who steps away past the idle window loses their
+entry; without this they returned mid-conversation to a try-later page, which is
+precisely the "no open session is ended" the message promises. `continuing` is
+the driver's statement that this tab already has a transcript, and it is the one
+way past a full cap.
 
 **Nothing reads the client's address**, and a test asserts that over the source
 of the two files that could.

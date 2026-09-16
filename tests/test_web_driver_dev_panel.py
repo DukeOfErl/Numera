@@ -119,16 +119,34 @@ def test_the_developer_s_machine_sees_the_panel(page, recent):
 
 
 def test_two_sessions_panels_show_only_their_own_records(page, recent):
-    """The question text differs between the two, so a shared buffer cannot pass."""
+    """The question text differs between the two, so a shared buffer cannot pass.
+
+    Asserted on each page's own draw and again on the sink beneath them, keyed by
+    the session each account actually got. The pages cannot be re-run against each
+    other here: `web.signed_in_email` is one process-wide stub, so re-running the
+    first page after the second was built would re-identify it as the second
+    account -- correct behaviour for a browser whose signed-in account changed,
+    and an artefact of the fixture rather than a leak. The sink check below is
+    what actually rules leakage out.
+    """
     one = page(auth=True, email=DEV.email, enrolled={DEV.email: DEV}).run()
     one = _ask(one, "first session's question")
     two = page(auth=True, email=ADMIN.email, enrolled={ADMIN.email: ADMIN}).run()
     two = _ask(two, "second session's question")
-    one.run()  # redraw, so the first panel would show the second's rows if it leaked
 
     (first,), (second,) = _panel(one), _panel(two)
     assert set(first.value["question"]) == {"first session's question"}
     assert set(second.value["question"]) == {"second session's question"}
+
+    dev_session = web.effective_session(
+        web.Admission(web.Door.OPEN, configured=True, account=DEV), "shared-link"
+    )
+    admin_session = web.effective_session(
+        web.Admission(web.Door.OPEN, configured=True, account=ADMIN), "shared-link"
+    )
+    assert dev_session != admin_session, "one shared link, two accounts, two sessions"
+    assert {r["question"] for r in recent.rows(dev_session)} == {"first session's question"}
+    assert {r["question"] for r in recent.rows(admin_session)} == {"second session's question"}
 
 
 def test_the_panel_holds_the_last_five_questions_and_drops_the_sixth_s_predecessor():

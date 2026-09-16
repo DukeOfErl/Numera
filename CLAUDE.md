@@ -68,7 +68,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-provider-limit-ending` | `0600`–`0640` — `0600` written |
 | `add-durable-trail` | `0700`–`0730` |
 | `add-answer-feedback` | `0740`–`0770` — `0740`, `0750`, `0760` written |
-| `add-user-identity` | `0780`–`0830` — `0780`–`0820` written |
+| `add-user-identity` | `0780`–`0830` — all written |
 | `add-question-and-answer-records` | `0840`–`0870` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last

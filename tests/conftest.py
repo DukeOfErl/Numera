@@ -71,6 +71,16 @@ def agent_with(repo, config, tmp_path, model, name="checkpoints.sqlite") -> AskA
     return AskAgent(repo, config, str(tmp_path / name), model=model)
 
 
+def ask_question(at, question: str):
+    """Drive one question through the real page and return the rerun.
+
+    One copy, because there were three byte-identical ones and the page now has
+    more than one thing that can stand where the input does -- a closed door, a
+    try-later notice -- so `at.chat_input[0]` is the assumption that breaks first.
+    """
+    return at.chat_input[0].set_value(question).run()
+
+
 def run(agent: AskAgent, session: str, question: str) -> list:
     return list(agent.ask(session, question))
 

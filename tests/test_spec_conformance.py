@@ -379,13 +379,21 @@ COVERED: dict[str, tuple[str, ...]] = {
     "to them": (
         "test_identity_never_reaches_the_agent.py::test_two_agents_with_two_keys_send_two_keys",
         "test_web_driver_identity.py::"
-        "test_an_enrolled_account_with_no_credential_is_refused_asking_and_no_agent_is_built",
+        "test_an_enrolled_account_with_no_credential_meets_a_door_of_its_own",
+        "test_web_driver_identity.py::test_the_no_credential_door_is_its_own_state_not_an_open_one",
+        "test_web_driver_identity.py::"
+        "test_agent_for_refuses_rather_than_falling_back_to_the_environment",
         "test_web_driver_identity.py::test_the_credential_is_never_on_the_page",
         "test_web_driver_identity.py::test_two_sessions_get_two_agents_and_one_repository",
     ),
     "What is kept about a person, and that they are told": (
         "test_identity_never_reaches_the_agent.py::"
         "test_two_sessions_under_two_identities_each_carry_their_own",
+        "test_web_driver_identity.py::test_two_accounts_on_one_shared_link_get_two_sessions",
+        "test_web_driver_identity.py::"
+        "test_a_session_pruned_for_idleness_is_stamped_again_when_its_reader_returns",
+        "test_web_driver_identity.py::"
+        "test_ending_a_session_clears_the_identity_the_panel_and_the_place",
         "test_identity_never_reaches_the_agent.py::test_the_role_is_written_as_it_was_at_record_time",
         "test_identity_never_reaches_the_agent.py::"
         "test_a_verdict_in_a_signed_in_session_carries_the_identity",
@@ -407,6 +415,10 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_web_driver_session_cap.py::test_a_session_that_goes_idle_frees_a_place",
         "test_web_driver_session_cap.py::test_nothing_reads_the_client_s_address",
         "test_web_driver_session_cap.py::test_a_refused_visitor_holds_no_place",
+        "test_web_driver_session_cap.py::"
+        "test_a_session_mid_conversation_is_not_turned_away_when_the_cap_fills",
+        "test_web_driver_session_cap.py::test_a_genuinely_new_session_is_still_refused_at_the_cap",
+        "test_web_driver_session_cap.py::test_a_visitor_who_has_not_passed_the_door_holds_no_place",
     ),
     "A deployment with no identity configured behaves as before": (
         "test_web_driver_identity.py::"

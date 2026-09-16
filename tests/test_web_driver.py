@@ -16,7 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from conftest import FIXTURE, agent_with
+from conftest import FIXTURE, agent_with, ask_question
 from streamlit.testing.v1 import AppTest
 
 from agent_doubles import batched_tool_calls, costing, says, scripted, tool_call
@@ -67,8 +67,7 @@ def app(monkeypatch, repo, agent) -> AppTest:
     return AppTest.from_file(APP, default_timeout=TIMEOUT)
 
 
-def ask(at: AppTest, question: str) -> AppTest:
-    return at.chat_input[0].set_value(question).run()
+ask = ask_question
 
 
 # -- events become items --------------------------------------------------
