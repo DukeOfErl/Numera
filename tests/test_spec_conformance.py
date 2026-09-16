@@ -75,6 +75,20 @@ COVERED: dict[str, tuple[str, ...]] = {
     # structure-only wording, which appears in no clause of the requirement. A
     # mapping that names a test checking something else is exactly the failure this
     # file admits it cannot detect, so it is worth not making by hand.
+    # Remapped when 4.13 landed. It was a recorded gap while ADR-0530's rewrite was
+    # unbuilt, because the tests then present asserted the superseded semantics --
+    # prose citation -- and would have read as covering three clauses they never
+    # mentioned.
+    "Scoring is based on entry identifiers, not answer text": (
+        "test_scoring.py::test_every_expected_entry_reaching_the_table_is_the_pass",
+        "test_scoring.py::test_an_expected_entry_never_reaching_the_table_fails_the_check",
+        "test_scoring.py::test_an_entry_cited_without_being_retrieved_has_still_reached_the_table",
+        "test_scoring.py::test_the_rank_of_each_expected_entry_in_the_table_is_reported",
+        "test_scoring.py::test_an_admissible_citation_is_neither_a_hit_nor_unexpected",
+        "test_scoring.py::test_a_question_expecting_nothing_does_not_pass_the_table_check",
+        "test_report.py::test_the_two_kinds_of_missed_entry_are_reported_apart",
+        "test_report.py::test_an_unexpected_citation_is_reported_as_not_an_error",
+    ),
     "The asked property and organism are recognised": (
         "test_scoring.py::test_an_abbreviated_search_counts_as_searching_for_the_organism",
         "test_scoring.py::test_searching_for_another_organism_does_not_count",
@@ -467,22 +481,10 @@ AWAITING_THE_PROMPT = (
     "Leading with a figure does not displace what qualifies it",
 )
 
-# ADR-0530 rewrote this requirement and 4.13 has not yet rebuilt the scoring under
-# it. The tests that used to be listed here still pass -- they assert the old
-# semantics, where an expected entry had to be cited in the prose -- so leaving
-# them mapped would let the three new clauses (reaching the table, the rank
-# figure, the admissible list) read as covered by tests that never mention them.
-# That is precisely the failure this file admits it cannot detect, so the
-# requirement is recorded as a gap until 4.13 lands.
-AWAITING_THE_TABLE_SCORING = ("Scoring is based on entry identifiers, not answer text",)
-
 UNMAPPED: dict[str, str] = {
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),
-    **dict.fromkeys(
-        AWAITING_THE_TABLE_SCORING, "ADR-0530 rewrote it; the scoring is rebuilt in task 4.13"
-    ),
 }
 
 

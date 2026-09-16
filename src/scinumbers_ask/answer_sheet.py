@@ -25,6 +25,7 @@ import re
 from pathlib import Path
 
 from .citations import DELIMITED
+from .config import format_usd
 from .corpus import Entry
 from .entries_table import rows_for
 from .evaluation import Result, refuse_a_committable_results_path
@@ -79,7 +80,7 @@ def render_html(
     return _PAGE.format(
         style=_STYLE,
         count=len(results),
-        front=_front_matter(results[0]) if results else "",
+        front=_front_matter(results),
         sections="".join(sections),
     )
 
@@ -121,7 +122,7 @@ def _section(
         verdict = (
             "every expected entry reached the table"
             if score.all_expected_reached_the_table
-            else f"{len(score.never_retrieved)} of {score.expected} never retrieved"
+            else f"{len(score.never_reached)} of {score.expected} never reached it"
         )
     else:
         verdict = "no expected entries: scored on declining"
@@ -139,7 +140,7 @@ def _section(
   <p class="meta">{html.escape(result.end_reason)} · {result.searches} search(es),
      {result.tool_calls}/{result.tool_call_limit} tool calls,
      {result.model_calls}/{result.call_limit} model calls ·
-     {result.matched} matched · ${result.spend / 1_000_000:.4f}</p>
+     {result.matched} matched · {format_usd(result.spend)}</p>
 </section>"""
 
 
@@ -173,27 +174,29 @@ def _row(entry_id, by_id, place, expected, admissible, cited, result) -> str:
 
 
 def _value(entry: Entry) -> str:
-    if entry.range_low is not None and entry.range_high is not None:
-        # An approximate scalar is recorded as a range whose ends are equal, and
-        # printing it literally reads as a spread the source never claimed.
-        core = (
-            entry.range_low
-            if entry.range_low == entry.range_high
-            else f"{entry.range_low}–{entry.range_high}"
-        )
-    else:
-        core = entry.value if entry.value is not None else "—"
+    """`Entry.value_display`, escaped, with the source's hedges beside it.
+
+    Not re-derived. An earlier version checked the range before the scalar, which
+    is the opposite of `value_display`'s precedence, so an entry carrying both --
+    the ordinary shape of a value with a spread, `7.4` over `7.1-7.7` -- showed
+    `7.4` in the table the reader saw and `7.1-7.7` here. This module's whole claim
+    is fidelity to that table; the rank column earned it and the value column was
+    quietly breaking it.
+
+    Escaped, because the units come from the corpus, and the corpus is an external
+    input whose prose is documented to use `<` as a less-than sign.
+    """
     flags = "".join(
         mark
         for mark, on in (
             ("~", entry.range_approximate),
-            ("≷", entry.range_one_sided),
+            ("\u2277", entry.range_one_sided),
             ("?", entry.range_qualified),
-            ("⚯", entry.range_fused),
+            ("\u26af", entry.range_fused),
         )
         if on
     )
-    shown = f"{core} {entry.units or ''}".strip()
+    shown = html.escape(f"{entry.value_display} {entry.units or ''}".strip())
     return f"{shown} <span class='flag'>{flags}</span>" if flags else shown
 
 
@@ -218,17 +221,45 @@ def _answer(text: str) -> str:
         lines = escaped.split("\n")
         listed = [line for line in lines if line.strip()]
         if listed and all(line.lstrip().startswith(("-", "*")) for line in listed):
-            items = "".join(f"<li>{line.lstrip(' -*')}</li>" for line in listed)
+            # `lstrip(" -*")` ate the sign off a bullet reading "- -20 °C".
+            items = "".join(f"<li>{_unmarked(line)}</li>" for line in listed)
             out.append(f"<ul>{items}</ul>")
         else:
             out.append("<p>" + "<br>".join(lines) + "</p>")
     return "".join(out)
 
 
-def _front_matter(first: Result) -> str:
-    p = first.provenance
-    if p is None:
+def _unmarked(line: str) -> str:
+    """One bullet marker and the space after it, never a character set."""
+    stripped = line.lstrip()
+    return stripped[1:].lstrip(" ") if stripped[:1] in "-*" else stripped
+
+
+def _front_matter(results: tuple[Result, ...]) -> str:
+    """What produced these answers -- or a refusal to say, when they differ.
+
+    A results file can hold several runs: it is appended to and resumed, and a
+    resume may cross a model change, a prompt edit or a corpus rebuild. Captioning
+    the whole document with the first result's provenance would describe every
+    answer on the page with settings most of them were not produced under.
+    `report.render` groups for exactly this reason; this is the same discipline in
+    a document that has one header rather than a section per group.
+    """
+    carried = [r.provenance for r in results if r.provenance is not None]
+    if not carried:
         return ""
+    distinct = {
+        (p.model, p.prompt_digest, p.corpus_digest, p.corpus_entries, p.code_version)
+        for p in carried
+    }
+    if len(distinct) > 1:
+        return (
+            '<p class="front"><strong>These answers come from '
+            f"{len(distinct)} different runs</strong> — the model, prompt, corpus or code "
+            "is not the same across them, so no single header describes the page. Each "
+            "answer's own run is recorded in the results file.</p>"
+        )
+    p = carried[0]
     return f"""<dl class="front">
 <dt>Recorded</dt><dd>{html.escape(p.recorded_at)}</dd>
 <dt>Model</dt><dd>{html.escape(p.model)}</dd>

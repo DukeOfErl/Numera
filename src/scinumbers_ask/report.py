@@ -225,8 +225,7 @@ def _figures(
             f"  questions where every expected entry reached it: {passes} of {with_expected}"
         )
         lines.append(
-            f"  never retrieved: {sum(len(s.never_retrieved) for s in scores)} "
-            f"(a failure of search)"
+            f"  never reached it: {sum(len(s.never_reached) for s in scores)} (a failure of search)"
         )
         deepest = [s.deepest_rank for s in scores if s.deepest_rank is not None]
         if deepest:
@@ -236,9 +235,13 @@ def _figures(
             # ranking failure and needs a different fix from a search failure.
             deepest.sort()
             middle = deepest[len(deepest) // 2]
+            # No denominator. The obvious one -- the largest retrieval count in
+            # the group -- belongs to some other result, and the rank indexes
+            # `rows_for` (cited and retrieved) rather than the retrieval set, so
+            # "worst 45 of 45" could describe an entry nowhere near its own
+            # table's bottom. A rank is read against what a driver shows.
             lines.append(
-                f"  deepest expected entry in the table: median {middle}, worst "
-                f"{deepest[-1]} of {max(len(r.retrieved) for r in scorable)} rows"
+                f"  deepest expected entry in the table: median rank {middle}, worst {deepest[-1]}"
             )
         lines.append(
             f"  and cited in the prose: {cited_total} of {expected_total} "
@@ -396,9 +399,13 @@ def _per_tier(
             continue
         expected = sum(s.expected for s in group)
         if not expected:
+            # Said as an absence, not as a different scoring. A false-premise
+            # question is not `unsupported`, so `unsupported_score` never sees
+            # it either: nothing scores it, and claiming otherwise is exactly
+            # the absence-that-reads-as-a-pass this module exists to avoid.
             lines.append(
-                f"    {tier}: {len(group)} result(s), no expected entries — scored on "
-                f"declining, not on what was brought back"
+                f"    {tier}: {len(group)} result(s) expecting no entries — no "
+                f"citation figure applies, and no other check scores them either"
             )
             continue
         reached = sum(s.reached_the_table for s in group)

@@ -33,7 +33,7 @@ from .bionumbers import cross_references, occurrences
 if TYPE_CHECKING:
     from .trace import QuestionTrace
 
-__all__ = ["FORM", "citations", "cross_references", "format_citation"]
+__all__ = ["DELIMITED", "FORM", "citations", "cross_references", "format_citation"]
 
 # The delimiters are the whole contract. Nothing about the identifier's shape is
 # asserted here -- `[^\[\]]+` is "whatever is between them" -- so the only thing a

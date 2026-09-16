@@ -46,10 +46,15 @@ class CitationScore:
     """
 
     expected: int
-    #: Expected and retrieved, so the reader was shown it. The headline.
+    #: Expected and in the table the reader was shown. The headline.
     reached_the_table: int
-    #: Expected and never retrieved. A failure of *search*.
-    never_retrieved: tuple[int, ...]
+    #: Expected and absent from that table. A failure of *search*.
+    #:
+    #: Not "never retrieved": `rows_for` carries a cited entry into the table even
+    #: when no retrieval returned it, which is the ordinary shape of a follow-up
+    #: answered in its parent's session. Counting those as a search failure marked
+    #: three results of the first baseline as missing an entry the reader could see.
+    never_reached: tuple[int, ...]
     #: Expected and cited in the prose. Secondary to reaching the table.
     cited_expected: int
     #: Expected, retrieved, not cited. **Not an error on its own**: with the
@@ -72,7 +77,7 @@ class CitationScore:
     def all_expected_reached_the_table(self) -> bool:
         """The pass. False when a question expects nothing -- a false-premise
         question is scored on its admissible list, not on this."""
-        return self.expected > 0 and not self.never_retrieved
+        return self.expected > 0 and not self.never_reached
 
     @property
     def deepest_rank(self) -> int | None:
@@ -91,7 +96,6 @@ def citation_score(result: Result, question: Question, repo: CorpusRepository) -
     """
     expected = set(result.expected_entries)
     cited = set(result.cited)
-    retrieved = set(result.retrieved)
     admissible = set(question.admissible_entries)
 
     # The table as a reader would have seen it, from the module that builds it
@@ -101,15 +105,19 @@ def citation_score(result: Result, question: Question, repo: CorpusRepository) -
     ]
     place = {entry_id: index + 1 for index, entry_id in enumerate(order)}
 
+    # The table, not the retrieval set. `rows_for` carries a cited entry even when
+    # no retrieval returned it, and the spec's pass is reaching the table -- so the
+    # membership test is the table's own keys, which `place` already holds.
+    shown = expected & set(place)
     return CitationScore(
         expected=len(expected),
-        reached_the_table=len(expected & retrieved),
-        never_retrieved=tuple(sorted(expected - retrieved)),
+        reached_the_table=len(shown),
+        never_reached=tuple(sorted(expected - set(place))),
         cited_expected=len(expected & cited),
-        passed_over=tuple(sorted((expected & retrieved) - cited)),
+        passed_over=tuple(sorted(shown - cited)),
         admissible_cited=tuple(sorted(cited & admissible)),
         unexpected=tuple(sorted(cited - expected - admissible)),
-        ranks=tuple(sorted(place[e] for e in expected & retrieved if e in place)),
+        ranks=tuple(sorted(place[e] for e in shown)),
     )
 
 

@@ -155,7 +155,7 @@ def test_the_two_kinds_of_missed_entry_are_reported_apart(corpus):
     missed = a_result(expected_entries=(1, 2), cited=(), retrieved=(1,))
     text = render((missed,), (a_question(expected_entries=(1, 2)),), corpus)
     assert "passed over: 1" in text
-    assert "never retrieved: 1" in text
+    assert "never reached it: 1" in text
 
 
 def test_an_unexpected_citation_is_reported_as_not_an_error(corpus):
@@ -407,7 +407,7 @@ def test_a_tier_expecting_nothing_is_not_reported_as_nought_per_cent(corpus):
     # reads; a false-premise question records none, so neither does its result.
     result = a_result("nucleus", expected_entries=(), cited=(1,), retrieved=(1,))
     text = render((result,), (question,), corpus)
-    assert "no expected entries" in text
+    assert "expecting no entries" in text
     assert "declining: 0 of 0" not in text
 
 

@@ -109,11 +109,14 @@ class Question:
     unsupported: bool = False
     # The question this one follows, asked in that question's session.
     follows: str | None = None
-    # What the question exercises -- a comparison, a conversion, an unsupported ask.
-    # Free-form on purpose: the report gives its figures per tag, and a fixed
-    # vocabulary here would have to be widened by whoever adds the next kind of
-    # question, which is the moment they are least likely to touch this file.
+    # What the question demands of the agent. A closed vocabulary, and `Tier` says
+    # why -- it is compared against the same tier in an earlier run.
     tier: Tier = Tier.BASIC
+    # What the question exercises -- a comparison, a conversion, an unsupported ask.
+    # Free-form on purpose, unlike the tier above: the report merely groups by a
+    # tag, and a fixed vocabulary here would have to be widened by whoever adds the
+    # next kind of question, which is the moment they are least likely to touch
+    # this file.
     tags: tuple[str, ...] = ()
     notes: str = ""
 

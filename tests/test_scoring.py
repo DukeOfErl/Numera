@@ -143,7 +143,7 @@ def test_every_expected_entry_reaching_the_table_is_the_pass():
     assert (score.cited_expected, score.passed_over) == (1, (2,))
 
 
-def test_an_expected_entry_never_retrieved_fails_the_table_check():
+def test_an_expected_entry_never_reaching_the_table_fails_the_check():
     """A failure of search, and the only thing that fails the headline."""
     score = citation_score(
         a_result(expected_entries=(1, 2), cited=(1,), retrieved=(1,)),
@@ -151,7 +151,7 @@ def test_an_expected_entry_never_retrieved_fails_the_table_check():
         a_repo(1, 2),
     )
     assert not score.all_expected_reached_the_table
-    assert score.never_retrieved == (2,)
+    assert score.never_reached == (2,)
     assert score.passed_over == ()
 
 
@@ -478,9 +478,13 @@ def test_a_property_with_too_few_peers_is_not_judged_and_says_so():
     assert peers_too_few((99,), all_ids(population), population) == (99,)
 
 
-def test_peers_are_the_same_property_for_the_same_organism():
+def test_peers_are_the_same_organism():
     """Another organism's entries are not peers: comparing across them would flag
-    every legitimate difference between species."""
+    every legitimate difference between species.
+
+    Renamed: property is no longer part of the pool key at all (ADR-0540), and a
+    name claiming it would send a reader looking for a rule that is not there.
+    """
     others = tuple(
         an_entry(entry_id=i, value=2.0, organism="Bacteria Escherichia coli")
         for i in range(1, MIN_PEERS + 2)
@@ -805,3 +809,58 @@ def test_an_unexpected_citation_is_still_judged_against_what_was_expected():
     # a real defect, and only a citation from outside the expected list shows it.
     assert flagged.peers == 9
     assert flagged.peer_high == 10.3
+
+
+def test_an_entry_cited_without_being_retrieved_has_still_reached_the_table():
+    """`rows_for` carries a cited entry into the table whether or not a retrieval
+    returned it, and the pass is *reaching the table*. Scoring against the
+    retrieval set instead marked the follow-up in the first question set as
+    missing an entry the reader could plainly see -- three results of the baseline,
+    reported under "a failure of search"."""
+    result = a_result(expected_entries=(1,), cited=(1,), retrieved=())
+    score = citation_score(result, a_question(expected_entries=(1,)), a_repo(1))
+    assert score.all_expected_reached_the_table
+    assert score.never_reached == ()
+    assert score.ranks == (1,), "it is in the table, so it has a place in it"
+
+
+def test_peers_must_share_the_unit_as_well_as_the_organism():
+    """The other half of the pool key, and nothing varied it.
+
+    Every other peer test uses `an_entry`'s single default unit, so the mutant
+    `return (entry.organism, "")` -- which reinstates the exact defect
+    `_quantity_of`'s docstring says was measured, a Liter pooled with a cubic
+    micrometre -- survived the whole suite. Here the peers are the same organism
+    and quantity recorded in a different unit, and they must not be compared: 3.4
+    litres is not 3.4 cubic micrometres, and a pool spanning both makes the
+    interval meaningless rather than wide.
+    """
+    in_litres = tuple(
+        an_entry(entry_id=i, value=value, units="Liter")
+        for i, value in enumerate((1.0e-15, 1.2e-15, 1.4e-15, 1.6e-15, 1.8e-15), start=1)
+    )
+    cited = an_entry(entry_id=99, value=2.0, units="um^3")
+    population = in_litres + (cited,)
+    wanted = all_ids(population)
+
+    assert outliers_among_peers((99,), wanted, population) == ()
+    assert peers_too_few((99,), wanted, population) == (99,)
+
+    # And the positive case, so the rule is not merely refusing everything: the
+    # same five values recorded in the cited entry's own unit do form a pool.
+    from dataclasses import replace
+
+    same_unit = tuple(replace(entry, units="um^3") for entry in in_litres)
+    population = same_unit + (cited,)
+    assert peers_too_few((99,), all_ids(population), population) == ()
+
+
+def test_an_entry_with_no_unit_at_all_is_not_pooled():
+    """`_peer_pool` skips an entry with no unit, and nothing asserted it. A blank
+    unit is not a quantity two entries can be said to share."""
+    unitless = tuple(
+        an_entry(entry_id=i, value=float(i), units="") for i in range(1, MIN_PEERS + 2)
+    )
+    cited = an_entry(entry_id=99, value=100.0, units="")
+    population = unitless + (cited,)
+    assert peers_too_few((99,), all_ids(population), population) == (99,)
