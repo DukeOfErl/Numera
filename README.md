@@ -158,6 +158,15 @@ Two properties worth knowing before you rely on it:
   checkpoints do not. A hosted session that survives a restart is a separate
   decision and has not been made.
 
+**What the trail keeps about you.** Your question, the answer you were given and the
+identifiers of the entries behind it, under a per-question identifier and the
+identifier of your session — nothing that names you, because there is no sign-in
+yet. They are kept because a rating on an answer nobody can read is worth nothing,
+and they are read by whoever operates the deployment in order to improve it. The
+app says so in its own side panel and on the terminal's first line, rather than
+only here ([ADR-0840](docs/decisions/0840-what-a-question-s-trail-keeps.md)).
+`sql/feedback.sql` is how it is read back.
+
 Spend is enforced, not merely reported: a question stops at its ceiling and presents what it had
 established, marked incomplete, rather than being cut off mid-sentence. A limit is configured where
 it binds — the number you set is the one that stops work
@@ -193,10 +202,12 @@ refusals on unanswerable questions are specified in `openspec/changes/add-ask-ag
 withdrawn on account of a thumbs-down; the rating is evidence for whoever is improving the tool, and
 it reaches them rather than the agent.
 
-**The trail records which question was rated, not the question itself.** So a rating currently names
-an answer whose text is not stored anywhere — `openspec/changes/add-question-and-answer-records/`
-specifies the fix and is not implemented. There is no sign-in, so no rating can yet be attributed to
-the person who gave it; space for that is recorded and left empty.
+**Ratings given before 2026-09-16 name answers nobody can read.** The trail now records the question
+as asked, the answer as given and the entries behind it, so a rating can be read next to what it
+judged — but a trail cannot be backfilled, and the ratings collected before that change name
+questions whose words were never kept anywhere
+([ADR-0840](docs/decisions/0840-what-a-question-s-trail-keeps.md)). There is still no sign-in, so no
+rating can be attributed to the person who gave it; space for that is recorded and left empty.
 
 ## For the course review
 

@@ -166,6 +166,15 @@ core, and a test there refuses a name with no file behind it.
 | `trail_store.py` | The trail's durable destination: one append-only table, written best-effort (ADR-0700, ADR-0710) |
 | `feedback.py` | A reader's judgement of an answer, recorded to the trail. **Presentation, not core** — see below |
 
+**`ask` wraps `_ask`, and the wrapper is where the records are written.** The
+question, the answer and the evidence behind it are recorded as their events pass
+through, not at the eight places inside `_ask` that can yield an `Answer` — seven
+of those are endings, and a per-branch record is one the next branch forgets.
+Each is written *before* its event is handed on, because Streamlit abandons the
+generator mid-iteration on every rerun and code after a `yield` may never run
+(ADR-0840). Add a ninth ending and it records itself; add a record beside a
+`yield` and you have reintroduced the bug.
+
 **The trail has two sinks.** `trace.py` writes to a logger; `trail_store.py`
 attaches to that logger as a second handler, so no call site knows about it. Two
 things a reader will otherwise get wrong:

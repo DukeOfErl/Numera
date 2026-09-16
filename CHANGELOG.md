@@ -12,6 +12,15 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **The trail records the question as asked, the answer as given, and the entries
+  the answer stood on.** A rating collected before this said "answer
+  `c23c83c16324` was wrong" and there was no way to learn what it was answering.
+  Three records on the existing table, under the question's own identifier, with
+  no migration: the question written when the question *starts*, so a run that
+  hits a spend ceiling or a missing key still leaves a record of what was asked.
+  Cited and retrieved entries stay separable, and the retrieved set is the whole
+  one rather than the head the page displays. Both interfaces now say that
+  questions and answers are kept, and why ([ADR-0840]).
 - **The structured trail can outlive the container that wrote it.** The trail was
   written to a file inside a hosted container whose disk does not survive a
   reboot or redeploy, so every search, alias resolution and spend increment from
@@ -285,3 +294,4 @@ number rather than an error:
 [ADR-0740]: docs/decisions/0740-native-st-feedback.md
 [ADR-0750]: docs/decisions/0750-feedback-is-recorded-here-not-at-the-tracer.md
 [ADR-0760]: docs/decisions/0760-an-answer-is-two-columns.md
+[ADR-0840]: docs/decisions/0840-what-a-question-s-trail-keeps.md

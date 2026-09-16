@@ -42,10 +42,10 @@ one row and the cost of failing closed is a reader blocked by a telemetry fault.
 
 ---
 
-## In progress
-
 ### WP2 — Feedback capture
-`add-answer-feedback`, 35/39 tasks. ADR-0740, ADR-0750, ADR-0760.
+`add-answer-feedback`, archived 2026-09-16 (`openspec/changes/archive/
+2026-09-16-add-answer-feedback`), merged to `dev` as `cadd4a7`. ADR-0740,
+ADR-0750, ADR-0760.
 
 Thumbs up/down per answer, comment box on thumbs-down only, keyed on
 `question_id`, stored as `feedback.verdict` / `feedback.comment` rows in the same
@@ -57,37 +57,27 @@ people actually complain about before building a UI for it; the comment hint ask
 readers to name a problematic entry's ID, and those comments are the evidence for
 whether per-entry rating is worth building. Nothing here forecloses it.
 
-Remaining: verifier pass on the widget groups, README/CHANGELOG, archive, and the
-deferred cosmetic below.
+### WP2.5 — The question and the answer in the trail
+**`add-question-and-answer-records`**, implemented 2026-09-16 on
+`feat/question-and-answer-records`. ADR block `0840`–`0870`;
+[ADR-0840](decisions/0840-what-a-question-s-trail-keeps.md) is the decision and
+carries the reasoning this entry used to hold.
 
----
+Three records on the existing `trail` table, keyed on the existing `question_id`
+and needing no migration: `question.asked`, `answer.given` and `answer.evidence`
+(cited and retrieved kept separable). Written in `agent.ask`, which now wraps the
+work as `_ask`, so every one of the eight branches that can yield an `Answer`
+records it — seven of them are endings, and an ending is exactly the answer a
+reader rates down.
+
+`sql/feedback.sql` query 2 now shows a rating beside the question it judged and
+the answer it judged; 2b shows the evidence behind it.
+
+**Not backfillable, and that is the whole reason this went before WP3.** The
+ratings already on `dev` predate it and name questions whose words were never
+kept anywhere; those columns are null for them for ever.
 
 ## Next
-
-### WP2.5 — The question and the answer in the trail
-**`add-question-and-answer-records`**, proposed 2026-09-16. ADR block `0840`–`0870`.
-Planning artifacts complete; not implemented. Small, and blocking the value of WP2.
-
-The trail records `question_id` but neither the question nor the answer, so a
-thumbs-down says "answer `c23c83c16324` was wrong" with no way to learn what it
-was answering. The text is on the events already (`QuestionStarted.question`,
-`AnswerEntries.question`) for the drivers' sake; it simply never reaches
-`trace.record`. This is a gap, not a decision — no comment anywhere argues for
-omitting it.
-
-Needs, all keyed on the existing `question_id`:
-
-- the question as asked
-- the answer as given
-- **every entry id the answer was built on** — cited and retrieved both, which
-  `AnswerEntries` already carries
-
-Today only a partial reconstruction is possible: `search` rows hold the property,
-organism and keyword terms plus the matching entry ids, so you can see what was
-looked for but not what was asked.
-
-Belongs to the trail, not to feedback, and wants a spec requirement of its own —
-storing what people type is a decision to write down rather than slip in.
 
 ### WP3 — Auth, roles and the session cap
 Reserved as `add-user-identity`, ADR block `0780`–`0830`. Not yet proposed.
