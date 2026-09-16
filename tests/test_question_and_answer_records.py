@@ -315,23 +315,42 @@ def test_a_destination_that_cannot_be_written_does_not_fail_a_question(repo, con
     """Fail-open (ADR-0710), with the larger rows this change writes.
 
     The real sink, not a hand-rolled one: `TrailHandler.emit` is what swallows,
-    and the guarantee is a property of that handler rather than of `logging`.
+    and the guarantee is a property of that handler rather than of `logging`,
+    which does not wrap `emit` at all.
+
+    A file-shaped handler is attached alongside, because `store.failures` alone
+    proves only that *something* was attempted. The stream proves all three of
+    this change's records travelled the path; the counter proves they were
+    attempted against a destination that refused.
     """
     from test_feedback import _Engine
 
+    stream = io.StringIO()
+    configure(stream)
     engine = _Engine(fail_on_begin=OSError("the destination is gone"))
     store = trail_store.TrailStore(engine=engine)
     store.ready = True
     logger = logging.getLogger(trace.LOGGER_NAME)
     logger.addHandler(trail_store.TrailHandler(store))
     try:
-        events = list(agent_with(repo, config, tmp_path, scripted(says("an answer"))).ask("s", "q"))
+        model = scripted(tool_call("search_entries", property="Cell"), says("1 μm [[100002]]"))
+        events = list(agent_with(repo, config, tmp_path, model).ask("s", "how wide?"))
     finally:
         logger.handlers.clear()
 
     assert events[-1].reason is EndReason.ANSWERED
     assert any(isinstance(e, Answer) for e in events)
-    assert store.failures, "no write failed, so nothing here exercised the fail-open path"
+    for event in (ASKED, ANSWER, EVIDENCE):
+        assert records(stream, event), f"{event} never reached the logger at all"
+
+    # Exactly the give-up threshold, not more. `question.asked` is the first
+    # record of the question and fails, and the store stops attempting after
+    # `FAILURES_BEFORE_GIVING_UP` consecutive failures -- so a larger number here
+    # would mean the pause stopped working, and a smaller one that nothing was
+    # attempted. Asserting the number rather than truthiness is what makes this a
+    # positive control instead of a shape check.
+    assert store.failures == trail_store.FAILURES_BEFORE_GIVING_UP
+    assert store.ready is False, "the store should have paused rather than gone on trying"
 
 
 def test_the_records_reach_the_durable_store_under_the_question_s_own_identifier(
