@@ -47,10 +47,16 @@ doubles, both populations of the table. Its brief already says so.
       failed `test_the_identity_modules_are_core_and_that_is_deliberate`,
       `test_no_agent_module_reaches_for_the_web_framework[permissions]` and
       `test_only_the_web_driver_knows_the_web_framework`; 56 others passed.*
-- [ ] 1.7 `verifier` on group 1. Ask specifically: would any test still pass if
+- [x] 1.7 `verifier` on group 1. Ask specifically: would any test still pass if
       `GRANTS` granted `DEV_PANEL` to every role? Measure by making it so in a
       copy.
 
+      *PASS WITH FINDINGS. All-grant table: 6 of 11 failed, no survivor claims
+      the deny direction. Found and fixed: the docstring's claim that the
+      identity-free modules could not import `permissions` was false (core-to-
+      core imports were allowed; now forbidden by name for those three); the
+      unknown-role default and the five role values were pinned by nothing (now
+      tested).*
 ## 2. Accounts and the schema
 
 - [x] 2.1 `sql/accounts.sql`: the `accounts` table DDL and an insert template
@@ -77,8 +83,11 @@ doubles, both populations of the table. Its brief already says so.
 - [x] 2.5 `TrailHandler.emit` reads `user_role` off the record the way it reads
       `user_email`; `_INSERT` writes it. Test: a record with identity writes both
       columns; one without writes NULL for both — not `''`.
-- [ ] 2.6 `verifier` on group 2.
+- [x] 2.6 `verifier` on group 2.
 
+      *PASS WITH FINDINGS. Every named mutant killed by the test whose name
+      claims it, including fail-closed. Found and fixed: a lookup returning the
+      typed email rather than the row's survived (now tested).*
 ## 3. Identity stamped at the sink, and a credential per agent
 
 - [x] 3.1 `default_model(config, api_key=None)`: the key as a parameter, `None`
@@ -112,9 +121,16 @@ doubles, both populations of the table. Its brief already says so.
 - [x] 3.8 ADR-0810 and ADR-0820 written out. ADR-0820 records the principle for
       later: if the agent must ever know what is permitted, it is handed
       permissions, never the role.
-- [ ] 3.9 `verifier` on group 3. Ask: is there any path — parameter, field,
+- [x] 3.9 `verifier` on group 3. Ask: is there any path — parameter, field,
       import, global — by which the role could reach `agent.py`?
 
+      *PASS WITH FINDINGS. Parameter, field and relative import: closed. Open at
+      the time: `import scinumbers_ask.web` — the import rule split on the first
+      dot and read it as the package, so the registry was reachable from
+      `agent.py` and a role written to the trail went unnoticed. Fixed in the
+      rule (`_reached`); re-seeded, now fails the dependency test. String-key
+      access (`getattr`, `globals()`) stays invisible, and needs one of the
+      closed doors first — recorded in the test.*
 ## 4. The gate, the notice, and the unconfigured deployment
 
 - [x] 4.1 `authlib>=1.3.2` in the `ask` extra; `uv lock`; `.streamlit/
@@ -152,8 +168,15 @@ doubles, both populations of the table. Its brief already says so.
       enrolled → refused and recorded; enrolled → answered. Read
       `.claude/rules/streamlit-driver.md` first: when things are drawn is a
       whole-script-run question.
-- [ ] 4.8 `verifier` on group 4.
+- [x] 4.8 `verifier` on group 4.
 
+      *PASS WITH FINDINGS. Eight of nine mutants caught; the money path is
+      asserted on what was built. Found and fixed: a refusal on a session that
+      had admitted another account was stamped with that account (registry now
+      forgotten before the lookup); `_sign_out` and the no-secrets-file branch
+      had no test (now tested). Noted, not changed: the escaping scan exempts
+      `CONSTANT.format(...)`, so the signed-in caption is wrapped by discipline
+      rather than by the scan.*
 ## 5. The dev panel
 
 - [x] 5.1 `web.RecentTrail` handler: per-session deque trimmed to the last five
@@ -172,8 +195,11 @@ doubles, both populations of the table. Its brief already says so.
       question text between them so a shared buffer cannot pass.
 - [x] 5.5 Test: the panel's contents do not reach the model (positive control
       first).
-- [ ] 5.6 `verifier` on group 5.
+- [x] 5.6 `verifier` on group 5.
 
+      *PASS WITH FINDINGS. Both canaries reproduced with the same ids as 7.1;
+      "absent, not disabled" pinned. Found and fixed: "below the run status" and
+      the sink install's idempotence were claims with no test (now tested).*
 ## 6. The session cap
 
 - [x] 6.1 `web.SessionRegistry` under `@st.cache_resource`: touch on every
@@ -190,13 +216,46 @@ doubles, both populations of the table. Its brief already says so.
 
 ## 7. Seeding, once, where it counts
 
-- [ ] 7.1 Into a **copy**: make `authorization.require` a no-op. Exactly the
+- [x] 7.1 Into a **copy**: make `authorization.require` a no-op. Exactly the
       group-1 refusal tests and the group-5 absence test must fail, and nothing
       else. Name them in the task text when done. Then: grant `DEV_PANEL` to
       `student` in the copy — the student-has-no-panel test must fail. Then:
       pass the role into `AskAgent` in the copy — the structural test in 3.6
       must fail.
-- [ ] 7.2 Run the full suite once, at the end. Not per group.
+      *Done 2026-09-16, full offline suite on each self-contained copy (1,377
+      tests). Three failures are copy artefacts common to all three and absent
+      from the working tree — `test_specs_were_found`,
+      `test_no_requirement_is_claimed_that_the_specs_do_not_contain` (no
+      `openspec/` in the copy) and
+      `test_a_results_file_git_would_track_is_refused_before_it_is_written` (the
+      copy is not a git repository). Beyond those:*
+      - *`require` a no-op — 10:*
+        `test_permissions.py::test_each_tester_role_is_refused_the_dev_panel[student|scientist|senior scientist]`,
+        `::test_no_identity_is_refused`,
+        `::test_the_refusal_names_the_permission_and_nothing_about_the_account`;
+        `test_web_driver_dev_panel.py::test_a_tester_s_page_has_no_such_section[student|scientist|senior scientist]`,
+        `::test_the_accessor_refuses_a_tester_and_no_identity_but_gives_a_dev_the_rows`,
+        `::test_the_refusal_does_not_depend_on_the_caller`.
+      - *`DEV_PANEL` granted to student — 5:*
+        `test_permissions.py::test_each_tester_role_is_refused_the_dev_panel[student]`,
+        `::test_the_two_populations_partition_the_roles`,
+        `::test_the_refusal_names_the_permission_and_nothing_about_the_account`;
+        `test_web_driver_dev_panel.py::test_a_tester_s_page_has_no_such_section[student]`,
+        `::test_the_accessor_refuses_a_tester_and_no_identity_but_gives_a_dev_the_rows`.
+      - *`role` parameter on `AskAgent` — 3:*
+        `test_driver_independence.py::test_identity_never_enters_the_agent_the_trail_or_the_feedback[agent]`,
+        `::test_the_agent_takes_no_parameter_naming_its_caller`,
+        `test_identity_never_reaches_the_agent.py::test_the_agent_holds_the_key_and_nothing_else_about_the_person`.
+      *The group-5 verifier reproduced the first two sets independently and
+      found the same ids. Two further side doors the group-3 verifier opened —
+      `import scinumbers_ask.web` in `agent.py`, and `from .permissions import
+      …` in all three identity-free modules — survived until the import rule
+      was repaired; both re-seeded and both now fail.*
+- [x] 7.2 Run the full suite once, at the end. Not per group. *1,388 passed,
+      3 skipped (network), 40 deselected, 103 s. One earlier run, made while
+      three canary suites ran in parallel, failed a single AppTest identity test
+      that passed alone and in the same order on the rerun — the 30 s AppTest
+      timeout under load, not an ordering fault.*
 
 ## 8. The record
 
