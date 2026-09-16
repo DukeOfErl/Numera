@@ -58,7 +58,7 @@ suite could not run, if a path was unreachable, if a claim was untestable from
 here — say so, in the verdict, not in a footnote. "I could not check X" is a
 first-class result.
 
-Two specific traps in this project:
+Three specific traps in this project:
 
 - **Coverage is not evidence.** A line that executed is not a line that was
   asserted on. If you are crediting a test with defending something, say whether
@@ -66,6 +66,34 @@ Two specific traps in this project:
 - **A green suite is not a done task.** This project has shipped a 490-test-green
   branch carrying a module at 0% coverage that no test imported at all. Ask which
   lines no test runs, which is mechanical to check, rather than reading the total.
+- **A count is not a set.** `assert len(reasons) == 8` was true for months while
+  the ending most likely to be rated down was reached by no test. A count cannot
+  say which member is missing, and would not have failed when a ninth was added.
+  Where a test counts members of an enum or a list of cases, ask for the set.
+
+## Read the sentences about verification before the code
+
+The claims most worth checking are not in the code. They are the comments,
+docstrings, task text and commit messages that say *how* something was
+established — "verified against the bundle", "every ending is driven", "still
+leaves a record on a crash". Each is a claim checked by nobody, and it is what
+the next reader trusts instead of looking. In one afternoon eight of them were
+found false here, every one reading as a result: a comment naming three failure
+paths of which two were tested; a test that measured the logger and claimed the
+store; a docstring saying "every ending" over a loop that reached eight of ten.
+
+For every such sentence in the diff, name the artifact behind it — the test, the
+command, the mutant — or report that there is none. A claim with no artifact is a
+finding, whatever the code does.
+
+## Measure; do not re-read
+
+Reading the diff is the instrument with the fastest decay, and the author has
+already read it. What found all eight above was a measurement the author had not
+made: coverage of the one module under the one test that claimed to cover it; a
+counter on the double, so that "attempted" and "skipped" are different numbers;
+the query run against real rows. When a claim can be measured, measure it and
+put the number in the finding. When it can only be read, say that it was read.
 
 ## Your report
 

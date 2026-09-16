@@ -84,10 +84,58 @@ Reserved as `add-user-identity`, ADR block `0780`–`0830`. Not yet proposed.
 
 - Google OAuth via `st.login`, `authlib>=1.3.2` in the `ask` extra.
 - Five roles — student, scientist, senior scientist, dev, admin — with a
-  `{Role: set[Permission]}` grant table. Permissions discussed: read, rate an
-  entry, suggest a problem, rate AI prose, query aggregated results, ask for
-  calculations, suggest an edit, edit with provenance. Roles later weight ratings
-  and gate human review of the AI-generated database.
+  `{Role: set[Permission]}` grant table. Roles later weight ratings and gate
+  human review of the AI-generated database.
+
+**The grant table, decided 2026-09-16.** Settled here, before the change is
+proposed, because it is a classification rule and every worker implementing a
+permission needs the same table — without one fixed first, each decides its own
+row, which is how a grant drifts in.
+
+*Dropped for now:* suggest an edit, edit with provenance, ask for calculations.
+Each names a capability the app does not have; a permission for an absent
+feature is either dead code or a promise, and neither belongs in the first table.
+
+*Default-deny, grants explicit.* A wrong deny announces itself — somebody clicks
+and is refused. A wrong grant is silent and looks like ordinary use. So the cheap
+direction absorbs the uncertainty: anything not in the table is refused, and the
+code says so where the table is defined.
+
+| | read | rate AI prose | suggest a problem | rate an entry | query aggregated results |
+|---|---|---|---|---|---|
+| student | ✓ | ✓ | ✓ | ✓ | – |
+| scientist | ✓ | ✓ | ✓ | ✓ | – |
+| senior scientist | ✓ | ✓ | ✓ | ✓ | – |
+| dev | ✓ | ✓ | ✓ | ✓ | ✓ |
+| admin | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+Two things the table says that are worth reading off it rather than assuming:
+
+- **The three tester roles have identical permissions in WP3.** They differ in
+  the *weight* their ratings will carry, which is later work. Withholding rating
+  from students would defeat WP2 — the point of an alpha is feedback from
+  everyone who reads — and a low-weight rating costs a footnote, which is the
+  cheap direction. `rate an entry` is granted to all on the same reasoning; its
+  UI is scoped out of WP2 and the comment-ID evidence decides whether it is
+  built, so the grant is reserved rather than live.
+- **`query aggregated results` is operator-only, and that became a privacy line
+  on 2026-09-16.** Since `add-question-and-answer-records` the aggregates
+  contain other testers' questions verbatim. A senior scientist's standing is
+  about weighting and later about gating review, not about reading what other
+  people typed. Dev and admin see it because they operate the deployment.
+
+*Open, needs a yes:* the table as it stands leaves admin and dev identical. The
+thing that separates them — allowlisting an account, minting its OpenRouter key,
+assigning its role — is a sixth permission, **manage accounts**, and it belongs
+to admin alone. Not added until confirmed.
+
+**Role lands on the trail row, at write time.** A `user_role` beside the
+existing `user_email` column, recorded when the row is written and never looked
+up afterwards. A rating's weight is the weight at the moment it was given; a
+lookup at read time would let a later role change rewrite history. This is the
+first schema addition since the table was created, so `ensure_schema` gains an
+`add column if not exists` — decide in the WP3 design whether that is the shape
+wanted or whether role belongs in `detail`.
 - `authorization.py` / `permissions.py` split, neither importing Streamlit.
 - **Rate limiting means a global concurrent-session cap, not per-IP.** Streamlit's
   own docs say `st.context.ip_address` must not be used for security — it is
