@@ -44,7 +44,12 @@ class _Conn:
 
 
 class _Engine:
-    """Returns one row (or none) for the select, or fails where told to."""
+    """Returns one row (or none) for the select, or fails where told to.
+
+    Not `conftest.RecordingEngine`: that one records writes, and this one has to
+    *answer* a SELECT. Sharing them would mean a double that both returns rows
+    and records inserts, which is two jobs and no clearer than two doubles.
+    """
 
     def __init__(self, row=None, *, fail_on_begin=None, fail_on_execute=None):
         self.row = row

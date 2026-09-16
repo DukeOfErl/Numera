@@ -71,6 +71,73 @@ def agent_with(repo, config, tmp_path, model, name="checkpoints.sqlite") -> AskA
     return AskAgent(repo, config, str(tmp_path / name), model=model)
 
 
+class RecordingEngine:
+    """An engine double that keeps every statement and parameter set it was given.
+
+    One definition for the tests that read back *what was written* — the trail's
+    identifiers, the identity columns, a feedback row. There were four
+    hand-written copies of this, disagreeing on what they filtered on, so a
+    column added to `trail_store._INSERT` had to be chased through each: a copy
+    that happened to keep passing hid that the column it should have asserted on
+    never arrived.
+
+    Two doubles deliberately do **not** use this and say so where they are
+    defined: `test_trail_store.py` needs the `SET LOCAL` to succeed while only
+    the INSERT fails, and `test_accounts.py` needs a SELECT to return a row.
+    Simulating a specific failure point is the thing those tests are for, and a
+    shared double with a predicate for it would be harder to read than either.
+    """
+
+    def __init__(self, fail: Exception | None = None, fail_on_begin: Exception | None = None):
+        # Two failure points, kept apart because they are different code paths in
+        # the caller: opening the transaction, and executing the statement. A
+        # double that conflated them would leave one untested while looking
+        # thorough -- `test_trail_store.py` makes the same distinction and says so.
+        self.fail = fail
+        self.fail_on_begin = fail_on_begin
+        self.conns: list[_RecordingConn] = []
+
+    def begin(self):
+        if self.fail_on_begin is not None:
+            raise self.fail_on_begin
+        conn = _RecordingConn(self.fail)
+        self.conns.append(conn)
+
+        class _Ctx:
+            def __enter__(self_inner):
+                return conn
+
+            def __exit__(self_inner, *exc):
+                return False
+
+        return _Ctx()
+
+    @property
+    def params(self) -> list[dict]:
+        """Every parameter set handed to any statement, in order."""
+        return [p for c in self.conns for p in c.params]
+
+    @property
+    def written(self) -> list[dict]:
+        """Every parameter set that carried a record — the rows a reader would see."""
+        return [p for p in self.params if "event" in p]
+
+
+class _RecordingConn:
+    def __init__(self, fail: Exception | None = None):
+        self.fail = fail
+        self.statements: list[str] = []
+        self.params: list[dict] = []
+
+    def execute(self, statement, params=None):
+        self.statements.append(str(statement))
+        if self.fail is not None:
+            raise self.fail
+        if params is not None:
+            self.params.append(dict(params))
+        return None
+
+
 def ask_question(at, question: str):
     """Drive one question through the real page and return the rerun.
 

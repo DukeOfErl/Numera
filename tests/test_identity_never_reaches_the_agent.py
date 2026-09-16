@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 
 import pytest
-from conftest import agent_with
+from conftest import RecordingEngine, agent_with
 
 from agent_doubles import says, scripted, tool_call
 from scinumbers_ask import feedback, trace, web
@@ -33,30 +33,7 @@ from scinumbers_ask.trail_store import TrailHandler, TrailStore
 # --- a destination that keeps what was written ----------------------------------
 
 
-class _Conn:
-    def __init__(self, sink: list[dict]):
-        self.sink = sink
-
-    def execute(self, statement, params=None):
-        if params is not None and "insert" in str(statement).lower():
-            self.sink.append(dict(params))
-
-
-class _Engine:
-    def __init__(self):
-        self.written: list[dict] = []
-
-    def begin(self):
-        conn = _Conn(self.written)
-
-        class _Ctx:
-            def __enter__(self_inner):
-                return conn
-
-            def __exit__(self_inner, *exc):
-                return False
-
-        return _Ctx()
+_Engine = RecordingEngine  # one definition, in conftest
 
 
 @pytest.fixture

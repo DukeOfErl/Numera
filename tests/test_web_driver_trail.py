@@ -24,7 +24,7 @@ import logging
 from pathlib import Path
 
 import pytest
-from conftest import FIXTURE
+from conftest import FIXTURE, RecordingEngine
 from streamlit.testing.v1 import AppTest
 
 from scinumbers_ask import trace, trail_store, web
@@ -33,42 +33,7 @@ APP = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 TIMEOUT = 30
 
 
-class _Conn:
-    def __init__(self, fail: Exception | None = None):
-        self.fail = fail
-        self.params: list[dict] = []
-
-    def execute(self, statement, params=None):
-        if self.fail is not None:
-            raise self.fail
-        if params is not None:
-            self.params.append(dict(params))
-        return None
-
-
-class _Engine:
-    """Enough of an engine to count what reached it."""
-
-    def __init__(self, fail: Exception | None = None):
-        self.fail = fail
-        self.conns: list[_Conn] = []
-
-    def begin(self):
-        conn = _Conn(self.fail)
-        self.conns.append(conn)
-
-        class _Ctx:
-            def __enter__(self_inner):
-                return conn
-
-            def __exit__(self_inner, *exc):
-                return False
-
-        return _Ctx()
-
-    @property
-    def rows(self) -> list[dict]:
-        return [p for c in self.conns for p in c.params if "event" in p]
+_Engine = RecordingEngine  # one definition, in conftest
 
 
 @pytest.fixture
@@ -194,12 +159,12 @@ def test_a_record_reaches_the_destination_once_not_once_per_rerun(
 
     at = script.run()
     at.chat_input[0].set_value("how many ribosomes?").run()
-    after_question = len(engine.rows)
+    after_question = len(engine.written)
     assert after_question, "the question recorded nothing at all"
 
     at.run()
     at.run()
-    assert len(engine.rows) == after_question, "reruns re-recorded the question"
+    assert len(engine.written) == after_question, "reruns re-recorded the question"
 
 
 # --- configuration is absence-tolerant, end to end -------------------------

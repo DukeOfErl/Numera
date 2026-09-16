@@ -210,6 +210,14 @@ A deployment also holds at most `SCINUMBERS_MAX_SESSIONS` sessions open at once;
 the next visitor is told to try again shortly, and no open session is ended to
 make room ([ADR-0790](docs/decisions/0790-the-session-cap-is-a-heartbeat-registry.md)).
 
+**With sign-in configured, your conversation follows your account** rather than
+the `?session=` link — so opening the app again, on any tab, continues where you
+were, and a link you hand to someone else starts them in their own session
+instead of joining yours
+([ADR-0830](docs/decisions/0830-the-session-is-keyed-on-the-account-not-the-link.md)).
+Without sign-in the link is still the session, so a developer's bookmark behaves
+exactly as it always has.
+
 Spend is enforced, not merely reported: a question stops at its ceiling and presents what it had
 established, marked incomplete, rather than being cut off mid-sentence. A limit is configured where
 it binds — the number you set is the one that stops work

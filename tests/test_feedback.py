@@ -12,52 +12,14 @@ import json
 import logging
 
 import pytest
-from conftest import agent_with
+from conftest import RecordingEngine, agent_with
 
 from agent_doubles import says, scripted
 from scinumbers_ask import feedback, trace, trail_store
 from scinumbers_ask.events import QuestionStarted
 from scinumbers_ask.feedback import Verdict
 
-
-class _Conn:
-    def __init__(self, fail=None):
-        self.fail = fail
-        self.params: list[dict] = []
-
-    def execute(self, statement, params=None):
-        if self.fail is not None:
-            raise self.fail
-        if params is not None:
-            self.params.append(dict(params))
-        return None
-
-
-class _Engine:
-    """Enough of an engine to read back what a feedback record actually wrote."""
-
-    def __init__(self, fail_on_begin=None):
-        self.fail_on_begin = fail_on_begin
-        self.conns: list[_Conn] = []
-
-    def begin(self):
-        if self.fail_on_begin is not None:
-            raise self.fail_on_begin
-        conn = _Conn()
-        self.conns.append(conn)
-
-        class _Ctx:
-            def __enter__(self_inner):
-                return conn
-
-            def __exit__(self_inner, *exc):
-                return False
-
-        return _Ctx()
-
-    @property
-    def written(self) -> list[dict]:
-        return [p for c in self.conns for p in c.params if "event" in p]
+_Engine = RecordingEngine  # one definition, in conftest
 
 
 @pytest.fixture

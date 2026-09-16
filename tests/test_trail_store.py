@@ -34,6 +34,12 @@ from scinumbers_ask.trail_store import TrailHandler, TrailStore, install
 class _Conn:
     """Records what was executed **and with which parameters**.
 
+    Not `conftest.RecordingEngine`, deliberately: these tests need the `SET
+    LOCAL statement_timeout` to succeed while only the INSERT fails, which is
+    the distinction half this file exists to draw. The shared double is for the
+    tests that read back *what was written*; simulating a particular failure
+    point is what this one is for.
+
     The parameters are the point. An earlier version of this double took
     `params=None` and dropped it, which meant no test could observe what was
     actually written -- so a mutant passing `session_id=None` unconditionally, or

@@ -51,6 +51,32 @@ any release; `1.0.0` when it stabilizes.
 - A signed-in tester whose allowance is spent, or who has no credential yet, is
   told to ask whoever runs the deployment, and that the allowance renews monthly.
   The funder-neutral wording stays for a developer on their own key.
+- **With sign-in configured, a session is keyed on the account rather than on the
+  `?session=` link.** The link is supplied by whoever holds it, and it had become
+  the key for the identity stamped on every record, the dev panel's rows and the
+  session cap — so two readers on one link overwrote each other's attribution, a
+  dev on a shared link could see another reader's trail, and the sign-in redirect,
+  which drops the query string, stranded the session it came from. One account is
+  now one conversation; a deployment without sign-in keeps the link as the session
+  ([ADR-0830]).
+- An enrolled account with no credential now meets a door of its own rather than a
+  page with its input removed, so the page has one gate and no code path can build
+  an agent that falls back on the deployment's own key.
+- Enrolment matches an address without regard to case, and the session cap counts
+  a reader once they are through the door rather than when they arrive — an
+  abandoned sign-in page no longer holds a place ([ADR-0790]).
+
+### Fixed
+
+- A session pruned for idleness and returned to kept drawing "signed in as" while
+  recording no account at all; identity is re-established on every rerun.
+- Signing out cleared the identity but left the dev panel's rows, so the next
+  account on that tab could be shown the previous reader's questions. Ending a
+  session is now one operation over all three per-session stores.
+- A reader mid-conversation could be turned away at the cap after their heartbeat
+  was pruned, contradicting the promise that no open session is ended.
+- The enrolment-unavailable page offered nothing to click, so the retry it
+  promised needed a manual reload.
 - `authlib>=1.3.2` joins the `ask` extra, for `st.login`.
 
 - **The trail records the question as asked, the answer as given, and the entries
@@ -339,5 +365,6 @@ number rather than an error:
 [ADR-0790]: docs/decisions/0790-the-session-cap-is-a-heartbeat-registry.md
 [ADR-0800]: docs/decisions/0800-default-deny-and-the-pruning-rule.md
 [ADR-0810]: docs/decisions/0810-the-role-is-written-at-record-time.md
+[ADR-0830]: docs/decisions/0830-the-session-is-keyed-on-the-account-not-the-link.md
 [ADR-0820]: docs/decisions/0820-one-agent-per-session-handed-a-credential-not-an-identity.md
 [ADR-0840]: docs/decisions/0840-what-a-question-s-trail-keeps.md
