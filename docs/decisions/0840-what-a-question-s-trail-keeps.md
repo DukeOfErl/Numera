@@ -86,6 +86,17 @@ received, which is the only thing this record is for.
 
 ## Trade-off accepted
 
+**The trail is no longer free of the corpus's text.** Before this change every
+record carried search terms, identifiers and counts, and `trace.py` said so — a
+trail could be committed or shared without a licensing thought. `answer.given`
+carries the model's prose verbatim, which restates corpus values and may quote a
+reference string. The default destination stays under gitignored `logs/`, and
+nothing refuses a tracked `--trace` path the way `evaluation.py` refuses a
+tracked results path: an answer is a reader's own output and reaches stdout
+regardless, so the trail is not the surface that decides whether it leaks.
+Accepted, and the comment that said otherwise is corrected — found by the code
+review, which is what a false comment left behind looks like from outside.
+
 **Rows grow from roughly a hundred bytes to roughly a kilobyte.** Accepted
 unmitigated. At alpha scale — tens of questions a day — that is single-digit
 megabytes a year, well inside Neon's free tier. A size guard added now would be

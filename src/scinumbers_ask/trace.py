@@ -23,8 +23,13 @@ from typing import Any
 LOGGER_NAME = "scinumbers_ask"
 
 # Inside the repository but gitignored: the trail is this project's own output, not
-# corpus data, and the records carry search terms, identifiers and token counts --
-# no entry text, so nothing of the corpus's licensing travels with them.
+# corpus data. Until ADR-0840 the records carried only search terms, identifiers and
+# token counts. `answer.given` now carries the model's prose verbatim, which restates
+# corpus values and may quote a reference string -- so the trail is no longer free
+# of the corpus's text, and a trail written to a tracked path is a file to look at
+# before committing. The default stays under `logs/`, which is gitignored; unlike
+# `evaluation.py`, nothing here refuses a tracked path, because the answer is a
+# reader's own output and goes to stdout regardless.
 DEFAULT_FILE = "logs/trace.jsonl"
 
 # Set at import, not only in configure(). An unconfigured logger inherits the

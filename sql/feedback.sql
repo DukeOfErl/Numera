@@ -62,6 +62,15 @@ order by 1 desc, 2;
 --    `question.asked` or `answer.given` row at all — those questions were never
 --    kept anywhere and cannot be backfilled. An inner join would drop them
 --    without saying so, which is worse than a visible null.
+--
+--    `answered` is the column to filter on before counting anything. The
+--    `answer` column holds whatever the reader was shown, and seven of the eight
+--    things the agent can show are endings — "this run has spent $0.60 against a
+--    $0.60 budget", "the key has no credit left" — recorded deliberately, because
+--    a reader rates those too. But a thumbs-down on a budget notice is not a bad
+--    answer, and a tally that pooled them would say the model is worse than it
+--    is. `question.answered` is written on the ordinary path only, so its
+--    presence is the free discriminator.
 select
     v.at,
     v.question_id,
@@ -70,7 +79,8 @@ select
     v.detail ->> 'verdict' as verdict,
     c.detail ->> 'comment'  as comment,
     q.detail ->> 'question' as question,
-    a.detail ->> 'answer'   as answer
+    a.detail ->> 'answer'   as answer,
+    (e.question_id is not null) as answered
 from trail v
 left join trail c
        on c.question_id = v.question_id
@@ -81,6 +91,9 @@ left join trail q
 left join trail a
        on a.question_id = v.question_id
       and a.event = 'answer.given'
+left join trail e
+       on e.question_id = v.question_id
+      and e.event = 'question.answered'
 where v.event = 'feedback.verdict'
 order by v.at desc;
 

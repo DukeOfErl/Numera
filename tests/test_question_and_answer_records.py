@@ -561,3 +561,27 @@ def _corpus_path() -> str:
     from conftest import FIXTURE
 
     return FIXTURE
+
+
+def test_the_terminal_does_not_claim_to_keep_what_it_discards(
+    repo, config, tmp_path, monkeypatch, capsys
+):
+    """`--trace ""` discards the trail, and this driver installs no durable store.
+
+    The notice is a claim about what is kept, so on a run that keeps nothing it
+    must not be made. Found by the code review, not by the tests: the first
+    version printed it unconditionally.
+    """
+    from scinumbers_ask import messages
+    from scinumbers_ask.cli import main
+
+    monkeypatch.setattr("scinumbers_ask.cli.AskAgent", lambda *a, **k: _NoModel())
+    monkeypatch.setenv("SCINUMBERS_CORPUS", str(_corpus_path()))
+    with pytest.raises(SystemExit):
+        main(["--ask", "q", "--trace", "", "--checkpoints", str(tmp_path / "c.sqlite")])
+
+    captured = capsys.readouterr()
+    assert messages.RECORDS_NOTE not in captured.err
+    assert "kept" not in captured.err
+    # Positive control: the run itself happened and said so.
+    assert "no_answer" in captured.out
