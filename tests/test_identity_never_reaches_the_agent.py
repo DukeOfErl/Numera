@@ -23,7 +23,7 @@ import logging
 import pytest
 from conftest import agent_with
 
-from agent_doubles import says, scripted
+from agent_doubles import says, scripted, tool_call
 from scinumbers_ask import feedback, trace, web
 from scinumbers_ask.agent import AskAgent
 from scinumbers_ask.feedback import Verdict
@@ -252,15 +252,28 @@ def test_the_same_question_under_two_roles_hands_the_model_identical_inputs(
     dev is identical, and neither the account nor the role is anywhere in it."""
     web.remember_identity("s-student", Identity("student@example.org", Role.STUDENT))
     web.remember_identity("s-dev", Identity("dev@example.org", Role.DEV))
-    as_student, as_dev = scripted(says("x")), scripted(says("x"))
+    # A tool call in each script, so the comparison covers the tool's inputs and
+    # its result as the model saw them, not only the question and the prompt.
+    as_student = scripted(tool_call("search_entries", property="Cell"), says("x"))
+    as_dev = scripted(tool_call("search_entries", property="Cell"), says("x"))
     question = "how many ribosomes in a cell?"
     list(agent_with(repo, config, tmp_path, as_student, "st.sqlite").ask("s-student", question))
     list(agent_with(repo, config, tmp_path, as_dev, "dv.sqlite").ask("s-dev", question))
 
-    seen_by_student = [(type(m).__name__, m.content) for m in as_student.seen]
-    seen_by_dev = [(type(m).__name__, m.content) for m in as_dev.seen]
-    assert any(question in content for _, content in seen_by_student), "control: question absent"
+    def _seen(model):
+        return [
+            (type(m).__name__, m.content, getattr(m, "tool_calls", None) or None)
+            for m in model.seen
+        ]
+
+    seen_by_student, seen_by_dev = _seen(as_student), _seen(as_dev)
+    assert any(question in str(content) for _, content, _ in seen_by_student), (
+        "control: question absent"
+    )
+    assert any(name == "ToolMessage" for name, _, _ in seen_by_student), (
+        "control: no tool result reached the model"
+    )
     assert seen_by_student == seen_by_dev
-    everything = " ".join(str(c) for _, c in seen_by_student)
+    everything = " ".join(str(c) for _, c, _ in seen_by_student)
     for token in ("student@example.org", "dev@example.org", "student", "dev@"):
         assert token not in everything

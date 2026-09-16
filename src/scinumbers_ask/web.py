@@ -420,6 +420,11 @@ def admit(state: MutableMapping[str, Any], engine: Any | None, session_id: str) 
     held = state.get(ADMISSION_KEY)
     if held is not None and held[0] == email:
         return held[1]
+    # A different account on this session id, or the first: whatever identity the
+    # registry held for it is no longer this person's. Forgotten *before* the
+    # lookup, so a refusal recorded below is not stamped with the previous
+    # account -- a verifier produced exactly that row before this line existed.
+    forget_identity(session_id)
     try:
         if engine is None:
             raise EnrolmentUnavailable("no accounts database is configured")
@@ -493,7 +498,7 @@ def _sign_out(session_id: str) -> None:
     st.logout()
 
 
-def draw_closed_door(admission: Admission) -> None:
+def draw_closed_door(admission: Admission, session_id: str) -> None:
     """What a visitor sees instead of the page. Sign-in and nothing else, or the
     one sentence that says why not. The caller stops the script after this."""
     st.title("SciNumbers ask")
@@ -502,7 +507,7 @@ def draw_closed_door(admission: Admission) -> None:
         st.button("Sign in with Google", on_click=st.login, icon=":material/login:")
     elif admission.door is Door.NOT_ENROLLED:
         st.error(as_text(messages.NOT_ENROLLED), icon=":material/person_off:")
-        st.button("Sign out", on_click=st.logout)
+        st.button("Sign out", on_click=_sign_out, args=(session_id,))
     elif admission.door is Door.UNAVAILABLE:
         st.error(as_text(messages.ENROLMENT_CHECK_UNAVAILABLE), icon=":material/cloud_off:")
 

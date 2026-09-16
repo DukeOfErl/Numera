@@ -82,6 +82,14 @@ def test_an_enrolled_account_comes_back_with_its_role_and_credential():
     )
 
 
+def test_the_account_carries_the_enrolled_form_of_the_email_not_the_typed_one():
+    """The row's spelling is what the trail is stamped with and what query 8
+    finds by. A mutant returning the argument instead of the row survived until
+    this test varied the two."""
+    account = lookup(_Engine(_row(email="Tester@Example.org")), "tester@example.org")
+    assert account.email == "Tester@Example.org"
+
+
 def test_an_absent_account_is_none():
     assert lookup(_Engine(None), "nobody@example.org") is None
 
@@ -108,8 +116,8 @@ def test_an_unreadable_table_raises_rather_than_answering_none(engine):
         lookup(engine, "tester@example.org")
 
 
-def test_enrolment_unavailable_is_not_a_subclass_of_anything_a_caller_would_confuse():
-    """A caller catching `PermissionError` for a refusal must not catch this."""
+def test_enrolment_unavailable_is_not_a_permission_error():
+    """A caller catching `PermissionError` for a `Refused` must not catch this."""
     assert not issubclass(EnrolmentUnavailable, PermissionError)
 
 

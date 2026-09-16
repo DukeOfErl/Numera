@@ -332,6 +332,58 @@ def test_signing_out_forgets_the_session_s_identity(monkeypatch):
         web.IDENTITIES.clear()
 
 
+def test_a_refusal_after_another_account_was_admitted_carries_no_stamp(monkeypatch, caught):
+    """A verifier produced this row: admit as one account, then a stranger on the
+    same session id with no signed-out rerun between, and the refusal came out
+    stamped with the *first* account's email. The registry entry has to go
+    before the lookup, not only on sign-out."""
+    _configured(monkeypatch, TESTER.email)
+    monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: TESTER)
+    state: dict = {}
+    web.admit(state, object(), "s1")
+    monkeypatch.setattr(web, "signed_in_email", lambda: "stranger@example.org")
+    monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: None)
+    assert web.admit(state, object(), "s1").door is web.Door.NOT_ENROLLED
+    (refused,) = [r for r in caught.records if r.getMessage() == "signin.refused"]
+    assert refused.fields["email"] == "stranger@example.org"
+    assert getattr(refused, "user_email", None) is None
+    assert getattr(refused, "user_role", None) is None
+    assert "s1" not in web.IDENTITIES
+
+
+def test_sign_out_forgets_the_identity_and_then_logs_out(monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(web.st, "logout", lambda: calls.append("logout"))
+    web.remember_identity("s1", Identity(TESTER.email, Role.SCIENTIST))
+    try:
+        web._sign_out("s1")
+        assert "s1" not in web.IDENTITIES
+        assert calls == ["logout"]
+    finally:
+        web.IDENTITIES.clear()
+
+
+def test_identity_is_not_configured_when_there_is_no_secrets_file_at_all(monkeypatch):
+    """This checkout has a real secrets file, so the branch for a machine with
+    none never runs here unless made to. Streamlit raises its own error for
+    the missing file; that is "not configured", and anything else is not."""
+    from streamlit.errors import StreamlitSecretNotFoundError
+
+    class _NoFile:
+        def __contains__(self, key):
+            raise StreamlitSecretNotFoundError("no secrets.toml")
+
+    class _Broken:
+        def __contains__(self, key):
+            raise RuntimeError("malformed")
+
+    monkeypatch.setattr(web.st, "secrets", _NoFile())
+    assert web.identity_configured() is False
+    monkeypatch.setattr(web.st, "secrets", _Broken())
+    with pytest.raises(RuntimeError):
+        web.identity_configured()
+
+
 def test_agent_for_holds_one_agent_per_state_and_rebuilds_on_a_new_credential(
     monkeypatch, repo, tmp_path
 ):

@@ -64,7 +64,7 @@ if not web.session_registry().admit(session):
 # the door is open and the page runs exactly as it did before identity existed.
 admission = web.admit(st.session_state, web.trail_destination(), session)
 if admission.door is not web.Door.OPEN:
-    web.draw_closed_door(admission)
+    web.draw_closed_door(admission, session)
     st.stop()
 # One agent per session, holding this account's credential and nothing else
 # about the person. `None` means an enrolled account with no credential issued:

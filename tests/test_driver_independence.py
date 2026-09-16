@@ -46,21 +46,48 @@ AGENT_CORE = sorted(
 )
 
 
+def _reached(dotted: str) -> str:
+    """The module a dotted import path reaches, with this package's own prefix
+    stripped -- so `scinumbers_ask.web` counts as `web`, not as `scinumbers_ask`.
+
+    This was the blind spot a verifier found: `import scinumbers_ask.web as _w`
+    inside `agent.py` passed every dependency-direction test here, because the
+    first segment was the package and never a sibling's name. The relative form
+    was caught; the absolute form of the same import was not. An absolute
+    intra-package import is legal Python and a one-line edit, which is exactly
+    the kind of thing this file exists to refuse.
+    """
+    parts = dotted.lstrip(".").split(".")
+    if parts and parts[0] == PACKAGE.name and len(parts) > 1:
+        return parts[1]
+    return parts[0]
+
+
 def imports_of(module: str) -> set[str]:
-    """Every module name reached by an import in this module, however written."""
+    """Every module name reached by an import in this module, however written --
+    at top level or inside a function, relative or absolute."""
     tree = ast.parse((PACKAGE / f"{module}.py").read_text())
     names: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            names.update(alias.name.split(".")[0] for alias in node.names)
+            names.update(_reached(alias.name) for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             # `from . import x, y` names the modules in the aliases; `from .x import y`
             # names it in the module. Both reach a sibling, so both count.
             if node.module:
-                names.add(node.module.lstrip(".").split(".")[0])
+                names.add(_reached(node.module))
             if node.level and not node.module:
                 names.update(alias.name for alias in node.names)
     return names
+
+
+def test_the_import_rule_sees_the_absolute_form_too():
+    """`import scinumbers_ask.web` and `from .web import x` reach the same module
+    and must be read the same way; only one of them was."""
+    assert _reached("scinumbers_ask.web") == "web"
+    assert _reached(".web") == "web"
+    assert _reached("scinumbers_ask") == "scinumbers_ask"
+    assert _reached("streamlit.testing.v1") == "streamlit"
 
 
 def test_the_agent_core_is_not_empty():
