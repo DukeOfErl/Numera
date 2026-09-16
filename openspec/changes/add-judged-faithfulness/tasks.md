@@ -69,6 +69,28 @@ exactly what ADR-0510 was written to prevent.
       the question, which the expected set settles by construction. Gate it behind a deterministic
       check on the spread between cited and passed-over values, so a judge is paid only where the
       numbers differ
+- [ ] 4.4 Judge a **scoped claim of absence**: an answer that declines part of a question by saying
+      the corpus holds nothing for it, while the corpus holds entries for exactly that part. Measured
+      in the 2026-09-11 baseline, with both instances and their sentences in
+      `docs/evaluations/2026-09-11-baseline.md`
+  - **A faithfulness judge will not catch it, and this is the trap to avoid.** "The corpus contains
+    two measurements for the volume of a budding yeast nucleus" is *faithful to its retrieval
+    context* — the agent had two and said two. The corpus holds nine. Faithfulness compares an answer
+    against what was retrieved, and the entire defect lives in the gap between what was retrieved and
+    what exists, which that comparison cannot see. It needs its own criterion (GEval), **given the
+    question's expected entries as an input**, not a faithfulness verdict.
+  - **Split the work along what each half can know.** The deterministic side supplies the evidence —
+    the corpus holds N for this question, the answer cited none of them — and the judge decides
+    whether the prose asserts an absence. Neither half works alone: the arithmetic fires on nearly
+    every answer, because almost every answer cites a subset and that is normal; the judge without
+    the arithmetic has no way to know the claim is false.
+  - **Report it as a list with the sentence, not as a rate.** Two instances in thirty is not a
+    frequency, and the sentence is what makes it actionable — it is also what shows whether the rule
+    was right. Move to a rate if it turns out to be common.
+  - Why it is worth the effort: an incomplete answer invites a follow-up, but a false absence
+    forecloses the question. The reader is told the data does not exist and stops looking, in a
+    sentence that sounds like a fact about our system and carries our authority.
+
 - [ ] 4.3 Review before merging (see 1.4)
 
 ## 5. Documentation and conformance
