@@ -148,9 +148,16 @@ fails open (ADR-0710).
       judges, and that the trail names the question without storing it, pointing
       at the change that fixes it. A README that described only what works would
       be the more comfortable and less true one.
-- [ ] 5.5 Archive the change on this branch, before the merge, and diff the
+- [x] 5.5 Archive the change on this branch, before the merge, and diff the
       promoted requirement text mechanically — `openspec archive` refuses a
       dropped scenario and says nothing about dropped prose.
+
+      Diffed by comparing every non-blank line of the delta against the promoted
+      file rather than by reading: 158 delta lines, all present; 5 requirements
+      and 19 scenarios both sides; the only two lines the promotion adds are the
+      capability title and a `## Requirements` header. Done this way because the
+      prose is where the reasoning lives — the scenarios are the part the tool
+      already protects.
 
 ## 6. What the collected feedback is for
 
