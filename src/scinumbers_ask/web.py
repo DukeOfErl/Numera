@@ -24,6 +24,8 @@ import hashlib
 import json
 import logging
 import os
+import sys
+import threading
 import time
 import uuid
 from collections import OrderedDict
@@ -296,7 +298,10 @@ def items_for(events: Iterable[Event], repo: CorpusRepository | None = None) -> 
 
 
 def session_id(
-    state: MutableMapping[str, Any], params: MutableMapping[str, Any] | None = None
+    state: MutableMapping[str, Any],
+    params: MutableMapping[str, Any] | None = None,
+    *,
+    advertise: bool = True,
 ) -> str:
     """The session this browser tab is continuing, created on first use.
 
@@ -315,7 +320,14 @@ def session_id(
         # Same width as the terminal driver's, so a session started in one can be
         # continued in the other by copying it.
         state[SESSION_KEY] = params.get(QUERY_KEY) or uuid.uuid4().hex[:8]
-    params[QUERY_KEY] = state[SESSION_KEY]
+    if advertise:
+        params[QUERY_KEY] = state[SESSION_KEY]
+    else:
+        # Under sign-in the conversation is keyed on the account (ADR-0830), so
+        # this token decides nothing: leaving it in the address bar would offer a
+        # link that does not resume the conversation it appears to name, beside a
+        # caption showing a different identifier.
+        params.pop(QUERY_KEY, None)
     return state[SESSION_KEY]
 
 
@@ -406,6 +418,14 @@ def admit(
     held: a database that wakes up admits the reader on the next rerun, so a
     person told "try again shortly" who tries again is actually retried.
 
+    **What the held row means for an operator: withdrawal takes effect at the
+    reader's next page load, not at once.** Disabling an account, changing its
+    role or rotating its key changes nothing for a tab that is already open,
+    because neither this row nor the agent built from it is re-read while the
+    tab lives. Re-reading per question was considered and rejected (a database
+    round trip per question); if a key must be cut off immediately, revoke it at
+    the provider, which the next model call will meet.
+
     This decides the door only; it does not register identity. The caller maps
     the account to its *effective* session (`effective_session`) and stamps
     that, because under sign-in the conversation is keyed on the account and not
@@ -495,18 +515,24 @@ def establish_identity(admission: Admission, session_id: str) -> None:
         forget_identity(session_id)
 
 
-def end_session(session_id: str) -> None:
+def end_session(conversation_id: str, tab_id: str | None = None) -> None:
     """Forget everything this deployment holds for one session, in one place.
 
     The identity stamp, the panel's rows and the cap's heartbeat are three
     per-session stores; a sign-out that cleared only one left the next account on
     the same tab able to see the last one's panel rows. One function so a new
     store, or a new exit path, has one place to join rather than a checklist.
+
+    Two keys, because the stores count different things: the stamp and the panel
+    belong to the *conversation*, the cap's place to the *tab*. Signing out of one
+    tab frees that tab and ends the conversation -- which is what signing out
+    means; the account's other tabs meet the door again on their next rerun.
     """
-    forget_identity(session_id)
+    forget_identity(conversation_id)
     if RECENT is not None:
-        RECENT.forget(session_id)
-    session_registry().drop(session_id)
+        RECENT.forget(conversation_id)
+    if tab_id is not None:
+        session_registry().drop(tab_id)
 
 
 def checkpoint_path() -> str:
@@ -559,12 +585,12 @@ def agent_for(
     return agent
 
 
-def _sign_out(session_id: str) -> None:
-    end_session(session_id)
+def _sign_out(conversation_id: str, tab_id: str | None = None) -> None:
+    end_session(conversation_id, tab_id)
     st.logout()
 
 
-def draw_closed_door(admission: Admission, session_id: str) -> None:
+def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None = None) -> None:
     """What a visitor sees instead of the page. Sign-in and nothing else, or the
     one sentence that says why not. The caller stops the script after this."""
     st.title("SciNumbers ask")
@@ -573,10 +599,10 @@ def draw_closed_door(admission: Admission, session_id: str) -> None:
         st.button("Sign in with Google", on_click=st.login, icon=":material/login:")
     elif admission.door is Door.NOT_ENROLLED:
         st.error(as_text(messages.NOT_ENROLLED), icon=":material/person_off:")
-        st.button("Sign out", on_click=_sign_out, args=(session_id,))
+        st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id))
     elif admission.door is Door.NO_CREDENTIAL:
         st.error(as_text(messages.NO_CREDENTIAL), icon=":material/key_off:")
-        st.button("Sign out", on_click=_sign_out, args=(session_id,))
+        st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id))
     elif admission.door is Door.UNAVAILABLE:
         st.error(as_text(messages.ENROLMENT_CHECK_UNAVAILABLE), icon=":material/cloud_off:")
         # A widget, so the retry the docstring promises can happen without the
@@ -584,7 +610,7 @@ def draw_closed_door(admission: Admission, session_id: str) -> None:
         st.button("Try again", on_click=lambda: None, icon=":material/refresh:")
 
 
-def draw_identity(admission: Admission, session_id: str) -> None:
+def draw_identity(admission: Admission, session_id: str, tab_id: str | None = None) -> None:
     """Who the page thinks you are -- or that it is nobody's, so the state is
     visible rather than inferred."""
     if not admission.configured:
@@ -595,7 +621,7 @@ def draw_identity(admission: Admission, session_id: str) -> None:
         st.caption(
             as_text(messages.SIGNED_IN_AS.format(email=account.email, role=account.role.value))
         )
-    st.button("Sign out", on_click=_sign_out, args=(session_id,), icon=":material/logout:")
+    st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id), icon=":material/logout:")
 
 
 #: The secrets section naming the durable trail's database.
@@ -764,71 +790,120 @@ DEFAULT_SESSION_IDLE_S = 600
 
 @dataclass
 class SessionRegistry:
-    """Which sessions are live, by heartbeat -- and what "live" cannot mean here.
+    """Which browser sessions are live, by heartbeat -- and what "live" cannot mean.
 
     Streamlit offers no reliable disconnect hook, so a session is live for as
     long as it has rerun within `idle_s`. Every rerun of an admitted session
-    touches it; a session that stops rerunning is pruned when its window
-    passes. A closed tab therefore counts as live until then -- **the registry
-    over-counts, and so admits fewer than the cap, never more.** That is the
-    cheap direction for a guard that protects the host, and ADR-0790 says so
-    where an operator tempted to raise the cap will read it.
+    touches it; one that stops rerunning is pruned when its window passes. A
+    closed tab therefore counts as live until then -- **the registry over-counts,
+    and so admits fewer than the cap, never more.** That is the cheap direction
+    for a guard that protects the host, and ADR-0790 says so where an operator
+    tempted to raise the cap will read it.
+
+    **Keyed on the browser session, not on the conversation, and the difference
+    is load-bearing.** Under sign-in one account is one conversation across all
+    its tabs (ADR-0830), so counting conversations would count *accounts*: eight
+    testers with five tabs each is forty Streamlit sessions and forty agents,
+    which the cap exists to bound, reported as eight. What costs the host is a
+    tab. So each entry is a tab, and it remembers which conversation that tab
+    belongs to -- which is what lets pruning clear the identity stamp and the
+    panel's rows for a conversation once its *last* tab has gone, and not while
+    another is still open.
 
     Not keyed on the client's address: `st.context.ip_address` is supplied by
-    the client and is not evidence of anything. Keyed on the session identifier
-    the page already carries, which is also what the identity registry and the
-    panel's sink are keyed on -- so pruning here evicts both.
+    the client and is not evidence of anything.
 
-    The clock is an attribute so a test can move it without patching `time`
-    for every other module in the process.
+    The clock is an attribute so a test can move it without patching `time` for
+    every other module in the process. The lock is not decoration: Streamlit runs
+    one script thread per browser session against this single cached object, so
+    two reruns prune concurrently, and a check-then-set on the count can admit
+    over the cap.
     """
 
     max_sessions: int = DEFAULT_MAX_SESSIONS
     idle_s: float = DEFAULT_SESSION_IDLE_S
     clock: Callable[[], float] = time.monotonic
-    _last_seen: dict[str, float] = field(default_factory=dict)
+    #: tab -> (last seen, the conversation that tab is in)
+    _last_seen: dict[str, tuple[float, str]] = field(default_factory=dict)
+    _lock: threading.Lock = field(default_factory=threading.Lock)
 
     def prune(self) -> None:
-        cutoff = self.clock() - self.idle_s
-        for session_id in [s for s, seen in self._last_seen.items() if seen < cutoff]:
-            del self._last_seen[session_id]
-            forget_identity(session_id)
+        """Drop tabs past their idle window, and the stores of conversations that
+        no live tab is left in."""
+        with self._lock:
+            cutoff = self.clock() - self.idle_s
+            expired = [tab for tab, (seen, _) in self._last_seen.items() if seen < cutoff]
+            emptied = {self._last_seen.pop(tab, (0.0, ""))[1] for tab in expired}
+            still_open = {conversation for _, conversation in self._last_seen.values()}
+        # Outside the lock: these reach other module-level stores, and holding one
+        # lock while taking another is how a deadlock is built.
+        for conversation in emptied - still_open:
+            forget_identity(conversation)
             if RECENT is not None:
-                RECENT.forget(session_id)
+                RECENT.forget(conversation)
 
     def live(self) -> int:
         self.prune()
-        return len(self._last_seen)
+        with self._lock:
+            return len(self._last_seen)
 
-    def admit(self, session_id: str, *, continuing: bool = False) -> bool:
-        """Touch a known session, or admit a new one if there is room.
+    def admit(
+        self, session_id: str, conversation_id: str | None = None, *, continuing: bool = False
+    ) -> bool:
+        """Touch a known tab, or admit a new one if there is room.
 
-        A session already counted is always re-admitted and never ended: the cap
+        A tab already counted is always re-admitted and never ended: the cap
         refuses the door, it does not clear the room. `continuing` says this tab
-        already holds a conversation -- so a session pruned for idleness while its
-        reader was mid-conversation is re-admitted rather than turned away at the
-        cap, which "no open session is ended" requires and pruning alone would
-        break. A genuinely new session at the cap is refused and **not recorded**,
-        so a refused visitor's retry costs nothing.
+        already holds a conversation -- so one pruned for idleness while its
+        reader was mid-conversation is re-admitted rather than turned away, which
+        "no open session is ended" requires and pruning alone would break. A
+        genuinely new tab at the cap is refused and **not recorded**, so a refused
+        visitor's retry costs nothing.
+
+        `conversation_id` defaults to the tab's own id, which is what an
+        unconfigured deployment wants: there, the two are the same thing.
         """
         self.prune()
-        known = session_id in self._last_seen
-        if known or continuing or len(self._last_seen) < self.max_sessions:
-            self._last_seen[session_id] = self.clock()
-            return True
+        with self._lock:
+            known = session_id in self._last_seen
+            if known or continuing or len(self._last_seen) < self.max_sessions:
+                self._last_seen[session_id] = (
+                    self.clock(),
+                    conversation_id if conversation_id is not None else session_id,
+                )
+                return True
         return False
 
     def drop(self, session_id: str) -> None:
-        """Free a session's place immediately, on sign-out."""
-        self._last_seen.pop(session_id, None)
+        """Free one tab's place immediately, on sign-out."""
+        with self._lock:
+            self._last_seen.pop(session_id, None)
+
+
+def _number(name: str, default: float) -> float:
+    """A setting read from the environment, falling back rather than crashing.
+
+    `int("twenty")` raises outside `streamlit_app.py`'s `NotConfigured` handler,
+    so a typo in a deployment variable took the whole page down with a stack
+    trace where every other misconfiguration gets a sentence. A bad value here
+    means the default and a line on the operator's log.
+    """
+    raw = env_setting(name, "")
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        print(f"{name}={raw!r} is not a number; using {default}", file=sys.stderr)
+        return default
 
 
 @st.cache_resource
 def session_registry() -> SessionRegistry:
     """One registry per server, which is what a cap on the server needs."""
     return SessionRegistry(
-        max_sessions=int(env_setting(MAX_SESSIONS_ENV, str(DEFAULT_MAX_SESSIONS))),
-        idle_s=float(env_setting(SESSION_IDLE_ENV, str(DEFAULT_SESSION_IDLE_S))),
+        max_sessions=int(_number(MAX_SESSIONS_ENV, DEFAULT_MAX_SESSIONS)),
+        idle_s=_number(SESSION_IDLE_ENV, DEFAULT_SESSION_IDLE_S),
     )
 
 

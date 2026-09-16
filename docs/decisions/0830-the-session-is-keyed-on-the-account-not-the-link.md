@@ -88,10 +88,19 @@ session id, which is shown in the page's caption and carried in the URL of a
 screenshot, is not itself an address.
 
 **Two tabs under one account share a checkpoint thread**, so they share the
-model's memory while showing different on-screen transcripts. The transcript was
-already per tab and the checkpoint already per session id; what changed is that
-the two tabs now agree on the id. A reader who wants a fresh conversation signs
-out, or the operator clears the thread.
+model's memory while showing different on-screen transcripts — and, if both are
+asked at once, write that thread concurrently. The transcript was already per tab
+and the checkpoint already per session id; what changed is that the two tabs now
+agree on the id, which before this was impossible. SQLite serialises the writes
+and the turns interleave rather than corrupt, but a reader asking in two tabs at
+once gets one conversation with both questions in it. Accepted: it is the honest
+consequence of "one account is one conversation", and a reader who wants two
+conversations has always had the option of two accounts. A fresh conversation is
+a sign-out, or the operator clearing the thread.
+
+**The cap is keyed on the tab, not on this** (ADR-0790). Counting conversations
+would count accounts, and the cap is there to bound what the host actually
+carries — one Streamlit session and one agent per tab.
 
 **The URL still carries a token that no longer decides anything under sign-in.**
 It is left in place because it is what an unconfigured deployment runs on, and

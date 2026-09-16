@@ -51,7 +51,11 @@ except (CorpusUnavailable, NotConfigured) as exc:
 # The token in the URL. It continues a conversation on a developer's machine and
 # is what a bookmark carries -- but it is supplied by whoever holds the link, so
 # under sign-in it is not what the conversation is keyed on (see below).
-url_session = web.session_id(st.session_state, st.query_params)
+# Not advertised in the address bar where sign-in decides the conversation: the
+# token would name a session that resuming it would not reach (ADR-0830).
+url_session = web.session_id(
+    st.session_state, st.query_params, advertise=not web.identity_configured()
+)
 
 # The door, before anything is drawn. Where identity is configured a visitor who
 # is not signed in, not enrolled, or holding no credential is offered sign-in or
@@ -60,7 +64,7 @@ url_session = web.session_id(st.session_state, st.query_params)
 # before identity existed.
 admission = web.admit(st.session_state, web.trail_destination, url_session)
 if admission.door is not web.Door.OPEN:
-    web.draw_closed_door(admission, url_session)
+    web.draw_closed_door(admission, url_session, url_session)
     st.stop()
 
 # What the conversation, the identity stamp, the dev panel and the cap are all
@@ -68,18 +72,28 @@ if admission.door is not web.Door.OPEN:
 # one shared link cannot overwrite each other's attribution and the OAuth
 # redirect -- which drops the query string -- cannot strand a session (ADR-0830).
 session = web.effective_session(admission, url_session)
-# Every rerun, not only at sign-in: a session pruned for idleness and returned to
-# would otherwise keep drawing "signed in as" while recording nobody.
-web.establish_identity(admission, session)
 
 # The cap, at the door rather than before it. Counting a visitor who has not yet
 # passed the door left a place held by every abandoned pre-sign-in visit; what
-# costs the host is a session with an agent behind it. A tab already holding a
-# conversation is admitted whatever the count, because no open session is ended
-# to make room (ADR-0790).
-if not web.session_registry().admit(session, continuing=bool(web.transcript(st.session_state))):
+# costs the host is a session with an agent behind it. Counted per *tab*, not per
+# conversation, because one account's five tabs are five Streamlit sessions and
+# five agents. A tab already holding a conversation is admitted whatever the
+# count, because no open session is ended to make room (ADR-0790).
+#
+# **Before the stamp below, and that order is load-bearing**: admitting prunes,
+# and pruning clears the stamp of any conversation whose last tab has gone. Set
+# the stamp first and a reader returning after the idle window had it wiped in
+# the same run, so the question they came back to ask was recorded against
+# nobody while the sidebar still named them.
+if not web.session_registry().admit(
+    url_session, session, continuing=bool(web.transcript(st.session_state))
+):
     web.draw_try_later()
     st.stop()
+
+# Every rerun, not only at sign-in: a session pruned for idleness and returned to
+# would otherwise keep drawing "signed in as" while recording nobody.
+web.establish_identity(admission, session)
 
 # One agent per session, holding this account's credential and nothing else about
 # the person. Never None: an enrolled account with no credential met its own door
@@ -116,7 +130,7 @@ with st.sidebar:
     # Who this page thinks you are, or that it is nobody's. A person reading
     # under an account they did not expect is a person whose questions are being
     # recorded against the wrong name.
-    web.draw_identity(admission, session)
+    web.draw_identity(admission, session, url_session)
     # Always drawn, including before the first question, when it reads zero. The
     # panel must not gain a section the moment a question completes: a layout that
     # grows under the reader is a worse surprise than a bar showing nothing spent.

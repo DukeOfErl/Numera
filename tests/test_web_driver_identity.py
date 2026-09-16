@@ -590,7 +590,7 @@ def test_ending_a_session_clears_the_identity_the_panel_and_the_place():
         handler.emit(record)
         assert web.session_registry().admit("s1")
         assert handler.rows("s1") and "s1" in web.IDENTITIES
-        web.end_session("s1")
+        web.end_session("s1", "s1")
         assert handler.rows("s1") == []
         assert "s1" not in web.IDENTITIES
         assert web.session_registry().live() == 0
@@ -599,3 +599,87 @@ def test_ending_a_session_clears_the_identity_the_panel_and_the_place():
         web.RECENT = None
         web.IDENTITIES.clear()
         web.session_registry.clear()
+
+
+def test_the_cap_counts_tabs_and_not_accounts(monkeypatch):
+    """One account is one conversation across its tabs (ADR-0830), so a cap keyed
+    on the conversation would count *accounts*: eight testers with five tabs each
+    is forty Streamlit sessions and forty agents, reported as eight. What costs
+    the host is a tab, so that is what the registry holds."""
+    web.session_registry.clear()
+    try:
+        registry = web.session_registry()
+        conversation = web.effective_session(_admitted(TESTER), "ignored")
+        for tab in ("tab-1", "tab-2", "tab-3"):
+            assert registry.admit(tab, conversation)
+        assert registry.live() == 3, "three tabs of one account are three sessions"
+    finally:
+        web.session_registry.clear()
+
+
+def test_the_stamp_survives_the_prune_that_admitting_performs(monkeypatch):
+    """The ordering the page depends on. `admit` prunes, and pruning clears the
+    stamp of a conversation whose last tab has gone; establishing identity before
+    that call had the stamp wiped in the same run, so a reader returning after
+    the idle window asked their question against no account at all."""
+    now = {"t": 1000.0}
+    registry = web.SessionRegistry(max_sessions=20, idle_s=600, clock=lambda: now["t"])
+    admission = _admitted(TESTER)
+    conversation = web.effective_session(admission, "url")
+    try:
+        registry.admit("url", conversation)
+        web.establish_identity(admission, conversation)
+        assert web.IDENTITIES[conversation] == Identity(TESTER.email, Role.SCIENTIST)
+
+        now["t"] += 601  # the reader steps away, then comes back and asks
+        registry.admit("url", conversation)
+        web.establish_identity(admission, conversation)
+        assert web.IDENTITIES[conversation] == Identity(TESTER.email, Role.SCIENTIST), (
+            "the stamp was pruned away in the same run that set it"
+        )
+    finally:
+        web.IDENTITIES.clear()
+
+
+def test_pruning_one_tab_leaves_a_conversation_another_tab_is_still_in():
+    """The stamp belongs to the conversation, so it may only go when the last tab
+    holding it does."""
+    now = {"t": 1000.0}
+    registry = web.SessionRegistry(max_sessions=20, idle_s=600, clock=lambda: now["t"])
+    admission = _admitted(TESTER)
+    conversation = web.effective_session(admission, "url")
+    try:
+        registry.admit("tab-1", conversation)
+        registry.admit("tab-2", conversation)
+        web.establish_identity(admission, conversation)
+        now["t"] += 400
+        registry.admit("tab-2", conversation)  # one tab keeps rerunning
+        now["t"] += 400  # tab-1 is now past its window, tab-2 is not
+        registry.prune()
+        assert conversation in web.IDENTITIES, "the live tab's conversation was cleared"
+        now["t"] += 601
+        registry.prune()
+        assert conversation not in web.IDENTITIES, "the last tab went and nothing was cleared"
+    finally:
+        web.IDENTITIES.clear()
+
+
+def test_a_malformed_cap_setting_falls_back_rather_than_taking_the_page_down(monkeypatch, capsys):
+    monkeypatch.setenv(web.MAX_SESSIONS_ENV, "twenty")
+    web.session_registry.clear()
+    try:
+        assert web.session_registry().max_sessions == web.DEFAULT_MAX_SESSIONS
+        assert "not a number" in capsys.readouterr().err
+    finally:
+        web.session_registry.clear()
+
+
+def test_the_url_token_is_not_advertised_where_sign_in_decides_the_conversation():
+    """Otherwise the address bar offers a link that does not resume the
+    conversation it names, beside a caption showing a different identifier."""
+    state, params = {}, {"session": "abc123"}
+    assert web.session_id(state, params, advertise=False) == "abc123"
+    assert "session" not in params
+    state, params = {}, {}
+    web.session_id(state, params, advertise=True)
+    assert params["session"], "a developer's machine keeps its bookmark"

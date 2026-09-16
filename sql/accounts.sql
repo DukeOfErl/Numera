@@ -17,6 +17,12 @@
 -- `disabled` is how an account is withdrawn without losing the row: a disabled
 -- account is refused exactly as an absent one is, and the trail rows it wrote
 -- keep their attribution.
+--
+-- **Withdrawal takes effect at the reader's next page load, not at once.** The
+-- row is read when a session signs in and held for the life of that browser
+-- session, so disabling an account, changing its role or replacing its key does
+-- nothing to a tab that is already open. To cut off a key immediately, revoke it
+-- at OpenRouter; the next model call meets that.
 
 create table if not exists accounts (
     email          text primary key,

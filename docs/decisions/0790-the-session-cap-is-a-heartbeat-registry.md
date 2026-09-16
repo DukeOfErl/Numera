@@ -34,8 +34,13 @@ Two ways to count were on the table:
 ## Decision
 
 **`web.SessionRegistry`, one per server under `st.cache_resource`, keyed on the
-session's effective identifier** (ADR-0830 — the account where one is signed in,
-the URL token otherwise). Every rerun of an admitted session touches it. A new
+browser session** — the per-tab token, *not* the conversation. Under sign-in one
+account is one conversation across all its tabs (ADR-0830), so counting
+conversations would count accounts: eight testers with five tabs each is forty
+Streamlit sessions and forty agents, which is exactly what the cap exists to
+bound, reported as eight. Each entry remembers which conversation its tab is in,
+which is what lets pruning clear that conversation's identity stamp and panel
+rows once its *last* tab has gone and not while another is open. Every rerun of an admitted session touches it. A new
 session arriving when the live count is at `SCINUMBERS_MAX_SESSIONS` (default 20)
 is shown one sentence — try again shortly — and is not recorded, so a refused
 visitor holds no place. An admitted session is never ended to make room: the cap
@@ -53,6 +58,18 @@ sign-in for the length of the idle window — the cap ran out with a fraction of
 its sessions real. What costs the host is a session with an agent behind it, and
 that is what is now counted. OAuth round trips are bounded by the provider, not
 here.
+
+**Admitting prunes, so it must run before the stamp is established.** A reader
+returning after the idle window does both in one script run; with the stamp set
+first, pruning wiped it in the same run and the question they came back to ask
+was recorded against nobody while the sidebar still named them. The driver calls
+`session_registry().admit(...)` and then `establish_identity(...)`, and a test
+drives that order rather than a convenient one.
+
+**The registry is locked.** Streamlit runs one script thread per browser session
+against this single cached object, so two reruns prune concurrently — and the
+second `del` on an already-removed key raised, handing that reader a stack trace
+instead of the app. A check-then-set on the count could also admit over the cap.
 
 **A tab already holding a conversation is admitted whatever the count.** Pruning
 is by heartbeat, so a reader who steps away past the idle window loses their
