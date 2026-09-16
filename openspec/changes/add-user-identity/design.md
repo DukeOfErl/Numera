@@ -15,10 +15,11 @@ this codebase. The constraints that shape the approach:
   global — and **`web.resources()` is `@st.cache_resource`**, so one `AskAgent`
   serves every browser session on the server. Both have to change before a key
   can be per person.
-- **The agent takes no parameter naming its caller (ADR-0110).** Identity is not
-  the caller; it is a fact about the person, carried for the record. It must not
-  make the agent behave differently, and the design has to make that visibly
-  true.
+- **The agent takes no parameter naming its caller (ADR-0110).** The spec now
+  goes further: the agent receives neither the account nor the role, and what it
+  is handed is identical whoever asks. If it must one day know what is permitted,
+  it is handed permissions, never the role. The design has to make that true by
+  construction, not by discipline.
 - **The trail already has the seams.** `QuestionTrace.record` puts fields in
   `extra`; `TrailHandler.emit` already reads `user_email` off the record and
   writes NULL. `feedback._record` goes through the same logger. The `trail`
@@ -72,29 +73,51 @@ Its URL was already treated as a secret; this is why it has to stay one.
 `web.resources()` keeps the corpus repository under `@st.cache_resource` — it is
 the expensive index — and stops constructing the agent. `web.agent_for(state,
 repo, account)` builds an `AskAgent` once per session into `st.session_state`,
-with the account's key and identity passed at construction. `AskAgent` is cheap:
+with the account's key — and only the key — passed at construction. `AskAgent` is cheap:
 its saver is opened per `_saver()` call, and the checkpoint path stays shared.
 **ADR-0820.**
 
 `default_model(config, api_key: str | None)` takes the key. `None` falls back to
 `os.environ`, which is what the CLI, the harness and an unconfigured deployment
 pass — behaviour unchanged for all three. `AskAgent.__init__` gains
-`api_key: str | None = None` and `identity: Identity | None = None`.
+`api_key: str | None = None` **and nothing else**: the credential is the one
+per-person fact the agent needs, and it is not identity.
 
-*Alternative considered:* threading identity through `ask(session_id, question,
-identity)`. Rejected: `ask`'s signature is the port every adapter uses, and a
-per-session agent already *is* one person's, so construction is the honest
-place. It also keeps ADR-0110 visibly true — `ask` cannot vary on who is asking
-because it does not receive who is asking.
+*Alternative considered:* passing `Identity` at construction, for the trail. The
+first draft did. Rejected because it hands the agent the role — which the spec
+now forbids — in order to write a column, when the column can be written without
+the agent knowing (next decision). Also rejected: threading identity through
+`ask(...)`, for the same reason and because `ask` is the port every adapter uses.
 
-### Identity is a value, and it travels on the trace
+### Identity is stamped at the sink; nothing below the driver ever holds it
 
-`Identity(email: str, role: Role)` in `permissions.py`. `QuestionTrace` gains
-`user_email` and `user_role`, both defaulting to `""` and placed in `extra` by
-`record()` — so `TrailHandler.emit`'s existing `or None` turns the absence into
-NULL, exactly as it does for `session_id`. `start_question(...)` takes an
-optional `identity`. `feedback.record_verdict/record_comment` take `identity`
-and put the same two fields on their records.
+`Identity(email: str, role: Role)` in `permissions.py`. The web driver owns a
+process-wide registry `session_id → Identity` (populated at sign-in, evicted with
+the session registry below) and installs **one `logging.Filter` on the trail's
+logger** — beside the file, durable and panel sinks, after `trace.to_file` for
+the ordering reason `install_trail` already states. The filter reads
+`session_id` off every record and stamps `user_email` and `user_role` onto it.
+`TrailHandler.emit` already reads `user_email`; it gains `user_role` the same way,
+and its existing `or None` turns absence into NULL.
+
+Consequences, all of them the point:
+
+- **`agent.py`, `trace.py` and `feedback.py` are untouched by identity.** No
+  parameter, no field, no import. `QuestionTrace` still carries question, session
+  and run label; `feedback._record` still writes through the same logger; both get
+  stamped without knowing. A structural test asserts over the source that none of
+  the three names `Identity`, `role` or `email`.
+- **The CLI and the evaluation harness install no filter**, so their records
+  carry NULL exactly as today — "unconfigured behaves as before" is not a branch,
+  it is the absence of a filter.
+- **What the agent is given is identical whoever asks**, by construction: it is
+  never given who is asking. The spec's scenario for this is asserted over the
+  model double's `seen` and the tool inputs across two roles.
+
+*Alternative considered:* identity on `QuestionTrace`, threaded from the driver
+through the agent. It works, and it puts the role one attribute away from the
+code that decides an answer, guarded only by discipline. The filter puts it in a
+different module.
 
 **The role is written, not looked up.** `user_role text` joins `user_email` as a
 column — not inside `detail` — because it is a first-class join key for the
@@ -104,24 +127,36 @@ created; `_SCHEMA` gains `alter table {table} add column if not exists user_role
 text` after the `create table if not exists`, run in the same `ensure_schema`
 transaction, idempotent on every start.
 
-### The grant table is data; the refusal is one function
+`signin.refused` is written by the driver itself, with the email in the record's
+fields: there is no session identity to stamp, because the person was refused
+one.
+
+### The grant table is data, holds one permission, and the refusal is one function
 
 `permissions.py`: `Role` and `Permission` enums, `GRANTS: dict[Role,
-frozenset[Permission]]` — the table from the spec, with the pruning rule and
-default-deny stated in the comment above it. `authorization.py`: `allowed(
-identity, permission) -> bool` and `require(identity, permission)` raising
-`Refused`, which carries the permission's name and nothing else. `None` identity
-is refused everything. **ADR-0800.**
+frozenset[Permission]]` — one permission, `DEV_PANEL`, granted to dev and admin,
+refused to the three tester roles. The pruning rule and default-deny are stated
+in the comment above it. `authorization.py`: `allowed(identity, permission)` and
+`require(identity, permission)` raising `Refused`, which carries the permission's
+name and nothing about the account. `None` identity is refused. **ADR-0800.**
 
-*Where `require` is called.* Inside the operation: `feedback.record_verdict` and
-`record_comment` (the things that record), `web.answer` (the thing that asks; the
-driver's single dispatch point), and the panel's data accessor. The page's
-control-hiding is presentation and proves nothing; the tests drive the
-operations directly with a role that lacks the grant.
+*Why `read` and `feedback` are not permissions.* Enrolment grants them. An
+enrolled account always has a role, and every role would grant both, so the
+table would carry two columns no row refuses — a deny direction that can only be
+tested against `None`, which is enrolment's job, not the table's. A permission
+exists only where some role is refused it. When a role that may read but not
+rate arrives, `feedback` becomes a permission with a row to test; not before.
 
-*Alternative considered:* putting `require(READ)` inside `AskAgent.ask`.
-Rejected on ADR-0110: the agent would then receive who is asking. `web.answer`
-is the web adapter's operation, and the CLI has no identity by design.
+*Where `require` is called.* Inside the operation: the panel's data accessor,
+which is the one operation a role can be refused. Asking and rating are gated by
+enrolment at the sign-in step, not by a permission check in `web.answer` or
+`feedback.py` — there is nothing for such a check to refuse. The page's
+control-hiding is presentation and proves nothing; the tests drive the accessor
+directly with a tester role.
+
+*Alternative considered:* keeping `read`/`feedback` as always-granted rows "for
+later". Rejected: a table with rows nobody can refuse teaches the reader that the
+table is decoration.
 
 ### Enrolment is read once per session and refused loudly
 
@@ -173,11 +208,19 @@ Not per-IP, per the roadmap: `st.context.ip_address` is client-supplied.
 ### Unconfigured means untouched
 
 `web.identity_configured() -> bool` is `"auth" in st.secrets`. When false:
-no sign-in gate, `identity=None` everywhere, `api_key=None` (environment
+no sign-in gate, no identity filter installed, `api_key=None` (environment
 fallback), records carry NULL as today, the sidebar says "no sign-in configured",
 and the dev panel is shown — a session that is nobody's is the developer's. This
 is the same rule the durable trail follows and is asserted through `AppTest`
 with no `[auth]` in secrets, which is how every existing web test already runs.
+
+**Deferred decision, recorded here and in the roadmap's "Deferred, deliberately"
+section:** showing the panel to an unconfigured deployment is right while the
+panel holds nothing but the session's own trail, and is to be decided again
+before it holds anything more — a cross-session view, spend figures, anything an
+operator would not want a URL-holder to see if `[auth]` were forgotten. The spec
+carries the same condition, so the day the panel grows is the day the test for
+this fails and forces the decision.
 
 ### The notice is one sentence, extended
 
@@ -213,12 +256,17 @@ many sessions holds at most `MAX_SESSIONS × 5 questions` of formatted lines.
 Stated in ADR-0790 so nobody tunes the cap upward to compensate without knowing
 why it seems low.
 
-**Both directions of the grant table** → every permission test asserts a grant
-*and* a refusal, and the refusal varies the dimension the rule reads — a role
-that lacks it, an account with no role, `None`. A seeded canary ("the guard is
-bypassed": `require` made a no-op in a copy) must fail a named test before the
+**Both directions of the grant table** → the panel test asserts a grant *and* a
+refusal, and the refusal varies the dimension the rule reads — a tester role, not
+only `None`. A seeded canary ("the guard is bypassed": `require` made a no-op in
+a copy; then `DEV_PANEL` granted to `student`) must fail a named test before the
 change is believed. This is the one stage this project keeps seeding for; the
 memory and the roadmap both say so.
+
+**The role reaching the agent by a side door** → asserted structurally over the
+source (`agent.py`, `trace.py`, `feedback.py` name none of `Identity`, `role`,
+`email`) and behaviourally (identical model inputs across two roles). The filter
+design makes the side door a different module.
 
 ## Migration Plan
 

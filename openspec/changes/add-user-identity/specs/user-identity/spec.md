@@ -1,9 +1,10 @@
 ## Purpose
 
 Who a reader is, what they may do, and what the system keeps about them: sign-in
-and enrolment, roles and a default-deny grant table, a capped credential of each
-tester's own, the panel that lets an operator see a session's trail, and the rule
-that a deployment with no identity configured behaves exactly as it did before.
+and enrolment, roles and a default-deny grant table that the agent never sees, a
+capped credential of each tester's own, the panel that lets an operator see a
+session's trail, and the rule that a deployment with no identity configured
+behaves exactly as it did before.
 
 ## ADDED Requirements
 
@@ -68,30 +69,37 @@ who is not enrolled, and it is kept so that they can be.
 ### Requirement: Every enrolled account holds one role, and permissions are granted by a default-deny table
 
 There SHALL be five roles — student, scientist, senior scientist, dev, admin —
-and every enrolled account SHALL hold exactly one. There SHALL be three
-permissions: `read` (ask questions and see answers), `feedback` (rate an answer
-and comment on it), and `dev panel` (see this session's trail). What a role may
-do SHALL be stated in one grant table, and anything the table does not grant
-SHALL be refused. The table is:
+and every enrolled account SHALL hold exactly one. Reading answers and giving
+feedback are what enrolment grants; they are not permissions a role can lack, and
+the table does not list them. A permission SHALL exist only where some role is
+refused it, so that the refusal can be tested against a real role rather than
+against nobody. Today that is one permission: `dev panel`, to see this session's
+trail. What a role may do SHALL be stated in one grant table, and anything the
+table does not grant SHALL be refused:
 
-| Role | `read` | `feedback` | `dev panel` |
-|---|---|---|---|
-| student, scientist, senior scientist | granted | granted | refused |
-| dev, admin | granted | granted | granted |
+| Role | `dev panel` |
+|---|---|
+| student, scientist, senior scientist | refused |
+| dev, admin | granted |
 
-A signed-in account with no role SHALL hold no permission, including `read`.
+Where there is no identity, nothing SHALL be granted.
 
-A permission SHALL exist only where the application has an action to refuse. The
-three tester roles are identical here and differ in the weight their judgements
-will later carry; dev and admin are identical here and differ by label. That is
-deliberate: a table row nobody can test is a grant that drifts.
+The three tester roles are identical here and differ in the weight their
+judgements will later carry; dev and admin are identical here and differ by
+label. That is deliberate: a table row nobody can test is a grant that drifts.
+
+The role SHALL NOT reach the agent, and neither SHALL the account. What the agent
+is handed about a question SHALL be identical whoever asks it. Where the agent
+must one day know what is permitted — a question whose scope needs allowing, a
+calculation — it SHALL be handed the permissions, never the role, so that an
+answer can depend on what is allowed and never on who is asking.
 
 The refusal SHALL belong to the action, not to the page that offers it. Whatever
-asks the system to answer a question, record a rating or show the panel meets the
-same refusal; a page that hides a control has not enforced anything.
+asks the system to show the panel meets the same refusal; a page that hides a
+control has not enforced anything.
 
 #### Scenario: A tester reads and rates
-- **WHEN** an account holding the student, scientist or senior scientist role asks a question and rates the answer
+- **WHEN** an enrolled account holding the student, scientist or senior scientist role asks a question and rates the answer
 - **THEN** the question is answered and the rating is recorded
 
 #### Scenario: A tester has no panel
@@ -102,13 +110,18 @@ same refusal; a page that hides a control has not enforced anything.
 - **WHEN** an account holding the dev or admin role views the page
 - **THEN** the panel of trail records is present
 
-#### Scenario: An account without a role is refused everything
-- **WHEN** a signed-in account holds no role
-- **THEN** it may not ask, may not rate, and has no panel
+#### Scenario: No identity holds the permission
+- **WHEN** the panel is requested with no identity
+- **THEN** it is refused
+
+#### Scenario: The agent is handed the same question whoever asks
+- **WHEN** the same question is asked under two different roles
+- **THEN** what the agent and the model are given is identical
+- **AND** neither the account nor the role appears in it
 
 #### Scenario: The refusal does not depend on who asks
-- **WHEN** an action is requested for an account whose role does not grant it, by any caller
-- **THEN** the action is refused the same way
+- **WHEN** the panel is requested for an account whose role does not grant it, by any caller
+- **THEN** it is refused the same way
 
 ### Requirement: An operator can see a session's own trail
 
@@ -237,8 +250,11 @@ configured, so that the state is visible rather than inferred. This is the
 developer's machine, and refusing to run without an identity provider would make
 the absence of sign-in an outage — the same rule the durable trail follows.
 
-In that state the panel of trail records SHALL be shown: a session that is
-nobody's is the developer's.
+In that state the panel of trail records SHALL be shown, for as long as it
+carries nothing but the session's own records: a session that is nobody's is the
+developer's. This is a decision to revisit, not a settled one — before the panel
+shows anything more sensitive than the session's own trail, whether an
+unconfigured deployment still sees it SHALL be decided again.
 
 #### Scenario: No identity is configured
 - **WHEN** the application starts with no identity provider configured

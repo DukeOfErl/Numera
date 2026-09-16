@@ -111,20 +111,31 @@ test. That removed five of the eight permissions first discussed:
 - *suggest a problem* is folded into *feedback*, by the same reasoning as *rate
   an entry*: the comment box lives inside the rating widget and requires a
   thumbs-down first, so there is no place to refuse one without the other.
+- *read* and *feedback* — dropped later the same day, when the table was about
+  to be written into a spec and it became clear no role refused either. Being
+  enrolled *is* reading and rating; a row every role holds can only be tested
+  against nobody, which is enrolment's job. A permission exists only where some
+  role is refused it. `feedback` returns the day a role that may read but not
+  rate exists.
 
 *Default-deny, grants explicit.* A wrong deny announces itself — somebody clicks
 and is refused. A wrong grant is silent and looks like ordinary use. So the cheap
 direction absorbs the uncertainty: anything not in the table is refused, and the
 code says so where the table is defined.
 
-| | read | feedback | dev panel |
-|---|---|---|---|
-| student / scientist / senior scientist | ✓ | ✓ | – |
-| dev / admin | ✓ | ✓ | ✓ |
+| | dev panel |
+|---|---|
+| student / scientist / senior scientist | – |
+| dev / admin | ✓ |
 
-- **`read` is what the allowlist grants.** Signed in but not allowlisted is a
-  role of none, and default-deny refuses even reading. That is the permission
-  that makes the allowlist mean something.
+- **Enrolment is what grants reading and rating.** Signed in but not enrolled is
+  refused before the table is consulted; the table decides only what an enrolled
+  role may do beyond that.
+- **The agent never receives the role, or the account.** What it is handed is
+  identical whoever asks. If it must one day know what is permitted — scope of a
+  question, a calculation — it is handed *permissions*, never the role, so an
+  answer can depend on what is allowed and never on who is asking. Identity
+  reaches the trail rows by a filter at the sink, not through the agent.
 - **The three tester roles are identical in WP3**, and so are dev and admin.
   Testers differ in the *weight* their ratings will later carry — refusing
   students would defeat WP2. Roles are kept as data now so that weighting and
@@ -153,6 +164,12 @@ Implementation note for the design, not the spec: the records are already on
 the trail's logger and carry `session_id`; a retaining handler filtered by
 session at render time is a third sink on the same logger, and needs neither
 the file nor the database.
+
+**An unconfigured deployment (no `[auth]`) sees the dev panel** — a developer's
+machine — for as long as the panel holds nothing but the session's own trail.
+*Deferred:* to be decided again before the panel shows anything more sensitive
+(a cross-session view, spend); the spec carries the condition. Listed under
+"Deferred, deliberately" too.
 
 **`manage accounts` is not a permission, and the open item above is closed.**
 Allowlisting an account, minting its OpenRouter key and assigning its role are
@@ -340,6 +357,12 @@ change that is not happening.
 ---
 
 ## Deferred, deliberately
+
+- **The dev panel is shown to an unconfigured deployment** (no `[auth]`), because
+  that is a developer's machine and the panel holds only the session's own
+  trail. Decide again before the panel shows anything an operator would not want
+  a URL-holder to see if `[auth]` were forgotten — a cross-session view, spend
+  figures. The `user-identity` spec carries the condition. (2026-09-16)
 
 | Item | Why it is waiting |
 |---|---|

@@ -11,13 +11,14 @@ person's, and the roadmap has kept a column empty for them since day one.
 
 - **Sign-in.** Google, through Streamlit's own `st.login` (OIDC), with an
   allowlist of accounts the operator maintains outside the app. Signed in but not
-  allowlisted is a role of none.
+  allowlisted is refused; enrolment is what grants reading and rating.
 - **Roles and a grant table.** Five roles — student, scientist, senior
-  scientist, dev, admin — and three permissions — `read`, `feedback`, `dev
-  panel` — as data, default-deny. The table was decided in `docs/roadmap.md`
-  §WP3 on 2026-09-16 and is not redesigned here; the pruning rule that produced
-  it (a permission exists only where the app has a code path to refuse) is what
-  keeps it at three.
+  scientist, dev, admin — and one permission, `dev panel`, as data,
+  default-deny. The table was decided in `docs/roadmap.md` §WP3 on 2026-09-16
+  and revised the same day: `read` and `feedback` were rows no role refused, and
+  a permission exists only where some role is refused it. **The agent never
+  receives the role or the account**; if it must one day know what is
+  permitted, it is handed permissions, never the role.
 - **A dev panel**, present for `dev panel` holders and absent for everyone else:
   this session's last five questions' trail records as a table. It exists so
   that enforcement has a deny direction to test, and because WP4 and WP5 will
@@ -30,10 +31,11 @@ person's, and the roadmap has kept a column empty for them since day one.
 - **The agent takes its credential as a parameter** instead of reading a process
   global, and **one agent per browser session** instead of one per server — the
   corpus index stays shared, the thing holding a key does not.
-- **Identity on every trail row, at write time.** `user_email` is finally
-  written, and `user_role` is added beside it, recorded when the row is written
-  and never looked up afterwards: a rating's weight is the weight at the moment
-  it was given.
+- **Identity on every trail row, at write time, stamped by the driver at the
+  sink.** `user_email` is finally written, and `user_role` is added beside it,
+  recorded when the row is written and never looked up afterwards: a rating's
+  weight is the weight at the moment it was given. The agent, the trace and the
+  feedback module do not change for this — a filter on the trail's logger does.
 - **A global cap on concurrent sessions.** Not per-IP — Streamlit's own docs say
   the client address must not be used for security. This protects the host, not
   the budget; cost is capped per key.
@@ -68,12 +70,14 @@ person's, and the roadmap has kept a column empty for them since day one.
 ## Impact
 
 **Code.** `agent.py`: `default_model` takes the key rather than reading
-`os.environ`, and `AskAgent` is constructed per session. `web.py`: `resources()`
-splits — the repository stays `@st.cache_resource`, the agent moves to session
-state. `streamlit_app.py`: the sign-in gate before anything is drawn, the dev
-panel below run status. `trail_store.py`: `user_role` column and the first
-`add column if not exists`; `TrailHandler` reads identity off the record.
-`trace.py`/`feedback.py`: identity threaded onto records. `messages.py`: the
+`os.environ`, and `AskAgent` is constructed per session — nothing else changes
+there. `web.py`: `resources()` splits — the repository stays
+`@st.cache_resource`, the agent moves to session state — and gains the identity
+filter, the panel's handler and the session registry. `streamlit_app.py`: the
+sign-in gate before anything is drawn, the dev panel below run status.
+`trail_store.py`: `user_role` column and the first `add column if not exists`;
+`TrailHandler` reads the role off the record as it reads the email.
+`trace.py` and `feedback.py`: untouched, and a test says so. `messages.py`: the
 notice. Three new core-side modules, none importing Streamlit: `permissions.py`
 (the table, as data), `authorization.py` (the refusal), `accounts.py` (the
 account → role → key lookup). `tests/test_driver_independence.py` gains them.

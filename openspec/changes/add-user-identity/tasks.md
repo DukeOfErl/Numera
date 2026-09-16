@@ -25,28 +25,26 @@ doubles, both populations of the table. Its brief already says so.
 ## 1. The table and the refusal
 
 - [ ] 1.1 ADR stubs `0780`–`0820`, committed before anything else.
-- [ ] 1.2 `permissions.py`: `Role`, `Permission`, `Identity`, and `GRANTS` as
-      data — the table exactly as the spec states it, with default-deny and the
-      pruning rule written in the comment above it. Imports nothing from
-      Streamlit.
+- [ ] 1.2 `permissions.py`: `Role`, `Permission` (one member, `DEV_PANEL`),
+      `Identity`, and `GRANTS` as data — the table exactly as the spec states
+      it, with default-deny, the pruning rule, and why `read` and `feedback` are
+      not rows written in the comment above it. Imports nothing from Streamlit.
 - [ ] 1.3 `authorization.py`: `allowed(identity, permission)` and
-      `require(identity, permission)` raising `Refused`. `None` is refused
-      everything. The refusal carries the permission's name and nothing about the
-      account.
-- [ ] 1.4 Tests, both directions, per permission: for `read`, `feedback` and
-      `dev panel`, one role that holds it passes and one that lacks it is refused.
-      For `dev panel` the refused role must be a *tester* role, not `None` — a
-      test that only refuses `None` has not exercised the table.
-- [ ] 1.5 Test: an account with no role is refused `read`. Vary the dimension:
-      the same email with a role passes, without one is refused.
-- [ ] 1.6 Test: the table covers every `Role` and names only known `Permission`s
-      — asserted against the enums, not counted, for the reason
+      `require(identity, permission)` raising `Refused`. `None` is refused. The
+      refusal carries the permission's name and nothing about the account.
+- [ ] 1.4 Tests, both directions: dev and admin are granted `DEV_PANEL`; each
+      of student, scientist and senior scientist is refused it; `None` is
+      refused it. The refused *roles* are the test — a test that only refuses
+      `None` has not exercised the table.
+- [ ] 1.5 Test: the table covers every `Role` and names only known
+      `Permission`s — asserted against the enums, not counted, for the reason
       `tests/agent_endings.py` gives.
-- [ ] 1.7 Add `permissions`, `authorization`, `accounts` to the core side of
+- [ ] 1.6 Add `permissions`, `authorization`, `accounts` to the core side of
       `tests/test_driver_independence.py`; confirm the test fails if any of them
       imports Streamlit (seed it, in a copy).
-- [ ] 1.8 `verifier` on group 1. Ask specifically: would any test still pass if
-      `GRANTS` granted everything to everyone? Measure by making it so in a copy.
+- [ ] 1.7 `verifier` on group 1. Ask specifically: would any test still pass if
+      `GRANTS` granted `DEV_PANEL` to every role? Measure by making it so in a
+      copy.
 
 ## 2. Accounts and the schema
 
@@ -69,29 +67,38 @@ doubles, both populations of the table. Its brief already says so.
       columns; one without writes NULL for both — not `''`.
 - [ ] 2.6 `verifier` on group 2.
 
-## 3. Identity on the trace, and a credential per agent
+## 3. Identity stamped at the sink, and a credential per agent
 
-- [ ] 3.1 `QuestionTrace` gains `user_email`/`user_role` (default `""`),
-      `record()` puts them in `extra`; `start_question(…, identity=None)`.
-- [ ] 3.2 `default_model(config, api_key=None)`: the key as a parameter, `None`
-      falling back to the environment. `AskAgent.__init__(…, api_key=None,
-      identity=None)`; `ask` threads identity into `start_question`. `ask`'s
-      signature does not change.
-- [ ] 3.3 Test: two agents constructed with different keys send different keys
+- [ ] 3.1 `default_model(config, api_key=None)`: the key as a parameter, `None`
+      falling back to the environment. `AskAgent.__init__(…, api_key=None)` and
+      nothing else. `ask`'s signature does not change.
+- [ ] 3.2 Test: two agents constructed with different keys send different keys
       to the provider (assert on the model double's construction, not on the
       environment). Test: `api_key=None` reads the environment exactly as
       before.
-- [ ] 3.4 Test: every record of a question asked through an agent with identity
-      carries email and role — through the trail, not the events, and varying the
-      identity between two questions so a constant cannot pass.
-- [ ] 3.5 `feedback.record_verdict/record_comment` take `identity`; the two
-      fields land on their records. Test both with identity and without.
-- [ ] 3.6 Test: identity does not reach the model. Follow
-      `test_nothing_recorded_here_reaches_the_model` with its positive control;
-      the needle is the email.
-- [ ] 3.7 ADR-0810 and ADR-0820 written out.
-- [ ] 3.8 `verifier` on group 3. Ask: is there any path by which identity could
-      change what the agent does, not only what it records?
+- [ ] 3.3 `web.IdentityStamp(logging.Filter)` over a process-wide
+      `session_id → Identity` registry: stamps `user_email` and `user_role` onto
+      every record whose session is known. Installed once, after
+      `trace.to_file`, pinned the way `test_web_driver_trail.py` pins that
+      ordering. Presentation side; imports `logging` only.
+- [ ] 3.4 `TrailHandler.emit` reads `user_role` the way it reads `user_email`
+      (task 2.5). Test through the trail, not the events: two sessions under two
+      identities → each session's records carry its own email and role, so a
+      constant or a shared stamp cannot pass.
+- [ ] 3.5 Test: feedback records are stamped **without `feedback.py` changing** —
+      a verdict recorded in a stamped session carries the identity; one recorded
+      with no registry entry carries NULL for both, not `''`.
+- [ ] 3.6 Structural test, in `test_driver_independence.py`: `agent.py`,
+      `trace.py` and `feedback.py` name none of `Identity`, `user_role`,
+      `user_email`. Seed a violation in a copy and watch it fail.
+- [ ] 3.7 Test, the spec's scenario: the same question asked under two roles
+      hands the agent and the model identical inputs (`model.seen`, tool calls),
+      with the positive control that the question itself reached the model.
+- [ ] 3.8 ADR-0810 and ADR-0820 written out. ADR-0820 records the principle for
+      later: if the agent must ever know what is permitted, it is handed
+      permissions, never the role.
+- [ ] 3.9 `verifier` on group 3. Ask: is there any path — parameter, field,
+      import, global — by which the role could reach `agent.py`?
 
 ## 4. The gate, the notice, and the unconfigured deployment
 
@@ -109,8 +116,10 @@ doubles, both populations of the table. Its brief already says so.
       two sessions get two agents and one repository (`test_web_driver.py` has
       the cache-hit test to extend).
 - [ ] 4.4 `streamlit_app.py`: the gate before anything is drawn; sign-out and
-      "signed in as" in the sidebar; `require(identity, READ)` inside
-      `web.answer`; the missing-credential refusal when the account has no key.
+      "signed in as" in the sidebar; the identity registry entry made at
+      sign-in; the missing-credential refusal in `web.answer` when the account
+      has no key. No permission check on asking or rating — enrolment is the
+      gate, and there is nothing for a check to refuse.
 - [ ] 4.5 `messages.records_note(identity_configured)`; the CLI passes `False`;
       the sidebar shows the extended sentence when configured. Test the literal
       fragments, both variants.
@@ -160,7 +169,9 @@ doubles, both populations of the table. Its brief already says so.
 - [ ] 7.1 Into a **copy**: make `authorization.require` a no-op. Exactly the
       group-1 refusal tests and the group-5 absence test must fail, and nothing
       else. Name them in the task text when done. Then: grant `DEV_PANEL` to
-      `student` in the copy — the student-has-no-panel test must fail.
+      `student` in the copy — the student-has-no-panel test must fail. Then:
+      pass the role into `AskAgent` in the copy — the structural test in 3.6
+      must fail.
 - [ ] 7.2 Run the full suite once, at the end. Not per group.
 
 ## 8. The record
@@ -177,7 +188,9 @@ doubles, both populations of the table. Its brief already says so.
       per-session agent. `CLAUDE.md` module table and the `PRESENTATION`/core
       sets.
 - [ ] 8.5 `docs/roadmap.md` §WP3 points at this change and its ADRs rather than
-      describing them.
+      describing them. Its "Deferred, deliberately" section gains the
+      unconfigured-deployment-sees-the-panel decision, with the condition that
+      reopens it.
 - [ ] 8.6 `openspec validate add-user-identity --strict`, archive, then diff
       each promoted requirement against its delta mechanically — archive refuses
       a dropped scenario and says nothing about dropped prose.
