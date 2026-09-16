@@ -200,18 +200,25 @@ doubles, both populations of the table. Its brief already says so.
 
 ## 8. The record
 
-- [ ] 8.1 ADR-0780 and ADR-0800 written out (the others land with their groups).
-- [ ] 8.2 Spec-conformance mapping for the new capability and the two modified
+- [x] 8.1 ADR-0780 and ADR-0800 written out (the others land with their groups).
+- [x] 8.2 Spec-conformance mapping for the new capability and the two modified
       requirements' new scenarios. A scenario that merely executes is a gap, not
       a pass; say which is which.
-- [ ] 8.3 `sql/feedback.sql`: a per-tester and a per-role query, left joins as
+      *Five named in the `COVERED` comment: sign-out's next visit, enrolled-after-
+      refusal, two testers under one exhausted cap, records-found-by-account
+      (query 8, by hand), credential-never-shown beyond the drawn elements.*
+- [x] 8.3 `sql/feedback.sql`: a per-tester and a per-role query, left joins as
       before. Run against `dev`.
-- [ ] 8.4 `README.md`: sign-in, enrolment, what is now kept about a person,
+      *Queries 6, 7 and 8 added and run over SQL-over-HTTP on 2026-09-16: 25
+      verdicts, all `(null, null)` / `(no sign-in)`; the `user_role` column was
+      added to the live `dev` table by the same idempotent `alter` that
+      `ensure_schema` runs.*
+- [x] 8.4 `README.md`: sign-in, enrolment, what is now kept about a person,
       the operator's steps from the design's migration plan. `CHANGELOG.md`.
       `docs/diagrams/architecture.md`: the three new core modules and the
       per-session agent. `CLAUDE.md` module table and the `PRESENTATION`/core
       sets.
-- [ ] 8.5 `docs/roadmap.md` §WP3 points at this change and its ADRs rather than
+- [x] 8.5 `docs/roadmap.md` §WP3 points at this change and its ADRs rather than
       describing them. Its "Deferred, deliberately" section gains the
       unconfigured-deployment-sees-the-panel decision, with the condition that
       reopens it.
