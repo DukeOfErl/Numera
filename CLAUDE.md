@@ -68,7 +68,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-provider-limit-ending` | `0600`–`0640` — `0600` written |
 | `add-durable-trail` | `0700`–`0730` |
 | `add-answer-feedback` | `0740`–`0770` — `0740`, `0750`, `0760` written |
-| `add-user-identity` | `0780`–`0830` — reserved, change not yet proposed |
+| `add-user-identity` | `0780`–`0830` — `0780`–`0820` written |
 | `add-question-and-answer-records` | `0840`–`0870` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
@@ -165,6 +165,9 @@ core, and a test there refuses a name with no file behind it.
 | `trace.py` | The structured trail, one question id and one session id throughout |
 | `trail_store.py` | The trail's durable destination: one append-only table, written best-effort (ADR-0700, ADR-0710) |
 | `feedback.py` | A reader's judgement of an answer, recorded to the trail. **Presentation, not core** — see below |
+| `permissions.py` | `Role`, `Permission`, `Identity`, and `GRANTS` — the default-deny table as data, with the pruning rule above it (ADR-0800) |
+| `authorization.py` | `allowed` / `require` / `Refused`: the one refusal, called inside the operation it guards, never by the page |
+| `accounts.py` | `lookup(engine, email)`: enrolment off one row, **fails closed** — the deliberate inverse of `trail_store` (ADR-0780) |
 
 **`ask` wraps `_ask`, and the wrapper is where the records are written.** The
 question, the answer and the evidence behind it are recorded as their events pass
@@ -175,16 +178,34 @@ generator mid-iteration on every rerun and code after a `yield` may never run
 (ADR-0840). Add a ninth ending and it records itself; add a record beside a
 `yield` and you have reintroduced the bug.
 
-**The trail has two sinks.** `trace.py` writes to a logger; `trail_store.py`
-attaches to that logger as a second handler, so no call site knows about it. Two
-things a reader will otherwise get wrong:
+**The trail has three sinks and a filter, all on one logger.** `trace.py` writes
+to a logger; `trail_store.py` attaches as a second handler, `web.RecentTrail` (the
+dev panel) as a third, and `web.IdentityStamp` — a `logging.Filter` keyed by
+`session_id` — stamps `user_email`/`user_role` onto every record of a signed-in
+session before any handler sees it. No call site knows about any of them, which
+is how `agent.py`, `trace.py` and `feedback.py` stay free of identity:
+`test_driver_independence.py` parses all three for any identifier that would
+mean otherwise, and `AskAgent` takes an `api_key` and nothing else about the
+person (ADR-0810, ADR-0820). Two things a reader will otherwise get wrong:
 
 - **Recording fails open, deliberately inverting the spend gate** — the reasoning,
   and why it is a spec requirement rather than a code convention, is ADR-0710.
 - **`install` must come after `trace.to_file`**, which calls `configure`, which
   clears the logger's handlers. Above it, the sink is attached and then discarded:
   an app that looks configured and records nothing. `test_web_driver_trail.py`
-  pins the order; nothing below the driver can see it.
+  pins the order for both handlers; nothing below the driver can see it. The
+  filter is exempt — `configure` leaves filters alone — and a test asserts that
+  rather than a comment.
+
+**Identity stops at the driver, and the guard is in the accessor.** `web.admit`
+decides the door once per account per session and fails closed when the accounts
+table cannot be read; `web.agent_for` builds one agent per session with the
+account's credential and builds *nothing* for an enrolled account with no key,
+because an agent with `api_key=None` falls back to the environment's. The one
+`require` in the system is inside `web.dev_panel_rows`, not on the page that
+draws the section. A deployment with no `[auth]` runs exactly as before — no
+branch, just the absence of a registry entry — and sees the panel (a deferred
+decision, `docs/roadmap.md`).
 
 `feedback.py` sits on the **presentation** side of the dependency line, and that
 placement is the guarantee rather than a filing choice: a comment is text a

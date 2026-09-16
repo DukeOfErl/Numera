@@ -327,10 +327,20 @@ COVERED: dict[str, tuple[str, ...]] = {
     # trail's shape rather than against these words; "The process that wrote the
     # records is replaced" needs a real restart against a real database and lives
     # behind the `network` marker, which the offline suite deselects.
-    # `add-user-identity`. The two requirements its later groups build -- the dev
-    # panel and the session cap -- are in `AWAITING_IDENTITY_GROUPS` below until
-    # those groups land; task 8.2 finishes this mapping and says which scenarios
-    # merely execute.
+    # `add-user-identity`. Every requirement is claimed below; the scenarios that
+    # are *executed but not asserted* -- gaps, by this file's own rule -- are:
+    #   - "A reader signs out ... the next visit begins at sign-in": `st.logout`
+    #     is offered and its callback forgets the registry entry, but AppTest
+    #     cannot click through an OIDC logout; the next-visit half is unasserted.
+    #   - "An account is enrolled after being refused ... proceeds": the refusal
+    #     is held per session, so this needs a new session; not driven.
+    #   - "One tester's cap is exhausted ... another's is answered as usual": the
+    #     ending exists (ADR-0600) and keys are per agent, but the two are not
+    #     driven together against a 402 in one deployment.
+    #   - "A person's records can be found": `sql/feedback.sql` query 8, run by
+    #     hand against Neon, not a test.
+    #   - "The credential is never shown": asserted over the elements the tests
+    #     draw, not over every page state.
     "A reader signs in before anything is shown, and identity comes from the provider": (
         "test_web_driver_identity.py::"
         "test_a_visitor_who_is_not_signed_in_is_offered_sign_in_and_nothing_else",

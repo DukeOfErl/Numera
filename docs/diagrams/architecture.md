@@ -102,6 +102,9 @@ flowchart TB
         events[events.py]
         trace[trace.py]
         store[trail_store.py]
+        perm[permissions.py]
+        authz[authorization.py]
+        acct[accounts.py]
     end
     subgraph data["Corpus"]
         corpus[corpus.py]
@@ -128,7 +131,33 @@ flowchart TB
     web -- "supplies the engine" --> store
     web --> fb
     fb -- "a reader's judgement" --> trace
+    web -- "require()" --> authz
+    authz --> perm
+    web -- "lookup() at sign-in" --> acct
+    acct --> perm
+    acct --> store
+    web -. "IdentityStamp filter,<br/>RecentTrail handler" .-> trace
 ```
+
+**Three identity modules joined the core, and none of them is reached by the
+agent.** `permissions.py` holds the roles and the one-column grant table as data;
+`authorization.py` holds `require`, called inside the one operation a role can be
+refused — the dev panel's accessor in `web.py`; `accounts.py` reads enrolment off a
+row at sign-in and fails closed. They are core so a test or a second caller can
+exercise the refusal without a browser, and `test_driver_independence.py` names
+them as such on purpose (ADR-0800).
+
+**The agent is built per session, handed a credential and nothing else.**
+`web.resources` caches the corpus index for the life of the server;
+`web.agent_for` builds one `AskAgent` per browser session with that account's own
+key. Who the person is never enters: the web driver stamps `user_email` and
+`user_role` onto trail records with a `logging.Filter` on `trace`'s logger, keyed
+by the `session_id` every record already carries, and `TrailHandler` writes both
+columns. `agent.py`, `trace.py` and `feedback.py` are untouched by identity, and a
+structural test parses all three for any identifier that would mean otherwise
+(ADR-0810, ADR-0820). The third dotted arrow is that filter and the dev panel's
+in-memory sink together: both attach to the logger the way the store does, and
+both are installed after `trace.to_file` for the same reason.
 
 **The dotted arrows are the trail, and neither is a dependency.** `trace.py` does
 not import `trail_store`: the store attaches itself as a second handler on

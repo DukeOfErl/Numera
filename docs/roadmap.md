@@ -80,129 +80,31 @@ kept anywhere; those columns are null for them for ever.
 ## Next
 
 ### WP3 — Auth, roles and the session cap
-Reserved as `add-user-identity`, ADR block `0780`–`0830`. Not yet proposed.
+Built as `add-user-identity` on `feat/user-identity` (2026-09-16); moves to Done
+at merge. The reasoning that used to live here is now where an implementer reads
+it — this section points rather than repeats:
 
-- Google OAuth via `st.login`, `authlib>=1.3.2` in the `ask` extra.
-- Five roles — student, scientist, senior scientist, dev, admin — with a
-  `{Role: set[Permission]}` grant table. Roles later weight ratings and gate
-  human review of the AI-generated database.
+- **What the system must do:** `openspec/specs/user-identity/spec.md` once
+  archived (until then `openspec/changes/add-user-identity/specs/`), plus the
+  two scenarios each added to `agent-session` and `answer-feedback`.
+- **Accounts in the trail database, keys in the clear, enrolment fails closed** —
+  ADR-0780. **The session cap is a heartbeat registry, never per-address, and
+  protects the host rather than the budget** — ADR-0790. **Default-deny, the
+  pruning rule, and why the table has one column** — ADR-0800; the eight
+  permissions considered and the seven dropped are listed there. **The role is a
+  column written at record time** — ADR-0810. **One agent per session, handed a
+  credential and never an identity; if the agent must ever know what is
+  permitted, it is handed permissions, never the role** — ADR-0820.
+- **The grant table itself** is `GRANTS` in `src/scinumbers_ask/permissions.py`,
+  with the rule for growing it in the comment above.
+- **Operator's steps** — Google OAuth client, `[auth]` in secrets, the
+  `accounts` table from `sql/accounts.sql`, one capped OpenRouter key per tester
+  — are in `README.md` §"Sign-in and enrolment".
 
-**The grant table, decided 2026-09-16, revised the same day.** Settled here,
-before the change is proposed, because it is a classification rule and every
-worker implementing a permission needs the same table — without one fixed first,
-each decides its own row, which is how a grant drifts in.
-
-*The rule that pruned it:* a permission exists only where the app has a code
-path to refuse. A permission for an absent feature is dead code or a promise,
-and one for a distinction the app cannot yet make is a table row nobody can
-test. That removed five of the eight permissions first discussed:
-
-- *suggest an edit, edit with provenance, ask for calculations* — capabilities
-  the app does not have.
-- *rate an entry* — today it is the same widget as rating the prose; it becomes a
-  separate permission when per-entry rating exists, which may be much later.
-- *query aggregated results* — this meant **answering a question whose scope
-  spans more than one organism or property**, not reading the trail. The first
-  draft of this table misread it as the latter and reasoned about privacy from
-  that; the misreading reached nothing but this file (checked: no spec, change
-  or ADR mentions it), and the roadmap text is corrected here. The permission
-  itself waits until the agent can classify a question's scope, which it
-  cannot.
-- *suggest a problem* is folded into *feedback*, by the same reasoning as *rate
-  an entry*: the comment box lives inside the rating widget and requires a
-  thumbs-down first, so there is no place to refuse one without the other.
-- *read* and *feedback* — dropped later the same day, when the table was about
-  to be written into a spec and it became clear no role refused either. Being
-  enrolled *is* reading and rating; a row every role holds can only be tested
-  against nobody, which is enrolment's job. A permission exists only where some
-  role is refused it. `feedback` returns the day a role that may read but not
-  rate exists.
-
-*Default-deny, grants explicit.* A wrong deny announces itself — somebody clicks
-and is refused. A wrong grant is silent and looks like ordinary use. So the cheap
-direction absorbs the uncertainty: anything not in the table is refused, and the
-code says so where the table is defined.
-
-| | dev panel |
-|---|---|
-| student / scientist / senior scientist | – |
-| dev / admin | ✓ |
-
-- **Enrolment is what grants reading and rating.** Signed in but not enrolled is
-  refused before the table is consulted; the table decides only what an enrolled
-  role may do beyond that.
-- **The agent never receives the role, or the account.** What it is handed is
-  identical whoever asks. If it must one day know what is permitted — scope of a
-  question, a calculation — it is handed *permissions*, never the role, so an
-  answer can depend on what is allowed and never on who is asking. Identity
-  reaches the trail rows by a filter at the sink, not through the agent.
-- **The three tester roles are identical in WP3**, and so are dev and admin.
-  Testers differ in the *weight* their ratings will later carry — refusing
-  students would defeat WP2. Roles are kept as data now so that weighting and
-  the later gating of human review have something to read.
-- **`dev panel` exists so that enforcement has a deny direction to test.** A
-  table in which every role holds every permission cannot show that refusal
-  works. It is also a surface WP4 and WP5 will want anyway.
-
-**The dev panel** — a requirement for `add-user-identity`'s spec delta when it
-is proposed; drafted here so the delta is a copy, not a rewrite:
-
-> A sidebar section, below the run status, SHALL be shown to roles granted `dev
-> panel` and SHALL be absent — not disabled — for every other role. It SHALL
-> show the trail records of this session's last five questions as a table:
-> when, which question, the event, and its detail. This session's only:
-> another tester's trail is not this permission's to show, and scoping to the
-> session is what keeps that true without a second rule. Nothing shown here
-> SHALL reach the model; these are records of questions already answered.
->
-> Scenarios: a dev sees the section and a student's page has no such section
-> (both directions, because the point is the refusal); the table names the
-> question just asked; a session with no questions shows an empty section
-> rather than none, so a dev can tell "nothing yet" from "not permitted".
-
-Implementation note for the design, not the spec: the records are already on
-the trail's logger and carry `session_id`; a retaining handler filtered by
-session at render time is a third sink on the same logger, and needs neither
-the file nor the database.
-
-**An unconfigured deployment (no `[auth]`) sees the dev panel** — a developer's
-machine — for as long as the panel holds nothing but the session's own trail.
-*Deferred:* to be decided again before the panel shows anything more sensitive
-(a cross-session view, spend); the spec carries the condition. Listed under
-"Deferred, deliberately" too.
-
-**`manage accounts` is not a permission, and the open item above is closed.**
-Allowlisting an account, minting its OpenRouter key and assigning its role are
-operator actions done outside the app — the OpenRouter dashboard, a row in the
-accounts table. There is no code path in the app to refuse, so a permission
-would gate nothing. Admin and dev therefore hold identical permissions in WP3;
-the role is kept as a label for later.
-
-**Role lands on the trail row, at write time.** A `user_role` beside the
-existing `user_email` column, recorded when the row is written and never looked
-up afterwards. A rating's weight is the weight at the moment it was given; a
-lookup at read time would let a later role change rewrite history. This is the
-first schema addition since the table was created, so `ensure_schema` gains an
-`add column if not exists` — decide in the WP3 design whether that is the shape
-wanted or whether role belongs in `detail`.
-- `authorization.py` / `permissions.py` split, neither importing Streamlit.
-- **Rate limiting means a global concurrent-session cap, not per-IP.** Streamlit's
-  own docs say `st.context.ip_address` must not be used for security — it is
-  trivially spoofed, and behind a proxy the client supplies `X-Forwarded-For`
-  itself, so a per-IP limiter rate-limits honest users only. With each tester's
-  spend capped at their own key, a limiter protects the *host* (RAM, CPU,
-  instances), not cost. Worth stating in the ADR, because "rate limiting" reads as
-  a cost control and here it is precisely not one.
-
-**API keys: one per user, minted by the operator.** Not a shared key, and not a
-key a tester supplies. OpenRouter's Management API mints runtime keys from a
-management key, each with its own hard credit cap — which is exactly the shape
-wanted: per-user spend isolation without anyone handing over a credential.
-
-Verified against openrouter.ai/docs/features/provisioning-api-keys on 2026-09-16
-(the feature is now called **Management API Keys**; a management key is created at
-openrouter.ai/settings/management-keys and cannot itself call completion
-endpoints):
+Kept here because it is operational reference an ADR would bury: OpenRouter's
+**Management API Keys**, verified against openrouter.ai/docs/features/provisioning-api-keys
+on 2026-09-16. A management key is created at openrouter.ai/settings/management-keys
+and cannot itself call completion endpoints.
 
 | | |
 |---|---|
@@ -210,29 +112,15 @@ endpoints):
 | Fields | `name`, `limit` (credit cap), `disabled`, `limit_reset` (`daily`/`weekly`/`monthly`), `include_byok_in_limit` |
 | Usage | per key: `usage`, `usage_daily`, `usage_weekly`, `usage_monthly`, `limit_remaining` |
 
-**The tester never sees the key.** The operator mints one per allowlisted account
-and the app looks it up server-side. That is what keeps this clear of Streamlit
-Cloud's terms, which are about accepting *third-party* credentials — an earlier
-note in this file claimed those terms ruled out per-user keys at all, which was
-wrong. Nothing is accepted from anyone; the operator's own key is subdivided.
+Use `limit_reset: monthly`: a tester who exhausts their cap recovers on their own
+instead of the operator servicing an unlock. A spent key already surfaces as its
+own ending (ADR-0600). The tester never sees the key; nothing is accepted from
+anyone, the operator's own credit is subdivided — which is what keeps this clear
+of Streamlit Cloud's terms about accepting third-party credentials.
 
-Consequences, none of them free:
-
-- **`agent.py` has to change, not just the driver.** `default_model()` reads
-  `OPENROUTER_API_KEY` from `os.environ` at call time — a process global. The
-  credential must become a parameter threaded from the driver.
-- **`web.resources()` is `@st.cache_resource`, so one `AskAgent` is shared by
-  every browser session on the server.** The corpus repository should stay shared
-  — it is the expensive index — but the agent must not be, or one tester's key
-  funds another's questions.
-- **Where the keys live.** A mapping from account to key, and it cannot be
-  Streamlit secrets without a redeploy per tester. Neon is the obvious home, and
-  that makes the trail database hold credentials, which it does not today.
-  Decide deliberately when WP3 is proposed.
-- **`limit_reset: monthly` means a tester who exhausts their cap recovers on its
-  own.** Worth using: the alternative is the operator servicing an unlock request.
-- **The ending already exists.** A spent key surfaces as its own ending
-  (ADR-0600), so the refusal path for an exhausted per-user cap is built.
+Left for later, on purpose: a helper script for minting keys and inserting rows;
+the deletion path and any retention limit for what is kept about a person (the
+spec says why: nobody to ask yet); re-reading enrolment mid-session.
 
 ### WP4 — Usage events + hosted tracing
 Depends on WP1 and WP3. Not yet proposed.

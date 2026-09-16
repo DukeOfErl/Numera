@@ -123,6 +123,8 @@ measurement.
 | `SCINUMBERS_RUN` | `dev` | names the run spend is counted against; a new name starts a fresh budget |
 | `SCINUMBERS_CHECKPOINTS` | `checkpoints/ask.sqlite` | where sessions persist |
 | `SCINUMBERS_TRACE` | `logs/trace.jsonl` | the structured trail; `-` for stderr, empty to discard |
+| `SCINUMBERS_MAX_SESSIONS` | `20` | how many browser sessions the deployment holds open at once; the next is told to try later |
+| `SCINUMBERS_SESSION_IDLE_S` | `600` | how long a quiet session keeps its place before it is freed |
 
 ### The durable trail (hosted deployments only)
 
@@ -160,12 +162,53 @@ Two properties worth knowing before you rely on it:
 
 **What the trail keeps about you.** Your question, the answer you were given and the
 identifiers of the entries behind it, under a per-question identifier and the
-identifier of your session — nothing that names you, because there is no sign-in
-yet. They are kept because a rating on an answer nobody can read is worth nothing,
-and they are read by whoever operates the deployment in order to improve it. The
-app says so in its own side panel and on the terminal's first line, rather than
-only here ([ADR-0840](docs/decisions/0840-what-a-question-s-trail-keeps.md)).
-`sql/feedback.sql` is how it is read back.
+identifier of your session — and, where sign-in is configured, the account you
+were signed in as and the role it held at the time. They are kept because a rating
+on an answer nobody can read is worth nothing, and they are read by whoever
+operates the deployment in order to improve it. The app says so in its own side
+panel and on the terminal's first line, rather than only here
+([ADR-0840](docs/decisions/0840-what-a-question-s-trail-keeps.md),
+[ADR-0810](docs/decisions/0810-the-role-is-written-at-record-time.md)).
+`sql/feedback.sql` is how it is read back; its query 8 finds everything kept about
+one account. A request path for deleting it, and any retention limit, are
+deliberately deferred until there is somebody to ask.
+
+### Sign-in and enrolment (hosted deployments only)
+
+With no `[auth]` section in secrets the app runs exactly as described above: no
+sign-in, one `OPENROUTER_API_KEY` from the environment, records carrying no
+account, and the side panel saying so. **Add `[auth]` and every visitor must sign
+in with Google and be enrolled before anything is drawn.** Signed in but not
+enrolled is refused with one sentence and recorded, so the operator can enrol
+someone who tried.
+
+Enrolment happens outside the app — there is no page for it, and so no permission
+gates it. The operator's steps, in order:
+
+1. Create a Google OAuth client and put its values under `[auth]` in the hosting
+   platform's secrets box; `.streamlit/secrets.toml.example` has the shape, and
+   `redirect_uri` must end in `/oauth2callback`.
+2. Create the `accounts` table in the same database as the trail, from
+   `sql/accounts.sql`.
+3. For each tester, mint a runtime key at OpenRouter with a monthly limit
+   (Management API, `limit_reset: monthly`) and insert a row: email, one of the
+   five roles, the key. Each tester's questions are then charged to their own
+   key and capped by it; an enrolled account with no key can sign in but is told
+   no credential has been issued. Nobody but the operator ever sees a key
+   ([ADR-0780](docs/decisions/0780-accounts-live-in-the-trail-database.md),
+   [ADR-0820](docs/decisions/0820-one-agent-per-session-handed-a-credential-not-an-identity.md)).
+
+The five roles — student, scientist, senior scientist, dev, admin — differ today
+in one thing: dev and admin see a **Dev** section in the side panel with this
+session's trail for its last five questions; the three tester roles see no such
+section. Nothing about the role reaches the agent, so an answer cannot depend on
+who asked
+([ADR-0800](docs/decisions/0800-default-deny-and-the-pruning-rule.md)). The
+roles exist now so that ratings can later be weighted by who gave them.
+
+A deployment also holds at most `SCINUMBERS_MAX_SESSIONS` sessions open at once;
+the next visitor is told to try again shortly, and no open session is ended to
+make room ([ADR-0790](docs/decisions/0790-the-session-cap-is-a-heartbeat-registry.md)).
 
 Spend is enforced, not merely reported: a question stops at its ceiling and presents what it had
 established, marked incomplete, rather than being cut off mid-sentence. A limit is configured where
@@ -206,8 +249,12 @@ it reaches them rather than the agent.
 as asked, the answer as given and the entries behind it, so a rating can be read next to what it
 judged — but a trail cannot be backfilled, and the ratings collected before that change name
 questions whose words were never kept anywhere
-([ADR-0840](docs/decisions/0840-what-a-question-s-trail-keeps.md)). There is still no sign-in, so no
-rating can be attributed to the person who gave it; space for that is recorded and left empty.
+([ADR-0840](docs/decisions/0840-what-a-question-s-trail-keeps.md)). Ratings given before sign-in
+was configured — and every rating on a deployment without it — carry no account either.
+
+**Enrolment is not managed from the app.** Adding a tester, assigning a role and issuing a
+credential are rows and keys the operator writes by hand (`sql/accounts.sql`); there is no page for
+it, and deliberately no permission that would pretend to gate one.
 
 ## For the course review
 

@@ -13,7 +13,11 @@
 -- **Every query here was run against the `dev` branch on 2026-09-16**, which is
 -- how they stopped being guesses: 25 verdicts, 12 comments, and query 3 correctly
 -- pulling `100001` and `100002` out of free prose written as "checking entry
--- 100001" and "not sure about 100002".
+-- 100001" and "not sure about 100002". Queries 6-8 were run the same day, after
+-- `add-user-identity` added the `user_role` column: all 25 verdicts fell in the
+-- `(null, null)` line of 6 and the `(no sign-in)` line of 7, and 8 returned
+-- nothing for a placeholder address -- which is the expected shape of a database
+-- nobody has signed in to yet, and establishes the SQL, not the populated case.
 --
 -- What that run does *not* establish, for queries 2 and 2b: every rating on `dev`
 -- predates `add-question-and-answer-records`, so `question`, `answer`, `cited`
@@ -167,3 +171,51 @@ select
 from trail
 group by event
 order by 2 desc;
+
+
+-- 6. Ratings per tester. `user_email` and `user_role` are stamped on every row
+--    of a signed-in session at write time (ADR-0810); rows from before sign-in
+--    existed, and every row from a deployment with no `[auth]`, carry null in
+--    both and land in the `(null, null)` line here rather than vanishing. The
+--    role is the one held when the rating was given, so a promoted tester's
+--    earlier ratings stay under the earlier role -- read this with that in mind.
+select
+    user_email,
+    user_role,
+    count(*) filter (where detail ->> 'verdict' = 'up')   as up,
+    count(*) filter (where detail ->> 'verdict' = 'down') as down,
+    count(*)                                              as rated,
+    min(at)                                               as first_rating,
+    max(at)                                               as last_rating
+from trail
+where event = 'feedback.verdict'
+group by 1, 2
+order by rated desc, 1, 2;
+
+
+-- 7. Ratings per role -- the query the roles exist for. A senior scientist's
+--    thumbs-down and a student's are different evidence, and this is where they
+--    are told apart. Same caveats as 6; and the same caution as the header: a
+--    thumbs-down rate per role is still not an error rate.
+select
+    coalesce(user_role, '(no sign-in)')                   as role,
+    count(distinct user_email)                            as testers,
+    count(*) filter (where detail ->> 'verdict' = 'up')   as up,
+    count(*) filter (where detail ->> 'verdict' = 'down') as down,
+    count(*)                                              as rated
+from trail
+where event = 'feedback.verdict'
+group by 1
+order by rated desc;
+
+
+-- 8. Everything kept about one account, so that it can be found -- and, when the
+--    deletion path is decided, deleted -- by the account alone. Questions, answers,
+--    evidence, searches, ratings and comments all carry the stamp, so one filter
+--    finds them; a refused sign-in carries the email in `detail` instead, because
+--    the person was refused an identity to stamp.
+select at, session_id, question_id, event, detail
+from trail
+where user_email = 'tester@example.org'
+   or (event = 'signin.refused' and detail ->> 'email' = 'tester@example.org')
+order by at;

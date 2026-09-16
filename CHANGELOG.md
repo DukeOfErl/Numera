@@ -12,6 +12,44 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **Sign-in, enrolment and a credential per tester, for hosted deployments.** With
+  `[auth]` in secrets every visitor signs in with Google and must be enrolled — a
+  row the operator inserts in an `accounts` table beside the trail, naming the
+  role and the tester's own capped OpenRouter key — before anything is drawn.
+  Signed in but not enrolled is refused with one sentence and recorded; an
+  unreadable accounts table admits nobody and says a different sentence, because
+  a check that failed open would let an outage open the door. Each session gets
+  an agent funded by its own credential; an enrolled account with no credential is
+  told so and no agent is built. Configure nothing and the app runs exactly as it
+  did ([ADR-0780], [ADR-0820]).
+- **Every record of a signed-in session carries the account and the role it held
+  at the time**, written when the row is and never looked up afterwards, so a
+  later change of role cannot rewrite what a rating weighed. `user_role` joins
+  `user_email` as a column; the first schema change since the table was created,
+  applied idempotently on every start. The role and the account are stamped onto
+  the trail at the sink by the web driver — the agent, the tracer and the feedback
+  module never hold them, and a test parses their source to keep it that way
+  ([ADR-0810]).
+- **Five roles and a default-deny grant table with one permission.** Student,
+  scientist, senior scientist, dev and admin; the table grants `dev panel` to dev
+  and admin and refuses it to the three tester roles, and lists nothing else,
+  because a permission exists only where some role is refused it. Reading and
+  rating are what enrolment grants ([ADR-0800]).
+- **A Dev section in the side panel** for dev and admin — and for a developer's
+  machine with no sign-in configured — showing this session's trail for its last
+  five questions. Absent, not disabled, for everyone else. Nothing in it reaches
+  the model.
+- **A cap on open sessions**, `SCINUMBERS_MAX_SESSIONS` (default 20), counted by
+  heartbeat and never by client address. The next visitor is told to try again
+  shortly; no open session is ended. It protects the host, not the budget, which
+  each tester's credential already bounds ([ADR-0790]).
+
+### Changed
+
+- The side panel's statement of what is kept now names the account and the role
+  where sign-in is configured — the same sentence, extended, not a second one.
+- `authlib>=1.3.2` joins the `ask` extra, for `st.login`.
+
 - **The trail records the question as asked, the answer as given, and the entries
   the answer stood on.** A rating collected before this said "answer
   `c23c83c16324` was wrong" and there was no way to learn what it was answering.
@@ -294,4 +332,9 @@ number rather than an error:
 [ADR-0740]: docs/decisions/0740-native-st-feedback.md
 [ADR-0750]: docs/decisions/0750-feedback-is-recorded-here-not-at-the-tracer.md
 [ADR-0760]: docs/decisions/0760-an-answer-is-two-columns.md
+[ADR-0780]: docs/decisions/0780-accounts-live-in-the-trail-database.md
+[ADR-0790]: docs/decisions/0790-the-session-cap-is-a-heartbeat-registry.md
+[ADR-0800]: docs/decisions/0800-default-deny-and-the-pruning-rule.md
+[ADR-0810]: docs/decisions/0810-the-role-is-written-at-record-time.md
+[ADR-0820]: docs/decisions/0820-one-agent-per-session-handed-a-credential-not-an-identity.md
 [ADR-0840]: docs/decisions/0840-what-a-question-s-trail-keeps.md
