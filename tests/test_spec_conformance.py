@@ -448,7 +448,10 @@ COVERED.update(
 # requirement left this list as its tests landed. A different kind of gap from the
 # one above and kept apart from it -- otherwise finishing 10.9 would look
 # impossible rather than merely unfinished.
-AWAITING_THE_HARNESS = (
+# Renamed from AWAITING_THE_HARNESS: the harness is built, and these four moved
+# out of `add-answer-evaluation` into `add-judged-faithfulness` on 2026-09-16.
+# They are still read from that change's open delta, so they still need a bucket.
+AWAITING_THE_JUDGE = (
     "Faithfulness is judged per claim, with a reason",
     "The judged layer is secondary and optional",
     "A judge is trusted only after measured agreement",
@@ -475,7 +478,7 @@ AWAITING_THE_TABLE_SCORING = ("Scoring is based on entry identifiers, not answer
 
 UNMAPPED: dict[str, str] = {
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
-    **dict.fromkeys(AWAITING_THE_HARNESS, "add-answer-evaluation is unbuilt; no harness yet"),
+    **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),
     **dict.fromkeys(
         AWAITING_THE_TABLE_SCORING, "ADR-0530 rewrote it; the scoring is rebuilt in task 4.13"

@@ -508,95 +508,24 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
       baseline* as well as the code: a set that measures the wrong thing is not a defect any test
       can see
 
-## 6. The judged layer
+## 6. The judged layer — moved to `add-judged-faithfulness`
 
-Gated on group 5, and on 5.4 in particular: the judge is validated against the hand labels, not against
-a checker (ADR-0510).
+Deferred out of this change on 2026-09-16, and the reason is measured rather than preferred.
+ADR-0510 requires a judge to be gated on agreement with the deterministic scoring against a golden
+set. Task 5.4 built that set — 30 answers read by hand — and it came back **29 sound, 1 unsound, 0
+unclear**. A judge answering "faithful" to everything agrees 97% of the time, so no floor can be set
+from it, and building the judge against it would produce exactly what ADR-0510 exists to prevent: a
+validated-looking figure resting on a validation that could not fail.
 
-- [ ] 6.1 Implement the judge wrapper: DeepEval's model base subclassed over the project's `ChatOpenAI`
-      through OpenRouter, honouring the schema argument via structured output, reading the provider's cost
-      figure per call, telemetry switched off before the import. The only module that imports `deepeval`,
-      and it imports it lazily so the deterministic layer runs without the extra
-- [ ] 6.1b Set `penalize_ambiguous_claims=True`, and say in the code why the shipped default is wrong
-      here: `_calculate_score` counts every verdict that is not `no`, so `idk` scores as faithful —
-      the lenient direction on exactly the claims the judge was least sure of, in a layer that exists
-      to catch what the deterministic checks cannot see. Leave `truths_extraction_limit` unset until
-      measured: our contexts are whole tool results, and a low cap judges an answer against a fraction
-      of what the agent was shown, reporting the difference as unfaithfulness
-- [x] 6.2 Verify the DeepEval surface against the installed version rather than the design: confirm
-      `FaithfulnessMetric` exposes `.score`, `.reason`, `.claims`, `.truths` and `.verdicts[i].verdict/.reason`
-      after `measure()`. Record what was verified and against which version in the module's docstring
-  - **Done 2026-09-10 against the installed 4.2.1**, ahead of its group because 5.4's label format
-    depends on it. The surface is as the design assumed, but three things were not: the verdict is
-    three-valued (`yes`/`no`/`idk`), `idk` counts as *faithful* by default, and an answer yielding no
-    claims scores 1.0. Recorded in the design; 6.1b and 6.3 carry the consequences. The docstring note
-    still has to be written when the module exists.
-- [ ] 6.2b Restate the verified surface in the judge module's docstring when 6.1 creates it, naming the
-      version it was checked against — a finding recorded only in a design document is one the next
-      reader of the code will not meet
-- [ ] 6.3 Implement the `judge` pass: read the results file, judge each answer that states a quantity,
-      record a refusal as not judged, and append one judgement per question, repeat and judge model —
-      claims, verdicts, reasons, score, judge model, judge spend — to a second JSONL. Resumable against it
-  - **Gate on whether claims were extracted, never on the score.** `_calculate_score` returns 1.0 for
-    an empty verdict list, so a refusal — or an answer whose claims the extractor cannot parse — reads
-    as perfectly faithful. "Record a refusal as not judged" was written on principle; this is the
-    measurement that makes it load-bearing, and the two conditions are the same number and different
-    facts.
-- [ ] 6.4 Test the wrapper and the pass against a scripted judge, so the harness's tests assert this code
-      and not the framework's prompts; one `network`-marked check runs the real judge on a fixture answer
-- [ ] 6.5 Check how claim extraction treats `[[nnnnnn]]` markers on the baseline's answers; if it distorts
-      claims, strip them for the judge only and record that the judged text differs from the answer
-- [ ] 6.6 Extend the report: judged figures beside the deterministic ones, never combined; per judge
-      model; judge spend apart from the agent's; the report unchanged when no judgements file exists
-- [ ] 6.7 Measure agreement against the hand labels from 5.4 and against the deterministic scoring where
-      both speak; list every disagreement with its claim and reason; report a judged-faithful fabrication
-      as a judge miss; mark every judged figure unvalidated while agreement is below the configured floor
-  - **The reference is saturated, so plain agreement cannot be the gate.** 5.4 labelled 29 of 30
-    answers sound; a judge answering "faithful" to everything scores 97%. Read that as the
-    instrument failing to discriminate, not as the judge working. Two things the labels still
-    support, both weaker than a correlation floor and both honest: whether the judge passes the one
-    **citation swap** (repeat 2 of `yeast-nuclear-volume`, where a correct number carries a wrong
-    identifier — the one answer where the deterministic layer and a faithfulness judge should
-    disagree), and whether its disagreements land on the answers 5.4's notes flag. ADR-0510 required
-    a correlation floor, so **write the substitution as a decision** rather than quietly weakening
-    the gate.
-  - A more discriminating reference is the honest alternative and it costs a run: harder questions,
-    or a question set built to contain answers that are wrong in ways faithfulness can see. Decide
-    that before building the judge, not after measuring it against a reference that cannot fail.
-- [ ] 6.8 Set the floor from what 6.7 shows, not from the design's placeholder, and write an ADR only if
-      the reading changes a decision
+The second reason is where the defects were. Everything this change found came from the deterministic
+layer or from reading answers: a citation swap, two answers understating what the corpus holds, and
+expected lists twice built by a method that missed a third of what it should have. None of those is
+what a faithfulness judge catches, and the citation swap is one it will probably pass.
 
-- [ ] 6.10 Judge whether a passed-over entry's *omission* changed the answer — an unmentioned
-      growth condition, a value an order of magnitude from everything cited — rather than whether it
-      fits the question. Under ADR-0530's widened expected set, fit is settled by construction: the
-      entry is expected because it records the asked property, and an answer citing four of nine
-      with the table carrying the rest is the intended shape, so "do they fit?" costs a judge call
-      to confirm what the set already says
-  - **Gate it behind a deterministic spread check** between the cited and passed-over values, so
-    the judge is paid only where the numbers actually differ. That gate is the same comparison
-    ADR-0520 needs rebuilt around (entries the question's property terms select, restricted to the
-    cited entry's organism); build one implementation and use it for both, rather than two
-    comparisons of the same kind that can drift apart.
-
-- [ ] 6.9 Review the branch before merging (see 1.5). The judge is the component whose output a
-      reader is least able to check, so brief the reviewer on the agreement gate specifically
-
-- [x] 5.7 Write the answer sheet: every answer and the entries that bear on it, as HTML or PDF,
-      behind `scinumbers-eval report --sheet`. The figures say what happened; this is what a person
-      reads to decide whether the figures mean anything — which is what 5.4 asks for by hand and
-      what 5.6 gives a reviewer when the question is whether the *set* measures the right thing
-  - **The recorded context is deliberately absent**, and a test asserts it: three quarters of a
-    results file is the verbatim text the agent was shown, kept so a changed scoring rule or a judge
-    can run again without re-asking a paid question. Reproducing it would bury the answer.
-  - **It carries corpus text through the entries it tabulates, so it goes through the same
-    refusal the results file does.** The group 3-4 review recorded that every later artefact of a
-    run needs that guard; this is the first one to arrive since. Both directions are tested — a
-    path git would track is refused, and a path outside is written.
-  - PDF needs `weasyprint`, which is its own extra rather than part of `eval`: it needs system
-    libraries a machine may not have, and a native dependency that can fail at import has no place
-    being mandatory for a harness whose job is asking questions. HTML needs nothing.
-  - **ADR-0420's test caught the column header.** "BNID" in a live string is the source database's
-    notation in a second module; the sheet uses "ID", which is what both drivers already print.
+The four judged-layer requirements moved with it, into `specs/judged-faithfulness/`. `deepeval`
+leaves the `eval` extra and returns with the change that uses it. **ADR-0500 and ADR-0510 stay where
+they are** — written under this change's block and referenced from commits — and remain in force
+there.
 
 ## 7. Documentation and conformance
 

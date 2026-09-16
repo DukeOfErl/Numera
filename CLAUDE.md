@@ -22,6 +22,7 @@ Two branches that each number ADRs from the current highest id will both claim t
 | `add-answer-evaluation` | `0500`–`0550` — `0500`, `0510`, `0520`, `0530` written |
 | `add-answer-shape` | `0560`–`0590` |
 | `add-provider-limit-ending` | `0600`–`0640` — `0600` written |
+| `add-judged-faithfulness` | `0650`–`0690` |
 
 **This table is the authority, not a scan of `docs/decisions/`.** A scan cannot see uncommitted ADRs on another branch: `git ls-tree` reads committed trees, and each branch is checked out in its own worktree, so a number can be spent and still invisible from here. `add-ask-agent` has written `0100`–`0190` and holds a second range, `0260`–`0290`, because its first block ran out while the change was still open. A block is extended rather than renumbered: the ADRs already written are referenced from code comments and commit messages, and renumbering would break every one of those references to buy contiguity that nothing needs. Its first block was also uncommitted for two sessions, which is how a scan came to report those numbers as free. Never conclude a number is free because no file for it turns up.
 
@@ -40,7 +41,8 @@ the same source tree: `bionumbers_ingest` (`ingest`), `scinumbers_ask` (`ask`), 
 
 A fourth extra, `eval`, is **additive to `ask` rather than a package of its own**: the evaluation
 harness lives in `scinumbers_ask` because it is an adapter over that agent, and the extra carries only
-what is new (`deepeval`, for the judged layer alone). Install both: `uv sync --extra ask --extra eval`.
+what is new. Install both: `uv sync --extra ask --extra eval`. The extra is currently empty:
+`deepeval` left with the judged layer, which is now `add-judged-faithfulness`, and returns with it.
 A deterministic evaluation run needs none of DeepEval, which is why it is separable at all.
 
 Diagrams — including the agent's graph generated from the compiled object — are in
@@ -93,10 +95,11 @@ core, and a test there refuses a name with no file behind it.
 | `entries_table.py` | Rows, marks and legends — shared by both drivers |
 | `messages.py` | Wording both drivers use, and `STOP_THE_RUN` |
 | `cli.py` / `web.py` | The two interactive adapters |
-| `question_set.py` | The evaluation's question set: the format, its reader, and the entry shapes derived from the corpus |
+| `question_set.py` | The question set: the format, its reader, the entry shapes derived from the corpus, and the tier (`basic` / `compound` / `declining`) that keeps a gain in one kind of question from being paid for out of another |
 | `evaluation.py` | The evaluation driver: asks, records one line per result, resumes, fingerprints what produced each, and refuses a results path git would track |
 | `scoring.py` | Every score needing no model and no prose parser, as pure functions; the outlier check (ADR-0520) |
 | `report.py` | Figures read out of a results file, never combined across model, prompt or corpus |
+| `answer_sheet.py` | Every answer and the entries that bear on it, as HTML or PDF; never the recorded context |
 | `eval_cli.py` | The evaluation command (`scinumbers-eval`): `check`, `run` and `report` |
 | `trace.py` | The structured trail, one question id throughout |
 
@@ -226,7 +229,7 @@ A repeated-run harness -- fault seeding, mutation testing -- should exclude the 
 
 `pytest` is offline by default and runs on the six-entry fixture: `addopts = "-m 'not network and not corpus' -p no:deepeval"` deselects both markers, so a green run may never have executed the tests that hit a real service or the ones that check a marker can fire against a real corpus. Run those explicitly with `pytest -m network` and `SCINUMBERS_CORPUS=... pytest -m corpus`.
 
-`-p no:deepeval` is there because the `eval` extra installs DeepEval, which registers a pytest plugin that prints a teardown line after every run — including runs that touch none of its code. Collection is unaffected; it is the output that moved, and "the suite output is unchanged" is not checkable if it depends on which extras a developer installed. Harmless where DeepEval is absent, since `-p no:<name>` for an uninstalled plugin is not an error — which matters because this file is shared by all three work packages. Group 6 of `add-answer-evaluation` may want DeepEval's own pytest integration back; that means overriding `addopts` in that run, and the whole expression has to be written out, exactly as with `-m`.
+`-p no:deepeval` is there because the `eval` extra installs DeepEval, which registers a pytest plugin that prints a teardown line after every run — including runs that touch none of its code. Collection is unaffected; it is the output that moved, and "the suite output is unchanged" is not checkable if it depends on which extras a developer installed. Harmless where DeepEval is absent, since `-p no:<name>` for an uninstalled plugin is not an error — which matters because this file is shared by all three work packages. `add-judged-faithfulness` may want DeepEval's own pytest integration back; that means overriding `addopts` in that run, and the whole expression has to be written out, exactly as with `-m`. The flag stays in `addopts` meanwhile: it costs nothing where the plugin is absent, and removing it would have to be undone the moment the judged layer lands.
 
 ## Testing the tests
 
