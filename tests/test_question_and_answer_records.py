@@ -158,11 +158,40 @@ def test_every_ending_that_gives_an_answer_records_it(repo, config, tmp_path, mo
         assert recorded == answers, (
             f"{build.__name__}: driver saw {len(answers)} answer(s), trail has {len(recorded)}"
         )
-        assert records(stream, ASKED), f"{build.__name__}: the question itself went unrecorded"
+        # The text, not merely a row. `assert records(...)` here survived a mutant
+        # recording a constant question for all eleven builds; it was killed only
+        # by the two-question test above, which is a different property.
+        assert [r["question"] for r in records(stream, ASKED)] == [
+            "How wide is an E. coli cell?"
+        ], f"{build.__name__}: the question itself went unrecorded, or recorded wrong"
 
     from agent_endings import COVERED
 
     assert seen_endings == COVERED, sorted(r.value for r in COVERED - seen_endings)
+
+
+def test_a_crash_mid_answer_still_leaves_the_question_recorded(
+    repo, config, tmp_path, trail, monkeypatch
+):
+    """`ask` names three failures it survives; this is the third.
+
+    A spend ceiling and a missing key are endings the agent produces and shapes.
+    A defect of ours is not: it escapes as an exception, taking the generator
+    with it. That run is the one most worth reading afterwards, and until this
+    test existed the comment claiming it was covered had nothing behind it.
+    """
+
+    def explode(_message):
+        raise TypeError("a bug in this file, not the provider")
+
+    monkeypatch.setattr("scinumbers_ask.agent._text_of", explode)
+    agent = agent_with(repo, config, tmp_path, scripted(says("x")))
+    with pytest.raises(TypeError, match="a bug in this file"):
+        list(agent.ask("s", "a question whose run crashed"))
+
+    (asked,) = records(trail, ASKED)
+    assert asked["question"] == "a question whose run crashed"
+    assert not records(trail, ANSWER), "the crash came before any answer"
 
 
 # -- the evidence ----------------------------------------------------------
