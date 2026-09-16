@@ -124,6 +124,41 @@ def test_the_durable_trail_sink_is_core_and_that_is_deliberate():
     assert not imports_of("trail_store") & ADAPTERS
 
 
+# The identity modules. Core by decision, like `trail_store`, and for a sharper
+# reason: the refusal in `authorization` has to be reachable by a test or a second
+# caller with no browser, and the grant table in `permissions` is the data that
+# refusal reads. `accounts` joins them when it lands (group 2 of `add-user-identity`);
+# `test_every_named_core_module_exists` refuses a name with no file behind it, so
+# it is not listed before then.
+IDENTITY_CORE = {"permissions", "authorization"}
+
+
+def test_the_identity_modules_are_core_and_that_is_deliberate():
+    """Where a refusal lives decides who can be refused.
+
+    Put `authorization` on the presentation side and the only thing that can
+    call it is a page -- so the page's hiding of a control becomes the guard,
+    which is exactly the arrangement the spec forbids ("the refusal belongs to
+    the action, not to the page that offers it"). On the core side, the panel's
+    accessor calls `require` itself and every caller meets the same refusal.
+
+    Being core costs the core nothing: neither module imports a framework. The
+    parametrized tests below hold them to that, but only because they are in
+    `AGENT_CORE` by subtraction -- and subtraction is silent, so this is where
+    the decision is written down.
+    """
+    assert IDENTITY_CORE <= set(AGENT_CORE), sorted(IDENTITY_CORE - set(AGENT_CORE))
+    for module in IDENTITY_CORE:
+        assert "streamlit" not in imports_of(module)
+        assert not imports_of(module) & PRESENTATION
+
+
+def test_every_named_core_module_exists():
+    """The mirror of `test_every_named_adapter_exists`, for the same reason."""
+    missing = {name for name in IDENTITY_CORE if not (PACKAGE / f"{name}.py").exists()}
+    assert not missing, f"named as core but no such module: {sorted(missing)}"
+
+
 def test_every_named_adapter_exists():
     """A name in these sets with no file behind it is a guard over nothing.
 

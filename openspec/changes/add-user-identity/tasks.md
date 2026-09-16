@@ -24,24 +24,29 @@ doubles, both populations of the table. Its brief already says so.
 
 ## 1. The table and the refusal
 
-- [ ] 1.1 ADR stubs `0780`–`0820`, committed before anything else.
-- [ ] 1.2 `permissions.py`: `Role`, `Permission` (one member, `DEV_PANEL`),
+- [x] 1.1 ADR stubs `0780`–`0820`, committed before anything else.
+- [x] 1.2 `permissions.py`: `Role`, `Permission` (one member, `DEV_PANEL`),
       `Identity`, and `GRANTS` as data — the table exactly as the spec states
       it, with default-deny, the pruning rule, and why `read` and `feedback` are
       not rows written in the comment above it. Imports nothing from Streamlit.
-- [ ] 1.3 `authorization.py`: `allowed(identity, permission)` and
+- [x] 1.3 `authorization.py`: `allowed(identity, permission)` and
       `require(identity, permission)` raising `Refused`. `None` is refused. The
       refusal carries the permission's name and nothing about the account.
-- [ ] 1.4 Tests, both directions: dev and admin are granted `DEV_PANEL`; each
+- [x] 1.4 Tests, both directions: dev and admin are granted `DEV_PANEL`; each
       of student, scientist and senior scientist is refused it; `None` is
       refused it. The refused *roles* are the test — a test that only refuses
       `None` has not exercised the table.
-- [ ] 1.5 Test: the table covers every `Role` and names only known
+- [x] 1.5 Test: the table covers every `Role` and names only known
       `Permission`s — asserted against the enums, not counted, for the reason
       `tests/agent_endings.py` gives.
-- [ ] 1.6 Add `permissions`, `authorization`, `accounts` to the core side of
+- [x] 1.6 Add `permissions`, `authorization`, `accounts` to the core side of
       `tests/test_driver_independence.py`; confirm the test fails if any of them
-      imports Streamlit (seed it, in a copy).
+      imports Streamlit (seed it, in a copy). *Done for `permissions` and
+      `authorization` as `IDENTITY_CORE`; `accounts` is added in 2.2 when its
+      file exists. Seeded `import streamlit` into a copy of `permissions.py`:
+      failed `test_the_identity_modules_are_core_and_that_is_deliberate`,
+      `test_no_agent_module_reaches_for_the_web_framework[permissions]` and
+      `test_only_the_web_driver_knows_the_web_framework`; 56 others passed.*
 - [ ] 1.7 `verifier` on group 1. Ask specifically: would any test still pass if
       `GRANTS` granted `DEV_PANEL` to every role? Measure by making it so in a
       copy.
