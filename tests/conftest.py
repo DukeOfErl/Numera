@@ -42,6 +42,21 @@ def _trail_stays_in_the_tmp_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("SCINUMBERS_TRACE", str(tmp_path / "trace.jsonl"))
 
 
+@pytest.fixture(autouse=True)
+def _each_test_starts_with_no_open_sessions():
+    """The session cap's registry is a cached resource: one per process, which
+    is what a cap on a server needs and exactly wrong for a test process that
+    opens a fresh `AppTest` session per test. Without this the twenty-first web
+    test in a run is turned away with "try again shortly" -- sixty failures
+    that pass one at a time. Imported lazily so tests that never touch the web
+    driver do not pay for Streamlit."""
+    from scinumbers_ask import web
+
+    web.session_registry.clear()
+    yield
+    web.session_registry.clear()
+
+
 @pytest.fixture
 def config() -> Config:
     return Config(model="fake/model", question_ceiling=usd("0.60"), run_budget=usd("1.20"))

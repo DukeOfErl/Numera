@@ -69,6 +69,10 @@ NO_SIGN_IN_CONFIGURED = (
     "No sign-in is configured: anyone with this address can ask, and records carry no account."
 )
 SIGNED_IN_AS = "Signed in as {email} ({role})."
+TRY_LATER = (
+    "Too many sessions are open right now, so this one cannot start. "
+    "Try again in a few minutes; nobody's session is ended to make room."
+)
 
 # Endings after which asking again cannot produce a different answer. What these
 # share is that they are not about the question just asked: a spent run budget

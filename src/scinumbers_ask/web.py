@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 import uuid
 from collections.abc import Callable, Iterable, Iterator, MutableMapping
 from dataclasses import dataclass, replace
@@ -652,6 +653,91 @@ def install_identity_stamp() -> None:
     for existing in [f for f in logger.filters if isinstance(f, IdentityStamp)]:
         logger.removeFilter(existing)
     logger.addFilter(IdentityStamp())
+
+
+# --- the session cap --------------------------------------------------------------------
+
+#: How many sessions the deployment holds open at once, and how long a session
+#: may go quiet before its place is freed. Both from the environment, so a host
+#: with more memory can raise one without a code change; the defaults are the
+#: design's (ADR-0790).
+MAX_SESSIONS_ENV = "SCINUMBERS_MAX_SESSIONS"
+SESSION_IDLE_ENV = "SCINUMBERS_SESSION_IDLE_S"
+DEFAULT_MAX_SESSIONS = 20
+DEFAULT_SESSION_IDLE_S = 600
+
+
+@dataclass
+class SessionRegistry:
+    """Which sessions are live, by heartbeat -- and what "live" cannot mean here.
+
+    Streamlit offers no reliable disconnect hook, so a session is live for as
+    long as it has rerun within `idle_s`. Every rerun of an admitted session
+    touches it; a session that stops rerunning is pruned when its window
+    passes. A closed tab therefore counts as live until then -- **the registry
+    over-counts, and so admits fewer than the cap, never more.** That is the
+    cheap direction for a guard that protects the host, and ADR-0790 says so
+    where an operator tempted to raise the cap will read it.
+
+    Not keyed on the client's address: `st.context.ip_address` is supplied by
+    the client and is not evidence of anything. Keyed on the session identifier
+    the page already carries, which is also what the identity registry and the
+    panel's sink are keyed on -- so pruning here evicts both.
+
+    The clock is an attribute so a test can move it without patching `time`
+    for every other module in the process.
+    """
+
+    max_sessions: int = DEFAULT_MAX_SESSIONS
+    idle_s: float = DEFAULT_SESSION_IDLE_S
+    clock: Callable[[], float] = time.monotonic
+    _last_seen: dict[str, float] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self._last_seen is None:
+            self._last_seen = {}
+
+    def prune(self) -> None:
+        cutoff = self.clock() - self.idle_s
+        for session_id in [s for s, seen in self._last_seen.items() if seen < cutoff]:
+            del self._last_seen[session_id]
+            forget_identity(session_id)
+            if RECENT is not None:
+                RECENT.forget(session_id)
+
+    def live(self) -> int:
+        self.prune()
+        return len(self._last_seen)
+
+    def admit(self, session_id: str) -> bool:
+        """Touch a known session, or admit a new one if there is room.
+
+        A known session is always admitted and never ended: the cap refuses the
+        door, it does not clear the room. A new one at the cap is refused and
+        **not recorded**, so a refused visitor's retry costs nothing and does
+        not hold a place they were not given.
+        """
+        self.prune()
+        if session_id in self._last_seen or len(self._last_seen) < self.max_sessions:
+            self._last_seen[session_id] = self.clock()
+            return True
+        return False
+
+
+@st.cache_resource
+def session_registry() -> SessionRegistry:
+    """One registry per server, which is what a cap on the server needs."""
+    return SessionRegistry(
+        max_sessions=int(env_setting(MAX_SESSIONS_ENV, str(DEFAULT_MAX_SESSIONS))),
+        idle_s=float(env_setting(SESSION_IDLE_ENV, str(DEFAULT_SESSION_IDLE_S))),
+    )
+
+
+def draw_try_later() -> None:
+    """The page at the cap: one sentence, before sign-in is offered, so the cap
+    also bounds the OAuth round trips. The caller stops the script after this."""
+    st.title("SciNumbers ask")
+    st.warning(as_text(messages.TRY_LATER), icon=":material/hourglass_top:")
 
 
 # --- the dev panel: a third sink on the same logger ---------------------------------

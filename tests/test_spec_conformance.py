@@ -390,6 +390,13 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_web_driver_dev_panel.py::test_the_panel_s_contents_do_not_reach_the_model",
         "test_web_driver_dev_panel.py::test_the_refusal_does_not_depend_on_the_caller",
     ),
+    "Concurrent sessions are capped for the whole deployment, not per client address": (
+        "test_web_driver_session_cap.py::test_the_session_past_the_cap_is_told_to_try_later",
+        "test_web_driver_session_cap.py::test_an_admitted_session_is_never_ended_to_make_room",
+        "test_web_driver_session_cap.py::test_a_session_that_goes_idle_frees_a_place",
+        "test_web_driver_session_cap.py::test_nothing_reads_the_client_s_address",
+        "test_web_driver_session_cap.py::test_a_refused_visitor_holds_no_place",
+    ),
     "A deployment with no identity configured behaves as before": (
         "test_web_driver_identity.py::"
         "test_with_no_identity_configured_a_question_is_answered_without_signing_in",
@@ -695,15 +702,7 @@ AWAITING_THE_PROMPT = (
     "Leading with a figure does not displace what qualifies it",
 )
 
-# `add-user-identity`'s group 6, not yet built. Listed so that a requirement of a
-# half-built change is a named gap rather than a missing line; it leaves as the
-# group lands.
-AWAITING_IDENTITY_GROUPS = (
-    "Concurrent sessions are capped for the whole deployment, not per client address",
-)
-
 UNMAPPED: dict[str, str] = {
-    **dict.fromkeys(AWAITING_IDENTITY_GROUPS, "add-user-identity group 6 is unbuilt"),
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_HARNESS, "add-answer-evaluation is unbuilt; no harness yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),

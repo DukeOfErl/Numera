@@ -50,6 +50,14 @@ except (CorpusUnavailable, NotConfigured) as exc:
 
 session = web.session_id(st.session_state, st.query_params)
 
+# The cap, before the door: a deployment at its limit turns a new session away
+# with one sentence and offers nothing -- not even sign-in, so the cap also
+# bounds the OAuth round trips. A session already admitted is touched and never
+# ended; the count is by heartbeat, not by client address (ADR-0790).
+if not web.session_registry().admit(session):
+    web.draw_try_later()
+    st.stop()
+
 # The door, before anything is drawn. Where identity is configured a visitor who
 # is not signed in, or not enrolled, is offered sign-in or the one sentence that
 # says why not -- no question, no answer, no record. Where it is not configured
