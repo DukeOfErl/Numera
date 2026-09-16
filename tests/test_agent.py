@@ -855,10 +855,13 @@ def test_every_non_raising_path_ends_with_a_question_ended(repo, config, tmp_pat
         )
         reasons.add(end.reason)
 
-    # Nine builds, eight distinct endings -- the unconfigured and unpriceable paths
-    # share NOT_CONFIGURED. Asserting the exact count so a build that silently
-    # collapsed onto another ending would be caught rather than absorbed.
-    assert len(reasons) == 8, sorted(r.value for r in reasons)
+    # The exact set, not a count. A count said `== 8` here for months while
+    # `PROVIDER_LIMIT` was reached by no build at all, and adding a tenth
+    # `EndReason` would not have failed it. Against `EndReason` itself, so a new
+    # member with no build behind it breaks this by construction.
+    from agent_endings import COVERED
+
+    assert reasons == COVERED, sorted(r.value for r in COVERED - reasons)
 
 
 # -- gaps found by coverage, not by reading -------------------------------

@@ -132,6 +132,13 @@ def test_every_ending_that_gives_an_answer_records_it(repo, config, tmp_path, mo
     nobody thought of, so this drives every ending the agent can produce and
     asserts the invariant: wherever an `Answer` reached the driver, the same text
     is in the trail under the same identifier.
+
+    "Every ending" is checked against `EndReason` itself rather than counted. The
+    first version of this test said `== 8`, which was true and hid the gap it was
+    written to prevent: the `PROVIDER_LIMIT` site -- the partial answer kept when
+    a key runs out of credit, the ending most likely to be rated down -- was
+    reached by no build. A verifier found it by measuring coverage of `agent.py`
+    rather than by reading this docstring, which is the lesson.
     """
     from agent_endings import ending_builds
 
@@ -153,7 +160,9 @@ def test_every_ending_that_gives_an_answer_records_it(repo, config, tmp_path, mo
         )
         assert records(stream, ASKED), f"{build.__name__}: the question itself went unrecorded"
 
-    assert len(seen_endings) == 8, sorted(r.value for r in seen_endings)
+    from agent_endings import COVERED
+
+    assert seen_endings == COVERED, sorted(r.value for r in COVERED - seen_endings)
 
 
 # -- the evidence ----------------------------------------------------------
@@ -225,7 +234,10 @@ def test_the_whole_retrieved_set_is_recorded_not_the_head_the_driver_shows(confi
     list(agent.ask("s", "how wide is a widget?"))
 
     (evidence,) = records(trail, EVIDENCE)
-    assert len(evidence["retrieved"]) == 20
+    # The identities, not merely the count: a record holding twenty *wrong* ids
+    # would satisfy a length assertion, and a presentation cap leaking in is only
+    # one of the ways this can go wrong.
+    assert sorted(evidence["retrieved"]) == list(range(900_100, 900_120))
     assert len(evidence["retrieved"]) > web.CITED_ROWS + web.UNCITED_ROWS
 
 
