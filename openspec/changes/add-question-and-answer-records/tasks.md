@@ -104,7 +104,7 @@ cited set that differs from the retrieved set.
       3 skipped, 39 deselected. (One fewer than before the mapping: removing the
       requirement from `TESTED_BUT_UNNAMED` drops one parametrised gap test.)
 
-**Fourteen canaries, fourteen deaths**, seeded into a copy: a constant question, a
+**Fifteen canaries, fifteen deaths**, seeded into a copy: a constant question, a
 truncated answer, `cited` set from `event.retrieved`, the retrieved set sliced at
 the driver's cap, the answer recorded after the `yield`, only short answers
 recording, each interface notice removed, `at_provider_limit` dropped from the
@@ -112,8 +112,11 @@ enumeration, the spent-key partial answer alone going unrecorded (which
 names its build in the failure message), and `question.asked` moved from before
 the work to after it — which kills the crash test, the one the comment in `ask`
 had been claiming without evidence, a `TrailHandler` that lets the
-destination's failure escape (which is what fail-open means here), and a store
-that never pauses — which kills the give-up test alone, as it should. Recorded because the first run of
+destination's failure escape (which is what fail-open means here), a store
+that never pauses (which kills the give-up test alone, as it should), and an
+ending that quietly stops yielding its `Answer` — caught by name, because three
+of the eleven endings legitimately produce none and a fourth joining them
+silently would turn the core assertion vacuous. Recorded because the first run of
 the last two **passed vacuously** — `test_web_driver.py` resolves the app by
 absolute path, so a mutation applied to a copied `streamlit_app.py` was never
 read. They died once re-run from a self-contained copy of `src`, `tests` and the

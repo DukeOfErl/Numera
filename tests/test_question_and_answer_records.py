@@ -133,6 +133,13 @@ def test_every_ending_that_gives_an_answer_records_it(repo, config, tmp_path, mo
     asserts the invariant: wherever an `Answer` reached the driver, the same text
     is in the trail under the same identifier.
 
+    Three of the eleven endings produce no `Answer` at all -- `NO_ANSWER`,
+    `PROVIDER_FAILURE` and `INTERNAL_ERROR` have no `yield Answer` on their path
+    -- so for those the core assertion reduces to `[] == []`. That is correct and
+    is not proof of anything, which is why the set of answerless builds is pinned
+    below: a build that silently stopped yielding an `Answer` would otherwise slip
+    from "checked" into "vacuous" without failing.
+
     "Every ending" is checked against `EndReason` itself rather than counted. The
     first version of this test said `== 8`, which was true and hid the gap it was
     written to prevent: the `PROVIDER_LIMIT` site -- the partial answer kept when
@@ -145,6 +152,7 @@ def test_every_ending_that_gives_an_answer_records_it(repo, config, tmp_path, mo
     # No `trail` fixture: this configures its own stream per build, and asking for
     # one that is then discarded reads as though it were what is asserted on.
     seen_endings = set()
+    answerless: set[str] = set()
     for build in ending_builds(repo, config, tmp_path, monkeypatch):
         # Built before the stream is attached: two of the builds ask a question
         # of their own to reach the state they are named for, and those records
@@ -156,6 +164,8 @@ def test_every_ending_that_gives_an_answer_records_it(repo, config, tmp_path, mo
         seen_endings.add(events[-1].reason)
 
         answers = [e.text for e in events if isinstance(e, Answer)]
+        if not answers:
+            answerless.add(build.__name__)
         recorded = [r["answer"] for r in records(stream, ANSWER)]
         assert recorded == answers, (
             f"{build.__name__}: driver saw {len(answers)} answer(s), trail has {len(recorded)}"
@@ -170,6 +180,9 @@ def test_every_ending_that_gives_an_answer_records_it(repo, config, tmp_path, mo
     from agent_endings import COVERED
 
     assert seen_endings == COVERED, sorted(r.value for r in COVERED - seen_endings)
+    # Exactly these produce no answer. Pinned so a build whose `Answer` quietly
+    # disappeared turns this test vacuous loudly rather than silently.
+    assert answerless == {"blank", "provider_dead", "internal_error"}, sorted(answerless)
 
 
 def test_a_crash_mid_answer_still_leaves_the_question_recorded(
@@ -403,9 +416,16 @@ def test_a_dead_destination_stops_trying_before_the_answer_is_reached(repo, conf
     assert events[-1].reason is EndReason.ANSWERED, "the reader is unaffected"
     assert store.failures == trail_store.FAILURES_BEFORE_GIVING_UP
     assert store.ready is False, "the store should have paused rather than gone on trying"
-    # The give-up lands before the answer: fewer attempts than records emitted.
-    assert engine.attempts < len(records(stream))
-    assert records(stream, ANSWER), "the logger still saw it; only the store did not"
+    # Which records were never attempted, without pinning which three consumed the
+    # budget: attempts happen in emission order, so everything from index
+    # `attempts` onward never reached the engine. Naming the three would break the
+    # day somebody adds a `trace.record` earlier in `_ask`, and would read as a
+    # bug in the give-up regime rather than as a moved record.
+    emitted = [r["event"] for r in records(stream)]
+    never_attempted = emitted[engine.attempts :]
+    assert ANSWER in never_attempted
+    assert EVIDENCE in never_attempted
+    assert ASKED in emitted[: engine.attempts], "the question itself was attempted"
 
 
 def test_the_records_reach_the_durable_store_under_the_question_s_own_identifier(
