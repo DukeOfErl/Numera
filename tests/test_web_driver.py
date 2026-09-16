@@ -62,7 +62,8 @@ def app(monkeypatch, repo, agent) -> AppTest:
     is cached for the life of the process: a second test would be served the
     first one's agent.
     """
-    monkeypatch.setattr(web, "resources", lambda corpus=None: (repo, agent))
+    monkeypatch.setattr(web, "resources", lambda corpus=None: repo)
+    monkeypatch.setattr(web, "agent_for", lambda state, repo, admission: agent)
     return AppTest.from_file(APP, default_timeout=TIMEOUT)
 
 
@@ -522,7 +523,7 @@ def test_a_follow_up_continues_the_conversation_after_a_restart(
     # The server restarts: a new agent over the same store, and a page that knows
     # only what the URL carried.
     restarted = AskAgent(repo, config, store, model=scripted(says("second answer")))
-    monkeypatch.setattr(web, "resources", lambda corpus=None: (repo, restarted))
+    monkeypatch.setattr(web, "agent_for", lambda state, repo, admission: restarted)
     after = AppTest.from_file(APP, default_timeout=TIMEOUT)
     after.query_params = {web.QUERY_KEY: session}
     after.run()

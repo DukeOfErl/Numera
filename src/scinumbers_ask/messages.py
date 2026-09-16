@@ -27,6 +27,7 @@ from .events import (
     UngroundedRefusal,
 )
 
+
 # What is kept, in the reader's own view rather than in a policy nobody opens.
 #
 # The requirement is that a reader can learn it *from the interface*: the system
@@ -41,10 +42,33 @@ from .events import (
 # Says why, not only what. "Questions are logged" reads as surveillance; the
 # reason is that a rating on an answer nobody can read is worth nothing, which is
 # the whole of what this records.
-RECORDS_NOTE = (
-    "Questions, answers and the entries behind them are kept, so whoever runs "
-    "this can see where it goes wrong."
+def records_note(identity_configured: bool) -> str:
+    """What is kept -- one sentence, extended rather than doubled when a person is
+    attached to it. The terminal passes `False`: it has no sign-in."""
+    kept = "Questions, answers and the entries behind them"
+    if identity_configured:
+        kept += ", under your account and role,"
+    return f"{kept} are kept, so whoever runs this can see where it goes wrong."
+
+
+# The door, before anything else is drawn. Each is a different sentence because
+# each asks the reader to do a different thing -- and "not enrolled" during an
+# outage would send a person to the operator, who finds them already enrolled.
+SIGN_IN_NEEDED = "Sign in to ask a question. Nothing is shown, and nothing is kept, until you do."
+NOT_ENROLLED = (
+    "This account is not enrolled. Ask whoever runs this to enrol it; there is nothing to do here."
 )
+ENROLMENT_CHECK_UNAVAILABLE = (
+    "Enrolment cannot be checked right now, so nobody can be admitted. Try again shortly."
+)
+NO_CREDENTIAL = (
+    "No credential has been issued for this account, so it cannot ask a question yet. "
+    "That is for whoever runs this to issue, not for you."
+)
+NO_SIGN_IN_CONFIGURED = (
+    "No sign-in is configured: anyone with this address can ask, and records carry no account."
+)
+SIGNED_IN_AS = "Signed in as {email} ({role})."
 
 # Endings after which asking again cannot produce a different answer. What these
 # share is that they are not about the question just asked: a spent run budget

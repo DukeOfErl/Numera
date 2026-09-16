@@ -30,7 +30,8 @@ from typing import Any
 
 import streamlit as st
 
-from . import bionumbers, entries_table, feedback, messages, trace, trail_store
+from . import accounts, bionumbers, entries_table, feedback, messages, trace, trail_store
+from .accounts import Account, EnrolmentUnavailable
 from .agent import AskAgent
 from .config import Config, env_setting, refuse_retired_env
 from .corpus import load
@@ -57,7 +58,7 @@ PROTOTYPE_SHORT = "Prototype — verify numbers against the original source."
 # driver and lives in `messages` for the same reason every warning does. The page
 # reads it from here so that `streamlit_app.py` needs one import, as it does for
 # every other piece of wording on the page.
-RECORDS_NOTE = messages.RECORDS_NOTE
+records_note = messages.records_note
 
 # Pinned to the viewport rather than written into the page. Drawn as an ordinary
 # element it sat above the conversation and scrolled away with the first answer --
@@ -319,6 +320,196 @@ def transcript(state: MutableMapping[str, Any]) -> list[tuple[str, list[Item]]]:
     return state[TRANSCRIPT_KEY]
 
 
+# --- the door ---------------------------------------------------------------------
+
+#: Session-state keys for what `admit` and `agent_for` hold. Namespaced like the
+#: others: one flat dictionary, shared with every widget on the page.
+ADMISSION_KEY = "scinumbers_ask.admission"
+AGENT_KEY = "scinumbers_ask.agent"
+
+
+class Door(StrEnum):
+    """What the page may do before it draws anything."""
+
+    OPEN = "open"
+    SIGN_IN = "sign in"
+    NOT_ENROLLED = "not enrolled"
+    UNAVAILABLE = "enrolment check unavailable"
+
+
+@dataclass(frozen=True)
+class Admission:
+    """The door's answer for this session, and the account behind it if open.
+
+    `configured` is carried so the page can say the right thing in the
+    unconfigured case -- there is no sign-in, records carry no account -- without
+    reading secrets a second time.
+    """
+
+    door: Door
+    configured: bool
+    account: Account | None = None
+
+
+def identity_configured() -> bool:
+    """Whether `[auth]` is in secrets. Absent means: run exactly as before.
+
+    Not `st.user.is_logged_in`, which does not exist as an attribute at all when
+    `[auth]` is absent (read from the installed Streamlit 1.61.1, not remembered).
+    A missing secrets file is "not configured", by the same types
+    `_is_not_configured` names for the trail.
+    """
+    try:
+        return "auth" in st.secrets
+    except Exception as exc:  # noqa: BLE001 - narrowed by `_is_not_configured`
+        if _is_not_configured(exc):
+            return False
+        raise
+
+
+def signed_in_email() -> str | None:
+    """The account the identity provider asserts, or None. Never a name the
+    reader typed: the system accepts no credential of its own."""
+    user = st.user.to_dict()
+    if not user.get("is_logged_in"):
+        return None
+    return user.get("email") or None
+
+
+def admit(state: MutableMapping[str, Any], engine: Any | None, session_id: str) -> Admission:
+    """Decide the door for this session, reading enrolment once per account.
+
+    Held in session state keyed by the email, so a rerun does not pay a database
+    round trip and a different account signing in on the same tab is looked up
+    afresh. Two things are deliberately *not* held:
+
+    - An unavailable check. It is retried on the next rerun, so a database that
+      wakes up admits the reader without a reload -- and a person told "try
+      again shortly" who tries again must actually be retried.
+    - Anything for a visitor who is not signed in. There is nothing to hold, and
+      the registry entry for this session is dropped so that a sign-out followed
+      by nothing leaves no identity behind it.
+
+    **Fails closed.** No engine, or one that cannot be read, is `UNAVAILABLE`,
+    never `OPEN` and never `NOT_ENROLLED`: the accounts module says why the
+    trail's fail-open reasoning does not transfer, and the page says a different
+    sentence for it so the operator is not sent looking for a row that exists.
+
+    A refused sign-in is recorded with the email in the record's own fields --
+    there is no session identity for the stamp to add, because the person was
+    refused one -- and no question id, because there is no question.
+    """
+    if not identity_configured():
+        return Admission(Door.OPEN, configured=False)
+    email = signed_in_email()
+    if email is None:
+        forget_identity(session_id)
+        state.pop(ADMISSION_KEY, None)
+        return Admission(Door.SIGN_IN, configured=True)
+    held = state.get(ADMISSION_KEY)
+    if held is not None and held[0] == email:
+        return held[1]
+    try:
+        if engine is None:
+            raise EnrolmentUnavailable("no accounts database is configured")
+        account = accounts.lookup(engine, email)
+    except EnrolmentUnavailable as exc:
+        trail_store.complain("enrolment check unavailable", exc)
+        return Admission(Door.UNAVAILABLE, configured=True)
+    if account is None:
+        trace.QuestionTrace(
+            question_id="",
+            session_id=session_id,
+            run_label=env_setting("SCINUMBERS_RUN", "").strip() or "dev",
+        ).record("signin.refused", email=email)
+        admission = Admission(Door.NOT_ENROLLED, configured=True)
+    else:
+        remember_identity(session_id, Identity(account.email, account.role))
+        admission = Admission(Door.OPEN, configured=True, account=account)
+    state[ADMISSION_KEY] = (email, admission)
+    return admission
+
+
+def checkpoint_path() -> str:
+    """Where the conversation store lives, its directory created on demand: the
+    checkpointer creates the file but not the directory above it."""
+    checkpoints = env_setting("SCINUMBERS_CHECKPOINTS", DEFAULT_CHECKPOINTS)
+    directory = os.path.dirname(checkpoints)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    return checkpoints
+
+
+def agent_for(
+    state: MutableMapping[str, Any], repo: CorpusRepository, admission: Admission
+) -> AskAgent | None:
+    """One agent per browser session, funded by this account's credential.
+
+    Built into session state rather than under `st.cache_resource`, because the
+    credential is per person and a cached agent is per server (ADR-0820). The
+    repository -- the expensive index -- stays shared; an agent is a config, a
+    reference and a path. Rebuilt if the credential changes under the same tab.
+
+    **Returns None, and builds nothing, for an enrolled account with no
+    credential.** This is the refusal the spec names, and it is here rather than
+    on the page because of what the alternative would do: an agent built with
+    `api_key=None` falls back to the environment, and an unconfigured
+    deployment's one key would quietly fund a tester the operator has not
+    issued one to. The page keeps the wording; this function keeps the refusal,
+    so whatever asks for an agent meets it.
+
+    Where no identity is configured, `None` is the environment's key, exactly
+    as before this change.
+    """
+    if admission.configured:
+        account = admission.account
+        if account is None or not account.openrouter_key:
+            state.pop(AGENT_KEY, None)
+            return None
+        key: str | None = account.openrouter_key
+    else:
+        key = None
+    held = state.get(AGENT_KEY)
+    if held is not None and held[0] == key:
+        return held[1]
+    agent = AskAgent(repo, Config.from_env(), checkpoint_path(), api_key=key)
+    state[AGENT_KEY] = (key, agent)
+    return agent
+
+
+def _sign_out(session_id: str) -> None:
+    forget_identity(session_id)
+    st.logout()
+
+
+def draw_closed_door(admission: Admission) -> None:
+    """What a visitor sees instead of the page. Sign-in and nothing else, or the
+    one sentence that says why not. The caller stops the script after this."""
+    st.title("SciNumbers ask")
+    if admission.door is Door.SIGN_IN:
+        st.info(as_text(messages.SIGN_IN_NEEDED), icon=":material/login:")
+        st.button("Sign in with Google", on_click=st.login, icon=":material/login:")
+    elif admission.door is Door.NOT_ENROLLED:
+        st.error(as_text(messages.NOT_ENROLLED), icon=":material/person_off:")
+        st.button("Sign out", on_click=st.logout)
+    elif admission.door is Door.UNAVAILABLE:
+        st.error(as_text(messages.ENROLMENT_CHECK_UNAVAILABLE), icon=":material/cloud_off:")
+
+
+def draw_identity(admission: Admission, session_id: str) -> None:
+    """Who the page thinks you are -- or that it is nobody's, so the state is
+    visible rather than inferred."""
+    if not admission.configured:
+        st.caption(as_text(messages.NO_SIGN_IN_CONFIGURED))
+        return
+    account = admission.account
+    if account is not None:
+        st.caption(
+            as_text(messages.SIGNED_IN_AS.format(email=account.email, role=account.role.value))
+        )
+    st.button("Sign out", on_click=_sign_out, args=(session_id,), icon=":material/logout:")
+
+
 #: The secrets section naming the durable trail's database.
 #: `[connections.usage]` in `.streamlit/secrets.toml`, or the same content pasted
 #: into Community Cloud's secrets box.
@@ -454,13 +645,18 @@ def install_identity_stamp() -> None:
 
 
 @st.cache_resource(show_spinner="Loading the corpus…")
-def resources(corpus: str | None = None) -> tuple[CorpusRepository, AskAgent]:
-    """The corpus index and the agent, built once for the life of the server.
+def resources(corpus: str | None = None) -> CorpusRepository:
+    """The corpus index, built once for the life of the server, and the trail's
+    sinks attached beside it.
 
     Cached because the indexes are built over the whole corpus and Streamlit
     would otherwise rebuild them on every interaction; task 8.2 verifies that
     they are not. Configuration comes from the environment because a Streamlit
     script has no argv to read it from.
+
+    The agent is no longer built here: it holds a credential, and a credential
+    is per person where a cached resource is per server. `agent_for` builds one
+    per session (ADR-0820).
     """
     refuse_retired_env()
     trace.to_file(env_setting("SCINUMBERS_TRACE", trace.DEFAULT_FILE))
@@ -484,13 +680,7 @@ def resources(corpus: str | None = None) -> tuple[CorpusRepository, AskAgent]:
     # rerun after it.
     if corpus is None:
         corpus = env_setting("SCINUMBERS_CORPUS")
-    repo = CorpusRepository(load(corpus))
-    checkpoints = env_setting("SCINUMBERS_CHECKPOINTS", DEFAULT_CHECKPOINTS)
-    # The store is created on demand by the checkpointer, but its directory is not.
-    directory = os.path.dirname(checkpoints)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-    return repo, AskAgent(repo, Config.from_env(), checkpoints)
+    return CorpusRepository(load(corpus))
 
 
 def as_text(text: str) -> str:

@@ -83,7 +83,8 @@ def app(monkeypatch, repo, config, tmp_path):
     agent = agent_with(
         repo, config, tmp_path, scripted(says("first answer"), says("second answer"))
     )
-    monkeypatch.setattr(web, "resources", lambda corpus=None: (repo, agent))
+    monkeypatch.setattr(web, "resources", lambda corpus=None: repo)
+    monkeypatch.setattr(web, "agent_for", lambda state, repo, admission: agent)
     monkeypatch.setenv("SCINUMBERS_CORPUS", FIXTURE)
     # No `resources.clear()`: patching the name replaces the cached function
     # outright, so there is no cache to clear and calling it would raise.
@@ -255,7 +256,8 @@ def cites(monkeypatch, repo, config, tmp_path):
         says("second answer (BNID 100002)"),
     )
     agent = agent_with(repo, config, tmp_path, model)
-    monkeypatch.setattr(web, "resources", lambda corpus=None: (repo, agent))
+    monkeypatch.setattr(web, "resources", lambda corpus=None: repo)
+    monkeypatch.setattr(web, "agent_for", lambda state, repo, admission: agent)
     monkeypatch.setenv("SCINUMBERS_CORPUS", FIXTURE)
     return AppTest.from_file(APP, default_timeout=TIMEOUT)
 

@@ -40,7 +40,7 @@ try:
         env_setting("SCINUMBERS_CORPUS"),
         lambda text: st.info(web.as_text(text), icon=":material/build:"),
     )
-    repo, agent = web.resources(corpus)
+    repo = web.resources(corpus)
 except (CorpusUnavailable, NotConfigured) as exc:
     # Both are misconfiguration a person can fix, so the message is the point:
     # Streamlit's exception panel would bury it under a stack the reader did not
@@ -49,6 +49,20 @@ except (CorpusUnavailable, NotConfigured) as exc:
     st.stop()
 
 session = web.session_id(st.session_state, st.query_params)
+
+# The door, before anything is drawn. Where identity is configured a visitor who
+# is not signed in, or not enrolled, is offered sign-in or the one sentence that
+# says why not -- no question, no answer, no record. Where it is not configured
+# the door is open and the page runs exactly as it did before identity existed.
+admission = web.admit(st.session_state, web.trail_destination(), session)
+if admission.door is not web.Door.OPEN:
+    web.draw_closed_door(admission)
+    st.stop()
+# One agent per session, holding this account's credential and nothing else
+# about the person. `None` means an enrolled account with no credential issued:
+# the input below is replaced by the sentence saying so, and no agent exists to
+# fall back on the environment's key.
+agent = web.agent_for(st.session_state, repo, admission)
 
 # Asked before anything is drawn, because every control drawn below is live in the
 # browser for as long as this run takes. A click on any of them re-runs the script,
@@ -76,12 +90,17 @@ with st.sidebar:
     # before every question. Not in the pinned banner, which is one line by
     # design; the sidebar is the page's standing statement about itself, and
     # this belongs beside the other one.
-    st.caption(web.RECORDS_NOTE)
+    st.caption(web.as_text(web.records_note(admission.configured)))
+    # Who this page thinks you are, or that it is nobody's. A person reading
+    # under an account they did not expect is a person whose questions are being
+    # recorded against the wrong name.
+    web.draw_identity(admission, session)
     # Always drawn, including before the first question, when it reads zero. The
     # panel must not gain a section the moment a question completes: a layout that
     # grows under the reader is a worse surprise than a bar showing nothing spent.
     spent_and_cap = web.run_status(
-        web.transcript(st.session_state), (agent.run_spend(), agent.run_budget)
+        web.transcript(st.session_state),
+        (agent.run_spend(), agent.run_budget) if agent is not None else None,
     )
     if spent_and_cap:
         spent, cap = spent_and_cap
@@ -129,6 +148,11 @@ if web.run_is_over(web.transcript(st.session_state)):
         ),
         icon=":material/block:",
     )
+# An enrolled account with no credential issued: the operator's to fix, so the
+# input is replaced by the sentence saying so rather than left to fail on the
+# first question.
+elif agent is None:
+    st.error(web.as_text(web.messages.NO_CREDENTIAL), icon=":material/key_off:")
 # `submit_mode="disable"` because a question runs for as long as the agent takes:
 # leaving the input live invites a second question into the middle of the first.
 elif question := st.chat_input("Ask a question", submit_mode="disable", key=web.ASK_KEY):

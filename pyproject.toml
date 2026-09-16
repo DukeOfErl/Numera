@@ -35,6 +35,10 @@ ask = [
     # `[binary]` for the prebuilt wheel: the host has no libpq to build against,
     # and a source build would fail at deploy time rather than here.
     "psycopg[binary]>=3.2",
+    # What `st.login` needs and Streamlit does not install: the OIDC client.
+    # Streamlit's own extra is `streamlit[auth]`; named directly so the floor is
+    # ours to read. Verified against the installed Streamlit 1.61.1 on 2026-09-16.
+    "authlib>=1.3.2",
 ]
 ingest = [
     "pydantic>=2.6",

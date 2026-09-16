@@ -117,32 +117,37 @@ doubles, both populations of the table. Its brief already says so.
 
 ## 4. The gate, the notice, and the unconfigured deployment
 
-- [ ] 4.1 `authlib>=1.3.2` in the `ask` extra; `uv lock`; `.streamlit/
+- [x] 4.1 `authlib>=1.3.2` in the `ask` extra; `uv lock`; `.streamlit/
       secrets.toml.example` gains the `[auth]` block with placeholders and the
       note that `redirect_uri` ends in `/oauth2callback`.
-- [ ] 4.2 `web.identity_configured()`; `web.current_identity(engine)`:
+- [x] 4.2 `web.identity_configured()`; `web.current_identity(engine)`:
       not-configured → `None` with configured=False; configured and not signed in
       → sign-in offered; signed in → `accounts.lookup`, held in session state;
       absent/disabled → `signin.refused` recorded and the not-enrolled message;
       `EnrolmentUnavailable` → the check-unavailable message, which is a
       different sentence.
-- [ ] 4.3 `web.resources()` returns the repository only; `web.agent_for(state,
+- [x] 4.3 `web.resources()` returns the repository only; `web.agent_for(state,
       repo, account)` builds the per-session agent. Test through `AppTest` that
       two sessions get two agents and one repository (`test_web_driver.py` has
       the cache-hit test to extend).
-- [ ] 4.4 `streamlit_app.py`: the gate before anything is drawn; sign-out and
+- [x] 4.4 `streamlit_app.py`: the gate before anything is drawn; sign-out and
       "signed in as" in the sidebar; the identity registry entry made at
       sign-in; the missing-credential refusal in `web.answer` when the account
       has no key. No permission check on asking or rating — enrolment is the
-      gate, and there is nothing for a check to refuse.
-- [ ] 4.5 `messages.records_note(identity_configured)`; the CLI passes `False`;
+      gate, and there is nothing for a check to refuse. *Deviation, recorded:
+      the refusal is in `web.agent_for`, not `web.answer`. An agent built with
+      `api_key=None` falls back to the environment's key, so a page-level
+      refusal would leave the operation able to spend it; `agent_for` returns
+      `None` and builds nothing, and the page keeps the wording. The test
+      asserts on what was built, not on the page.*
+- [x] 4.5 `messages.records_note(identity_configured)`; the CLI passes `False`;
       the sidebar shows the extended sentence when configured. Test the literal
       fragments, both variants.
-- [ ] 4.6 `AppTest`, no `[auth]`: behaviour identical to today — a question is
+- [x] 4.6 `AppTest`, no `[auth]`: behaviour identical to today — a question is
       answered without sign-in, records carry no account, the sidebar says no
       sign-in is configured. This is the regression guard for every existing
       web test, so it runs first.
-- [ ] 4.7 `AppTest`, `[auth]` configured (monkeypatch `st.secrets` and
+- [x] 4.7 `AppTest`, `[auth]` configured (monkeypatch `st.secrets` and
       `st.user`): not signed in → sign-in and nothing else; signed in, not
       enrolled → refused and recorded; enrolled → answered. Read
       `.claude/rules/streamlit-driver.md` first: when things are drawn is a

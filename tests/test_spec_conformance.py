@@ -327,6 +327,68 @@ COVERED: dict[str, tuple[str, ...]] = {
     # trail's shape rather than against these words; "The process that wrote the
     # records is replaced" needs a real restart against a real database and lives
     # behind the `network` marker, which the offline suite deselects.
+    # `add-user-identity`. The two requirements its later groups build -- the dev
+    # panel and the session cap -- are in `AWAITING_IDENTITY_GROUPS` below until
+    # those groups land; task 8.2 finishes this mapping and says which scenarios
+    # merely execute.
+    "A reader signs in before anything is shown, and identity comes from the provider": (
+        "test_web_driver_identity.py::"
+        "test_a_visitor_who_is_not_signed_in_is_offered_sign_in_and_nothing_else",
+        "test_web_driver_identity.py::"
+        "test_an_enrolled_account_is_admitted_and_its_records_carry_who_and_as_what",
+        "test_web_driver_identity.py::test_the_sidebar_says_who_is_signed_in_and_offers_sign_out",
+        "test_web_driver_identity.py::test_signing_out_forgets_the_session_s_identity",
+        "test_web_driver_identity.py::test_signed_in_email_is_none_without_is_logged_in",
+    ),
+    "An account must be enrolled, and enrolment happens outside the application": (
+        "test_web_driver_identity.py::"
+        "test_a_signed_in_account_that_is_not_enrolled_is_refused_and_recorded",
+        "test_web_driver_identity.py::test_a_refusal_is_recorded_once_per_session_not_once_per_rerun",
+        "test_web_driver_identity.py::"
+        "test_an_unreadable_accounts_table_admits_nobody_and_says_a_different_sentence",
+        "test_web_driver_identity.py::test_an_unavailable_check_is_retried_on_the_next_rerun",
+        "test_web_driver_identity.py::test_no_database_at_all_is_unavailable_not_open",
+        "test_accounts.py::test_an_unreadable_table_raises_rather_than_answering_none",
+        "test_accounts.py::test_a_disabled_account_is_none_exactly_as_an_absent_one_is",
+    ),
+    "Every enrolled account holds one role, and permissions are granted by a default-deny table": (
+        "test_permissions.py::test_dev_and_admin_are_granted_the_dev_panel",
+        "test_permissions.py::test_each_tester_role_is_refused_the_dev_panel",
+        "test_permissions.py::test_no_identity_is_refused",
+        "test_permissions.py::test_the_two_populations_partition_the_roles",
+        "test_permissions.py::test_the_table_has_a_row_for_every_role_and_names_only_known_permissions",
+        "test_permissions.py::test_every_permission_is_refused_to_some_role",
+        "test_permissions.py::test_the_refusal_names_the_permission_and_nothing_about_the_account",
+        "test_identity_never_reaches_the_agent.py::"
+        "test_the_same_question_under_two_roles_hands_the_model_identical_inputs",
+        "test_driver_independence.py::test_identity_never_enters_the_agent_the_trail_or_the_feedback",
+    ),
+    "Each tester's questions are funded by a credential of their own, capped, and never shown "
+    "to them": (
+        "test_identity_never_reaches_the_agent.py::test_two_agents_with_two_keys_send_two_keys",
+        "test_web_driver_identity.py::"
+        "test_an_enrolled_account_with_no_credential_is_refused_asking_and_no_agent_is_built",
+        "test_web_driver_identity.py::test_the_credential_is_never_on_the_page",
+        "test_web_driver_identity.py::test_two_sessions_get_two_agents_and_one_repository",
+    ),
+    "What is kept about a person, and that they are told": (
+        "test_identity_never_reaches_the_agent.py::"
+        "test_two_sessions_under_two_identities_each_carry_their_own",
+        "test_identity_never_reaches_the_agent.py::test_the_role_is_written_as_it_was_at_record_time",
+        "test_identity_never_reaches_the_agent.py::"
+        "test_a_verdict_in_a_signed_in_session_carries_the_identity",
+        "test_trail_store.py::test_the_handler_carries_the_role_beside_the_email",
+        "test_web_driver_identity.py::test_the_sidebar_says_who_is_signed_in_and_offers_sign_out",
+        "test_web_driver_identity.py::test_the_note_is_one_sentence_extended_not_two",
+    ),
+    "A deployment with no identity configured behaves as before": (
+        "test_web_driver_identity.py::"
+        "test_with_no_identity_configured_a_question_is_answered_without_signing_in",
+        "test_web_driver_identity.py::test_with_no_identity_configured_the_page_says_so",
+        "test_identity_never_reaches_the_agent.py::test_no_key_reads_the_environment_exactly_as_before",
+        "test_identity_never_reaches_the_agent.py::"
+        "test_a_session_nobody_is_signed_in_to_writes_null_for_both",
+    ),
     "The deterministic layer is logged under a per-question identifier": (
         "test_question_and_answer_records.py::"
         "test_two_different_questions_record_what_each_actually_asked",
@@ -623,7 +685,16 @@ AWAITING_THE_PROMPT = (
     "Leading with a figure does not displace what qualifies it",
 )
 
+# `add-user-identity`'s groups 5 and 6, not yet built. Listed by group so that
+# each leaves as its group lands, and so that a requirement of a half-built
+# change is a named gap rather than a missing line.
+AWAITING_IDENTITY_GROUPS = (
+    "An operator can see a session's own trail",
+    "Concurrent sessions are capped for the whole deployment, not per client address",
+)
+
 UNMAPPED: dict[str, str] = {
+    **dict.fromkeys(AWAITING_IDENTITY_GROUPS, "add-user-identity groups 5-6 are unbuilt"),
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_HARNESS, "add-answer-evaluation is unbuilt; no harness yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),

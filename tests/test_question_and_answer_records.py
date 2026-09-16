@@ -507,14 +507,16 @@ def test_the_page_says_that_questions_and_answers_are_kept(monkeypatch, repo, co
 
     from scinumbers_ask import web
 
-    # Literal fragments as well as the constant: `RECORDS_NOTE` is re-exported,
+    # Literal fragments as well as the sentence: `records_note` is re-exported,
     # so an empty one would satisfy `in` everywhere and this would pass having
-    # checked that the page contains the empty string.
-    assert "are kept" in web.RECORDS_NOTE and "goes wrong" in web.RECORDS_NOTE
+    # checked that the page contains the empty string. `False`: these tests run
+    # with no `[auth]` in secrets, so the page shows the unconfigured variant.
+    note = web.records_note(False)
+    assert "are kept" in note and "goes wrong" in note
 
     at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
     panel = " ".join(c.value for c in at.sidebar.caption)
-    assert web.RECORDS_NOTE in panel
+    assert note in panel
     assert "kept" in panel and "goes wrong" in panel
 
 
@@ -535,7 +537,7 @@ def test_the_terminal_says_it_too_including_for_a_single_question(
         main(["--ask", "q", "--checkpoints", str(tmp_path / "c.sqlite")])
 
     captured = capsys.readouterr()
-    assert messages.RECORDS_NOTE in captured.err
+    assert messages.records_note(False) in captured.err
     assert "kept" in captured.err and "goes wrong" in captured.err
     assert "kept" not in captured.out, "stdout carries the answer, not this"
 
@@ -581,7 +583,7 @@ def test_the_terminal_does_not_claim_to_keep_what_it_discards(
         main(["--ask", "q", "--trace", "", "--checkpoints", str(tmp_path / "c.sqlite")])
 
     captured = capsys.readouterr()
-    assert messages.RECORDS_NOTE not in captured.err
+    assert messages.records_note(False) not in captured.err
     assert "kept" not in captured.err
     # Positive control: the run itself happened and said so.
     assert "no_answer" in captured.out
