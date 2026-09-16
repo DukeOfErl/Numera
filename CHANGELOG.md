@@ -36,6 +36,38 @@ any release; `1.0.0` when it stabilizes.
   carries its question's identifier, which is what a rating on an answer will
   have to name. Neither this nor the session above can be added to records
   already written, which is why both precede the feature that needs them.
+- **An answer can be rated, and rating is optional.** A thumbs up or down sits at
+  the foot of each answer's prose, beside the entries it rests on rather than
+  below them. Recording one is never required: an answer nobody rates behaves
+  exactly as it does today, and the rating is committed on the click, because
+  most people who rate will do nothing else and a design that waits for a second
+  action collects nothing from them. A rating is final once given, and the
+  control shows it as settled ([ADR-0740]).
+- **Disapproval — and only disapproval — invites a comment.** The box asks what
+  was wrong, which is unanswerable about an answer somebody has just approved of,
+  so approval is recorded, acknowledged, and asks for nothing further. The hint
+  asks a reader to name the identifier of any entry they believe is wrong:
+  per-entry rating is deliberately not built, and what readers choose to write
+  about entries is the evidence for whether it should be.
+- **Comments are read by whoever operates the system, and are never sent to the
+  model.** Not to the conversation, not to a prompt, not to the state a later
+  question is answered from. A comment is the one input to this system authored to
+  be read by the people running it, so text asking the model to disregard its
+  instructions must not arrive by that route; an agent that reacted to disapproval
+  would also answer differently depending on who was watching, and its recorded
+  trail would stop describing what it does ([ADR-0750]).
+- **Ratings outlive the deployment that collected them**, in the same append-only
+  table as the trail and under the same question identifier — so a judgement can
+  be read beside what that question actually retrieved. Recording a rating fails
+  open like every other record: a failed write is never shown to the reader and
+  never interrupts the conversation. Space for who gave the rating is recorded and
+  left empty, because the system has no notion of who that is yet, and a record
+  written before identity exists can never be attributed afterwards.
+- **An answer is shown as two columns** — the prose and its rating on the left, the
+  entries it rests on to the right — so a reader checking a number against the row
+  it came from sees both at once instead of scrolling between them. Entries the
+  answer did not cite are folded away under their own heading; the cited ones
+  never are, because they are what the prose stands on ([ADR-0760]).
 
 - **A spent API key ends a question as a limit, and says whose limit it is.** Where
   the provider refuses a request for lack of credit, the question ends as
@@ -250,3 +282,6 @@ number rather than an error:
 [ADR-0600]: docs/decisions/0600-a-spent-key-is-its-own-ending.md
 [ADR-0700]: docs/decisions/0700-neon-for-the-durable-trail.md
 [ADR-0710]: docs/decisions/0710-recording-fails-open.md
+[ADR-0740]: docs/decisions/0740-native-st-feedback.md
+[ADR-0750]: docs/decisions/0750-feedback-is-recorded-here-not-at-the-tracer.md
+[ADR-0760]: docs/decisions/0760-an-answer-is-two-columns.md

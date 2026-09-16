@@ -112,10 +112,19 @@ fails open (ADR-0710).
       carrying on.
 - [x] 5.2 `openspec validate add-answer-feedback --strict`. Passing, re-run after
       the group 7 spec edits.
-- [ ] 5.3 CLAUDE.md: the new capability in the module table if a module is added.
-- [ ] 5.4 `README.md` and `CHANGELOG.md`: that answers can be rated, that rating
+- [x] 5.3 CLAUDE.md: the new capability in the module table if a module is added.
+      `feedback.py` added, marked **presentation, not core**, with a paragraph
+      saying the placement *is* the guarantee — the agent must not be able to
+      reach a stranger's text even by accident — and naming the wider
+      `PRESENTATION` set the test checks, since the older adapters test does not
+      cover it.
+- [x] 5.4 `README.md` and `CHANGELOG.md`: that answers can be rated, that rating
       is optional, and that comments are read by the operators and never sent to
-      the model.
+      the model. README gained a "Rating an answer" section and **two entries
+      under "What it does not do"** — that a rating never changes the answer it
+      judges, and that the trail names the question without storing it, pointing
+      at the change that fixes it. A README that described only what works would
+      be the more comfortable and less true one.
 - [ ] 5.5 Archive the change on this branch, before the merge, and diff the
       promoted requirement text mechanically — `openspec archive` refuses a
       dropped scenario and says nothing about dropped prose.

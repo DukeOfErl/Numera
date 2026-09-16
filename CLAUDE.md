@@ -164,6 +164,7 @@ core, and a test there refuses a name with no file behind it.
 | `eval_cli.py` | The evaluation command (`scinumbers-eval`): `check`, `run` and `report` |
 | `trace.py` | The structured trail, one question id and one session id throughout |
 | `trail_store.py` | The trail's durable destination: one append-only table, written best-effort (ADR-0700, ADR-0710) |
+| `feedback.py` | A reader's judgement of an answer, recorded to the trail. **Presentation, not core** — see below |
 
 **The trail has two sinks.** `trace.py` writes to a logger; `trail_store.py`
 attaches to that logger as a second handler, so no call site knows about it. Two
@@ -175,6 +176,13 @@ things a reader will otherwise get wrong:
   clears the logger's handlers. Above it, the sink is attached and then discarded:
   an app that looks configured and records nothing. `test_web_driver_trail.py`
   pins the order; nothing below the driver can see it.
+
+`feedback.py` sits on the **presentation** side of the dependency line, and that
+placement is the guarantee rather than a filing choice: a comment is text a
+stranger wrote, and the agent must not be able to reach it even by accident.
+`test_driver_independence.py` asserts that no agent-core module imports it —
+under `PRESENTATION`, which is wider than the `ADAPTERS` set the older test
+checks, because a module can be presentation without being a driver (ADR-0750).
 
 `trail_store` is core rather than presentation by decision, not by subtraction —
 `test_driver_independence.py` names it and says why. The connect timeout is the

@@ -63,6 +63,25 @@ The agent is separated from the interfaces that drive it (ports and adapters): i
 accepts questions, so the web page and — later — an evaluation harness are adapters over one agent,
 with no mode flag inside it.
 
+### Rating an answer
+
+Each answer carries a thumbs up or down, at the foot of its prose and beside the entries it rests on.
+**Rating is optional** — an answer nobody rates behaves exactly as it does today — and it is recorded
+the moment it is clicked, because most people who rate do nothing else. A rating is final once given.
+
+A thumbs **down** opens a comment box; approval does not, since the box asks what was wrong. The hint
+asks you to name the identifier of any entry you think is wrong: rating individual table rows is not
+built, and what people write about entries is the evidence for whether it should be.
+
+**Comments are read by whoever runs the deployment, and are never sent to the model** — not to the
+conversation, not to a prompt, not to the state a later question is answered from. A comment is the
+one input to this system written to be read by the people running it, and a tool whose wrong answers
+look like its right ones must not take instructions by that route.
+
+Ratings are written to the durable trail below, under the same identifier as the question they judge,
+so a judgement can be read beside what that question actually retrieved. If the write fails you are
+not told and the conversation is not interrupted: the cost of a lost row is one row.
+
 ## Running it
 
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
@@ -169,6 +188,15 @@ it cannot behave one way for a person and another for a harness.
 **The evaluation harness is not built.** Scoring citations against expected entries and scoring
 refusals on unanswerable questions are specified in `openspec/changes/add-ask-agent/tasks.md`
 (group 9) and unticked. That is why the prototype warning above says what it says.
+
+**A rating does not change the answer it is about.** Nothing is retried, revised, re-retrieved or
+withdrawn on account of a thumbs-down; the rating is evidence for whoever is improving the tool, and
+it reaches them rather than the agent.
+
+**The trail records which question was rated, not the question itself.** So a rating currently names
+an answer whose text is not stored anywhere — `openspec/changes/add-question-and-answer-records/`
+specifies the fix and is not implemented. There is no sign-in, so no rating can yet be attributed to
+the person who gave it; space for that is recorded and left empty.
 
 ## For the course review
 
