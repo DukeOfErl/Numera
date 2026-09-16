@@ -163,3 +163,22 @@ def test_the_table_named_is_the_table_read():
     engine = _Engine(_row())
     lookup(engine, "tester@example.org", table="accounts_test")
     assert any("from accounts_test" in s for s in engine.conns[0].statements)
+
+
+def test_enrolment_is_matched_without_regard_to_the_case_of_the_address():
+    """The operator types the address into the table; the provider asserts its
+    own spelling. An exact match tells a person who *is* enrolled that they are
+    not, and sends the operator to look at a row that is plainly there."""
+    engine = _Engine(_row(email="Tester@Example.org"))
+    account = lookup(engine, "tester@example.org")
+    assert account is not None
+    assert account.email == "Tester@Example.org", "the row's spelling, not the typed one"
+    statement = " ".join(engine.conns[0].statements).lower()
+    assert "lower(email) = lower(" in statement
+
+
+def test_the_account_hands_over_its_identity_and_not_its_credential():
+    account = lookup(_Engine(_row()), "tester@example.org")
+    assert account.identity.email == account.email
+    assert account.identity.role is account.role
+    assert "openrouter" not in repr(account.identity).lower()

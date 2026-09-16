@@ -25,15 +25,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .permissions import Role
+from .permissions import Identity, Role
 from .trail_store import STATEMENT_TIMEOUT_MS, complain
 
 DEFAULT_TABLE = "accounts"
 
+#: Matched case-insensitively, and the row's own spelling is what comes back.
+#:
+#: The address is typed by the operator into `sql/accounts.sql` and asserted by
+#: the identity provider, and nothing makes those two agree on case. An exact
+#: match refuses `Tester@example.org` for a row enrolled as `tester@example.org`
+#: -- a person told they are not enrolled when they are, which is the expensive
+#: direction here: the operator looks at the table, sees the row, and has nothing
+#: to go on. Mailbox names are case-sensitive in the standard and case-folded by
+#: every provider this deployment will meet; folding is the direction that
+#: matches reality.
 _SELECT = """
 select email, role, openrouter_key, disabled
 from {table}
-where email = :email
+where lower(email) = lower(:email)
 """
 
 
@@ -55,6 +65,16 @@ class Account:
     #: `None` when the operator has enrolled the account but issued no key yet;
     #: the page then refuses asking and names the missing credential.
     openrouter_key: str | None
+
+    @property
+    def identity(self) -> Identity:
+        """Who, and as what -- the part of this that is stamped onto the trail.
+
+        One place, so that a field added to `Identity` reaches the stamp without
+        a second hand-written conversion to keep in step. The credential stays
+        out of it deliberately: it goes to the agent and nowhere else.
+        """
+        return Identity(self.email, self.role)
 
 
 def lookup(engine, email: str, *, table: str = DEFAULT_TABLE) -> Account | None:

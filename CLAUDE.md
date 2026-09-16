@@ -178,34 +178,11 @@ generator mid-iteration on every rerun and code after a `yield` may never run
 (ADR-0840). Add a ninth ending and it records itself; add a record beside a
 `yield` and you have reintroduced the bug.
 
-**The trail has three sinks and a filter, all on one logger.** `trace.py` writes
-to a logger; `trail_store.py` attaches as a second handler, `web.RecentTrail` (the
-dev panel) as a third, and `web.IdentityStamp` — a `logging.Filter` keyed by
-`session_id` — stamps `user_email`/`user_role` onto every record of a signed-in
-session before any handler sees it. No call site knows about any of them, which
-is how `agent.py`, `trace.py` and `feedback.py` stay free of identity:
-`test_driver_independence.py` parses all three for any identifier that would
-mean otherwise, and `AskAgent` takes an `api_key` and nothing else about the
-person (ADR-0810, ADR-0820). Two things a reader will otherwise get wrong:
-
-- **Recording fails open, deliberately inverting the spend gate** — the reasoning,
-  and why it is a spec requirement rather than a code convention, is ADR-0710.
-- **`install` must come after `trace.to_file`**, which calls `configure`, which
-  clears the logger's handlers. Above it, the sink is attached and then discarded:
-  an app that looks configured and records nothing. `test_web_driver_trail.py`
-  pins the order for both handlers; nothing below the driver can see it. The
-  filter is exempt — `configure` leaves filters alone — and a test asserts that
-  rather than a comment.
-
-**Identity stops at the driver, and the guard is in the accessor.** `web.admit`
-decides the door once per account per session and fails closed when the accounts
-table cannot be read; `web.agent_for` builds one agent per session with the
-account's credential and builds *nothing* for an enrolled account with no key,
-because an agent with `api_key=None` falls back to the environment's. The one
-`require` in the system is inside `web.dev_panel_rows`, not on the page that
-draws the section. A deployment with no `[auth]` runs exactly as before — no
-branch, just the absence of a registry entry — and sees the panel (a deferred
-decision, `docs/roadmap.md`).
+**The trail has three sinks and a filter, all on one logger**, and identity
+stops at the driver. `.claude/rules/identity.md` carries both — where the
+refusal lives, what the agent may never be handed, why the session is keyed on
+the account rather than the link, and the install ordering that is load-bearing.
+It loads when you touch any file sign-in goes near.
 
 `feedback.py` sits on the **presentation** side of the dependency line, and that
 placement is the guarantee rather than a filing choice: a comment is text a
@@ -265,6 +242,7 @@ frontmatter matches, so these cost nothing on a session that never goes near the
 | `testing.md` | `tests/**`, `src/**/*.py` | how to run the suite (the `-m` trap), fault seeding, mutation testing, the negative-case rule |
 | `specs.md` | `openspec/**` | what a spec delta must contain, and why each change archives as it completes |
 | `streamlit-driver.md` | `streamlit_app.py`, `web.py`, their tests | why some things can only be seen through a whole script run |
+| `identity.md` | `web.py`, `permissions.py`, `authorization.py`, `accounts.py`, their tests | where the refusal lives, what the agent is never handed, how a session is keyed |
 | `lint-and-format.md` | `pyproject.toml`, `.pre-commit-config.yaml`, CI | the pin that must move in two places at once |
 
 `src/bionumbers_ingest/CLAUDE.md` loads when Claude reads a file in that package

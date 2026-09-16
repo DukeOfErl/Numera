@@ -365,9 +365,7 @@ class Admission:
     @property
     def identity(self) -> Identity | None:
         """Who, and as what -- for the grant table and the sidebar, never the agent."""
-        if self.account is None:
-            return None
-        return Identity(self.account.email, self.account.role)
+        return None if self.account is None else self.account.identity
 
 
 def identity_configured() -> bool:
@@ -905,11 +903,16 @@ class RecentTrail(logging.Handler):
                     questions.popitem(last=False)
             if event == "question.asked" and "question" in fields:
                 question.text = str(fields["question"])
+            # A shallow copy of the fields rather than a JSON dump: the dump is
+            # what `TrailHandler` already pays on the durable path, and doing it
+            # again here charged every session -- including every tester whose
+            # rows nobody can read -- for a rendering only a dev's page performs.
+            # Copied rather than referenced because the caller's dict is not ours.
             question.rows.append(
                 {
                     "when": datetime.fromtimestamp(record.created),
                     "event": event,
-                    "detail": json.dumps(fields, default=str),
+                    "fields": dict(fields),
                 }
             )
         except Exception:  # noqa: BLE001 - a panel must not break a question
@@ -922,7 +925,7 @@ class RecentTrail(logging.Handler):
                 "when": r["when"],
                 "question": question.text,
                 "event": r["event"],
-                "detail": r["detail"],
+                "detail": json.dumps(r["fields"], default=str),
             }
             for question in self._sessions.get(session_id, {}).values()
             for r in question.rows
