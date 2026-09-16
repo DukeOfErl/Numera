@@ -331,43 +331,84 @@ def representative_value(entry: Entry) -> float | None:
     return None
 
 
-def _values_by_quantity(entries: tuple[Entry, ...]) -> dict[tuple[str, str], list[float]]:
-    """Usable values grouped by the quantity they measure: property and organism.
+def _peer_pool(
+    expected: tuple[int, ...], entries: tuple[Entry, ...]
+) -> dict[tuple[str, str], list[float]]:
+    """The question's expected entries, grouped by organism and unit string.
 
-    Built once instead of scanning the corpus for every cited entry. The report
-    calls the two peer functions for the group and again for each tag and each
-    shape, so the old shape was O(results x cited x entries x buckets) -- tens of
-    millions of comparisons on a real corpus with both breakdowns asked for.
+    Built once per question rather than scanned per citation: the report calls the
+    peer functions for the group and again for each tag and each shape.
     """
-    grouped_values: dict[tuple[str, str], list[float]] = {}
+    grouped: dict[tuple[str, str], list[float]] = {}
+    wanted = set(expected)
     for entry in entries:
+        if entry.entry_id not in wanted:
+            continue
         value = representative_value(entry)
-        if value is not None:
-            grouped_values.setdefault((entry.property, entry.organism), []).append(value)
-    return grouped_values
+        if value is not None and entry.units:
+            grouped.setdefault(_quantity_of(entry), []).append(value)
+    return grouped
 
 
-def _peers_of(entry: Entry, index: dict[tuple[str, str], list[float]]) -> list[float]:
-    """The other entries' values for the same quantity.
+def _quantity_of(entry: Entry) -> tuple[str, str]:
+    """What must match for two entries to be comparable: organism and unit.
 
-    One copy of this entry's own value is removed rather than the entry being
-    excluded by identity: two entries can record the same number, and dropping
-    every match would shrink the population the floor is measured against.
+    **The unit is the literal string, not its dimension**, and that is measured
+    rather than fastidious. A pool matched on dimension put `1.8e-15 Liter` beside
+    `2.95 um^3` -- both volumes, fifteen orders of magnitude apart -- and the lower
+    bound of the interval became meaningless. `units.py` gives dimensional
+    compatibility and deliberately no conversion (ADR-0160), so nothing here could
+    bring two spellings onto one scale.
+
+    The cost is real and is the cheap direction: `um^3` and the micro-sign form are
+    one quantity and two pools, which cost six judgeable citations of 62 on the
+    first baseline. A split pool judges less; a fused pool judges wrongly.
     """
-    values = list(index.get((entry.property, entry.organism), ()))
+    return (entry.organism, (entry.units or "").strip().lower())
+
+
+def _peers_of(
+    entry: Entry, pool: dict[tuple[str, str], list[float]], expected: set[int]
+) -> list[float]:
+    """The pool's other values for this entry's organism and unit.
+
+    Where the entry is itself expected, one copy of its value is removed rather
+    than every match: two entries can record the same number, and dropping all of
+    them would shrink the population the floor is measured against.
+
+    Where it is **not** expected, nothing is removed. It is not in the pool, so
+    there is no copy of it there to take out -- and a coincidentally equal value
+    belongs to some other entry, which is a real peer. Removing it anyway cost a
+    peer and was found by seeding: the rule read the *value* where it meant the
+    *entry*, and only a cited entry from outside the expected list can tell the
+    two apart.
+    """
+    values = list(pool.get(_quantity_of(entry), ()))
+    if entry.entry_id not in expected:
+        return values
     own = representative_value(entry)
     if own is not None and own in values:
         values.remove(own)
     return values
 
 
-def outliers_among_peers(cited: tuple[int, ...], entries: tuple[Entry, ...]) -> tuple[Outlier, ...]:
-    """Cited entries whose value sits far outside their peers'. Task 4.5.
+def outliers_among_peers(
+    cited: tuple[int, ...], expected: tuple[int, ...], entries: tuple[Entry, ...]
+) -> tuple[Outlier, ...]:
+    """Cited entries whose value sits far outside their peers'. Tasks 4.5 and 4.15.
 
-    Peers are the corpus's other entries recording the same property for the same
-    organism. The answer's prose is never read: the inputs are the citation set and
-    the corpus, which is what makes this cheap enough to survive in a change that
-    has no parser.
+    **Peers are the question's own expected entries** for the cited entry's organism
+    and unit -- ADR-0540, superseding ADR-0520. The answer's prose is never read:
+    the inputs are the citation set, the question's expectation and the corpus.
+
+    The old definition -- the corpus's other entries with an *identical property
+    string* -- judged nothing at all. Measured over the first baseline: 0 of 91
+    citations judged, 91 unjudgeable, including the entry that motivated the check.
+    `property` is free text, so `Nuclear volume` and `Volume of nucleus` are two
+    quantities to a string comparison and one to a reader, and four peers sharing a
+    spelling almost never exist. The expected list is that vocabulary resolution,
+    done by hand against the corpus and reviewed; this reuses it rather than
+    building a second one to get wrong.
 
     **Reported, never scored.** An outlier is a fact about the corpus, not about
     the answer: the entry may be measuring something its neighbours are not, which
@@ -379,7 +420,8 @@ def outliers_among_peers(cited: tuple[int, ...], entries: tuple[Entry, ...]) -> 
     a pass.
     """
     by_id = {entry.entry_id: entry for entry in entries}
-    index = _values_by_quantity(entries)
+    pool = _peer_pool(expected, entries)
+    wanted = set(expected)
     found = []
     for entry_id in cited:
         entry = by_id.get(entry_id)
@@ -388,7 +430,7 @@ def outliers_among_peers(cited: tuple[int, ...], entries: tuple[Entry, ...]) -> 
         value = representative_value(entry)
         if value is None:
             continue
-        peer_values = _peers_of(entry, index)
+        peer_values = _peers_of(entry, pool, wanted)
         if len(peer_values) < MIN_PEERS:
             continue
         low, high = min(peer_values), max(peer_values)
@@ -411,22 +453,32 @@ def outliers_among_peers(cited: tuple[int, ...], entries: tuple[Entry, ...]) -> 
     return tuple(found)
 
 
-def peers_too_few(cited: tuple[int, ...], entries: tuple[Entry, ...]) -> tuple[int, ...]:
+def peers_too_few(
+    cited: tuple[int, ...], expected: tuple[int, ...], entries: tuple[Entry, ...]
+) -> tuple[int, ...]:
     """Cited entries the outlier comparison could not be made for.
 
     Reported beside the outliers so that "nothing flagged" is distinguishable from
     "nothing could be judged" -- an absence that reads as a pass is the failure
-    this exists to prevent.
+    this exists to prevent, and under ADR-0540 it is 35 of 91 on the first
+    baseline rather than a handful.
+
+    **The blind spot is an organism the question did not expect.** A citation to
+    another organism entirely -- the baseline has one, a Mycoplasma ribosome cited
+    for a question about E. coli -- shares its pool key with nothing and is never
+    judged. That is the citation most likely to be wrong, and the one this cannot
+    see.
     """
     by_id = {entry.entry_id: entry for entry in entries}
-    index = _values_by_quantity(entries)
+    pool = _peer_pool(expected, entries)
+    wanted = set(expected)
     unjudged = []
     for entry_id in cited:
         entry = by_id.get(entry_id)
         if entry is None or representative_value(entry) is None:
             unjudged.append(entry_id)
             continue
-        if len(_peers_of(entry, index)) < MIN_PEERS:
+        if len(_peers_of(entry, pool, wanted)) < MIN_PEERS:
             unjudged.append(entry_id)
     return tuple(unjudged)
 

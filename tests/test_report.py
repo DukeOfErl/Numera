@@ -208,9 +208,13 @@ def test_an_outlier_is_listed_with_the_interval_its_peers_occupy():
         for i, value in enumerate((1.76, 2.0, 2.5, 3.0, 3.3), start=1)
     ]
     entries = tuple(peers) + (replace(AN_ENTRY, entry_id=99, value=10.3),)
+    # The peers must be *expected*, not merely present: under ADR-0540 the pool is
+    # the question's own expected entries, because a pool keyed on property wording
+    # judged nothing at all on the real corpus.
+    expected = tuple(entry.entry_id for entry in entries)
     text = render(
-        (a_result(cited=(99,), expected_entries=(99,)),),
-        (a_question(expected_entries=(99,)),),
+        (a_result(cited=(99,), expected_entries=expected),),
+        (a_question(expected_entries=expected),),
         entries,
     )
     assert "at odds with their peers" in text

@@ -389,6 +389,16 @@ def test_a_follow_up_that_states_no_quantity_is_not_marked_for_citing_nothing():
 # -- 4.5: the outlier check ------------------------------------------------------
 
 
+def all_ids(population: tuple[Entry, ...]) -> tuple[int, ...]:
+    """Every entry in the population, as the question's expected list.
+
+    Under ADR-0540 peers come from the question's expected entries rather than from
+    the whole corpus, so a test that wants the old "compare against everything
+    here" shape says so explicitly.
+    """
+    return tuple(entry.entry_id for entry in population)
+
+
 def yeast_population() -> tuple[Entry, ...]:
     """The case this check exists for, from the specimen answers of 2026-09-04:
     eight entries between 1.76 and 3.3, and one at 10.3."""
@@ -402,7 +412,7 @@ def yeast_population() -> tuple[Entry, ...]:
 def test_the_entry_that_motivated_the_check_is_flagged():
     """10.3 against a peer maximum of 3.3 is 3.1 times outside. An order-of-
     magnitude threshold would have missed the very answer this exists for."""
-    (flagged,) = outliers_among_peers((99,), yeast_population())
+    (flagged,) = outliers_among_peers((99,), all_ids(yeast_population()), yeast_population())
     assert flagged.entry_id == 99
     assert flagged.peer_low == 1.76 and flagged.peer_high == 3.3
     assert flagged.outside_by > OUTLIER_FACTOR
@@ -413,7 +423,7 @@ def test_an_entry_inside_its_peers_interval_is_not_flagged():
     reports a list nobody can act on."""
     population = yeast_population()
     inside = tuple(entry.entry_id for entry in population if entry.entry_id != 99)
-    assert outliers_among_peers(inside, population) == ()
+    assert outliers_among_peers(inside, all_ids(population), population) == ()
 
 
 def test_an_entry_just_inside_the_factor_is_not_flagged():
@@ -421,7 +431,7 @@ def test_an_entry_just_inside_the_factor_is_not_flagged():
     the code: at the factor exactly, an entry is not outside it."""
     peers = tuple(an_entry(entry_id=i, value=2.0) for i in range(1, MIN_PEERS + 1))
     population = peers + (an_entry(entry_id=99, value=2.0 * OUTLIER_FACTOR),)
-    assert outliers_among_peers((99,), population) == ()
+    assert outliers_among_peers((99,), all_ids(population), population) == ()
 
 
 def test_a_value_inside_a_skewed_population_is_not_flagged_though_it_beats_the_median():
@@ -438,13 +448,13 @@ def test_a_value_inside_a_skewed_population_is_not_flagged_though_it_beats_the_m
         for i, value in enumerate((1.0, 1.0, 1.0, 1.0, 10.0), start=1)
     )
     population = peers + (an_entry(entry_id=99, value=5.0),)
-    assert outliers_among_peers((99,), population) == ()
+    assert outliers_among_peers((99,), all_ids(population), population) == ()
 
 
 def test_a_value_far_below_its_peers_is_flagged_too():
     peers = tuple(an_entry(entry_id=i, value=10.0) for i in range(1, MIN_PEERS + 1))
     population = peers + (an_entry(entry_id=99, value=0.5),)
-    (flagged,) = outliers_among_peers((99,), population)
+    (flagged,) = outliers_among_peers((99,), all_ids(population), population)
     assert flagged.outside_by > OUTLIER_FACTOR
 
 
@@ -455,8 +465,8 @@ def test_an_entry_with_a_twin_still_counts_its_twin_as_a_peer():
     """
     twins = tuple(an_entry(entry_id=i, value=2.0) for i in range(1, MIN_PEERS + 2))
     population = twins + (an_entry(entry_id=99, value=100.0),)
-    assert peers_too_few((1,), population) == ()
-    (flagged,) = outliers_among_peers((99,), population)
+    assert peers_too_few((1,), all_ids(population), population) == ()
+    (flagged,) = outliers_among_peers((99,), all_ids(population), population)
     assert flagged.peers == MIN_PEERS + 1
 
 
@@ -464,8 +474,8 @@ def test_a_property_with_too_few_peers_is_not_judged_and_says_so():
     """An absence that reads as a pass is the failure this exists to prevent."""
     peers = tuple(an_entry(entry_id=i, value=2.0) for i in range(1, MIN_PEERS))
     population = peers + (an_entry(entry_id=99, value=100.0),)
-    assert outliers_among_peers((99,), population) == ()
-    assert peers_too_few((99,), population) == (99,)
+    assert outliers_among_peers((99,), all_ids(population), population) == ()
+    assert peers_too_few((99,), all_ids(population), population) == (99,)
 
 
 def test_peers_are_the_same_property_for_the_same_organism():
@@ -476,8 +486,8 @@ def test_peers_are_the_same_property_for_the_same_organism():
         for i in range(1, MIN_PEERS + 2)
     )
     population = others + (an_entry(entry_id=99, value=100.0),)
-    assert outliers_among_peers((99,), population) == ()
-    assert peers_too_few((99,), population) == (99,)
+    assert outliers_among_peers((99,), all_ids(population), population) == ()
+    assert peers_too_few((99,), all_ids(population), population) == (99,)
 
 
 def test_a_zero_or_negative_value_is_not_judged():
@@ -495,7 +505,7 @@ def test_an_entry_with_only_a_range_is_compared_by_its_midpoint():
 def test_an_entry_with_no_usable_number_is_reported_as_unjudged():
     peers = tuple(an_entry(entry_id=i, value=2.0) for i in range(1, MIN_PEERS + 2))
     population = peers + (an_entry(entry_id=99, value=None),)
-    assert peers_too_few((99,), population) == (99,)
+    assert peers_too_few((99,), all_ids(population), population) == (99,)
 
 
 # -- 4.7: spread and stability ----------------------------------------------------
@@ -653,15 +663,15 @@ def test_exactly_the_peer_floor_is_enough_to_judge():
     check goes quiet on every population sitting exactly at the floor."""
     peers = tuple(an_entry(entry_id=i, value=2.0) for i in range(1, MIN_PEERS + 1))
     population = peers + (an_entry(entry_id=99, value=100.0),)
-    assert peers_too_few((99,), population) == ()
-    assert len(outliers_among_peers((99,), population)) == 1
+    assert peers_too_few((99,), all_ids(population), population) == ()
+    assert len(outliers_among_peers((99,), all_ids(population), population)) == 1
 
 
 def test_the_factor_reported_is_how_far_outside_the_entry_sits():
     """Asserted as a number, not just as "more than the threshold": the figure is
     what a reader judges the entry by, and a multiplication in place of the
     division would still have been "more than the threshold"."""
-    (flagged,) = outliers_among_peers((99,), yeast_population())
+    (flagged,) = outliers_among_peers((99,), all_ids(yeast_population()), yeast_population())
     assert flagged.outside_by == pytest.approx(10.3 / 3.3)
 
 
@@ -669,7 +679,7 @@ def test_a_value_at_the_low_boundary_is_not_flagged():
     """The low side of the interval, which only the high side had covered."""
     peers = tuple(an_entry(entry_id=i, value=4.0) for i in range(1, MIN_PEERS + 1))
     population = peers + (an_entry(entry_id=99, value=4.0 / OUTLIER_FACTOR),)
-    assert outliers_among_peers((99,), population) == ()
+    assert outliers_among_peers((99,), all_ids(population), population) == ()
 
 
 def test_an_unjudgeable_citation_does_not_stop_the_ones_after_it():
@@ -677,9 +687,9 @@ def test_an_unjudgeable_citation_does_not_stop_the_ones_after_it():
     `continue` here could have been a `break`, and a single entry with no usable
     number would have silenced the check for everything cited alongside it."""
     population = yeast_population() + (an_entry(entry_id=50, value=None),)
-    flagged = outliers_among_peers((50, 99), population)
+    flagged = outliers_among_peers((50, 99), all_ids(population), population)
     assert [outlier.entry_id for outlier in flagged] == [99]
-    assert peers_too_few((50, 99), population) == (50,)
+    assert peers_too_few((50, 99), all_ids(population), population) == (50,)
 
 
 @pytest.mark.parametrize(
@@ -710,7 +720,7 @@ def test_a_citation_the_corpus_does_not_hold_does_not_stop_the_check():
     """The other `continue` in the loop. One stale identifier in a citation list
     would have silenced the outlier check for every entry cited after it."""
     population = yeast_population()
-    flagged = outliers_among_peers((999999, 99), population)
+    flagged = outliers_among_peers((999999, 99), all_ids(population), population)
     assert [outlier.entry_id for outlier in flagged] == [99]
 
 
@@ -719,7 +729,7 @@ def test_the_factor_below_the_interval_is_also_how_far_outside_it_sits():
     side is: a multiplication would also have been "more than the threshold"."""
     peers = tuple(an_entry(entry_id=i, value=10.0) for i in range(1, MIN_PEERS + 1))
     population = peers + (an_entry(entry_id=99, value=2.0),)
-    (flagged,) = outliers_among_peers((99,), population)
+    (flagged,) = outliers_among_peers((99,), all_ids(population), population)
     assert flagged.outside_by == pytest.approx(10.0 / 2.0)
 
 
@@ -732,9 +742,13 @@ def test_neither_a_lonely_entry_nor_an_ordinary_one_stops_the_check_after_it():
     into a `break`, the check reports nothing at all for this answer -- which is
     indistinguishable from an answer with nothing wrong in it.
     """
-    lonely = an_entry(entry_id=40, property="Doubling time", value=30.0)
+    # Lonely by *unit*, which is what separates pools under ADR-0540. It used to
+    # be lonely by property, and that no longer isolates anything: a pool is keyed
+    # on organism and unit, because property wording is exactly what made the old
+    # rule judge nothing at all.
+    lonely = an_entry(entry_id=40, property="Doubling time", units="min", value=30.0)
     population = yeast_population() + (lonely,)
-    flagged = outliers_among_peers((40, 1, 99), population)
+    flagged = outliers_among_peers((40, 1, 99), all_ids(population), population)
     assert [outlier.entry_id for outlier in flagged] == [99]
 
 
@@ -745,4 +759,49 @@ def test_every_citation_that_could_not_be_judged_is_reported_not_just_the_first(
         an_entry(entry_id=50, value=None),
         an_entry(entry_id=51, value=None),
     )
-    assert peers_too_few((50, 51), population) == (50, 51)
+    assert peers_too_few((50, 51), all_ids(population), population) == (50, 51)
+
+
+def test_an_entry_the_question_does_not_expect_is_not_a_peer():
+    """The claim ADR-0540 actually makes, and nothing asserted it.
+
+    Every other test here passes the whole population as the expected list, so
+    removing the restriction entirely left the suite green -- the negative case
+    never varied the dimension the rule reads. Here the corpus holds eight further
+    entries of the same organism and unit that the question does *not* expect, and
+    they must not enter the pool: with them, 10.3 sits inside a 1.76-40.0 interval
+    and nothing is flagged.
+    """
+    expected = yeast_population()
+    strangers = tuple(
+        an_entry(entry_id=i, value=value)
+        for i, value in enumerate((12.0, 15.0, 20.0, 25.0, 30.0, 35.0, 38.0, 40.0), start=200)
+    )
+    population = expected + strangers
+    cited, wanted = (99,), all_ids(expected)
+
+    (flagged,) = outliers_among_peers(cited, wanted, population)
+    assert flagged.entry_id == 99
+    assert flagged.peer_high == 3.3, "a stranger entered the pool and raised the interval"
+    assert flagged.peers == 8
+
+    # And the other direction: expecting them makes 10.3 ordinary, which is what
+    # the expected list is for -- it decides what this entry is being compared to.
+    assert outliers_among_peers(cited, all_ids(population), population) == ()
+
+
+def test_an_unexpected_citation_is_still_judged_against_what_was_expected():
+    """A cited entry need not itself be expected. It keeps the whole pool, because
+    it is compared against the question's entries rather than its own neighbours --
+    which is what lets the check see a citation the set did not anticipate."""
+    # 30.0: the expected pool runs to 10.3 (entry 99 is in it), so the value has to
+    # clear 2x that to be an outlier at all. 12.0 would not, and would test nothing.
+    population = yeast_population() + (an_entry(entry_id=300, value=30.0),)
+    wanted = all_ids(yeast_population())
+    (flagged,) = outliers_among_peers((300,), wanted, population)
+    assert flagged.entry_id == 300
+    # All nine expected entries, none removed: 300 is not in the pool, so there is
+    # no copy of it to take out. Removing a coincidentally equal value instead was
+    # a real defect, and only a citation from outside the expected list shows it.
+    assert flagged.peers == 9
+    assert flagged.peer_high == 10.3

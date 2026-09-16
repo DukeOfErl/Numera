@@ -328,10 +328,14 @@ def _figures(
         f"refusals that searched first: {sum(1 for r in results if correctly_declined(r))}"
     )
 
+    # The expectation comes from the result, not the question: it is what the run
+    # was scored against, and `--expected-from-set` has already substituted it
+    # where that was asked for. Reading the question here would quietly ignore
+    # that flag for this one figure.
     flagged = [
         (result, outlier)
         for result in results
-        for outlier in outliers_among_peers(result.cited, entries)
+        for outlier in outliers_among_peers(result.cited, result.expected_entries, entries)
     ]
     if flagged:
         lines.append("cited entries at odds with their peers (reported, not scored):")
@@ -341,7 +345,7 @@ def _figures(
                 f"peers {outlier.peer_low:g}-{outlier.peer_high:g} over {outlier.peers} "
                 f"entries ({outlier.outside_by:.1f}x outside)"
             )
-    unjudged = {i for r in results for i in peers_too_few(r.cited, entries)}
+    unjudged = {i for r in results for i in peers_too_few(r.cited, r.expected_entries, entries)}
     if unjudged:
         # Said rather than left out: an absence that reads as a pass is what this
         # line exists to prevent.

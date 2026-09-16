@@ -314,13 +314,28 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
       and superseded the moment that layer lands. The evidence is in
       `docs/evaluations/2026-09-11-baseline.md`; nothing catches it until then, which is accepted.
 
-- [ ] 4.15 Implement ADR-0540's peer definition in `scoring.py`, replacing the property-string pool.
+- [x] 4.15 Implement ADR-0540's peer definition in `scoring.py`, replacing the property-string pool.
       The measurement is done (4.10); this is the code. Keep the factor of two and the floor of four
       peers -- only what counts as a peer changes -- and keep reporting the citations that could not
       be judged, because an absence reading as a pass is the failure this check exists to avoid
   - Both directions again once it lands: it can only flag an entry *in* the expected list, so one
     cited from outside it is never judged -- and an entry the set did not anticipate is exactly the
     kind most likely to be wrong. Count how many citations fall in that blind spot.
+  - **Done 2026-09-16.** On the baseline it now flags 106356 (10.3 against yeast nuclear volumes of
+    0.28-3.3) and 103710 (`Cell volume average`, midpoint 7.79 against 0.47-2.95), where the old rule
+    flagged nothing and judged nothing. 16 citations could not be judged and the report says so.
+  - **The blind-spot note above was wrong and the code corrected it**: a cited entry need *not* be
+    expected to be judged. It is compared against the question's entries rather than its own
+    neighbours, so an unexpected citation keeps the whole pool. What is really blind is a citation to
+    an **organism the question did not expect** -- the baseline has one, a Mycoplasma ribosome cited
+    for an E. coli question -- which shares its pool key with nothing.
+  - **Six defects seeded, six caught, but only after seeding found a real one.** The first run left
+    "the pool takes every entry, not only the expected ones" alive -- the central claim of ADR-0540 --
+    because every test passed the whole population as the expected list, so no negative case varied
+    the dimension the rule reads. The test added for it then exposed a second defect in the code:
+    `_peers_of` removed a *value* equal to the cited entry's even when that entry was not in the
+    pool, costing a peer. It now removes by identity, and only a citation from outside the expected
+    list can tell the two apart.
 
 - [x] 4.12 Review the branch before merging (see 1.5). The review of groups 3-4 found ten
       defects, including a results file that would have committed corpus text
