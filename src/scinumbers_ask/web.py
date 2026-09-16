@@ -37,7 +37,7 @@ from typing import Any
 
 import streamlit as st
 
-from . import accounts, bionumbers, entries_table, feedback, messages, trace, trail_store
+from . import accounts, allowance, bionumbers, entries_table, feedback, messages, trace, trail_store
 from .accounts import Account, EnrolmentUnavailable
 from .agent import AskAgent
 from .authorization import Refused, allowed, require
@@ -499,6 +499,23 @@ def admit(
     return admission
 
 
+def account_scope(admission: Admission) -> str | None:
+    """What the run ledger is narrowed by, or `None` for one shared pot.
+
+    Per account, because each account's questions are paid for by its own
+    credential: one shared ledger meant the first tester to spend the run budget
+    closed the door on every other, while their own keys were untouched and the
+    panel showed each of them the aggregate as if it were theirs.
+
+    A digest rather than the address. The agent is handed this, and the agent is
+    handed no identity (ADR-0820); a funding scope it cannot turn back into a
+    person is the same kind of value as the credential it already holds.
+    """
+    if not admission.configured or admission.account is None:
+        return None
+    return hashlib.sha256(admission.account.email.encode()).hexdigest()[:16]
+
+
 def effective_session(admission: Admission, url_session: str) -> str:
     """The key the conversation, the identity stamp and the dev panel all use.
 
@@ -607,7 +624,13 @@ def agent_for(
     held = state.get(AGENT_KEY)
     if held is not None and held[0] == key:
         return held[1]
-    agent = AskAgent(repo, Config.from_env(), checkpoint_path(), api_key=key)
+    agent = AskAgent(
+        repo,
+        Config.from_env(),
+        checkpoint_path(),
+        api_key=key,
+        budget_scope=account_scope(admission),
+    )
     state[AGENT_KEY] = (key, agent)
     return agent
 
@@ -938,6 +961,35 @@ def session_registry() -> SessionRegistry:
         max_sessions=int(_number(MAX_SESSIONS_ENV, DEFAULT_MAX_SESSIONS)),
         idle_s=_number(SESSION_IDLE_ENV, DEFAULT_SESSION_IDLE_S),
     )
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def _allowance(api_key: str) -> allowance.Allowance:
+    """The provider's figure, asked for at most every two minutes per key.
+
+    Cached because this is drawn on every rerun -- every thumb, every expander --
+    and a network call on each would put the provider in the path of a click.
+    Two minutes is short enough that a tester watching their allowance run down
+    sees it move, and long enough that clicking about costs nothing.
+    """
+    return allowance.fetch(api_key)
+
+
+def draw_allowance(admission: Admission) -> None:
+    """What the provider says is left on this reader's key, under the run budget.
+
+    Only where a reader has a key of their own: an unconfigured deployment's key
+    is the operator's, and its balance is not a tester's business. Silent when the
+    provider cannot be reached or says nothing we recognise -- a figure that might
+    be wrong is worse here than no figure, because this is the number a tester
+    would act on.
+    """
+    account = admission.account
+    if not admission.configured or account is None or not account.openrouter_key:
+        return
+    line = allowance.as_text(_allowance(account.openrouter_key))
+    if line:
+        st.caption(as_text(line))
 
 
 def draw_try_later() -> None:

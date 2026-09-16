@@ -89,8 +89,12 @@ def page(monkeypatch, repo, config, tmp_path):
     ) -> AppTest:
         agent = agent_with(repo, config, tmp_path, scripted(*(says(a) for a in answers)))
 
-        def building(repo_, config_, path, model=None, api_key=None):
+        def building(repo_, config_, path, model=None, api_key=None, **rest):
+            # `**rest` so a new per-reader fact on the constructor (the budget
+            # scope was the first) shows up as a changed assertion rather than a
+            # blank page from a TypeError raised inside the script.
             built.append(api_key)
+            building.rest = rest
             return agent
 
         monkeypatch.setattr(web, "AskAgent", building)
@@ -713,3 +717,72 @@ def test_the_suite_runs_as_though_no_sign_in_were_configured():
     exactly that way, on a tree that had not changed.
     """
     assert web.identity_configured() is False
+
+
+# --- each tester spends against their own budget ------------------------------------------
+
+
+def test_one_tester_s_spend_does_not_close_the_door_on_another(repo, config, tmp_path):
+    """The run ledger was keyed on the process-wide run label, so with a key each
+    the first tester to reach the run budget refused every other tester's next
+    question -- while their own credential was untouched, and the panel showed
+    each of them the aggregate as if it were their own spend."""
+    from scinumbers_ask import run_ledger
+    from scinumbers_ask.agent import AskAgent
+
+    store = str(tmp_path / "c.sqlite")
+    one = AskAgent(repo, config, store, api_key="k1", budget_scope="acct-one")
+    two = AskAgent(repo, config, store, api_key="k2", budget_scope="acct-two")
+
+    run_ledger.add(store, one._ledger_key(), config.run_budget)
+    assert one.run_spend() >= config.run_budget, "the first tester has spent their budget"
+    assert two.run_spend() == 0, "and the second's is untouched"
+
+
+def test_without_a_scope_the_budget_is_one_pot_exactly_as_before(repo, config, tmp_path):
+    """The terminal, the evaluation harness and an unconfigured page pass no
+    scope, and must keep the single deployment-wide budget they have always had."""
+    from scinumbers_ask import run_ledger
+    from scinumbers_ask.agent import AskAgent
+
+    store = str(tmp_path / "c.sqlite")
+    first = AskAgent(repo, config, store)
+    second = AskAgent(repo, config, store)
+    run_ledger.add(store, first._ledger_key(), 500)
+    assert second.run_spend() == 500
+
+
+def test_the_scope_is_per_account_and_says_nothing_about_who(monkeypatch):
+    scope = web.account_scope(_admitted(TESTER))
+    assert scope == web.account_scope(_admitted(TESTER)), "stable for one account"
+    assert scope != web.account_scope(_admitted(DEV)), "and different for another"
+    assert TESTER.email not in scope
+    assert web.account_scope(web.Admission(web.Door.OPEN, configured=False)) is None
+
+
+def test_the_agent_is_handed_the_scope_and_still_no_identity(repo, tmp_path):
+    """The scope is a funding fact like the credential beside it, not a person:
+    the structural guard in `test_driver_independence` still has to pass."""
+    from scinumbers_ask.agent import AskAgent
+
+    agent = AskAgent(repo, web.Config.from_env(), str(tmp_path / "c.sqlite"), budget_scope="s")
+    held = {name.lower().lstrip("_") for name in vars(agent)}
+    assert "budget_scope" in held
+    assert not held & {"identity", "role", "email", "account", "user_role", "user_email"}
+
+
+def test_a_tester_is_shown_what_the_provider_says_is_left_on_their_key(page, monkeypatch):
+    monkeypatch.setattr(
+        web, "_allowance", lambda key: web.allowance.Allowance(remaining=3.4, limit=5.0)
+    )
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    assert any("3.40" in c.value and "5.00" in c.value for c in at.sidebar.caption)
+
+
+def test_an_unconfigured_deployment_is_told_nothing_about_the_operator_s_key(page, monkeypatch):
+    """That balance is the operator's, not a reader's."""
+    monkeypatch.setattr(
+        web, "_allowance", lambda key: web.allowance.Allowance(remaining=3.4, limit=5.0)
+    )
+    at = page(auth=False).run()
+    assert not any("3.40" in c.value for c in at.sidebar.caption)

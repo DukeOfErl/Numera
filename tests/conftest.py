@@ -43,6 +43,32 @@ def _trail_stays_in_the_tmp_dir(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _the_suite_does_not_call_the_model_provider(monkeypatch):
+    """No test asks OpenRouter what is left on a key.
+
+    `web.draw_allowance` fetches that figure while the page renders, so without
+    this every `AppTest` run reaches the network -- slow where it works, and in a
+    sandbox a refused connection that took the whole page down before the module
+    was hardened. The suite is offline by default here as everywhere else; a test
+    that wants a figure patches `web._allowance`, and the fetch itself is
+    exercised against a stub opener in `test_allowance.py`.
+
+    The cache is cleared on both sides: `_allowance` is `st.cache_data`, which
+    outlives a test, so one test's answer would otherwise become the next one's.
+    """
+    from scinumbers_ask import allowance, web
+
+    monkeypatch.setattr(allowance, "fetch", lambda api_key, **kwargs: allowance.Allowance())
+    clear = getattr(web._allowance, "clear", None)
+    if clear:
+        clear()
+    yield
+    clear = getattr(web._allowance, "clear", None)
+    if clear:
+        clear()
+
+
+@pytest.fixture(autouse=True)
 def _the_suite_does_not_read_the_developer_s_secrets():
     """Run every test against an empty secrets file, whatever is on this machine.
 

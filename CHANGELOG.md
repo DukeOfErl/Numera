@@ -69,6 +69,10 @@ any release; `1.0.0` when it stabilizes.
   a reader once they are through the door rather than when they arrive — an
   abandoned sign-in page no longer holds a place ([ADR-0790]).
 
+- **Each tester's run budget is their own**, keyed to the account that pays for
+  the questions rather than shared across the deployment, and the side panel
+  shows what the model provider says is left on that tester's key.
+
 ### Fixed
 
 - A session pruned for idleness and returned to kept drawing "signed in as" while
@@ -76,6 +80,12 @@ any release; `1.0.0` when it stabilizes.
 - Signing out cleared the identity but left the dev panel's rows, so the next
   account on that tab could be shown the previous reader's questions. Ending a
   session is now one operation over all three per-session stores.
+- A signed-in reader who filled a conversation could not start another: the
+  conversation key was a pure function of their address and is also the thread
+  the length limit applies to, so a full conversation refused every further
+  question with no way out. A fresh link starts a fresh conversation again.
+- One tester reaching the run budget refused every other tester's next question,
+  although each funds their own with a separate capped key.
 - A reader mid-conversation could be turned away at the cap after their heartbeat
   was pruned, contradicting the promise that no open session is ended.
 - The enrolment-unavailable page offered nothing to click, so the retry it

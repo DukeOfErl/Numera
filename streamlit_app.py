@@ -149,6 +149,9 @@ with st.sidebar:
         # inline mathematics, so "$1.20 of $1.20" typeset the middle as an equation
         # and ate both currency signs. Same fault as the ending line's, same fix.
         st.caption(web.as_text(f"{format_usd(spent)} of {format_usd(cap)}"))
+    # What the provider still honours on this reader's own key, which is the
+    # figure they would act on when told their allowance is spent.
+    web.draw_allowance(admission)
     st.divider()
     # The sidebar's two views, below the run status: the entries a reader came
     # for, and -- only for roles the grant table allows -- this session's trail.

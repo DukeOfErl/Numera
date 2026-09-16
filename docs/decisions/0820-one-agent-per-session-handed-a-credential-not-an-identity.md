@@ -33,7 +33,8 @@ parameter naming the *person* either.
 
 ## Decision
 
-**`AskAgent.__init__` gains `api_key: str | None = None` and nothing else.**
+**`AskAgent.__init__` gains `api_key: str | None = None`, and later a
+`budget_scope` beside it (below), and nothing about who anybody is.**
 `default_model(config, api_key)` uses it; `None` falls back to the environment,
 which is what the terminal, the evaluation harness and a deployment with no
 identity configured pass — their behaviour is unchanged. `ask`'s signature does
@@ -65,6 +66,21 @@ what is permitted — a question whose scope needs allowing, a calculation a rol
 may request — it is handed the *permissions*, never the role. An answer may then
 depend on what is allowed and never on who is asking, and the grant table stays
 the one place that maps one to the other.
+
+**Amended 2026-09-16, before merge: a second per-reader value, `budget_scope`.**
+A code review found that per-account credentials had left the *budget* shared:
+`run_ledger` is keyed on the process-wide run label, so the first tester to reach
+`run_budget` refused every other tester's next question, while their own
+credential was untouched and the panel showed each of them the aggregate as
+though it were their own spend. The ledger is now keyed on the run label narrowed
+by an opaque per-account digest the driver supplies.
+
+That is a second parameter where this ADR said there would be one, and the line
+it must not cross is unchanged: `budget_scope` is a *funding* fact, the same kind
+as the credential beside it, and it cannot be turned back into a person. `None`
+keeps one pot for the whole deployment, which is what the terminal, the
+evaluation harness and an unconfigured page pass and have always had. The
+structural test still refuses any identifier that names an account or a role.
 
 ## Trade-off accepted
 
