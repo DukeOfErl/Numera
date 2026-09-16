@@ -99,12 +99,22 @@ FAILURES_BEFORE_GIVING_UP = 3
 # line on stderr at startup.
 #
 # The retry is timed rather than per-record because the original reasoning still
-# holds: an unreachable database does not fail fast, and paying a connection
-# attempt on every question to rediscover something already known is what the
-# no-retry rule forbids. Once a minute, doubling to a quarter of an hour, bounds
-# that cost to one stalled question per interval while the destination is down.
-SCHEMA_RETRY_AFTER_S = 60
-SCHEMA_RETRY_CEILING_S = 900
+# holds, and the first version of this fix proved it the hard way: an unreachable
+# database does not fail fast, so a retry costs a full `CONNECT_TIMEOUT_S` **on
+# the render path, in the middle of an answer**. With the deadline starting at
+# zero, the first record after a failed startup retried immediately and added five
+# seconds to the first question -- the reader watching prose appear and the table
+# not. Measured, not guessed.
+#
+# So a failed attempt sets the deadline itself, which defers the next one by a
+# full interval however the failure was reached, and the interval starts at five
+# minutes rather than one. While the destination is down that is one stalled
+# question per interval, shrinking; while it is up it is nothing at all.
+#
+# The honest limit: it is not zero. Retrying off the render path entirely -- a
+# thread, or a probe at session start -- is the real answer and is not this fix.
+SCHEMA_RETRY_AFTER_S = 300
+SCHEMA_RETRY_CEILING_S = 3600
 
 DEFAULT_TABLE = "trail"
 
@@ -223,8 +233,15 @@ class TrailStore:
             _FAILURES += 1
             complain("trail store unavailable", exc)
             self.ready = False
+            # The backoff is owned here, so every route to a failed attempt defers
+            # the next one -- including the attempt `install` makes at startup.
+            # Leaving that one undeferred is what put a five-second stall in the
+            # first question after a broken startup.
+            self.retry_after = time.monotonic() + self.retry_delay
+            self.retry_delay = min(self.retry_delay * 2, SCHEMA_RETRY_CEILING_S)
             return False
         self.ready = True
+        self.retry_delay = SCHEMA_RETRY_AFTER_S
         return True
 
     def _reachable(self) -> bool:
@@ -235,20 +252,16 @@ class TrailStore:
         failures to conclude the destination has died -- clear `ready`, so both
         recover through here and neither needs its own revival path.
 
-        The wait is extended *before* the attempt, so a failure cannot retry on
-        the very next record, and reset on success, so an app that recovers does
-        not keep a punitive interval it no longer needs.
+        The wait itself is `ensure_schema`'s to set, so that the attempt `install`
+        makes at startup defers the next one exactly as a later retry does. That
+        was not true of the first version and cost the first question five seconds.
         """
         if self.ready:
             return True
-        now = time.monotonic()
-        if now < self.retry_after:
+        if time.monotonic() < self.retry_after:
             return False
-        self.retry_after = now + self.retry_delay
-        self.retry_delay = min(self.retry_delay * 2, SCHEMA_RETRY_CEILING_S)
         if not self.ensure_schema():
             return False
-        self.retry_delay = SCHEMA_RETRY_AFTER_S
         self.consecutive_failures = 0
         return True
 

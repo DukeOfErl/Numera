@@ -15,6 +15,7 @@ click on the third writes onto the first.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from pathlib import Path
@@ -24,8 +25,43 @@ from conftest import FIXTURE, agent_with
 from streamlit.testing.v1 import AppTest
 
 from agent_doubles import says, scripted, tool_call
-from scinumbers_ask import feedback, trace, web
+from scinumbers_ask import feedback, trace, trail_store, web
 from scinumbers_ask.events import Answer, AnswerEntries, EndReason, QuestionEnded
+
+
+class _RecordingConn:
+    def __init__(self):
+        self.params: list[dict] = []
+
+    def execute(self, statement, params=None):
+        if params is not None:
+            self.params.append(dict(params))
+        return None
+
+
+class _RecordingEngine:
+    """Enough of an engine to read back what the page actually wrote."""
+
+    def begin(self):
+        conn = _RecordingConn()
+        self.conns.append(conn)
+
+        class _Ctx:
+            def __enter__(self_inner):
+                return conn
+
+            def __exit__(self_inner, *exc):
+                return False
+
+        return _Ctx()
+
+    def __init__(self):
+        self.conns: list[_RecordingConn] = []
+
+    @property
+    def written(self) -> list[dict]:
+        return [p for c in self.conns for p in c.params if "event" in p]
+
 
 APP = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 TIMEOUT = 30
@@ -193,9 +229,17 @@ def test_a_comment_is_recorded_against_the_same_answer(app):
 
 def test_an_unrated_answer_records_nothing_and_the_page_goes_on(app):
     at = ask(app.run(), "how many ribosomes?")
+    # The positive control, and it is the whole test. Without it every assertion
+    # below is satisfied by a page with no rating widget on it at all -- which is
+    # how this test passed the widget-removal experiment unchanged. The dimension
+    # is *ignored*, so something has to establish there was a control to ignore.
+    assert at.get("feedback"), "no rating was offered, so ignoring one proves nothing"
     assert _recorded(at) == {}
+
     at = ask(at, "and in yeast?")
     assert not at.exception
+    assert len(at.get("feedback")) == 2, "two answers, two controls"
+    assert len(web.transcript(at.session_state)) == 2, "the conversation did not continue"
     assert _recorded(at) == {}
 
 
@@ -403,37 +447,6 @@ def test_the_colour_rule_names_an_id_st_feedback_actually_renders(app):
     )
     assert "stButtonGroup" not in rule, "stButtonGroup is st.pills, not st.feedback"
     assert "prefers-color-scheme: light" in rule, "one colour cannot suit both themes"
-
-
-def test_the_colour_rule_leaves_a_settled_rating_looking_settled(app):
-    """`answer-feedback`: a rating once given is shown as settled, and a stylesheet
-    is enough to break that quietly.
-
-    Streamlit dims a disabled control by replacing the *button's* colour. The icon
-    is a separate span declaring `color: inherit` at specificity 0,1,0, so any rule
-    of ours that paints the icon directly outranks it, `inherit` never resolves,
-    and a rated pair stays as bright as an unrated one — with `cursor: not-allowed`
-    as the only surviving signal. Declining to apply to a disabled control is what
-    keeps the requirement met.
-
-    Structural, and says so: no test here renders CSS. What it pins is that the
-    rule cannot reach a disabled control, which is the property a revert removes.
-    """
-    rule = next((m.value for m in app.run().markdown if "stIconMaterial" in m.value), None)
-    assert rule, "no colour rule was emitted"
-
-    for selector in re.findall(r'\[data-testid="stFeedback"\][^{]*stIconMaterial[^{]*', rule):
-        assert ":not(:disabled)" in selector, (
-            f"this selector colours a disabled thumb too: {selector.strip()}"
-        )
-    assert re.search(r"button:disabled\s*\{[^}]*opacity", rule), (
-        "nothing fades a rated thumb. Excluding it from the colour was tried and "
-        "was not enough — the thumb stayed bright — so the settled look is set "
-        "here rather than inherited."
-    )
-
-
-# --- nothing interactive exists while the agent is still working -------------
 
 
 def test_the_rating_is_not_drawn_until_the_answer_is_finished(repo):
@@ -647,3 +660,119 @@ def test_the_live_path_splits_the_columns_the_same_way_the_replay_does():
     assert not evidence.get("feedback"), "the live path rated in the evidence column"
     assert evidence.dataframe, "the live path drew no table in the evidence column"
     assert not prose.dataframe, "the live path left the table in the prose column"
+
+
+# --- what the *page* hands down, not what the functions do with literals ------
+
+
+def test_the_page_records_the_session_it_is_in_and_the_comment_that_was_typed(app, monkeypatch):
+    """Two gaps in one blind spot, both of which survived the whole suite.
+
+    Every page-level test in this file runs under `_quiet_trail`, which clears the
+    trail logger's handlers — so none of them can observe a record at all — and
+    `_recorded()` reads `feedback.ratings()`, which keeps a verdict and a
+    `commented` flag and neither the session nor the text. The consequence:
+    `draw_feedback(items, "wrong-session")` and `text="x"` in `_draw_comment_box`
+    each passed 1243 tests.
+
+    Every test that checks text fidelity or the session calls `feedback.record_*`
+    directly with literals, so the wire from the page to the record is the one
+    stretch nothing covers. That is the expensive direction: a rating row carrying
+    a session that joins to no trail row is well-formed, plausible and useless,
+    and a comment is the one input here that cannot be reconstructed from anything
+    else.
+
+    So this installs a real sink over the real script and reads the row back.
+    """
+    engine = _RecordingEngine()
+    store = trail_store.install(engine, logger_name=trace.LOGGER_NAME)
+    assert store is not None and store.ready, "the sink is not installed; this proves nothing"
+    monkeypatch.setattr(web, "install_trail", lambda engine: store)
+
+    typed = "BNID 102345 looks 10x too high for E. coli"
+    at = ask(app.run(), "how many ribosomes?")
+    at = at.get("feedback")[0].set_value(0).run()
+    at = at.text_area[0].set_value(typed).run()
+    at = at.button[0].click().run()
+
+    session = web.session_id(at.session_state, {})
+    question_id = web.question_id_of(web.transcript(at.session_state)[0][1])
+
+    verdicts = [r for r in engine.written if r["event"] == feedback.VERDICT_EVENT]
+    comments = [r for r in engine.written if r["event"] == feedback.COMMENT_EVENT]
+    assert len(verdicts) == 1 and len(comments) == 1, engine.written
+
+    assert verdicts[0]["question_id"] == question_id
+    assert verdicts[0]["session_id"] == session, (
+        "the page handed down a session that is not the one it is in, so this "
+        "rating joins to no row of that question's trail"
+    )
+    assert comments[0]["session_id"] == session
+    assert json.loads(comments[0]["detail"])["comment"] == typed, (
+        "the comment stored is not the comment typed"
+    )
+
+
+def test_the_page_tells_the_ratings_a_question_is_running(app, monkeypatch):
+    """The join nothing held: both halves were unit-tested, the wire was not.
+
+    `question_pending` is tested as a function, and `draw_feedback(answering=True)`
+    is tested for what it disables — but that the *page* computes the first and
+    hands it to the second was verified only by reading. Replacing the call with
+    `answering = False`, or dropping the keyword from the transcript loop, left
+    1243 tests green.
+
+    What that costs if it regresses: a reader clicks a thumb on an older answer
+    while a new question is streaming, the click re-runs the script, the agent's
+    generator is abandoned mid-tool-call, and the turn is left half-persisted —
+    the defect this wiring exists to prevent, returned silently.
+
+    `AppTest` cannot pause inside a run to look, so the call is recorded instead.
+    The run that answers must pass `answering=True`; the re-run afterwards passes
+    False, which is what revives the controls.
+    """
+    seen: list[bool] = []
+    real = web.draw_feedback
+
+    def recording(items, session_id, state=None, *, answering=False):
+        seen.append(answering)
+        return real(items, session_id, state, answering=answering)
+
+    at = ask(app.run(), "how many ribosomes?")
+    monkeypatch.setattr(web, "draw_feedback", recording)
+    seen.clear()
+    ask(at, "and in yeast?")
+
+    assert seen, "the page drew no ratings at all, so this proves nothing"
+    assert True in seen, (
+        "no rating was drawn with answering=True while a question ran, so every "
+        "older answer's thumb stayed clickable and a click abandons the generator"
+    )
+    assert False in seen, (
+        "nothing was drawn with answering=False, so the controls are never revived"
+    )
+
+
+def test_a_turn_that_only_ended_is_not_offered_a_rating():
+    """`is_ratable` had nothing holding it: `return True` survived the full suite.
+
+    No test drives a turn that ends without an answer — a spend ceiling, a missing
+    key, a spent provider — so the rule's own reasoning stood unbacked, which this
+    project treats as worse than silence.
+
+    What it protects: a reader who hits the run budget, sees the refusal and
+    thumbs it down produces a row indistinguishable from a reader saying the
+    science was wrong. The ratings are the evidence base for whether the answers
+    are any good, so a handful of infrastructure complaints poisons the one
+    dataset that cannot be recomputed.
+    """
+    ending = web.Item(web.Kind.ENDING, "This run has stopped taking questions.", question_id="q1")
+    answer = web.Item(web.Kind.ANSWER, "about 1 micrometre", question_id="q1")
+
+    assert not web.is_ratable([ending]), "an ending alone was offered a rating"
+    assert not web.is_ratable([web.Item(web.Kind.WARNING, "hm", question_id="q1"), ending])
+    assert web.is_ratable([answer, ending]), "an answered turn was refused a rating"
+    # The dimension the rule actually reads is *an answer*, not *an identifier*:
+    # a turn with no question_id is unratable for a different reason, and a test
+    # that varied only that would pass against `return item.question_id != ""`.
+    assert not web.is_ratable([web.Item(web.Kind.ANSWER, "orphan")]), "no identifier to key on"

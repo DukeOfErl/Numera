@@ -349,6 +349,12 @@ def test_a_destination_that_was_asleep_at_startup_is_used_once_it_wakes():
     store = install(engine, logger_name="test.trail.wakes")
     assert store.ready is False, "the fixture did not reproduce a failed install"
 
+    # The wait is real, and deliberately so: an immediate retry here is a full
+    # connect timeout inside the reader's first question. Advanced rather than
+    # slept through -- the test is about recovery, not about the clock.
+    assert store.record("searched") is False, "the retry was not deferred; a question pays for it"
+    store.retry_after = 0.0
+
     assert store.record("searched") is True, "the store never recovered"
     assert store.record("searched") is True, "recovery did not stick"
     assert store.writes == 2
@@ -709,7 +715,7 @@ def test_the_wait_before_retrying_grows_and_is_reset_by_success():
     """
     store = TrailStore(engine=_Engine(fail_on_begin=OSError("down")))
     first = store.retry_delay
-    store.record("searched")
+    store.record("searched")  # retry_after is 0 on a store that never attempted
     assert store.retry_delay > first, "the wait did not grow after a failure"
 
     store.retry_after = 0.0

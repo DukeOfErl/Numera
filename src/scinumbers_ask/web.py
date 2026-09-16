@@ -909,27 +909,24 @@ FEEDBACK_THANKS = "Thanks — recorded."
 # That also avoids naming which half of the pair is selected --
 # `stFeedbackButtonActive` is the markup most likely to move under us, and letting
 # Streamlit keep its own state styling means never having to track it.
-#: The settled look is set here rather than left to fall through, and that is a
-#: retreat from cleverness. Excluding the disabled state was supposed to let the
-#: icon's `color: inherit` resolve to the button's `&:disabled` colour. It did not
-#: — a reader rated an answer and the thumb stayed orange — and after being wrong
-#: twice about this bundle by reading it, the third attempt stops depending on an
-#: inheritance chain nothing here can observe.
+#: **Live thumbs only. The settled state is deliberately left alone.**
 #:
-#: `opacity` on the button, not a colour on the icon: it cannot be defeated by
-#: whatever the icon's own colour turns out to compute to, it needs no second
-#: value chosen per theme, and it fades the chosen thumb without hiding *which*
-#: thumb was chosen — which a flat grey would.
+#: Two attempts to style a *rated* thumb both went wrong — first by relying on
+#: Streamlit's disabled colour reaching the icon through `inherit`, then by
+#: fading it with `opacity` — and neither could be checked from here, because
+#: nothing in this suite renders CSS. The `:disabled` half also had a consequence
+#: nobody wanted: the control is disabled while any question is answering, not
+#: only once rated, so every earlier turn's thumbs changed appearance for the
+#: duration of every run.
+#:
+#: So the rule colours the thumbs and stops. Whatever a rated thumb looks like is
+#: Streamlit's business, and the widget is still disabled, still `aria-checked`,
+#: and still shows `cursor: not-allowed`.
 FEEDBACK_CSS = """
 <style>
-[data-testid="stFeedback"] button:not(:disabled) [data-testid="stIconMaterial"] {
-  color: #ff9d3c;
-}
-[data-testid="stFeedback"] button:disabled { opacity: 0.45; }
+[data-testid="stFeedback"] [data-testid="stIconMaterial"] { color: #ff9d3c; }
 @media (prefers-color-scheme: light) {
-  [data-testid="stFeedback"] button:not(:disabled) [data-testid="stIconMaterial"] {
-    color: #c2410c;
-  }
+  [data-testid="stFeedback"] [data-testid="stIconMaterial"] { color: #c2410c; }
 }
 </style>
 """
