@@ -277,6 +277,31 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     holds made every citation figure vanish for a results file that outlived its set, rather than
     saying so. The report now names the count and, where nothing is scorable, says that plainly.
 
+- [ ] 4.14 Score a **scoped claim of absence**: an answer that declines part of a question, saying
+      the corpus holds nothing for it, while the corpus holds expected entries for exactly that part.
+      Nothing catches this today. `ungrounded_refusal` fires only when a *whole* answer refuses
+      without searching; a decline nested inside an otherwise complete answer passes every check
+  - **The case, from the baseline** (`yeast-vs-ecoli-volume`, repeat 1): *"For E. coli, I don't have
+    a directly comparable volume measurement in the corpus, but based on their smaller linear
+    dimensions..."* — followed by an estimated 10–100x. The corpus holds **eight** *E. coli* cell
+    volume entries. The answer made two searches, both `property="size"`, and never searched volume,
+    so the sentence is **true of its own context and false of the corpus**.
+  - **Why it needs its own check rather than being folded into the retrieval figure.** The retrieval
+    failure is already counted — that repeat reached 0 of 24 expected entries, the worst in the
+    baseline. What is *not* counted is the harm: a reader is told the data does not exist and stops
+    looking. That is a false claim about the corpus, and it is worse than an incomplete answer
+    because it forecloses the question.
+  - **Measure before choosing the detector**, and count both directions (4.10). Two candidates: a
+    prose rule over absence phrasings ("I don't have", "not in the corpus", "no data on"), which is
+    brittle in both directions; and a structural one needing no prose — for each asked organism,
+    whether any expected entry was cited — which is cheap and exact but cannot tell a *silent*
+    omission from a *claimed* absence, and only the second misleads a reader. Count how often each
+    fires on the baseline before picking one; they may both be wanted, reported apart.
+  - **This is also an agent-side finding, not only a scoring one.** An agent that asserts an absence
+    it never searched for is a defect in the answer, and the fix may belong in the prompt or the
+    tools rather than in a metric. Raise it with `add-ask-agent` once the frequency is known; do not
+    change the prompt from here.
+
 - [x] 4.12 Review the branch before merging (see 1.5). The review of groups 3-4 found ten
       defects, including a results file that would have committed corpus text
 
