@@ -551,9 +551,39 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     *should* be is a fact about the corpus, and a test that fixed them would fail every time the
     ingester improved. They go into a document beside the baseline when 5.3 records one.
 
-- [ ] 5.6 Review the branch before merging (see 1.5). Give the reviewer the *question set and the
+- [ ] 5.7b Fix `asked_properties` on the two questions where it cannot be scored. `diameter` selects
+      **319** stored properties for `ribosome-diameter`, whose expectation is 3 entries; `Nuclear`
+      selects **155** for `ecoli-nucleus`, which expects none. 4.10 measured the consequence — the
+      property-match rule credits almost any search — and said to fix the set before tightening the
+      rule. This is that fix
+  - The field is meant to be *the corpus's own vocabulary for what the question asks*, so a single
+    broad word is the wrong shape for it. The plural is already there: several terms are allowed and
+    the match takes their union.
+  - **Decide what the field is before editing it.** If the right value is "the property strings the
+    expected entries carry", it is derivable and the field is redundant — which would be worth
+    knowing, because a declared field that duplicates a derived one goes stale silently. If it is
+    genuinely a separate claim (what a *person* would call this quantity), say so where it is
+    declared. Do not simply widen it and move on.
+
+- [~] 5.6 Review the branch before merging (see 1.5). Give the reviewer the *question set and the
       baseline* as well as the code: a set that measures the wrong thing is not a defect any test
       can see
+  - **Two passes, because they fail differently.** The code review is one pass; the artefacts --
+    the set's contents and the baseline's conclusions -- are another, and only the second could
+    have caught either of the two set-construction errors, both of which every test passed.
+  - **Artefact pass done 2026-09-16.** The expected lists were checked by a *third* method, after
+    wording (wrong) and units (the rebuild): every expected entry was tested for carrying the
+    asked quantity, and every corpus entry with the right units and object was tested for being
+    in the list. The lists survive. The only omissions are components -- the nuclear pore complex
+    transporter for a nucleus question, atoms in the 50S subunit for a ribosome count -- and the
+    only entries lacking the expected unit are the deliberate shape exemplars (`N/A` for no
+    scalar, `Unitless` for an unclassified unit, `%` for the conditions entry).
+  - Those exemplars cannot corrupt a peer pool: an entry with no scalar never enters one, which
+    was worth checking rather than assuming once peers became per-question.
+  - Every figure in `docs/evaluations/2026-09-11-baseline.md` reproduces exactly from the
+    committed results file with `--expected-from-set`.
+  - **The one artefact defect found: `asked_properties`.** See 5.7b. The code pass cannot see it,
+    because the field is well-formed and the code reads it correctly.
 
 ## 6. The judged layer — moved to `add-judged-faithfulness`
 
