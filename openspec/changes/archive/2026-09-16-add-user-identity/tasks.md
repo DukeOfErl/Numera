@@ -281,6 +281,11 @@ doubles, both populations of the table. Its brief already says so.
       describing them. Its "Deferred, deliberately" section gains the
       unconfigured-deployment-sees-the-panel decision, with the condition that
       reopens it.
-- [ ] 8.6 `openspec validate add-user-identity --strict`, archive, then diff
+- [x] 8.6 `openspec validate add-user-identity --strict`, archive, then diff
       each promoted requirement against its delta mechanically — archive refuses
       a dropped scenario and says nothing about dropped prose.
+      *Done 2026-09-16: valid under `--strict`; archived as
+      `2026-09-16-add-user-identity` (+8, ~2, -0). Mechanical diff: all 8
+      `user-identity` requirements and the 2 MODIFIED ones promoted byte-for-byte
+      from their deltas; `agent-session` 13→13 and `answer-feedback` 5→5
+      requirements, none lost, none outside the delta changed.*

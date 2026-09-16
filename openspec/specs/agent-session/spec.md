@@ -143,10 +143,13 @@ and refusing to start without one would make the absence of telemetry an outage.
 
 **What is kept about a person, and why.** Recording the question keeps words somebody typed, and that
 is a decision rather than a side effect of plumbing. What is kept is the question, the answer, and
-the entries behind it — nothing about who asked, until identity exists and a requirement says so.
-They are kept because the judgements this system collects are unreadable without them, and they are
-read by whoever operates the system in order to improve it. A reader SHALL be able to learn this from
-the interface rather than by inspecting the records.
+the entries behind it — and, where identity is configured, the account that asked and the role it
+held at the time, carried on every record and written when the record is written rather than looked
+up afterwards. Where identity is not configured, records carry no account, as before. They are kept
+because the judgements this system collects are unreadable without them, and they are read by
+whoever operates the system in order to improve it. A reader SHALL be able to learn this from the
+interface rather than by inspecting the records, and the statement SHALL name the account and the
+role when they are kept.
 
 Recording the question or the answer SHALL NOT change what the model is shown. These are records of a
 question that has already been answered, not context for the next one.
@@ -204,6 +207,14 @@ never failing a question.
 - **WHEN** no durable destination is configured
 - **THEN** questions are answered exactly as they otherwise would be
 - **AND** the absence is reported once, rather than on every question
+
+#### Scenario: A signed-in reader's question is recorded
+- **WHEN** identity is configured and an enrolled account asks a question
+- **THEN** every record for that question carries the account and the role it held
+
+#### Scenario: No identity is configured
+- **WHEN** identity is not configured and a question is asked
+- **THEN** its records carry no account, exactly as before
 
 ### Requirement: Sessions are isolated from one another
 

@@ -84,9 +84,9 @@ Built as `add-user-identity` on `feat/user-identity` (2026-09-16); moves to Done
 at merge. The reasoning that used to live here is now where an implementer reads
 it — this section points rather than repeats:
 
-- **What the system must do:** `openspec/specs/user-identity/spec.md` once
-  archived (until then `openspec/changes/add-user-identity/specs/`), plus the
-  two scenarios each added to `agent-session` and `answer-feedback`.
+- **What the system must do:** `openspec/specs/user-identity/spec.md`, plus the
+  two scenarios each added to `agent-session` and `answer-feedback`; the change
+  itself is archived under `openspec/changes/archive/2026-09-16-add-user-identity/`.
 - **Accounts in the trail database, keys in the clear, enrolment fails closed** —
   ADR-0780. **The session cap is a heartbeat registry, never per-address, and
   protects the host rather than the budget** — ADR-0790. **Default-deny, the
