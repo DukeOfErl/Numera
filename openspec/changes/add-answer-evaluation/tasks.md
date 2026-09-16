@@ -421,7 +421,7 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     `unsupported` with admissible entries is shadowed by the reader's, so nothing asserted the guard
     that holds for a caller building a set programmatically. Tested directly now.
 
-- [~] 5.2 Measure the two retrieval bounds rather than defending them. `TOOL_CALL_LIMIT` (20) and
+- [x] 5.2 Measure the two retrieval bounds rather than defending them. `TOOL_CALL_LIMIT` (20) and
       `RUN_CALL_LIMIT` (12) were both chosen from a handful of observations — answers that satisfied their
       question used about five retrievals, one runaway used twenty-nine — and neither has been reached in
       live use since. What the run should settle: whether either bound ever binds; whether the questions
@@ -434,6 +434,18 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     question against a limit of 20; the most model calls any question used was 3 against 12. The
     second half of the question — whether an answer produced *at* a bound scores worse — cannot be
     answered yet, because no answer was produced at one. Repeats may change that; a harder set would.
+  - **Settled 2026-09-16 on the 30-result baseline: neither bound has ever bound, and the headroom is
+    wide.** Tool calls ran 0 to 13 with a median of 6, against a limit of 20; model calls ran 1 to 6
+    with a median of 3, against 12. **Zero of 30 reached either.**
+  - **The second half of the question still cannot be answered, and now it is clear why.** No answer
+    was produced *at* a bound, so nothing says whether one produced there scores worse. What the
+    distribution does show is that effort and success are not the same axis: the two heaviest
+    questions, at 13 and 11 tool calls, reached 8 of 24 and 15 of 17 respectively -- the most
+    expensive answer in the set is also among the least complete. So the bound is not what is
+    limiting these answers; the search is (see the property-search finding).
+  - **Leave both numbers alone.** A bound that never fires costs nothing, and raising a limit that
+    has never been reached would be changing a number on no evidence. Re-measure if a harder question
+    set lands, which is where an answer produced at a bound would first appear.
 - [x] 5.3 Record a baseline on the development model, with repeats, and keep the report beside the ADRs
       that the figures bear on
   - **A smoke run came first: ten questions, one repeat, $0.13, all answered, no failures.** Findings
