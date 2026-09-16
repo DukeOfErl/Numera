@@ -113,7 +113,7 @@ it binds — the number you set is the one that stops work
 ## Tests
 
 ```bash
-uv run pytest                                  # 917 tests on a six-entry fixture; no API key needed
+uv run pytest                                  # 1,183 tests on a six-entry fixture; no API key needed
 uv run pre-commit install                      # once per clone: ruff check and ruff format at each commit
 ```
 
@@ -126,15 +126,51 @@ SCINUMBERS_CORPUS=... uv run pytest -m corpus    # markers checked against a rea
 OPENROUTER_API_KEY=...    uv run pytest -m network   # real model calls; costs about $0.01
 ```
 
+## Evaluating the answers
+
+The harness is a third adapter over the same agent — it asks a question set and records what came
+back, with no mode flag and nothing the interactive drivers do not also get.
+
+```bash
+uv sync --extra ask --extra eval
+scinumbers-eval check question-sets/first-set.jsonl      # is the set usable against this corpus?
+scinumbers-eval run   question-sets/first-set.jsonl --repeats 3 \
+    --results evaluations/baseline.results.jsonl         # asks, and appends one line per answer
+scinumbers-eval report question-sets/first-set.jsonl \
+    --results evaluations/baseline.results.jsonl --repeats 3 \
+    --sheet evaluations/baseline.html                    # figures, and every answer with its entries
+```
+
+**A run resumes.** Results are appended as each question completes, so an interrupted run — a
+budget, a provider, a person — loses only the question in flight. Running the same command again
+asks what is missing and nothing else.
+
+**No result holds a score.** Each line carries the question, the answer, the entries cited and
+retrieved, the context the agent was shown and what produced it. Every figure is computed from
+those, so a scoring rule can be changed and the whole baseline re-scored without re-asking a single
+question. That has already paid for itself twice.
+
+**Results never enter the repository.** Every record carries the retrieval results verbatim, so a
+results file holds corpus text, which must not be committed (ADR-0170). The harness asks git whether
+it would track the path and refuses to write if it would — and the answer sheet, which tabulates
+entries, takes the same refusal.
+
+The first baseline and what it showed are in
+[`docs/evaluations/`](docs/evaluations/2026-09-11-baseline.md). The judged layer — a model separating
+an answer into claims — is deferred to its own change, `add-judged-faithfulness`, because the
+hand-labelled reference a judge must be validated against came back 29 sound of 30 and cannot gate
+anything.
+
 ## What it does not do
 
 Nothing writes to the corpus, and no tool can create, modify or delete an entry. The agent does not
 retrieve literature or fetch papers. It is not given the name of whichever driver is calling it, so
 it cannot behave one way for a person and another for a harness.
 
-**The evaluation harness is not built.** Scoring citations against expected entries and scoring
-refusals on unanswerable questions are specified in `openspec/changes/add-ask-agent/tasks.md`
-(group 9) and unticked. That is why the prototype warning above says what it says.
+**The judged layer is not built.** Scoring citations against expected entries, scoring refusals on
+unanswerable questions and reporting the spread across repeats all work; judging an answer's prose
+claim by claim does not, and is deferred to `add-judged-faithfulness`. So the figures below are
+deterministic: they say what was cited and retrieved, never whether a sentence is true.
 
 ## For the course review
 
@@ -150,13 +186,16 @@ documentation. Those are covered above. Where the project went past the brief:
 | The agent separated from its drivers, so a web page and an evaluation harness run the identical agent with no mode flag | ADR-0110, `test_driver_independence.py` |
 | Fault injection at the seams that fail silently — a spend ledger that cannot write, a marker whose condition can never fire | `test_spend.py`, `test_markers_against_corpus.py` |
 | Decisions recorded as ADRs, and behaviour specified in OpenSpec rather than prose | `docs/decisions/`, `openspec/` |
+| An evaluation whose records hold no scores, so a rule can be corrected and the whole baseline re-scored without re-asking a paid question | ADR-0530, ADR-0540, `scoring.py` |
 
 Of the optional tasks: token usage and cost are displayed per question and per run; short- and
 long-term memory are LangGraph checkpoints resumable across processes; the model is configurable and
 reached through OpenRouter; and retrieval is agentic rather than a single similarity lookup.
 
-**Not done, and the honest gap:** there is no evaluation report. Nothing here has been measured
-against expected answers.
+**Measured since:** a baseline of ten questions over three repeats, with the figures and what they
+showed in [`docs/evaluations/`](docs/evaluations/2026-09-11-baseline.md). Half of what the corpus
+holds for a question reaches the reader's table, and the gap is a failure of search rather than of
+selection. The honest remaining gap is that nothing yet judges whether a *sentence* is true.
 
 ## Where to read next
 

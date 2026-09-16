@@ -1,9 +1,18 @@
 # Tasks
 
 ADR block for this change: `0500`–`0550`, allocated in the table in `CLAUDE.md`, which is the
-authority; this note is a convenience for whoever is implementing. `0500` (DeepEval over RAGAS) and
-`0510` (a judge is validated against the identifiers) are written and are both in force for this
-change. Widen in `CLAUDE.md` first if the change owes more.
+authority; this note is a convenience for whoever is implementing. Widen in `CLAUDE.md` first if the
+change owes more.
+
+**Reconciled 2026-09-16 (task 7.6).** Five written, matching the table: `0500` (DeepEval over
+RAGAS), `0510` (a judge is validated against the identifiers), `0520` (the outlier check compares an
+interval — **superseded by `0540`**), `0530` (an expected entry must reach the table) and `0540`
+(peers come from the expected entries). `0550` is unspent.
+
+`0500` and `0510` govern the judged layer, which left for `add-judged-faithfulness`. They stay in
+this block and stay in force there: a block is extended, never renumbered, because the ADRs are
+referenced from code comments and commit messages, and moving them would break every reference to
+buy contiguity nothing needs.
 
 **Read this before picking up a task.** The sequence is scoped by what each check costs to build, not
 by whether it uses a model. Groups 1–3 are the recording layer that every measure needs. Group 4 is
@@ -648,16 +657,29 @@ there.
 
 ## 7. Documentation and conformance
 
-- [ ] 7.1 `README.md`: how to run an evaluation, resume one, judge one, and read the report — the task
+- [x] 7.1 `README.md`: how to run an evaluation, resume one, judge one, and read the report — the task
       `add-ask-agent` deferred as 10.1
-- [ ] 7.2 `docs/diagrams/architecture.md`: the third adapter in the modules diagram, following
+- [x] 7.2 `docs/diagrams/architecture.md`: the third adapter in the modules diagram, following
       `docs/diagrams/DIAGRAMS.md`; the agent's graph is unchanged and needs no regeneration
-- [ ] 7.3 `CLAUDE.md`: the new modules in the Architecture table, and the note that one module only
+- [x] 7.3 `CLAUDE.md`: the new modules in the Architecture table, and the note that one module only
       imports `deepeval`
-- [ ] 7.4 `CHANGELOG.md`: the harness, the judged layer, and the `eval` extra under Unreleased
-- [ ] 7.5 `tests/test_spec_conformance.py`: map every requirement in `answer-evaluation` to the test that
+  - The `deepeval` half is moot: it left with the judged layer, and `CLAUDE.md` now says so and says
+    why `-p no:deepeval` stays in `addopts` regardless. `question_set.py`, `evaluation.py`,
+    `scoring.py`, `report.py`, `answer_sheet.py` and `eval_cli.py` are all in the table.
+- [x] 7.4 `CHANGELOG.md`: the harness, the judged layer, and the `eval` extra under Unreleased
+- [x] 7.5 `tests/test_spec_conformance.py`: map every requirement in `answer-evaluation` to the test that
       asserts it, retiring the gap entries this change added, in the same commits as the tests
-- [ ] 7.6 Reconcile the ADR block against `CLAUDE.md` before archiving
+  - All fourteen are mapped and no gap entry from this change remains. **The mapping was not the
+    work; the requirement's words were.** "A cited entry at odds with its peers is flagged" still
+    described peers as "the other entries for the same property and organism" — the definition
+    ADR-0540 replaced — while reading as COVERED. That is precisely the failure this file admits it
+    cannot detect: a test that claims a requirement and checks something else. The requirement now
+    states the peer rule, including that sameness of unit means the same recorded unit and not merely
+    the same dimension, and it gained scenarios for a citation the question did not expect and for
+    peers in a different unit.
+  - The conformance test then caught an invented test name in the new mapping, which is the check
+    earning its place in the same session it exposed the stale wording.
+- [x] 7.6 Reconcile the ADR block against `CLAUDE.md` before archiving
 
 - [ ] 7.7 Review the whole change before archiving: the specs against the code that claims to
       satisfy them, not only the last group's diff (see 1.5)

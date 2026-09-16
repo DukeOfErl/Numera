@@ -149,14 +149,25 @@ are both on record, so this needs no judge.
 
 ### Requirement: A cited entry at odds with its peers is flagged
 
-The evaluation SHALL compare each cited entry's recorded value against the values recorded by the
-other entries for the same property and organism, and SHALL flag a citation whose entry is a distant
-outlier among them. The flag SHALL name the entry, its value, and the interval the other entries
-occupy, and SHALL NOT be counted as an error.
+The evaluation SHALL compare each cited entry's recorded value against its **peers** — the entries
+the question records as expected, sharing the cited entry's organism and its unit — and SHALL flag a
+citation whose entry is a distant outlier among them. The flag SHALL name the entry, its value, and
+the interval the peers occupy, and SHALL NOT be counted as an error.
 
-This asks only which entries were cited and what the corpus records for their neighbours, so it
-needs no reading of the answer's prose. An answer can cite an entry that exists, attribute its number
-correctly, and still lead with the one figure in the corpus that disagrees with every other
+**Peers are drawn from the question's expected entries, not from a property string.** `property` is
+free text, so one quantity is recorded under many spellings — `Nuclear volume`, `Volume of nucleus`,
+`Volume of nuclei during S phase` — and a pool keyed on wording is a pool keyed on coincidence. The
+expected list is that vocabulary resolved against the corpus by hand and reviewed, so the comparison
+reuses it rather than resolving a second time.
+
+**Peers SHALL share the cited entry's unit**, and sameness of unit means the same recorded unit,
+not merely the same dimension. A pool matched on dimension alone can place a volume in litres beside
+one in cubic micrometres, which spans fifteen orders of magnitude and makes the interval meaningless
+rather than wide.
+
+This asks only which entries were cited, what the question expected, and what the corpus records, so
+it needs no reading of the answer's prose. An answer can cite an entry that exists, attribute its
+number correctly, and still lead with the one figure in the corpus that disagrees with every other
 measurement of the same quantity. Every check that compares an answer against its own citations
 passes such an answer, because nothing about it is internally wrong.
 
@@ -164,15 +175,23 @@ An outlier is a fact about the corpus rather than about the answer, so it is rep
 rather than scored against the answer: the entry may be measuring something its neighbours do not.
 
 #### Scenario: A cited entry is an outlier
-- **WHEN** a cited entry's value is a distant outlier among the entries for the same property and organism
-- **THEN** the citation is flagged with that entry's value and the interval the other entries occupy
+- **WHEN** a cited entry's value is a distant outlier among the question's expected entries sharing its organism and unit
+- **THEN** the citation is flagged with that entry's value and the interval those peers occupy
 
 #### Scenario: Every cited entry sits with its peers
 - **WHEN** no cited entry's value is an outlier among its peers
 - **THEN** no outlier is reported for the answer
 
+#### Scenario: A citation the question did not expect
+- **WHEN** an answer cites an entry the question does not record as expected
+- **THEN** it is still compared against the question's expected entries that share its organism and unit, since it is judged against what the question is about rather than against its own neighbours
+
+#### Scenario: Peers recorded in a different unit
+- **WHEN** entries share the organism but record their values in a different unit
+- **THEN** they are not peers, and the comparison is not made across them
+
 #### Scenario: Too few peers to judge
-- **WHEN** a property has fewer entries than the comparison needs
+- **WHEN** fewer entries share the cited entry's organism and unit than the comparison needs
 - **THEN** no outlier is reported for it
 - **AND** the report states that the comparison could not be made
 

@@ -115,7 +115,11 @@ COVERED: dict[str, tuple[str, ...]] = {
     "A cited entry at odds with its peers is flagged": (
         "test_scoring.py::test_the_entry_that_motivated_the_check_is_flagged",
         "test_scoring.py::test_an_entry_inside_its_peers_interval_is_not_flagged",
-        "test_scoring.py::test_a_property_with_too_few_peers_is_not_judged_and_says_so",
+        "test_scoring.py::test_peers_are_the_same_organism",
+        "test_scoring.py::test_peers_must_share_the_unit_as_well_as_the_organism",
+        "test_scoring.py::test_an_entry_the_question_does_not_expect_is_not_a_peer",
+        "test_scoring.py::test_an_unexpected_citation_is_still_judged_against_what_was_expected",
+        "test_scoring.py::test_a_citation_with_too_few_peers_is_reported_as_unjudged",
         "test_report.py::test_an_outlier_is_listed_with_the_interval_its_peers_occupy",
         "test_report.py::test_a_comparison_that_could_not_be_made_is_said_rather_than_omitted",
     ),

@@ -21,6 +21,35 @@ any release; `1.0.0` when it stabilizes.
   request is no longer retried, because a key acquires no balance during a backoff.
   Whatever the answer had established before the refusal is kept rather than replaced
   by the notice ([ADR-0600]).
+- **An evaluation harness: `scinumbers-eval`.** A third adapter over the same agent,
+  with no mode flag — it asks a committed question set, records one line per answer
+  as the answer completes, resumes an interrupted run without re-asking, and reports
+  figures that are never combined across model, prompt or corpus. `check` validates a
+  set against a corpus before a run costs anything; `report --sheet` writes every
+  answer beside the entries that bear on it, as HTML or PDF.
+- **No result holds a score.** Each record carries the question, the answer, the
+  entries cited and retrieved, the context the agent was shown and what produced it.
+  Every figure is computed from those, so a scoring rule can be corrected and a whole
+  baseline re-scored without asking a paid question again — which has already paid for
+  itself twice, once for a rule and twice for a mis-built expected list
+  (`--expected-from-set`).
+- **An expected entry is scored by reaching the reader's table, not the prose**
+  ([ADR-0530]). The table lists every retrieved entry, so reaching it is what a reader
+  gets; requiring prose citation of every expected entry fails every good answer to a
+  question the corpus answers ten times over. The rank within that table is reported
+  beside it, because an entry ranked fortieth is one nobody sees, and a ranking failure
+  needs a different fix from a search failure.
+- **Questions carry a tier** — `basic`, `compound`, `declining` — and the report gives
+  its figures per tier, so a gain on hard questions cannot be paid for out of the
+  simple ones without showing. On the first baseline the aggregate read 51% while
+  `basic` stood at 66% and `compound` at 31%.
+- **A cited entry at odds with its peers is flagged, where "peer" is now meaningful**
+  ([ADR-0540], superseding [ADR-0520]). Peers are the question's own expected entries
+  for the cited entry's organism and unit; the previous definition — the corpus's other
+  entries with an identical property string — judged 0 of 91 citations on the first
+  baseline, because `property` is free text and four entries rarely share a spelling.
+- **A first answer baseline**, ten questions over three repeats, recorded in
+  `docs/evaluations/`.
 - **The evaluation refuses to write its results where git would track them.**
   Every record carries the retrieval results the agent was shown, verbatim, so a
   results file holds corpus text — the same unlicensed data the corpus itself is.
@@ -85,9 +114,10 @@ any release; `1.0.0` when it stabilizes.
 
 ### Known gaps
 
-- No evaluation harness yet: nothing has been scored against expected answers, which
-  is why the app describes itself as a prototype that is not scientifically
-  trustworthy.
+- No judged layer yet: the deterministic scoring works and a baseline has been
+  recorded, but nothing judges whether a *sentence* is true. Deferred to
+  `add-judged-faithfulness`, because the hand-labelled reference a judge must be
+  validated against came back 29 sound of 30 and cannot gate anything.
 
 - **`bionumbers-ingest`** — a command that turns the published BioNumbers export
   (an HTML table served as `.xls`) into a JSONL corpus. The export is fetched by
@@ -223,3 +253,6 @@ number rather than an error:
 [ADR-0240]: docs/decisions/0240-stamp-every-ingest.md
 [ADR-0250]: docs/decisions/0250-guards-belong-to-the-operation.md
 [ADR-0600]: docs/decisions/0600-a-spent-key-is-its-own-ending.md
+[ADR-0520]: docs/decisions/0520-the-outlier-check-compares-an-interval.md
+[ADR-0530]: docs/decisions/0530-an-expected-entry-must-reach-the-table.md
+[ADR-0540]: docs/decisions/0540-peers-come-from-the-expected-entries.md

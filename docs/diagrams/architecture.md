@@ -91,6 +91,7 @@ flowchart TB
     subgraph presentation["Presentation — adapters"]
         cli[cli.py]
         web[web.py]
+        harness[["the evaluation harness<br/>(see 6)"]]
         messages[messages.py]
         table[entries_table.py]
     end
@@ -108,10 +109,13 @@ flowchart TB
 
     cli --> messages
     web --> messages
+    harness --> messages
     messages --> events
     cli --> table
     web --> table
+    harness --> table
     table --> corpus
+    harness --> events
     agent --> tools
     agent --> spend
     agent --> events
@@ -129,6 +133,13 @@ layer would work perfectly and weld the agent to one interface — so
 presentation side, which is why the span rule that both the table and the model
 need lives on `Entry` (`corpus.py`) instead: the agent must not reach across the
 line to get it.
+
+The harness is collapsed to one box here because this diagram's story is the
+direction of dependency, and on that question it is simply a third adapter: it
+consumes the same events `cli` and `web` do, and the agent takes no parameter
+naming its caller (ADR-0110). Its own modules are section 6. It carries one rule
+the interactive drivers do not — it may not reach for a terminal, or the thing
+meant to run unattended would need one.
 
 ## 4. Ingestion: how the published export becomes a corpus
 
@@ -201,3 +212,35 @@ consumer was reading `range_approximate` and `range_one_sided` out of `parse_fla
 the wording it shows a reader, and a rename here would have turned those silently false there rather
 than failing
 ([ADR-0230](../decisions/0230-flag-and-count-never-correct.md), [ADR-0210](../decisions/0210-verifying-a-contract-owned-by-another-branch.md)).
+
+## 6. The evaluation harness: from a question set to a figure
+
+*What does a run actually do with a question, and where does each artefact come
+from?*
+
+```mermaid
+flowchart LR
+    set[/"question set<br/>(committed)"/] --> driver[evaluation.py]
+    driver -->|one session per question| agent[agent.py]
+    agent -->|events| driver
+    driver --> results[/"results file<br/>(never committed)"/]
+    results --> scoring[scoring.py]
+    scoring --> report[report.py]
+    scoring --> sheet[answer_sheet.py]
+    report --> figures[/figures/]
+    sheet --> answers[/"answers and their entries"/]
+```
+
+**The results file is the seam, and it holds no scores.** Each line carries the
+question, the answer, the entries cited and retrieved, the context the agent was
+shown and what produced it — so every figure to the right of it is recomputable
+without asking a question again. That is what let a scoring rule be corrected
+twice, and a mis-built expected list be corrected twice more, for nothing.
+
+**Two things never cross back into the repository.** The results file and the
+answer sheet both carry corpus text — the first verbatim, the second through the
+entries it tabulates — so both ask git whether it would track the path and refuse
+to write if it would (ADR-0170, ADR-0250).
+
+**What is not here:** the judged layer, which reads a results file and writes
+judgements to a file of its own. It is deferred to `add-judged-faithfulness`.

@@ -470,8 +470,13 @@ def test_an_entry_with_a_twin_still_counts_its_twin_as_a_peer():
     assert flagged.peers == MIN_PEERS + 1
 
 
-def test_a_property_with_too_few_peers_is_not_judged_and_says_so():
-    """An absence that reads as a pass is the failure this exists to prevent."""
+def test_a_citation_with_too_few_peers_is_reported_as_unjudged():
+    """An absence that reads as a pass is the failure this exists to prevent.
+
+    Renamed with ADR-0540: it is the *citation* that goes unjudged, and what it
+    lacks is peers sharing its organism and unit, not entries sharing a property
+    name. The old name pointed a reader at a rule that no longer exists.
+    """
     peers = tuple(an_entry(entry_id=i, value=2.0) for i in range(1, MIN_PEERS))
     population = peers + (an_entry(entry_id=99, value=100.0),)
     assert outliers_among_peers((99,), all_ids(population), population) == ()
