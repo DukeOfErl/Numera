@@ -165,13 +165,15 @@ def test_two_sessions_panels_show_only_their_own_records(page, recent):
     assert set(first.value["question"]) == {"first session's question"}
     assert set(second.value["question"]) == {"second session's question"}
 
-    dev_session = web.effective_session(
-        web.Admission(web.Door.OPEN, configured=True, account=DEV), "shared-link"
-    )
-    admin_session = web.effective_session(
-        web.Admission(web.Door.OPEN, configured=True, account=ADMIN), "shared-link"
-    )
-    assert dev_session != admin_session, "one shared link, two accounts, two sessions"
+    def conversation(at, account):
+        """The key that page actually used: its own token, under its account."""
+        return web.effective_session(
+            web.Admission(web.Door.OPEN, configured=True, account=account),
+            at.session_state[web.SESSION_KEY],
+        )
+
+    dev_session, admin_session = conversation(one, DEV), conversation(two, ADMIN)
+    assert dev_session != admin_session, "two accounts, two conversations"
     assert {r["question"] for r in recent.rows(dev_session)} == {"first session's question"}
     assert {r["question"] for r in recent.rows(admin_session)} == {"second session's question"}
 

@@ -240,6 +240,13 @@ def test_session_state_holds_the_identifier_and_what_was_drawn_and_nothing_else(
     about to run: every control already on screen is live while that run works,
     and a click on one abandons the agent's generator mid-tool-call.
 
+    The tab's own identifier is the third, and it is here for the reason the
+    session identifier is: it is an identity this driver mints and must keep,
+    because the session cap counts browser sessions and a browser session is
+    exactly what this dictionary outlives nothing of. It cannot come from the
+    URL -- that is the conversation's token, which anyone holding the link can
+    supply (ADR-0830).
+
     The rule keeps its teeth: anything else namespaced here still fails, and the
     allowance is a prefix rather than a wildcard, so `scinumbers_ask.spend` or a
     second copy of the conversation would still be caught.
@@ -249,7 +256,12 @@ def test_session_state_holds_the_identifier_and_what_was_drawn_and_nothing_else(
 
     kept = {k for k in at.session_state.filtered_state if k.startswith("scinumbers_ask.")}
     feedback_keys = {k for k in kept if k.startswith(FEEDBACK_PREFIXES)}
-    assert kept - feedback_keys == {web.SESSION_KEY, web.TRANSCRIPT_KEY, web.ASK_KEY}
+    assert kept - feedback_keys == {
+        web.SESSION_KEY,
+        web.TAB_KEY,
+        web.TRANSCRIPT_KEY,
+        web.ASK_KEY,
+    }
 
 
 def test_a_missing_corpus_is_explained_rather_than_raised(monkeypatch):

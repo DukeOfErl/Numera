@@ -536,13 +536,26 @@ def test_two_accounts_on_one_shared_link_get_two_sessions():
         web.IDENTITIES.clear()
 
 
-def test_the_account_s_session_survives_a_url_token_that_changed_or_vanished():
-    """Streamlit's OAuth callback and logout redirect to the bare base URL, so
-    the token is gone on the rerun after sign-in. A key derived from the account
-    does not care."""
+def test_a_fresh_link_gives_one_account_a_fresh_conversation():
+    """The escape hatch, and the reason the token is half of the key.
+
+    The conversation is the LangGraph thread, and a thread that fills up refuses
+    every further question. Keyed on the account alone the key was a pure
+    function of the email, so a reader who filled one could not leave it: a new
+    link did nothing, signing out gave the same key back, and the page's own
+    advice to reload with a fresh `?session=` could not be followed.
+    """
     account = _admitted(TESTER)
-    assert web.effective_session(account, "abc") == web.effective_session(account, "zzz")
-    assert web.effective_session(account, "") == web.effective_session(account, "abc")
+    assert web.effective_session(account, "abc") != web.effective_session(account, "zzz")
+    assert web.effective_session(account, "abc") == web.effective_session(account, "abc")
+
+
+def test_the_same_link_still_separates_two_accounts():
+    """The other half. A shared link must not carry one reader into another's
+    conversation, whatever the token says."""
+    assert web.effective_session(_admitted(TESTER), "abc") != web.effective_session(
+        _admitted(DEV), "abc"
+    )
 
 
 def test_with_no_identity_configured_the_url_token_is_still_the_session():
@@ -675,21 +688,20 @@ def test_a_malformed_cap_setting_falls_back_rather_than_taking_the_page_down(mon
         web.session_registry.clear()
 
 
-def test_the_url_token_is_neither_advertised_nor_adopted_under_sign_in():
-    """Not advertised, because it would name a conversation that opening it does
-    not reach. Not adopted either, because under sign-in it is the tab's identity
-    for the session cap -- and ten testers on one shared bookmark would register
-    as a single tab, bounding nothing, with any one of them able to free the
-    place the other nine sit in."""
+def test_the_link_names_the_conversation_and_never_the_tab():
+    """Two values that were one. The token comes from the link and stays in the
+    address bar, so a reader can bookmark a conversation and change it for a
+    fresh one. The tab's own id is minted, because the cap counts tabs and ten
+    testers on one shared bookmark would otherwise register as a single tab --
+    bounding nothing, and any one of them able to free the other nine's place."""
     state, params = {}, {"session": "abc123"}
-    minted = web.session_id(state, params, advertise=False)
-    assert minted != "abc123", "the link decided which tab this is"
-    assert "session" not in params
-    assert web.session_id(state, params, advertise=False) == minted, "stable for this tab"
+    assert web.session_id(state, params) == "abc123"
+    assert params["session"] == "abc123", "the conversation stays bookmarkable"
 
-    state, params = {}, {"session": "abc123"}
-    assert web.session_id(state, params, advertise=True) == "abc123"
-    assert params["session"] == "abc123", "a developer's machine keeps its bookmark"
+    minted = web.tab_id(state)
+    assert minted != "abc123", "the link decided which tab this is"
+    assert web.tab_id(state) == minted, "stable for the life of this browser session"
+    assert web.tab_id({}) != minted, "a second tab is a second session"
 
 
 def test_the_suite_runs_as_though_no_sign_in_were_configured():

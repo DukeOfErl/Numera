@@ -51,11 +51,14 @@ except (CorpusUnavailable, NotConfigured) as exc:
 # The token in the URL. It continues a conversation on a developer's machine and
 # is what a bookmark carries -- but it is supplied by whoever holds the link, so
 # under sign-in it is not what the conversation is keyed on (see below).
-# Not advertised in the address bar where sign-in decides the conversation: the
-# token would name a session that resuming it would not reach (ADR-0830).
-url_session = web.session_id(
-    st.session_state, st.query_params, advertise=not web.identity_configured()
-)
+# The token in the URL. It names the conversation -- under sign-in together with
+# the account, so a link cannot carry one reader into another's (ADR-0830) -- and
+# it is what a reader changes to start a fresh one when the current conversation
+# has filled up. Kept in the address bar so that is possible.
+url_session = web.session_id(st.session_state, st.query_params)
+# This browser session's own identity, which the cap counts and the link cannot
+# supply.
+tab = web.tab_id(st.session_state)
 
 # The door, before anything is drawn. Where identity is configured a visitor who
 # is not signed in, not enrolled, or holding no credential is offered sign-in or
@@ -64,7 +67,7 @@ url_session = web.session_id(
 # before identity existed.
 admission = web.admit(st.session_state, web.trail_destination, url_session)
 if admission.door is not web.Door.OPEN:
-    web.draw_closed_door(admission, url_session, url_session)
+    web.draw_closed_door(admission, url_session, tab)
     st.stop()
 
 # What the conversation, the identity stamp, the dev panel and the cap are all
@@ -86,7 +89,7 @@ session = web.effective_session(admission, url_session)
 # the same run, so the question they came back to ask was recorded against
 # nobody while the sidebar still named them.
 if not web.session_registry().admit(
-    url_session, session, continuing=bool(web.transcript(st.session_state))
+    tab, session, continuing=bool(web.transcript(st.session_state))
 ):
     web.draw_try_later()
     st.stop()
@@ -131,7 +134,7 @@ with st.sidebar:
     # Who this page thinks you are, or that it is nobody's. A person reading
     # under an account they did not expect is a person whose questions are being
     # recorded against the wrong name.
-    web.draw_identity(admission, session, url_session)
+    web.draw_identity(admission, session, tab)
     # Always drawn, including before the first question, when it reads zero. The
     # panel must not gain a section the moment a question completes: a layout that
     # grows under the reader is a worse surprise than a bar showing nothing spent.

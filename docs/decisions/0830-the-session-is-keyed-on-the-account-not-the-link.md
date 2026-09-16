@@ -39,11 +39,28 @@ short-cut the lookup and never re-asserted anything.
 
 ## Decision
 
-**Where identity is configured and an account is signed in, the session key is
-derived from the account** — `acct:` plus the first 16 hex characters of the
-SHA-256 of the email — **and the URL token is not consulted.** Where identity is
-not configured, the URL token remains the session, so a developer's machine keeps
+**Where identity is configured and an account is signed in, the conversation key
+is derived from the account *and* the URL token together** — `acct:` plus the
+first 16 hex characters of the SHA-256 of `email|token`. Where identity is not
+configured, the token alone remains the session, so a developer's machine keeps
 today's bookmarkable behaviour exactly.
+
+**Revised 2026-09-16, before merge.** The first version of this decision used the
+email alone and ignored the token. A code review found what that costs: the key
+became a pure function of the address, and it is also the LangGraph thread id, so
+a reader who filled a conversation past `CONVERSATION_BOUND` was refused every
+further question with no way out. A fresh link did nothing, signing out returned
+the same key, `end_session` never touched the checkpoint — and the page's own
+advice, "reload with a fresh `?session=`", could not be followed. Only an
+operator deleting the thread recovered it. Mixing the token back in restores the
+escape hatch while keeping the property this ADR exists for, because the account
+half is what stops a shared link carrying one reader into another's conversation.
+
+The cost, accepted knowingly: the sign-in redirect drops the query string, so a
+reader who signs in again starts a new conversation rather than resuming their
+last. For an alpha whose testers ask a handful of questions per sitting that is
+the cheaper of the two failures — a forgotten conversation against a reader who
+cannot ask anything at all.
 
 `web.effective_session(admission, url_session)` is the one place that decides
 this, and everything downstream takes that key: the identity stamp, the panel's
@@ -72,13 +89,11 @@ keying and ordering rather than of the model:
 
 ## Trade-off accepted
 
-**A signed-in reader cannot hold two independent conversations, and cannot share
-one.** Two tabs under one account are one session; a link handed to a colleague
-starts them in their own. Both were possible before and neither is promised by
-the spec. For an alpha whose whole point is attributing ratings to the person who
-gave them, a conversation that follows the account is the behaviour wanted, and
-the alternative — letting a reader mint conversations — is what made the
-attribution forgeable.
+**A reader can hold several conversations, and still cannot share one.** A fresh
+`?session=` starts a new thread for that account; a link handed to a colleague
+starts them in their own, because the account half of the key differs. Minting
+conversations is no longer what makes attribution forgeable — the account is
+stamped from the registry, not from anything the reader supplies.
 
 **The key is derived, so it cannot be looked up backwards from the trail.** A
 `session_id` of `acct:9f86d081…` does not say whose it is; `user_email` on the
@@ -98,9 +113,12 @@ consequence of "one account is one conversation", and a reader who wants two
 conversations has always had the option of two accounts. A fresh conversation is
 a sign-out, or the operator clearing the thread.
 
-**The cap is keyed on the tab, not on this** (ADR-0790). Counting conversations
-would count accounts, and the cap is there to bound what the host actually
-carries — one Streamlit session and one agent per tab.
+**The cap is keyed on the tab, not on this** (ADR-0790), and the tab's id is
+minted rather than read from the link — the review found that adopting it meant
+ten testers on one shared bookmark registered as a single tab, so the cap bounded
+nothing and any one of them signing out freed the other nine's place. Counting
+conversations would likewise count accounts; the cap is there to bound what the
+host actually carries, which is one Streamlit session and one agent per tab.
 
 **The URL still carries a token that no longer decides anything under sign-in.**
 It is left in place because it is what an unconfigured deployment runs on, and

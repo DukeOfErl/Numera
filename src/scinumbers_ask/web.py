@@ -298,10 +298,7 @@ def items_for(events: Iterable[Event], repo: CorpusRepository | None = None) -> 
 
 
 def session_id(
-    state: MutableMapping[str, Any],
-    params: MutableMapping[str, Any] | None = None,
-    *,
-    advertise: bool = True,
+    state: MutableMapping[str, Any], params: MutableMapping[str, Any] | None = None
 ) -> str:
     """The session this browser tab is continuing, created on first use.
 
@@ -319,24 +316,27 @@ def session_id(
     if SESSION_KEY not in state:
         # Same width as the terminal driver's, so a session started in one can be
         # continued in the other by copying it.
-        #
-        # **Adopted from the link only where the link decides something.** Under
-        # sign-in this value is the tab's identity for the session cap, and the
-        # token is supplied by whoever holds the link -- so ten testers opening
-        # one bookmark would register as a single tab, bounding nothing, and any
-        # one of them signing out would free the place the other nine sit in.
-        # That is ADR-0830's own reasoning applied to the cap.
-        carried = params.get(QUERY_KEY) if advertise else None
-        state[SESSION_KEY] = carried or uuid.uuid4().hex[:8]
-    if advertise:
-        params[QUERY_KEY] = state[SESSION_KEY]
-    else:
-        # Under sign-in the conversation is keyed on the account (ADR-0830), so
-        # this token decides nothing: leaving it in the address bar would offer a
-        # link that does not resume the conversation it appears to name, beside a
-        # caption showing a different identifier.
-        params.pop(QUERY_KEY, None)
+        state[SESSION_KEY] = params.get(QUERY_KEY) or uuid.uuid4().hex[:8]
+    params[QUERY_KEY] = state[SESSION_KEY]
     return state[SESSION_KEY]
+
+
+def tab_id(state: MutableMapping[str, Any]) -> str:
+    """This browser session's own identity, for the session cap alone.
+
+    Minted here and never read from the URL, which is what separates it from the
+    conversation token above. The token is supplied by whoever holds the link, so
+    ten testers opening one shared bookmark would register as a single tab: the
+    cap would bound nothing, and any one of them signing out would free the place
+    the other nine were sitting in. That is ADR-0830's reasoning about the link,
+    applied to the thing the cap counts.
+
+    Per browser session, because that is what costs the host -- one Streamlit
+    session and one agent.
+    """
+    if TAB_KEY not in state:
+        state[TAB_KEY] = uuid.uuid4().hex[:8]
+    return state[TAB_KEY]
 
 
 def transcript(state: MutableMapping[str, Any]) -> list[tuple[str, list[Item]]]:
@@ -355,6 +355,8 @@ def transcript(state: MutableMapping[str, Any]) -> list[tuple[str, list[Item]]]:
 
 #: Session-state keys for what `admit` and `agent_for` hold. Namespaced like the
 #: others: one flat dictionary, shared with every widget on the page.
+#: This browser session's own key, apart from the conversation it is in.
+TAB_KEY = "scinumbers_ask.tab"
 ADMISSION_KEY = "scinumbers_ask.admission"
 AGENT_KEY = "scinumbers_ask.agent"
 
@@ -498,24 +500,32 @@ def admit(
 
 
 def effective_session(admission: Admission, url_session: str) -> str:
-    """The key the conversation, the identity stamp, the panel and the cap all use.
+    """The key the conversation, the identity stamp and the dev panel all use.
 
-    Where identity is configured and an account is signed in, it is derived from
-    the account and **not** from the URL token: the token is recovered from
-    `?session=` and is shared by anyone given the link, so keying identity on it
-    let a second reader on the same link overwrite the first's stamp, and let the
-    OAuth redirect -- which drops the query string -- strand the pre-sign-in
-    session. Deriving it from the email removes both by construction: two accounts
-    on one link get two sessions, and the key survives the redirect. One account
-    is then one conversation, across tabs and reloads, which for a tester is the
-    right default and is what the checkpoint thread already keys on (ADR-0830).
+    Under sign-in it is derived from **the account and the link token together**,
+    and each half is doing a job:
 
-    Where identity is not configured -- a developer's machine -- the URL token is
-    kept, so a session stays bookmarkable exactly as before.
+    - *The account*, because the token alone is supplied by whoever holds the
+      link. Keyed on the token, a second reader opening a shared link took over
+      the first's identity stamp, and every later record of the first reader was
+      attributed to the second (ADR-0830).
+    - *The token*, because a conversation has to be escapable. It is the
+      LangGraph thread, and a thread that fills up (`CONVERSATION_BOUND`) refuses
+      every further question. Keyed on the account alone the key was a pure
+      function of the email, so a full conversation could not be left: a fresh
+      link did nothing, signing out gave the same key back, and the page's own
+      advice -- "reload with a fresh `?session=`" -- was impossible to follow.
+
+    Together: two accounts on one link get two conversations, and one account can
+    start a new one whenever it wants. The cap does not use this key at all; it
+    counts tabs (`tab_id`).
+
+    Where identity is not configured -- a developer's machine -- the token *is*
+    the conversation, exactly as before any of this.
     """
     if admission.configured and admission.account is not None:
-        digest = hashlib.sha256(admission.account.email.encode()).hexdigest()[:16]
-        return f"acct:{digest}"
+        seed = f"{admission.account.email}|{url_session}".encode()
+        return f"acct:{hashlib.sha256(seed).hexdigest()[:16]}"
     return url_session
 
 
