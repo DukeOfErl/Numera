@@ -31,7 +31,7 @@ from .evaluation import (
 )
 from .events import EndReason
 from .question_set import QuestionSetError, load_question_set
-from .report import render
+from .report import expected_taken_from_the_set, render
 from .repository import CorpusRepository
 
 PROG = "scinumbers-eval"
@@ -106,6 +106,13 @@ def main(argv: list[str] | None = None) -> None:
         "(.html, or .pdf where weasyprint is installed); it carries corpus text, so "
         "it is refused on any path git would track",
     )
+    shown.add_argument(
+        "--expected-from-set",
+        action="store_true",
+        help="score against the question set as it reads now, not against what each "
+        "result recorded; for when the method that built the set was wrong, since the "
+        "expected list is never shown to the agent and cannot have changed an answer",
+    )
     shown.add_argument("--by-tag", action="store_true", help="figures per question tag")
     shown.add_argument("--by-shape", action="store_true", help="figures per entry shape")
 
@@ -155,12 +162,20 @@ def main(argv: list[str] | None = None) -> None:
                 repeats=args.repeats,
                 by_tag=args.by_tag,
                 by_shape=args.by_shape,
+                expected_from_set=args.expected_from_set,
             ),
             end="",
         )
         if args.sheet:
+            # The sheet marks each entry against the same expectation the figures
+            # used, or the two would disagree about the same answer on the same page.
+            shown_results = (
+                expected_taken_from_the_set(results, {q.question_id: q for q in questions})
+                if args.expected_from_set
+                else results
+            )
             try:
-                write_answer_sheet(args.sheet, results, questions, entries or ())
+                write_answer_sheet(args.sheet, shown_results, questions, entries or ())
             except (SheetUnavailable, ResultsWouldBeCommitted) as exc:
                 raise SystemExit(f"{PROG}: {exc}") from exc
             print(f"Answers and their entries written to {args.sheet}.")

@@ -18,7 +18,7 @@ from conftest import write_all_shapes_corpus
 from scinumbers_ask.corpus import Entry, load
 from scinumbers_ask.evaluation import Provenance, Result
 from scinumbers_ask.question_set import Question, Tier
-from scinumbers_ask.report import render
+from scinumbers_ask.report import expected_taken_from_the_set, render
 
 PROVENANCE = Provenance(
     recorded_at="2026-09-05T09:00:00+00:00",
@@ -405,3 +405,37 @@ def test_a_tier_expecting_nothing_is_not_reported_as_nought_per_cent(corpus):
     text = render((result,), (question,), corpus)
     assert "no expected entries" in text
     assert "declining: 0 of 0" not in text
+
+
+# -- Re-scoring against the set as it reads now ---------------------------------
+
+
+def test_expected_entries_can_be_taken_from_the_set_instead_of_the_record(corpus):
+    """`expected_entries` is frozen into each result so a file is self-describing,
+    which is right when a set is edited and wrong when the *method* that built it
+    was faulty. The first lists were swept by property wording and missed every
+    entry recording a cell volume under the word "size"; re-running to fix a number
+    the agent never saw would be paying for nothing."""
+    result = a_result(expected_entries=(1,), cited=(1,), retrieved=(1, 2))
+    question = a_question(expected_entries=(1, 2))
+    text = render((result,), (question,), corpus, expected_from_set=True)
+    assert "2 of 2" in text
+    assert "taken from the question set as it reads now" in text
+
+
+def test_the_recorded_expectation_is_used_unless_asked_otherwise(corpus):
+    """The default must not quietly restate what a run was scored against."""
+    result = a_result(expected_entries=(1,), cited=(1,), retrieved=(1, 2))
+    question = a_question(expected_entries=(1, 2))
+    text = render((result,), (question,), corpus)
+    assert "1 of 1" in text
+    assert "taken from the question set" not in text
+
+
+def test_a_result_whose_question_left_the_set_keeps_what_it_recorded(corpus):
+    """There is nothing to take an expectation from, and inventing an empty one
+    would score it as a question with nothing to find."""
+    kept = expected_taken_from_the_set(
+        (a_result("gone", expected_entries=(1, 2)),), {"q1": a_question()}
+    )
+    assert kept[0].expected_entries == (1, 2)

@@ -14,6 +14,7 @@ no report, because it retires the suspicion that would have found the gap.
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
 
 from .config import format_usd
 from .corpus import Entry
@@ -48,6 +49,7 @@ def render(
     repeats: int = 1,
     by_tag: bool = False,
     by_shape: bool = False,
+    expected_from_set: bool = False,
 ) -> str:
     """The whole report as text. Empty results are said to be empty, not scored."""
     lines: list[str] = ["SciNumbers evaluation report", ""]
@@ -56,6 +58,15 @@ def render(
         return "\n".join(lines) + "\n"
 
     by_id = {question.question_id: question for question in questions}
+    if expected_from_set:
+        results = expected_taken_from_the_set(results, by_id)
+        lines += [
+            "Expected entries are taken from the question set as it reads now, not from what each",
+            "result recorded. Said here because every figure below then answers a "
+            "different question",
+            "from the one the run answered, and nothing in the numbers would show it.",
+            "",
+        ]
     repo = CorpusRepository(entries)
     lines += _coverage(results, questions, repeats)
     for group, members in grouped(results).items():
@@ -78,6 +89,35 @@ def render(
             "is a different system, and one average over them would describe none of them.",
         ]
     return "\n".join(lines) + "\n"
+
+
+def expected_taken_from_the_set(
+    results: tuple[Result, ...], by_id: dict[str, Question]
+) -> tuple[Result, ...]:
+    """Re-score against the set as it reads now, rather than as it read at run time.
+
+    `expected_entries` is copied into each result so a results file is
+    self-describing (ADR-0530), and that is right for the usual case: a set edited
+    after a run must not silently restate what the run was scored against.
+
+    It is wrong for one case, and that case has already happened. When the *method*
+    that built the set turns out to be faulty -- the first lists were swept by
+    property wording, which missed every entry recording a cell volume under the
+    word "size" -- the recorded denominator is not a historical fact worth
+    preserving, it is a bug. The alternative is paying for the whole run again to
+    change a number the run never saw, since the expected list is not shown to the
+    agent and cannot have altered a single answer.
+
+    A result whose question has left the set keeps what it recorded: there is
+    nothing to take it from, and inventing an empty expectation would score it as a
+    question with nothing to find.
+    """
+    return tuple(
+        replace(result, expected_entries=by_id[result.question_id].expected_entries)
+        if result.question_id in by_id
+        else result
+        for result in results
+    )
 
 
 def _coverage(
