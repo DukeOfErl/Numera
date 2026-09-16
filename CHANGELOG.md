@@ -35,7 +35,7 @@ any release; `1.0.0` when it stabilizes.
   and admin and refuses it to the three tester roles, and lists nothing else,
   because a permission exists only where some role is refused it. Reading and
   rating are what enrolment grants ([ADR-0800]).
-- **A Dev section in the side panel** for dev and admin — and for a developer's
+- **A Dev tab in the side panel**, beside the entries, for dev and admin — and for a developer's
   machine with no sign-in configured — showing this session's trail for its last
   five questions. Absent, not disabled, for everyone else. Nothing in it reaches
   the model.

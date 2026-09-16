@@ -5,7 +5,8 @@ Both directions through the real script, because "absent -- not disabled" is a
 claim about what the page did not draw. The deny case varies the dimension the
 rule reads: a *student* -- an enrolled account with a real role -- and not only a
 visitor with no identity. The panel is the only thing that puts a `dataframe` in
-the sidebar, so its presence is asserted on that element and on the "Dev" header.
+the sidebar's tab strip, so its presence is asserted on the strip's labels and
+on the table inside the Dev tab.
 """
 
 from __future__ import annotations
@@ -35,12 +36,22 @@ def recent(caught):
     web.RECENT = None
 
 
+def _dev_tab(at):
+    """The Dev tab, or None when the sidebar has no strip at all."""
+    for tab in at.sidebar.tabs:
+        if tab.label == web.DEV_TAB:
+            return tab
+    return None
+
+
 def _panel(at):
-    return at.sidebar.dataframe
+    """The table inside the Dev tab. Empty when there is no such tab."""
+    tab = _dev_tab(at)
+    return list(tab.dataframe) if tab is not None else []
 
 
 def _dev_header(at) -> bool:
-    return any(h.value == "Dev" for h in at.sidebar.header)
+    return _dev_tab(at) is not None
 
 
 # --- both directions, through the page -------------------------------------------------
@@ -63,20 +74,36 @@ def test_an_operator_s_page_has_the_section(page, recent, account):
     ids=["student", "scientist", "senior scientist"],
 )
 def test_a_tester_s_page_has_no_such_section(page, recent, account):
-    """Absent, not disabled: no header, no table, of any kind, anywhere in the sidebar."""
+    """Absent, not disabled. No Dev tab -- and no tab strip at all, because a
+    strip with one openable tab still shows there is a view they cannot have."""
     at = page(auth=True, email=account.email, enrolled={account.email: account}).run()
     assert not at.exception
     assert at.chat_input, "control: the tester was admitted and can ask"
     assert not _dev_header(at)
     assert not _panel(at)
+    assert not at.sidebar.tabs, "a strip that advertises a view they cannot open"
+    assert not at.sidebar.dataframe, "no table of trail records anywhere in the sidebar"
 
 
-def test_the_section_is_below_the_run_status(page, recent):
-    """The spec says where, and a verifier moved it above with every test green."""
+def test_the_entries_come_first_and_the_trail_second(page, recent):
+    """The strip's order. A reader is here for the entries; the trail is the
+    operator's view of the same session and sits behind them."""
     at = page(auth=True, email=DEV.email, enrolled={DEV.email: DEV}).run()
-    headers = [h.value for h in at.sidebar.header]
-    assert "Run budget" in headers, "control: the run status was drawn"
-    assert headers.index("Run budget") < headers.index("Dev")
+    assert [t.label for t in at.sidebar.tabs] == [web.ENTRIES_TAB, web.DEV_TAB]
+
+
+def test_the_strip_is_below_the_run_status(page, recent):
+    """The spec says where. Read off the sidebar's own children in order, because
+    a tab strip is a block rather than an element and does not appear in the
+    flat `header` list the previous version of this test compared against."""
+    at = page(auth=True, email=DEV.email, enrolled={DEV.email: DEV}).run()
+    kinds = [
+        "run budget" if getattr(child, "value", None) == "Run budget" else child.type
+        for child in at.sidebar.children.values()
+    ]
+    assert "run budget" in kinds, "control: the run status was drawn"
+    assert "tab_container" in kinds, "control: the strip was drawn"
+    assert kinds.index("run budget") < kinds.index("tab_container")
 
 
 def test_installing_the_panel_s_sink_twice_leaves_one():

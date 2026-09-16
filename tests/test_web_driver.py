@@ -609,7 +609,7 @@ def test_the_openable_entries_are_in_the_side_panel_not_the_main_column(
 
     labels = [e.label for e in at.sidebar.expander]
     assert any("BNID 100002" in label for label in labels), labels
-    assert any("Full entries" in h.value for h in at.sidebar.header)
+    assert any(t.label == web.ENTRIES_TAB for t in at.sidebar.tabs)
 
 
 def test_an_opened_row_shows_the_entry_the_model_never_saw(monkeypatch, repo, config, tmp_path):
@@ -677,7 +677,7 @@ def test_the_side_panel_is_there_before_any_question(monkeypatch, repo, config, 
     """A panel that materialises after the first answer reads as a glitch."""
     at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
 
-    assert any("Full entries" in h.value for h in at.sidebar.header)
+    assert any(t.label == web.ENTRIES_TAB for t in at.sidebar.tabs)
     assert not at.sidebar.expander, "entries before anything was retrieved"
 
 

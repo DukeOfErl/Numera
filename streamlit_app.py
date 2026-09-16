@@ -145,10 +145,13 @@ with st.sidebar:
         # inline mathematics, so "$1.20 of $1.20" typeset the middle as an equation
         # and ate both currency signs. Same fault as the ending line's, same fix.
         st.caption(web.as_text(f"{format_usd(spent)} of {format_usd(cap)}"))
-    # Below the run status, and only for roles the grant table allows -- the
-    # refusal is inside `dev_panel_rows`, so this line decides nothing.
-    web.draw_dev_panel(admission, session)
     st.divider()
+    # The sidebar's two views, below the run status: the entries a reader came
+    # for, and -- only for roles the grant table allows -- this session's trail.
+    # Made here so the strip sits under the run budget, and filled at the foot of
+    # the script, where the newest question's entries and records both exist.
+    # The refusal is inside `dev_panel_rows`; this line decides nothing.
+    entries_seat, dev_seat = web.sidebar_tabs(admission, session)
 
 for asked, drawn in web.transcript(st.session_state):
     with st.chat_message("user"):
@@ -245,5 +248,6 @@ elif question := st.chat_input("Ask a question", submit_mode="disable", key=web.
 
 # The side panel carries the newest answer's entries, whole and openable -- the
 # main column's table is the first few rows of the same set. Written after the
-# conversation so it reflects the question just asked.
-web.draw_full_entries(web.latest_table(web.transcript(st.session_state)))
+# conversation so both tabs reflect the question just asked.
+web.draw_full_entries(web.latest_table(web.transcript(st.session_state)), entries_seat)
+web.draw_dev_panel(admission, session, dev_seat)

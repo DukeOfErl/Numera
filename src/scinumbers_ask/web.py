@@ -1041,23 +1041,62 @@ def dev_panel_rows(admission: Admission, session_id: str) -> list[dict[str, Any]
     return RECENT.rows(session_id) if RECENT is not None else []
 
 
-def draw_dev_panel(admission: Admission, session_id: str) -> None:
-    """The sidebar section, below the run status. Absent -- not disabled, not
-    empty -- when refused; present and empty on a fresh session, so a dev can
-    tell "nothing yet" from "not permitted"."""
+#: What the sidebar's tab strip is called, in the order it is drawn. The entries
+#: come first because they are what a reader is there for; the trail is the
+#: operator's view of the same session and sits behind it.
+ENTRIES_TAB = "Full entries"
+DEV_TAB = "Dev"
+
+
+def sidebar_tabs(admission: Admission, session_id: str) -> tuple[Any | None, Any | None]:
+    """The sidebar's two views as a tab strip, or no strip at all.
+
+    Returns seats to be filled later -- a Streamlit container is bound to where
+    it was made, so the strip is created here, below the run status, and written
+    into at the end of the script when the newest question's entries and trail
+    records both exist.
+
+    **No strip where the dev panel is refused.** A lone tab labelled "Full
+    entries" is a control that does nothing, and a strip whose second tab is
+    missing would be the "disabled, not absent" the spec forbids -- a tester's
+    page must not show that there is a view they cannot open. The entries then
+    draw into the sidebar exactly as they did before tabs existed.
+
+    Whether the panel is refused is asked by trying it, so the rule lives in one
+    place: `dev_panel_rows` holds the `require`, and this reads its answer.
+    """
+    try:
+        dev_panel_rows(admission, session_id)
+    except Refused:
+        return None, None
+    with st.sidebar:
+        entries, dev = st.tabs([ENTRIES_TAB, DEV_TAB])
+    return entries, dev
+
+
+def draw_dev_panel(admission: Admission, session_id: str, seat: Any | None = None) -> None:
+    """This session's trail, into the Dev tab. Nothing at all when refused.
+
+    `seat` is `None` exactly when `sidebar_tabs` refused the panel, so there is
+    nowhere to draw and nothing to draw -- present and *empty* on a fresh
+    session, so a dev can tell "nothing yet" from "not permitted", and absent
+    rather than empty for everyone else.
+    """
+    if seat is None:
+        return
     try:
         rows = dev_panel_rows(admission, session_id)
     except Refused:
         return
     import pandas as pd
 
-    st.header("Dev")
-    st.caption(
-        as_text(
-            "This session's trail, for its last five questions. Nothing here reaches the model."
+    with seat:
+        st.caption(
+            as_text(
+                "This session's trail, for its last five questions. Nothing here reaches the model."
+            )
         )
-    )
-    st.dataframe(pd.DataFrame(rows, columns=list(PANEL_COLUMNS)), hide_index=True)
+        st.dataframe(pd.DataFrame(rows, columns=list(PANEL_COLUMNS)), hide_index=True)
 
 
 @st.cache_resource(show_spinner="Loading the corpus…")
@@ -1291,7 +1330,7 @@ def _draw_table(table: Table) -> None:
         st.markdown(as_text(summary.removeprefix("… ")))
 
 
-def draw_full_entries(table: Table | None) -> None:
+def draw_full_entries(table: Table | None, seat: Any | None = None) -> None:
     """Every retrieved entry, whole and openable, in the side panel.
 
     Drawn whether or not there is anything to put in it, so the panel is part of
@@ -1304,8 +1343,11 @@ def draw_full_entries(table: Table | None) -> None:
     the newest question's, because the panel is for reading the answer in front
     of you and a session's worth would bury it.
     """
-    with st.sidebar:
-        st.header("Full entries")
+    with seat if seat is not None else st.sidebar:
+        # The tab's own label is the heading when there is a strip; a header
+        # repeating it underneath is the same word twice.
+        if seat is None:
+            st.header(ENTRIES_TAB)
         if table is None:
             st.caption("The entries behind an answer appear here once you ask something.")
             return

@@ -199,9 +199,9 @@ gates it. The operator's steps, in order:
    [ADR-0820](docs/decisions/0820-one-agent-per-session-handed-a-credential-not-an-identity.md)).
 
 The five roles — student, scientist, senior scientist, dev, admin — differ today
-in one thing: dev and admin see a **Dev** section in the side panel with this
-session's trail for its last five questions; the three tester roles see no such
-section. Nothing about the role reaches the agent, so an answer cannot depend on
+in one thing: the side panel is a tab strip, and dev and admin get a second
+**Dev** tab beside the entries, showing this session's trail for its last five
+questions. The three tester roles get no such tab, and no strip at all. Nothing about the role reaches the agent, so an answer cannot depend on
 who asked
 ([ADR-0800](docs/decisions/0800-default-deny-and-the-pruning-rule.md)). The
 roles exist now so that ratings can later be weighted by who gave them.

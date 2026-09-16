@@ -124,10 +124,14 @@ control has not enforced anything.
 
 ### Requirement: An operator can see a session's own trail
 
-A sidebar section, below the run status, SHALL be shown to roles granted `dev
-panel` and SHALL be absent — not disabled — for every other role. It SHALL show
-the trail records of this session's last five questions as a table: when, which
-question, the event, and its detail. This session's only: another tester's trail
+The sidebar SHALL carry its views as a tab strip below the run status: the
+entries behind the newest answer first, and this session's trail second. The
+trail tab SHALL be shown to roles granted `dev panel` and SHALL be absent — not
+disabled — for every other role; where it is absent the sidebar SHALL show no
+strip at all, because a strip whose second tab is missing still tells a reader
+there is a view they may not open. The trail tab SHALL show the records of this
+session's last five questions as a table: when, which question, the event, and
+its detail. This session's only: another tester's trail
 is not this permission's to show, and scoping to the session is what keeps that
 true without a second rule. Nothing shown here SHALL reach the model; these are
 records of questions already answered.
@@ -135,21 +139,23 @@ records of questions already answered.
 A session with no questions yet SHALL show an empty section rather than none, so
 a dev can tell "nothing yet" from "not permitted".
 
-#### Scenario: A dev sees the section
+#### Scenario: A dev sees the trail tab
 - **WHEN** an account granted `dev panel` views the page
-- **THEN** the section is present below the run status
+- **THEN** the sidebar's tab strip is present below the run status
+- **AND** its tabs are the entries first and the trail second
 
-#### Scenario: A student's page has no such section
+#### Scenario: A student's page has no such tab
 - **WHEN** an account not granted `dev panel` views the page
-- **THEN** no such section exists on the page, disabled or otherwise
+- **THEN** no such tab exists on the page, disabled or otherwise
+- **AND** the sidebar shows no tab strip at all
 
 #### Scenario: The table names the question just asked
 - **WHEN** an account granted `dev panel` asks a question
-- **THEN** the section's table includes that question's records
+- **THEN** the trail tab's table includes that question's records
 
-#### Scenario: A fresh session shows an empty section
+#### Scenario: A fresh session shows an empty tab
 - **WHEN** an account granted `dev panel` opens a session and has asked nothing
-- **THEN** the section is present and empty
+- **THEN** the trail tab is present and empty
 
 #### Scenario: Another session's trail is not shown
 - **WHEN** two sessions are open under accounts granted `dev panel`

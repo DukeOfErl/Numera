@@ -406,6 +406,8 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_web_driver_dev_panel.py::test_a_tester_s_page_has_no_such_section",
         "test_web_driver_dev_panel.py::test_a_fresh_operator_session_shows_the_section_empty",
         "test_web_driver_dev_panel.py::test_the_table_names_the_question_just_asked",
+        "test_web_driver_dev_panel.py::test_the_entries_come_first_and_the_trail_second",
+        "test_web_driver_dev_panel.py::test_the_strip_is_below_the_run_status",
         "test_web_driver_dev_panel.py::test_two_sessions_panels_show_only_their_own_records",
         "test_web_driver_dev_panel.py::test_the_panel_s_contents_do_not_reach_the_model",
     ),
