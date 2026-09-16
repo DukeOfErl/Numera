@@ -71,6 +71,26 @@ def test_a_tester_s_page_has_no_such_section(page, recent, account):
     assert not _panel(at)
 
 
+def test_the_section_is_below_the_run_status(page, recent):
+    """The spec says where, and a verifier moved it above with every test green."""
+    at = page(auth=True, email=DEV.email, enrolled={DEV.email: DEV}).run()
+    headers = [h.value for h in at.sidebar.header]
+    assert "Run budget" in headers, "control: the run status was drawn"
+    assert headers.index("Run budget") < headers.index("Dev")
+
+
+def test_installing_the_panel_s_sink_twice_leaves_one():
+    logger = logging.getLogger(trace.LOGGER_NAME)
+    before = list(logger.handlers)
+    try:
+        web.install_recent_trail()
+        web.install_recent_trail()
+        assert sum(isinstance(h, web.RecentTrail) for h in logger.handlers) == 1
+    finally:
+        logger.handlers[:] = before
+        web.RECENT = None
+
+
 def test_a_fresh_operator_session_shows_the_section_empty(page, recent):
     """ "Nothing yet" must look different from "not permitted"."""
     at = page(auth=True, email=DEV.email, enrolled={DEV.email: DEV}).run()

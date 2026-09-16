@@ -48,6 +48,26 @@ def test_no_identity_is_refused():
         require(None, Permission.DEV_PANEL)
 
 
+def test_a_role_the_table_does_not_know_is_refused():
+    """`GRANTS.get(role, frozenset())`: the default is the deny direction, and a
+    mutant that made it `frozenset(Permission)` survived until this test. The
+    annotation says `Role`; nothing at runtime enforces it, and `accounts.lookup`
+    reads role text off a database row."""
+    stranger = Identity(email="someone@example.org", role="curator")  # type: ignore[arg-type]
+    assert not allowed(stranger, Permission.DEV_PANEL)
+    with pytest.raises(Refused):
+        require(stranger, Permission.DEV_PANEL)
+
+
+def test_the_role_values_are_the_words_the_spec_and_the_table_use():
+    """These strings are what `sql/accounts.sql` documents, what `accounts.lookup`
+    parses off the row, and what `user_role` is written as. A renamed member
+    value would enrol nobody and stamp a different word; pinned here so that a
+    change to one is a change to all four on purpose."""
+    assert {r.value for r in Role} == {"student", "scientist", "senior scientist", "dev", "admin"}
+    assert Permission.DEV_PANEL.value == "dev panel"
+
+
 def test_the_two_populations_partition_the_roles():
     """Both directions, measured over the whole table rather than sampled.
 

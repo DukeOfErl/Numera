@@ -294,7 +294,16 @@ def test_the_agent_takes_no_parameter_naming_its_caller():
 # *identifiers* -- names, parameters, attributes, keywords, imports -- and not as
 # text, because `agent.py` legitimately writes `{"role": "user"}` as a string and
 # mentions an account in prose. A string is not a way for the role to arrive.
-IDENTITY_TOKENS = {"Identity", "identity", "role", "email", "account", "user_role", "user_email"}
+IDENTITY_TOKENS = {
+    "Identity",
+    "identity",
+    "Role",
+    "role",
+    "email",
+    "account",
+    "user_role",
+    "user_email",
+}
 # The three modules identity must never enter. `agent.py` decides the answer;
 # `trace.py` builds the records; `feedback.py` records what a stranger said. All
 # three get stamped by the web driver's filter without knowing, which is the
@@ -336,6 +345,19 @@ def test_identity_never_enters_the_agent_the_trail_or_the_feedback(module):
     """
     reached = identifiers_of(module) & IDENTITY_TOKENS
     assert not reached, f"{module}.py names {sorted(reached)}; identity has a way in"
+    # And the modules themselves, whatever they are imported as. `permissions`
+    # and `authorization` are core, so the core-to-core rules above allow the
+    # import; this is the one place that forbids it for these three. A verifier
+    # seeded `from .permissions import Identity, Role` into all three and the
+    # suite stayed green until this line existed.
+    imported = imports_of(module) & IDENTITY_CORE
+    assert not imported, f"{module}.py imports {sorted(imported)}; identity has a way in"
+    # What is still invisible here, measured rather than guessed: `getattr(self,
+    # "role")`, `kwargs["role"]`, `globals()[...]` -- string keys. Each of them
+    # needs the value to have arrived first, by a parameter, a field or an
+    # import, and those three routes are what the two assertions above close.
+    # The registry itself lives in `web`, so reading it needs an import of `web`,
+    # which the dependency rule refuses in both spellings.
 
 
 def test_the_identity_free_modules_exist_and_are_core():

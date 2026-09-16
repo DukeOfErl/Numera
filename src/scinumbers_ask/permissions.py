@@ -28,7 +28,8 @@ five rows that say two things is a table a reader can hold in their head.
 **Nothing here reaches the agent.** `Identity` is a driver's value: the web
 driver looks it up at sign-in and stamps it onto trail records at the sink. The
 agent is never handed it, and `tests/test_driver_independence.py` asserts over
-the source that `agent.py`, `trace.py` and `feedback.py` name none of it. If the
+the source that `agent.py`, `trace.py` and `feedback.py` neither name it nor
+import this module (`test_identity_never_enters_the_agent_the_trail_or_the_feedback`). If the
 agent must one day know what is permitted, it is handed permissions, never the
 role (ADR-0820).
 
