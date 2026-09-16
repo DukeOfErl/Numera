@@ -328,9 +328,15 @@ def test_an_unavailable_check_is_retried_on_the_next_rerun(monkeypatch):
         web.IDENTITIES.clear()
 
 
-def test_no_database_at_all_is_unavailable_not_open(monkeypatch):
+def test_no_database_at_all_says_so_rather_than_asking_the_reader_to_wait(monkeypatch):
+    """`[auth]` set and `[connections.usage]` not is the likeliest first-deploy
+    mistake, and it never comes right on its own -- so "try again shortly" would
+    leave every visitor waiting on a retry that cannot succeed."""
     _configured(monkeypatch, TESTER.email)
-    assert web.admit({}, None, "s1").door is web.Door.UNAVAILABLE
+    door = web.admit({}, None, "s1").door
+    assert door is web.Door.NO_ACCOUNTS_DATABASE
+    assert door is not web.Door.OPEN, "fails closed either way"
+    assert messages.NO_ACCOUNTS_DATABASE != messages.ENROLMENT_CHECK_UNAVAILABLE
 
 
 def test_signing_out_forgets_the_session_s_identity(monkeypatch):
@@ -669,15 +675,21 @@ def test_a_malformed_cap_setting_falls_back_rather_than_taking_the_page_down(mon
         web.session_registry.clear()
 
 
-def test_the_url_token_is_not_advertised_where_sign_in_decides_the_conversation():
-    """Otherwise the address bar offers a link that does not resume the
-    conversation it names, beside a caption showing a different identifier."""
+def test_the_url_token_is_neither_advertised_nor_adopted_under_sign_in():
+    """Not advertised, because it would name a conversation that opening it does
+    not reach. Not adopted either, because under sign-in it is the tab's identity
+    for the session cap -- and ten testers on one shared bookmark would register
+    as a single tab, bounding nothing, with any one of them able to free the
+    place the other nine sit in."""
     state, params = {}, {"session": "abc123"}
-    assert web.session_id(state, params, advertise=False) == "abc123"
+    minted = web.session_id(state, params, advertise=False)
+    assert minted != "abc123", "the link decided which tab this is"
     assert "session" not in params
-    state, params = {}, {}
-    web.session_id(state, params, advertise=True)
-    assert params["session"], "a developer's machine keeps its bookmark"
+    assert web.session_id(state, params, advertise=False) == minted, "stable for this tab"
+
+    state, params = {}, {"session": "abc123"}
+    assert web.session_id(state, params, advertise=True) == "abc123"
+    assert params["session"] == "abc123", "a developer's machine keeps its bookmark"
 
 
 def test_the_suite_runs_as_though_no_sign_in_were_configured():

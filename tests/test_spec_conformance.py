@@ -357,7 +357,7 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_web_driver_identity.py::"
         "test_an_unreadable_accounts_table_admits_nobody_and_says_a_different_sentence",
         "test_web_driver_identity.py::test_an_unavailable_check_is_retried_on_the_next_rerun",
-        "test_web_driver_identity.py::test_no_database_at_all_is_unavailable_not_open",
+        "test_web_driver_identity.py::test_no_database_at_all_says_so_rather_than_asking_the_reader_to_wait",
         "test_accounts.py::test_an_unreadable_table_raises_rather_than_answering_none",
         "test_accounts.py::test_a_disabled_account_is_none_exactly_as_an_absent_one_is",
     ),

@@ -32,6 +32,14 @@ create table if not exists accounts (
     disabled       boolean not null default false
 );
 
+-- **One row per address, whatever its case.** `accounts.lookup` matches on
+-- `lower(email)`, and the primary key above is case-sensitive -- so without this
+-- index `Tester@example.org` and `tester@example.org` are two enrolable rows that
+-- both satisfy the lookup, and which one answers is Postgres's choice. That
+-- decides the person's role, their credential *and* their conversation key, and
+-- it could differ between two sign-ins by the same person.
+create unique index if not exists accounts_email_lower on accounts (lower(email));
+
 -- Enrol one tester. Replace every placeholder; `openrouter_key` may be null for
 -- an account that should be able to sign in but not yet ask (the page then says
 -- no credential has been issued).

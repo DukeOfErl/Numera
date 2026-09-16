@@ -40,7 +40,7 @@ import streamlit as st
 from . import accounts, bionumbers, entries_table, feedback, messages, trace, trail_store
 from .accounts import Account, EnrolmentUnavailable
 from .agent import AskAgent
-from .authorization import Refused, require
+from .authorization import Refused, allowed, require
 from .config import Config, env_setting, refuse_retired_env
 from .corpus import load
 from .events import Answer, AnswerEntries, EndReason, Event, QuestionEnded, Retrieval
@@ -319,7 +319,15 @@ def session_id(
     if SESSION_KEY not in state:
         # Same width as the terminal driver's, so a session started in one can be
         # continued in the other by copying it.
-        state[SESSION_KEY] = params.get(QUERY_KEY) or uuid.uuid4().hex[:8]
+        #
+        # **Adopted from the link only where the link decides something.** Under
+        # sign-in this value is the tab's identity for the session cap, and the
+        # token is supplied by whoever holds the link -- so ten testers opening
+        # one bookmark would register as a single tab, bounding nothing, and any
+        # one of them signing out would free the place the other nine sit in.
+        # That is ADR-0830's own reasoning applied to the cap.
+        carried = params.get(QUERY_KEY) if advertise else None
+        state[SESSION_KEY] = carried or uuid.uuid4().hex[:8]
     if advertise:
         params[QUERY_KEY] = state[SESSION_KEY]
     else:
@@ -359,6 +367,7 @@ class Door(StrEnum):
     NOT_ENROLLED = "not enrolled"
     NO_CREDENTIAL = "no credential"
     UNAVAILABLE = "enrolment check unavailable"
+    NO_ACCOUNTS_DATABASE = "no accounts database"
 
 
 @dataclass(frozen=True)
@@ -456,10 +465,19 @@ def admit(
     held = state.get(ADMISSION_KEY)
     if held is not None and held[0] == email:
         return held[1]
+    resolved = engine() if callable(engine) else engine
+    if resolved is None:
+        # Not `UNAVAILABLE`: that says "try again shortly", and this never comes
+        # right on its own. `[auth]` configured without `[connections.usage]` is
+        # the likeliest first-deploy mistake, and it should send the operator to
+        # `sql/accounts.sql` rather than leave every visitor waiting for a retry
+        # that cannot succeed.
+        trail_store.complain(
+            "no accounts database is configured",
+            EnrolmentUnavailable("[auth] is set but [connections.usage] is not"),
+        )
+        return Admission(Door.NO_ACCOUNTS_DATABASE, configured=True)
     try:
-        resolved = engine() if callable(engine) else engine
-        if resolved is None:
-            raise EnrolmentUnavailable("no accounts database is configured")
         account = accounts.lookup(resolved, email)
     except EnrolmentUnavailable as exc:
         trail_store.complain("enrolment check unavailable", exc)
@@ -555,13 +573,12 @@ def agent_for(
     repository -- the expensive index -- stays shared; an agent is a config, a
     reference and a path. Rebuilt if the credential changes under the same tab.
 
-    **Returns None, and builds nothing, for an enrolled account with no
-    credential.** This is the refusal the spec names, and it is here rather than
-    on the page because of what the alternative would do: an agent built with
-    `api_key=None` falls back to the environment, and an unconfigured
-    deployment's one key would quietly fund a tester the operator has not
-    issued one to. The page keeps the wording; this function keeps the refusal,
-    so whatever asks for an agent meets it.
+    **Raises for an enrolled account with no credential**, rather than building
+    one: an agent made with `api_key=None` falls back to the environment, so an
+    unconfigured deployment's own key would quietly fund a tester the operator
+    never issued one to. The page never meets that raise, because such an account
+    met `Door.NO_CREDENTIAL` before it got here; the raise is the backstop for a
+    caller that skipped the door.
 
     Where no identity is configured, `None` is the environment's key, exactly
     as before this change. Called only for an `OPEN` admission -- an enrolled
@@ -603,6 +620,8 @@ def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None =
     elif admission.door is Door.NO_CREDENTIAL:
         st.error(as_text(messages.NO_CREDENTIAL), icon=":material/key_off:")
         st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id))
+    elif admission.door is Door.NO_ACCOUNTS_DATABASE:
+        st.error(as_text(messages.NO_ACCOUNTS_DATABASE), icon=":material/database_off:")
     elif admission.door is Door.UNAVAILABLE:
         st.error(as_text(messages.ENROLMENT_CHECK_UNAVAILABLE), icon=":material/cloud_off:")
         # A widget, so the retry the docstring promises can happen without the
@@ -835,12 +854,16 @@ class SessionRegistry:
             expired = [tab for tab, (seen, _) in self._last_seen.items() if seen < cutoff]
             emptied = {self._last_seen.pop(tab, (0.0, ""))[1] for tab in expired}
             still_open = {conversation for _, conversation in self._last_seen.values()}
-        # Outside the lock: these reach other module-level stores, and holding one
-        # lock while taking another is how a deadlock is built.
-        for conversation in emptied - still_open:
-            forget_identity(conversation)
-            if RECENT is not None:
-                RECENT.forget(conversation)
+            # Inside the lock, and that matters. Released here, another tab's
+            # thread could complete its whole prologue in the gap -- re-admit,
+            # re-stamp -- and this loop would then wipe the stamp it had just
+            # set, so that tab's next question is recorded against nobody while
+            # its sidebar still names an account. Neither callee takes a lock,
+            # so there is no nesting here to deadlock on.
+            for conversation in emptied - still_open:
+                forget_identity(conversation)
+                if RECENT is not None:
+                    RECENT.forget(conversation)
 
     def live(self) -> int:
         self.prune()
@@ -1023,6 +1046,20 @@ def install_recent_trail() -> RecentTrail:
     return RECENT
 
 
+def may_see_dev_panel(admission: Admission) -> bool:
+    """Whether to *draw* the tab. Presentation's question; the refusal is
+    `dev_panel_rows`'.
+
+    Both read the grant table through the same `allowed` -- `require` is `allowed`
+    plus a raise -- so the two cannot disagree about a role. Asked separately
+    because answering it by calling the accessor rendered the whole panel just to
+    see whether it would raise, and then rendered it again to draw it: two full
+    serialisations per rerun, on every click, for exactly the sessions that have
+    rows.
+    """
+    return not admission.configured or allowed(admission.identity, Permission.DEV_PANEL)
+
+
 def dev_panel_rows(admission: Admission, session_id: str) -> list[dict[str, Any]]:
     """This session's recent trail -- **the operation the permission guards.**
 
@@ -1065,9 +1102,7 @@ def sidebar_tabs(admission: Admission, session_id: str) -> tuple[Any | None, Any
     Whether the panel is refused is asked by trying it, so the rule lives in one
     place: `dev_panel_rows` holds the `require`, and this reads its answer.
     """
-    try:
-        dev_panel_rows(admission, session_id)
-    except Refused:
+    if not may_see_dev_panel(admission):
         return None, None
     with st.sidebar:
         entries, dev = st.tabs([ENTRIES_TAB, DEV_TAB])

@@ -230,7 +230,13 @@ doubles, both populations of the table. Its brief already says so.
       `openspec/` in the copy) and
       `test_a_results_file_git_would_track_is_refused_before_it_is_written` (the
       copy is not a git repository). Beyond those:*
-      - *`require` a no-op — 10:*
+      *Re-run after the code review of 2026-09-16 split presentation's question
+      (`may_see_dev_panel`, reading `allowed`) from the operation's refusal
+      (`dev_panel_rows`, still calling `require`): the `require` canary now kills
+      8 rather than 10, because the tab-absence tests are refused by `allowed`
+      and no longer depend on `require`. Both layers refuse independently; the
+      accessor tests below are what pin the operation.*
+      - *`require` a no-op — 10 at the time, 8 now:*
         `test_permissions.py::test_each_tester_role_is_refused_the_dev_panel[student|scientist|senior scientist]`,
         `::test_no_identity_is_refused`,
         `::test_the_refusal_names_the_permission_and_nothing_about_the_account`;

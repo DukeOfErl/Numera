@@ -52,6 +52,10 @@ SIGN_IN_NEEDED = "Sign in to ask a question. Nothing is shown, and nothing is ke
 NOT_ENROLLED = (
     "This account is not enrolled. Ask whoever runs this to enrol it; there is nothing to do here."
 )
+NO_ACCOUNTS_DATABASE = (
+    "Sign-in is configured but the account list is not, so nobody can be admitted. "
+    "That is for whoever runs this deployment to fix; waiting will not help."
+)
 ENROLMENT_CHECK_UNAVAILABLE = (
     "Enrolment cannot be checked right now, so nobody can be admitted. Try again shortly."
 )
