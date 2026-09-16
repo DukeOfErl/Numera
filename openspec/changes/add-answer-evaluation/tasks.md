@@ -444,7 +444,7 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     present gives `"cell volume"` over *E. coli* 48 entries and 8 of 8 expected — full recall at
     half the noise. Stemming ("nucleus" against a stored "Nuclear") is a second step.
 
-- [ ] 5.4 **Read every answer in the baseline by hand and label it.** This is a task, not a review step:
+- [x] 5.4 **Read every answer in the baseline by hand and label it.** This is a task, not a review step:
       the labels are the reference the judge in group 6 is measured against, and they are also the only
       instrument that finds a fault nobody specified. Record, per answer, whether it is sound and what is
       wrong with it, in a file beside the results
@@ -455,6 +455,34 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     it in 6.7 without collapsing a state arbitrarily — and the collapse would not show up in the
     agreement figure. Label on the same three states. Design: *What DeepEval's faithfulness metric
     actually returns*.
+  - **Done 2026-09-16, and the result is that faithfulness is the wrong axis to gate the judge on.**
+    30 of 30 labelled by hand: **29 sound, 1 unsound, 0 unclear.** A judge answering "faithful" to
+    everything agrees 97% of the time, so plain agreement in 6.7 would be a high number meaning
+    nothing, and 6.8 cannot set a floor from it. **Do not treat the saturation as a pass** — it says
+    the instrument does not discriminate here, not that the answers are good.
+  - **The one `unsound` is a citation swap, and it is the case that discriminates.** Repeat 2 of
+    `yeast-nuclear-volume` cites 101627 ("Restriction enzyme EcoRI catalytic rate", 3.8 1/min,
+    organism Unspecified) for "2.83 μm³ during late anaphase", which is 105627. A digit
+    transposition. The *number is right and is in the context* — from 105627, which was retrieved —
+    so only the attribution is wrong, and a faithfulness judge that reads claims against context will
+    very likely pass it. `unretrieved_citations` already flags it; 101627 was never retrieved.
+    **Check the judge against this case specifically in 6.7**: it is the one answer in thirty where
+    the deterministic layer and a faithfulness judge should disagree, and if the judge passes it the
+    agreement figure will hide that it saw nothing.
+  - **All three hand-written notes describe the same defect, and none of it is faithfulness**: the
+    answer understates or misstates what the corpus holds. Two are the coverage claim of 4.14 — whose
+    detector fires on exactly those two answers and on no other, with the six honest planarian
+    refusals correctly left alone. The third is the citation swap above. The notes carried more
+    signal than the labels, which is worth knowing before designing the next label file.
+  - **What 6.7 should measure instead of agreement.** Agreement against a saturated reference is
+    uninformative; what the labels can still support is (a) whether the judge passes the one citation
+    swap, which is a yes/no about a known blind spot, and (b) whether the judge's disagreements fall
+    on the answers the notes flag, which tests whether it sees the defect class that actually occurs
+    here. Both are weaker than a correlation floor and both are honest; ADR-0510 required the floor,
+    so **record the substitution as a decision rather than quietly weakening the gate**.
+  - The deferred value-and-unit check stays deferred on this evidence: no answer stated a number that
+    was wrong on its face. The one bad citation carried a *correct* number, which is the opposite
+    failure and is not what a value parser would catch.
 - [x] 5.5 Record what fraction of the corpus is clean, beside the answer baseline, so a citation rate is
       read against the base rate rather than as a failure: measurement method recorded, scalar value
       recorded, unit classified, range not fused. Report the four separately and the conjunction, and
@@ -523,6 +551,18 @@ a checker (ADR-0510).
 - [ ] 6.7 Measure agreement against the hand labels from 5.4 and against the deterministic scoring where
       both speak; list every disagreement with its claim and reason; report a judged-faithful fabrication
       as a judge miss; mark every judged figure unvalidated while agreement is below the configured floor
+  - **The reference is saturated, so plain agreement cannot be the gate.** 5.4 labelled 29 of 30
+    answers sound; a judge answering "faithful" to everything scores 97%. Read that as the
+    instrument failing to discriminate, not as the judge working. Two things the labels still
+    support, both weaker than a correlation floor and both honest: whether the judge passes the one
+    **citation swap** (repeat 2 of `yeast-nuclear-volume`, where a correct number carries a wrong
+    identifier — the one answer where the deterministic layer and a faithfulness judge should
+    disagree), and whether its disagreements land on the answers 5.4's notes flag. ADR-0510 required
+    a correlation floor, so **write the substitution as a decision** rather than quietly weakening
+    the gate.
+  - A more discriminating reference is the honest alternative and it costs a run: harder questions,
+    or a question set built to contain answers that are wrong in ways faithfulness can see. Decide
+    that before building the judge, not after measuring it against a reference that cannot fail.
 - [ ] 6.8 Set the floor from what 6.7 shows, not from the design's placeholder, and write an ADR only if
       the reading changes a decision
 
