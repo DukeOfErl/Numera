@@ -507,17 +507,16 @@ def test_the_page_says_that_questions_and_answers_are_kept(monkeypatch, repo, co
 
     from scinumbers_ask import web
 
-    # Literal fragments as well as the sentence: `records_note` is re-exported,
+    # Literal fragments as well as the sentence: `RECORDS_NOTE` is re-exported,
     # so an empty one would satisfy `in` everywhere and this would pass having
-    # checked that the page contains the empty string. `False`: these tests run
-    # with no `[auth]` in secrets, so the page shows the unconfigured variant.
-    note = web.records_note(False)
-    assert "are logged" in note and "Questions, answers" in note
+    # checked that the page contains the empty string.
+    note = web.RECORDS_NOTE
+    assert "is logged" in note and "All exchange" in note
 
     at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
     panel = " ".join(c.value for c in at.sidebar.caption)
     assert note in panel
-    assert "logged" in panel and "Questions, answers" in panel
+    assert "logged" in panel and "All exchange" in panel
 
 
 def test_the_terminal_says_it_too_including_for_a_single_question(
@@ -537,8 +536,8 @@ def test_the_terminal_says_it_too_including_for_a_single_question(
         main(["--ask", "q", "--checkpoints", str(tmp_path / "c.sqlite")])
 
     captured = capsys.readouterr()
-    assert messages.records_note(False) in captured.err
-    assert "logged" in captured.err and "Questions, answers" in captured.err
+    assert messages.RECORDS_NOTE in captured.err
+    assert "logged" in captured.err and "All exchange" in captured.err
     assert "logged" not in captured.out, "stdout carries the answer, not this"
 
 
@@ -583,7 +582,7 @@ def test_the_terminal_does_not_claim_to_keep_what_it_discards(
         main(["--ask", "q", "--trace", "", "--checkpoints", str(tmp_path / "c.sqlite")])
 
     captured = capsys.readouterr()
-    assert messages.records_note(False) not in captured.err
-    assert "are logged" not in captured.err
+    assert messages.RECORDS_NOTE not in captured.err
+    assert "is logged" not in captured.err
     # Positive control: the run itself happened and said so.
     assert "no_answer" in captured.out

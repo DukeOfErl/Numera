@@ -66,7 +66,7 @@ PROTOTYPE_SHORT = "Prototype — verify numbers against the original source."
 # driver and lives in `messages` for the same reason every warning does. The page
 # reads it from here so that `streamlit_app.py` needs one import, as it does for
 # every other piece of wording on the page.
-records_note = messages.records_note
+RECORDS_NOTE = messages.RECORDS_NOTE
 
 # Pinned to the viewport rather than written into the page. Drawn as an ordinary
 # element it sat above the conversation and scrolled away with the first answer --

@@ -220,9 +220,14 @@ recorded when the record is written and never looked up afterwards. A role
 changed later SHALL NOT change records already written: a judgement's weight is
 the weight it carried when given.
 
-The statement of what is kept, already shown in the interface, SHALL name the
-account and the role alongside the question, the answer and the entries — one
-statement, not two.
+The interface SHALL state that what passes through the app is recorded, and why.
+It SHALL NOT be obliged to enumerate the fields. A standing side-panel notice is
+what a prototype used by invited testers needs, and one long enough to list the
+question, the answer, the entries, the account and the role is one a reader stops
+finishing — which tells them nothing while appearing to tell them everything. The
+fuller statement, shown once before use where a person will actually read it, is
+deferred until there are users rather than testers; `docs/roadmap.md` records it
+as deferred with the condition that reopens it.
 
 Every record about a person SHALL be attributable to that person, so that
 deleting what is kept about them is possible. The request path for deletion, and
@@ -238,9 +243,9 @@ is not unmentioned; when either is decided it lands here.
 - **WHEN** an account's role is changed after it has asked and rated
 - **THEN** the records already written still carry the role held at the time
 
-#### Scenario: The interface names what is kept
-- **WHEN** a signed-in reader views the page
-- **THEN** the statement of what is kept names the account and the role
+#### Scenario: The interface says that what passes through it is recorded
+- **WHEN** a reader views the page
+- **THEN** the page states that exchanges in the app are logged, and why
 
 #### Scenario: A person's records can be found
 - **WHEN** the operator looks for everything kept about one account

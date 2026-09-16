@@ -165,8 +165,10 @@ identifiers of the entries behind it, under a per-question identifier and the
 identifier of your session — and, where sign-in is configured, the account you
 were signed in as and the role it held at the time. They are kept because a rating
 on an answer nobody can read is worth nothing, and they are read by whoever
-operates the deployment in order to improve it. The app says so in its own side
-panel and on the terminal's first line, rather than only here
+operates the deployment in order to improve it. The app says that exchanges are
+logged in its own side panel and on the terminal's first line; this section is
+the thorough version, and a fuller notice shown before use is deferred until
+there are users rather than invited testers
 ([ADR-0840](docs/decisions/0840-what-a-question-s-trail-keeps.md),
 [ADR-0810](docs/decisions/0810-the-role-is-written-at-record-time.md)).
 `sql/feedback.sql` is how it is read back; its query 8 finds everything kept about

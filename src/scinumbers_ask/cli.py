@@ -202,7 +202,7 @@ def main(argv: list[str] | None = None) -> None:
     # the requirement it implements is that a reader can learn what is kept, which
     # is a claim about accuracy rather than a fixed banner.
     if args.trace:
-        print(messages.records_note(False), file=sys.stderr)
+        print(messages.RECORDS_NOTE, file=sys.stderr)
 
     if args.ask:
         raise SystemExit(run(agent, session_id, [args.ask], repo=repo))

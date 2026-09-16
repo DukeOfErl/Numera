@@ -246,6 +246,17 @@ change that is not happening.
 
 ## Deferred, deliberately
 
+- **The interface says only that exchanges are logged, not what is kept about a
+  person.** The side-panel notice is one line — "All exchange in this app is
+  logged for product development" — rather than the enumeration of question,
+  answer, entries, account and role it carried for one release. That list was
+  accurate and too long to read, and it sat above the controls a tester came
+  for. The obligation is not dropped: when there are real users rather than
+  invited testers, what is kept about a person is shown **once, before use**,
+  where a person will read it, which is the right shape for it and the wrong
+  shape for a side panel. The `user-identity` spec carries the condition.
+  README's "what the trail keeps about you" is the thorough version meanwhile.
+  (2026-09-16)
 - **The dev panel is shown to an unconfigured deployment** (no `[auth]`), because
   that is a developer's machine and the panel holds only the session's own
   trail. Decide again before the panel shows anything an operator would not want

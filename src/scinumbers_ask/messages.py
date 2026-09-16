@@ -27,36 +27,23 @@ from .events import (
     UngroundedRefusal,
 )
 
-
-# What is kept, in the reader's own view rather than in a policy nobody opens.
+# One line, and deliberately not an enumeration.
 #
-# The requirement is that a reader can learn it *from the interface*: the system
-# stores the words somebody typed, and a person discovering that by reading the
-# database afterwards has been told nothing. Shared by the drivers for the reason
-# every other sentence here is -- two interfaces making different claims about
-# what is kept are two different claims.
+# It named the question, the answer, the entries and -- once there was sign-in --
+# the account and the role. That is the honest list and it was too long to read:
+# a standing notice nobody finishes tells nobody anything, and it sat above the
+# controls a reader actually came for. So it says the thing that matters, which
+# is that what passes through here is recorded and why.
 #
-# Deliberately not folded into `web.PROTOTYPE_NOTE`: that banner is one line by
-# design, and a banner that wraps becomes a block a reader learns to skip.
+# **A fuller disclaimer is deferred, not dropped** (`docs/roadmap.md`). When
+# there are real users rather than invited testers, what is kept about a person
+# is shown once, before they use the app, where a person will read it -- which is
+# the right shape for that obligation and the wrong shape for a side panel.
 #
-# Says why, not only what. "Questions are logged" reads as surveillance; the
-# reason is that a rating on an answer nobody can read is worth nothing, which is
-# the whole of what this records.
-def records_note(identity_configured: bool) -> str:
-    """What is kept -- one sentence, extended rather than doubled when a person is
-    attached to it. The terminal passes `False`: it has no sign-in.
-
-    Short, because a standing notice nobody finishes reading tells nobody
-    anything. It still names *what* is kept rather than only that something is:
-    "logged for product development" would leave a reader to guess whether their
-    words are in it, and the requirement is that they can learn what is kept
-    without reading the database afterwards.
-    """
-    under = ", under your account and role," if identity_configured else ""
-    return (
-        f"Questions, answers and the entries behind them are logged{under} for product development."
-    )
-
+# The same sentence whether or not sign-in is configured. It was a function of
+# that for one release; with both variants identical the parameter only invited
+# a caller to believe it changed something.
+RECORDS_NOTE = "All exchange in this app is logged for product development."
 
 # The door, before anything else is drawn. Each is a different sentence because
 # each asks the reader to do a different thing -- and "not enrolled" during an

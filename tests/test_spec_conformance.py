@@ -399,7 +399,7 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_a_verdict_in_a_signed_in_session_carries_the_identity",
         "test_trail_store.py::test_the_handler_carries_the_role_beside_the_email",
         "test_web_driver_identity.py::test_the_sidebar_says_who_is_signed_in_and_offers_sign_out",
-        "test_web_driver_identity.py::test_the_note_is_one_sentence_extended_not_two",
+        "test_web_driver_identity.py::test_the_note_is_one_short_sentence_whatever_is_configured",
     ),
     "An operator can see a session's own trail": (
         "test_web_driver_dev_panel.py::test_an_operator_s_page_has_the_section",

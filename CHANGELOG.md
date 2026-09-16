@@ -46,9 +46,11 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
-- The side panel's statement of what is kept is shorter, and names the account and
-  the role where sign-in is configured — the same sentence, extended, not a second
-  one. The prototype caveat no longer appears twice: it stays in the pinned banner.
+- The side panel's statement of what is kept is one line — "All exchange in this
+  app is logged for product development" — rather than an enumeration of the
+  fields, which was accurate and too long to read. The fuller statement, shown
+  once before use, is deferred until there are users rather than invited testers.
+  The prototype caveat no longer appears twice: it stays in the pinned banner.
 - A signed-in tester whose allowance is spent, or who has no credential yet, is
   told to ask whoever runs the deployment, and that the allowance renews monthly.
   The funder-neutral wording stays for a developer on their own key.

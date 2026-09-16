@@ -127,7 +127,7 @@ with st.sidebar:
     # before every question. Not in the pinned banner, which is one line by
     # design; the sidebar is the page's standing statement about itself, and
     # this belongs beside the other one.
-    st.caption(web.as_text(web.records_note(admission.configured)))
+    st.caption(web.as_text(web.RECORDS_NOTE))
     # Who this page thinks you are, or that it is nobody's. A person reading
     # under an account they did not expect is a person whose questions are being
     # recorded against the wrong name.

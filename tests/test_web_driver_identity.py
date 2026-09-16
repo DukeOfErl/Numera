@@ -138,8 +138,7 @@ def test_with_no_identity_configured_a_question_is_answered_without_signing_in(p
 def test_with_no_identity_configured_the_page_says_so(page):
     at = page(auth=False).run()
     assert messages.NO_SIGN_IN_CONFIGURED in _sidebar_text(at)
-    assert web.records_note(False) in _sidebar_text(at)
-    assert "account" not in web.records_note(False)
+    assert web.RECORDS_NOTE in _sidebar_text(at)
 
 
 # --- 4.7: `[auth]` configured -------------------------------------------------------
@@ -184,8 +183,7 @@ def test_the_sidebar_says_who_is_signed_in_and_offers_sign_out(page):
     at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
     assert messages.SIGNED_IN_AS.format(email=TESTER.email, role="scientist") in _sidebar_text(at)
     assert "Sign out" in [b.label for b in at.sidebar.button]
-    assert web.records_note(True) in _sidebar_text(at)
-    assert "account and role" in web.records_note(True)
+    assert web.RECORDS_NOTE in _sidebar_text(at)
 
 
 def test_an_enrolled_account_with_no_credential_meets_a_door_of_its_own(page, caught):
@@ -447,16 +445,13 @@ def test_signed_in_email_is_none_without_is_logged_in(monkeypatch):
 # --- 4.5: the note, both variants -----------------------------------------------------------
 
 
-def test_the_note_is_one_sentence_extended_not_two():
-    plain, extended = messages.records_note(False), messages.records_note(True)
-    for note in (plain, extended):
-        assert "are logged" in note and "Questions, answers" in note
-    assert "account" not in plain and "role" not in plain
-    assert "under your account and role" in extended
-    assert extended.count(".") == 1
-
-
-# --- what a tester is told when the door shuts on them -------------------------------------
+def test_the_note_is_one_short_sentence_whatever_is_configured():
+    """Deliberately not an enumeration, and deliberately not two sentences: the
+    fuller statement of what is kept about a person is deferred to a disclaimer
+    shown once before use, when there are users to show it to."""
+    assert messages.RECORDS_NOTE == "All exchange in this app is logged for product development."
+    assert messages.RECORDS_NOTE.count(".") == 1
+    assert "account" not in messages.RECORDS_NOTE and "role" not in messages.RECORDS_NOTE
 
 
 def test_a_signed_in_tester_is_told_whom_to_ask_when_the_allowance_is_spent():
