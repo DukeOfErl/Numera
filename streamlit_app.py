@@ -153,7 +153,7 @@ if web.run_is_over(web.transcript(st.session_state)):
     # screen, so wrong advice here outranks the answer that said otherwise.
     st.error(
         web.as_text(
-            web.run_over_advice(web.transcript(st.session_state))
+            web.run_over_advice(web.transcript(st.session_state), signed_in=admission.configured)
             or "This run has stopped taking questions. Start a new session to continue —"
             " reload with a fresh `?session=` or clear this one."
         ),

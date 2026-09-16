@@ -39,7 +39,7 @@ from .agent import AskAgent
 from .authorization import Refused, require
 from .config import Config, env_setting, refuse_retired_env
 from .corpus import load
-from .events import Answer, AnswerEntries, Event, QuestionEnded, Retrieval
+from .events import Answer, AnswerEntries, EndReason, Event, QuestionEnded, Retrieval
 from .permissions import Identity, Permission
 from .repository import CorpusRepository
 
@@ -210,6 +210,10 @@ class Item:
     # Decided here for the same reason, and carried rather than looked up later: the
     # ending's reason is available at this point and gone by the time the page draws.
     stop_advice: str = ""
+    # The reason itself, beside the advice derived from it, so the page can pick
+    # the wording for a signed-in reader at draw time -- which is when it knows
+    # whether there is an operator who is not the reader.
+    reason: EndReason | None = None
     run_spend: int = 0
     run_budget: int = 0
     # The question that produced this item. Carried so a thing on screen can be
@@ -270,6 +274,7 @@ def _item_without_identity(event: Event, repo: CorpusRepository | None = None) -
             messages.ending_text(event),
             ends_the_run=event.reason in messages.STOP_THE_RUN,
             stop_advice=messages.run_over_advice(event.reason) or "",
+            reason=event.reason,
             run_spend=event.run_spend,
             run_budget=event.run_budget,
         )
@@ -1181,8 +1186,16 @@ def run_is_over(transcript: Iterable[tuple[str, list[Item]]]) -> bool:
     )
 
 
-def run_over_advice(transcript: Iterable[tuple[str, list[Item]]]) -> str:
+def run_over_advice(
+    transcript: Iterable[tuple[str, list[Item]]], *, signed_in: bool = False
+) -> str:
     """What to say about the ending that shut the door, or "" for nothing to add.
+
+    `signed_in` picks the wording for a reader who is not the funder -- a tester
+    whose key an operator issued -- so the last line on screen tells them whom to
+    ask, rather than the funder-neutral sentence written for a developer on their
+    own key. Decided here, at draw time, because whether there is such an
+    operator is a fact about the deployment and not about the ending.
 
     The page's own line -- start a new session -- is right for a spent budget and a
     full conversation, and wrong for a key with no credit: the new session's first
@@ -1195,6 +1208,8 @@ def run_over_advice(transcript: Iterable[tuple[str, list[Item]]]) -> str:
     for _, items in transcript:
         for item in items:
             if item.kind is Kind.ENDING and item.ends_the_run and item.stop_advice:
+                if signed_in and item.reason is not None:
+                    return messages.run_over_advice(item.reason, signed_in=True) or item.stop_advice
                 return item.stop_advice
     return ""
 

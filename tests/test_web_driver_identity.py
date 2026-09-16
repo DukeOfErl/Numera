@@ -426,3 +426,57 @@ def test_the_note_is_one_sentence_extended_not_two():
     assert "account" not in plain and "role" not in plain
     assert "under your account and role" in extended
     assert extended.count(".") == 1
+
+
+# --- what a tester is told when the door shuts on them -------------------------------------
+
+
+def test_a_signed_in_tester_is_told_whom_to_ask_when_the_allowance_is_spent():
+    """The funder-neutral sentence was written so a developer on their own key is
+    not told to contact themselves. A signed-in tester is not the funder, so
+    the page may -- must -- say whom to ask, and that the allowance renews."""
+    from scinumbers_ask.events import EndReason
+
+    plain = messages.run_over_advice(EndReason.PROVIDER_LIMIT)
+    tester = messages.run_over_advice(EndReason.PROVIDER_LIMIT, signed_in=True)
+    assert "ask" not in plain.lower()
+    assert "ask whoever runs this deployment" in tester
+    assert "renews" in tester and "monthly" in tester
+    assert "new session will not help" in tester
+    # Endings with no advice of their own stay that way for both readers.
+    assert messages.run_over_advice(EndReason.RUN_BUDGET, signed_in=True) is None
+
+
+def test_the_no_credential_sentence_says_whom_to_ask():
+    assert "Ask whoever runs this deployment" in messages.NO_CREDENTIAL
+
+
+def test_the_page_shows_a_tester_the_tester_s_wording_and_a_developer_the_neutral_one(
+    page, caught, repo, config, tmp_path
+):
+    from conftest import agent_with
+
+    from agent_doubles import OutOfCreditModel, says
+
+    def _spent_agent():
+        return agent_with(repo, config, tmp_path, OutOfCreditModel(responses=[says("x")]))
+
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER})
+    monkeypatch_agent = _spent_agent()
+    import scinumbers_ask.web as w
+
+    original = w.agent_for
+    w.agent_for = lambda state, repo_, admission: monkeypatch_agent
+    try:
+        at = _ask(at.run(), "how many?")
+        banner = " ".join(e.value for e in at.error)
+        assert "ask whoever runs this deployment" in banner
+        assert "whoever funds it" not in banner
+
+        w.agent_for = lambda state, repo_, admission: _spent_agent()
+        dev = _ask(page(auth=False).run(), "how many?")
+        banner = " ".join(e.value for e in dev.error)
+        assert "whoever funds it" in banner
+        assert "ask whoever runs this deployment" not in banner
+    finally:
+        w.agent_for = original

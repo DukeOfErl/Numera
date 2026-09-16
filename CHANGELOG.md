@@ -48,6 +48,9 @@ any release; `1.0.0` when it stabilizes.
 
 - The side panel's statement of what is kept now names the account and the role
   where sign-in is configured — the same sentence, extended, not a second one.
+- A signed-in tester whose allowance is spent, or who has no credential yet, is
+  told to ask whoever runs the deployment, and that the allowance renews monthly.
+  The funder-neutral wording stays for a developer on their own key.
 - `authlib>=1.3.2` joins the `ask` extra, for `st.login`.
 
 - **The trail records the question as asked, the answer as given, and the entries

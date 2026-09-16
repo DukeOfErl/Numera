@@ -62,8 +62,9 @@ ENROLMENT_CHECK_UNAVAILABLE = (
     "Enrolment cannot be checked right now, so nobody can be admitted. Try again shortly."
 )
 NO_CREDENTIAL = (
-    "No credential has been issued for this account, so it cannot ask a question yet. "
-    "That is for whoever runs this to issue, not for you."
+    "No credential has been issued for this account yet, so it cannot ask a question. "
+    "Ask whoever runs this deployment to issue one — it is theirs to do, and nothing "
+    "here can."
 )
 NO_SIGN_IN_CONFIGURED = (
     "No sign-in is configured: anyone with this address can ask, and records carry no account."
@@ -132,13 +133,38 @@ RUN_OVER_ADVICE: dict[EndReason, str] = {
 }
 
 
-def run_over_advice(reason: EndReason) -> str | None:
+# The same two endings, for a reader who is *not* the funder: a signed-in tester
+# on a hosted deployment, whose key was issued by an operator with a monthly cap.
+# Here the second person is right, because there is someone to ask who is not
+# the reader -- the absurdity the paragraph above avoids is exactly the case the
+# page can now tell apart (`web.identity_configured`). The terminal and the
+# harness never pass `signed_in`, so their wording is unchanged.
+SIGNED_IN_ADVICE: dict[EndReason, str] = {
+    EndReason.PROVIDER_LIMIT: (
+        "Your account's allowance for this app is spent, so a new session will not help. "
+        "It renews on its monthly schedule; to ask again sooner, ask whoever runs this "
+        "deployment to raise it."
+    ),
+    EndReason.NOT_CONFIGURED: (
+        "A new session will not help: this run stopped because something the app needs "
+        "is not configured. Tell whoever runs this deployment; there is nothing to do here."
+    ),
+}
+
+
+def run_over_advice(reason: EndReason, *, signed_in: bool = False) -> str | None:
     """What a driver should say about this ending, beyond its own generic line.
 
     `None` for every ending with no advice of its own, which is most of them: a
     driver falls back to its own wording rather than being handed a sentence for a
     case where its existing one is already correct.
+
+    `signed_in` selects the wording for a reader who is not the funder -- an
+    enrolled tester -- and is the web driver's to pass; nothing else has a reader
+    who could be one.
     """
+    if signed_in:
+        return SIGNED_IN_ADVICE.get(reason) or RUN_OVER_ADVICE.get(reason)
     return RUN_OVER_ADVICE.get(reason)
 
 
