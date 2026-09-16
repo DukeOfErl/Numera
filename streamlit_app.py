@@ -72,6 +72,11 @@ st.caption(web.as_text(f"{len(repo)} entries · session {session}"))
 # a run budget pushed past the scroll is not a standing figure.
 with st.sidebar:
     st.caption(web.PROTOTYPE_SHORT)
+    # What is kept, where a reader can find it without being made to read it
+    # before every question. Not in the pinned banner, which is one line by
+    # design; the sidebar is the page's standing statement about itself, and
+    # this belongs beside the other one.
+    st.caption(web.RECORDS_NOTE)
     # Always drawn, including before the first question, when it reads zero. The
     # panel must not gain a section the moment a question completes: a layout that
     # grows under the reader is a worse surprise than a bar showing nothing spent.
