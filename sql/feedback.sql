@@ -10,12 +10,19 @@
 -- Run these against the Neon database in `[connections.usage]`. Read-only; none
 -- of them writes.
 --
--- **Not yet run against a real database.** They were written from the schema in
--- `trail_store._SCHEMA` and from the two event names in `feedback.py`, and the
--- machine they were written on cannot reach Neon. Treat a first run as part of
--- checking them: a query that returns nothing may be telling you there is no
--- feedback, or that it is wrong. Query 5 is the one to run first, because it
--- distinguishes those two by not filtering on anything.
+-- **All five verified against the `dev` branch on 2026-09-16**, which is how they
+-- stopped being guesses: 25 verdicts, 12 comments, and query 3 correctly pulling
+-- `100001` and `100002` out of free prose written as "checking entry 100001" and
+-- "not sure about 100002". The header here previously said they had never been
+-- run, and told the reader to treat a first run as part of checking them — which
+-- was the right thing to say while it was true.
+--
+-- Query 5 is still the one to run first when something looks wrong, because it
+-- filters on nothing: an empty result there means no feedback, not a bad query.
+--
+-- Reaching Neon from a sandboxed shell needs its SQL-over-HTTP endpoint rather
+-- than a Postgres connection — `POST https://<host>/sql` with the connection
+-- string in a `Neon-Connection-String` header. Port 5432 does not resolve.
 --
 -- **A thumbs-down rate is not an error rate.** People who rate are not a sample
 -- of people who read: someone who spots a wrong number is far likelier to say so
