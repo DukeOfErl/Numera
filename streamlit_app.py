@@ -20,7 +20,11 @@ from scinumbers_ask.config import (
 )
 from scinumbers_ask.corpus import CorpusUnavailable
 
-st.set_page_config(page_title="SciNumbers ask", page_icon=":material/biotech:")
+# Wide, because each answer is now two columns: the prose and the entries it
+# rests on, side by side. The entries table is fixed-width and needs about
+# 640px before it grows a horizontal scrollbar that hides the ID column, which
+# the centred layout's ~700px main area cannot give half of. See READING_SPLIT.
+st.set_page_config(page_title="SciNumbers ask", page_icon=":material/biotech:", layout="wide")
 
 try:
     # Before the corpus is resolved. A reader who still exports the old variable
@@ -46,8 +50,17 @@ except (CorpusUnavailable, NotConfigured) as exc:
 
 session = web.session_id(st.session_state, st.query_params)
 
+# Asked before anything is drawn, because every control drawn below is live in the
+# browser for as long as this run takes. A click on any of them re-runs the script,
+# and a re-run abandons the agent's generator mid-tool-call -- so while a question
+# is being answered, the ratings on past answers are drawn inert.
+answering = web.question_pending(st.session_state)
+
 # Pinned to the viewport, before anything that could scroll it away.
 web.draw_prototype_banner()
+# Page-level, and here for the same reason the banner is: drawn once, above
+# everything that uses it, rather than once per turn from inside `draw_feedback`.
+web.draw_feedback_style()
 
 st.title("SciNumbers ask")
 st.caption(web.as_text(f"{len(repo)} entries · session {session}"))
@@ -79,7 +92,19 @@ for asked, drawn in web.transcript(st.session_state):
     with st.chat_message("user"):
         st.markdown(web.as_text(asked))
     with st.chat_message("assistant"):
-        web.show(drawn)
+        # Inside the message, so a rating sits with the answer it is about rather
+        # than floating between turns -- and `after_prose` places it at the foot
+        # of the prose column, beside the entries rather than under them. Every
+        # past turn gets one, not just the newest: a reader who reads three
+        # answers and then decides the second was wrong is the case this exists
+        # for.
+        # `drawn=drawn` binds this turn's items rather than the loop variable. The
+        # callback is in fact called before the next iteration, but a lambda that
+        # reads the loop variable is one refactor away from being called after it.
+        web.show(
+            drawn,
+            after_prose=lambda drawn=drawn: web.draw_feedback(drawn, session, answering=answering),
+        )
 
 # Some endings close the run: the budget is spent, the conversation is past its
 # token bound, nothing is configured, or the key funding the calls is out of credit.
@@ -101,7 +126,7 @@ if web.run_is_over(web.transcript(st.session_state)):
     )
 # `submit_mode="disable"` because a question runs for as long as the agent takes:
 # leaving the input live invites a second question into the middle of the first.
-elif question := st.chat_input("Ask a question", submit_mode="disable"):
+elif question := st.chat_input("Ask a question", submit_mode="disable", key=web.ASK_KEY):
     with st.chat_message("user"):
         st.markdown(web.as_text(question))
     # Recorded before it is drawn, and filled in place. The agent persists the turn
@@ -110,8 +135,23 @@ elif question := st.chat_input("Ask a question", submit_mode="disable"):
     items: list[web.Item] = []
     web.transcript(st.session_state).append((question, items))
     with st.chat_message("assistant"):
-        web.answer(agent.ask(session, question), repo, items)
+        # Rated here as well as in the loop above, and for the reason the "run is
+        # over" banner had to be: this turn joined the transcript after that loop
+        # had already run, so without this the rating appears one interaction late
+        # -- never, for the reader who reads the answer and stops. It is not drawn
+        # twice in one run, because the append is below the loop and not above it.
+        #
+        # `items` is the same list being filled as the answer arrives, so by the
+        # time the seam is reached it already holds the prose the rating is about.
+        web.answer(
+            agent.ask(session, question),
+            repo,
+            items,
+            after_prose=lambda: web.draw_feedback(items, session),
+        )
 
+    # Unconditional, and it settles two things this run decided too early.
+    #
     # The ending only exists now, and the branch above decided whether the run was
     # over *before* this question ran. Streamlit reruns on the next interaction and
     # not when a script finishes, so without this the reader is left looking at a
@@ -120,12 +160,26 @@ elif question := st.chat_input("Ask a question", submit_mode="disable"):
     # the deployed app's very first question: a spent key, and nothing on the page to
     # say a new one was needed.
     #
+    # `answering` was likewise decided at the top of this run and was true for all
+    # of it, so every older answer's rating was drawn inert -- correctly, while the
+    # agent was working. Nothing re-drew them once it stopped, so the last frame of
+    # the answering run stayed on screen and those ratings were dead until the
+    # reader clicked something else. A reader reported exactly that. `st.rerun()`
+    # clears the submitted question, so the redraw has `answering` false and the
+    # ratings come back.
+    #
     # A rerun rather than drawing the banner here: the input has already been created
     # by the time the ending arrives and cannot be taken back within one run, and a
     # closed run that still offers an input is the other half of the same confusion.
-    # It costs one redraw from the transcript -- no question, no model call.
-    if web.run_is_over(web.transcript(st.session_state)):
-        st.rerun()
+    # It costs one redraw from the transcript -- no question, no model call, and the
+    # same cost this page already pays on every thumb, expander and text entry.
+    #
+    # Unconditional. A condition was tried -- only redraw when an older turn exists
+    # to revive -- on the strength of a timing that turned out to be measured with
+    # other test runs competing for the machine. Measured alone: 38.4s with the
+    # redraw against 41.0s without it, so it costs nothing and the condition bought
+    # nothing. What it did buy was a second rule about when the page is fresh.
+    st.rerun()
 
 # The side panel carries the newest answer's entries, whole and openable -- the
 # main column's table is the first few rows of the same set. Written after the

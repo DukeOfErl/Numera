@@ -80,6 +80,26 @@ We also accept a second place a secret lives: the connection URL carries a
 password, held in `.streamlit/secrets.toml` and the Community Cloud secrets box,
 never in the repository.
 
+## How a missing dependency actually shows up
+
+This change's own design note claimed that a deploy without `sqlalchemy`
+promoted into `[project].dependencies` would "fail at import, at boot". **That is
+wrong, and the truth is quieter.** `trail_store` imports SQLAlchemy inside its
+methods rather than at module level, so the module loads; `st.connection` raises;
+and `web.trail_destination` catches it. The app runs, answers questions normally,
+and records nothing — with one line per start saying `trail destination
+unusable: ModuleNotFoundError`.
+
+Observed rather than reasoned: a worktree whose virtualenv predated the
+dependency reported exactly that, as `trail record dropped:
+ModuleNotFoundError: No module named 'sqlalchemy'`.
+
+Recorded because the correction runs the dangerous way. A loud boot failure gets
+noticed in seconds; a silent one is the failure mode this whole change exists to
+end, and expecting the loud version is how someone concludes a quiet deploy is a
+working one. **After deploying, confirm a row actually lands — do not infer it
+from the app starting.**
+
 ## Open after deployment
 
 Two measurements belong to this decision and could not be taken before it was

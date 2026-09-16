@@ -209,16 +209,21 @@ def test_the_app_runs_when_the_destination_refuses_every_connection(
 ):
     """Configured and broken is an operator's problem, not a reader's.
 
-    No handler is attached, so the per-question path never attempts a write it
-    cannot make: the failure is reported once at install rather than once per
-    question.
+    The page carries on. The handler **is** attached, which this test asserted the
+    opposite of until a reader found the consequence: `install` runs inside a
+    cached `resources()`, so attaching nothing made one failed connection at
+    startup permanent for the life of the container, and a serverless database
+    that was merely asleep never got a second chance. What bounds the cost is the
+    store's own timed backoff, not the absence of a handler.
     """
     monkeypatch.setattr(web, "trail_destination", lambda: _Engine(fail=OSError("refused")))
 
     at = script.run()
 
-    assert not at.exception
-    assert not any(isinstance(h, trail_store.TrailHandler) for h in clean_logger.handlers)
+    assert not at.exception, "a broken destination reached the reader"
+    assert any(isinstance(h, trail_store.TrailHandler) for h in clean_logger.handlers), (
+        "nothing is attached, so nothing will retry when the destination returns"
+    )
 
 
 def test_a_broken_connection_url_is_reported_rather_than_swallowed(monkeypatch, capsys):

@@ -293,18 +293,71 @@ def test_install_with_no_engine_returns_none_and_adds_no_handler():
     assert logger.handlers == before
 
 
-def test_install_when_the_schema_cannot_be_created_adds_no_handler():
-    """Configured and broken is an operator's problem, not a reader's.
+def test_install_attaches_a_handler_even_when_the_schema_cannot_be_created():
+    """**This test asserted the opposite, and the opposite lost every record.**
 
-    No handler is attached, so the per-question path never attempts a write it
-    cannot make -- the failure is reported once at install rather than once per
-    question.
+    Attaching no handler made a failure at install permanent: `install` runs
+    inside `web.resources`, which is `@st.cache_resource` and therefore runs once
+    per container, so a single timed-out connection at startup meant nothing was
+    even trying to write for the life of the process. Neon suspends a free-tier
+    branch after minutes of idleness and a cold start can outrun the connect
+    timeout, so "open the app after lunch" was the failing case. It was silent:
+    recording fails open, and the only evidence was one line on stderr.
+
+    The reasoning that produced the old behaviour was not wrong about cost -- a
+    reader must not pay a connection attempt per question to rediscover a dead
+    destination. That is now `_reachable`'s timed backoff, which bounds the cost
+    without making the verdict permanent.
     """
     logger = logging.getLogger("test.trail.broken")
     logger.handlers.clear()
     store = install(_Engine(fail_on_begin=OSError("down")), logger_name="test.trail.broken")
     assert store is not None and store.ready is False
-    assert not logger.handlers
+    assert any(isinstance(h, TrailHandler) for h in logger.handlers), (
+        "no handler, so nothing will ever retry: the destination is dead for the "
+        "life of the process even after it comes back"
+    )
+
+
+def test_a_destination_that_was_asleep_at_startup_is_used_once_it_wakes():
+    """The whole point of the change above, stated as the behaviour it buys.
+
+    The engine refuses the schema attempt at install and works afterwards -- which
+    is exactly a suspended serverless database taking longer to wake than the
+    connect timeout allows.
+    """
+
+    class WakesUp(_Engine):
+        """Refuses the first connection, then behaves. Built on `_Engine` rather
+        than beside it, so the transaction it hands back is the same one every
+        other test here exercises."""
+
+        def __init__(self):
+            super().__init__()
+            self.attempts = 0
+
+        def begin(self):
+            self.attempts += 1
+            if self.attempts == 1:
+                self.begins += 1
+                raise TimeoutError("compute is suspended")
+            return super().begin()
+
+    logger = logging.getLogger("test.trail.wakes")
+    logger.handlers.clear()
+    engine = WakesUp()
+    store = install(engine, logger_name="test.trail.wakes")
+    assert store.ready is False, "the fixture did not reproduce a failed install"
+
+    # The wait is real, and deliberately so: an immediate retry here is a full
+    # connect timeout inside the reader's first question. Advanced rather than
+    # slept through -- the test is about recovery, not about the clock.
+    assert store.record("searched") is False, "the retry was not deferred; a question pays for it"
+    store.retry_after = 0.0
+
+    assert store.record("searched") is True, "the store never recovered"
+    assert store.record("searched") is True, "recovery did not stick"
+    assert store.writes == 2
 
 
 def test_install_attaches_a_handler_when_the_schema_is_there():
@@ -635,14 +688,70 @@ def test_installing_twice_does_not_write_every_record_twice():
     logger.handlers.clear()
 
 
-def test_a_store_whose_schema_is_absent_does_not_connect_per_call():
-    """Connecting is the expensive, unbounded part; the answer is already known.
+def test_a_store_that_cannot_reach_its_destination_does_not_connect_per_call():
+    """Connecting is the expensive, unbounded part, and a reader pays for it.
 
-    `install` hands back a not-ready store rather than None, and a direct caller
-    could reasonably keep using it.
+    The retry that revives a sleeping destination must not become a connection
+    attempt per question: an unreachable database does not fail fast, so ten
+    records would be ten stalls. One attempt, then silence until the wait is up.
+
+    Varies the count rather than asserting zero -- zero was the old, permanent
+    behaviour, and a test asserting it would fail the moment recovery worked.
     """
-    store = TrailStore(engine=_Engine())
+    store = TrailStore(engine=_Engine(fail_on_begin=OSError("down")))
     assert store.ready is False
-    for _ in range(3):
+    for _ in range(10):
         assert store.record("searched") is False
-    assert store.engine.begins == 0
+    assert store.engine.begins == 1, (
+        f"{store.engine.begins} connection attempts for 10 records; the backoff is not holding"
+    )
+
+
+def test_the_wait_before_retrying_grows_and_is_reset_by_success():
+    """A destination down for an hour must not be probed 60 times.
+
+    Reset on success matters as much: an app that recovers should not keep a
+    punitive interval it no longer needs.
+    """
+    store = TrailStore(engine=_Engine(fail_on_begin=OSError("down")))
+    first = store.retry_delay
+    store.record("searched")  # retry_after is 0 on a store that never attempted
+    assert store.retry_delay > first, "the wait did not grow after a failure"
+
+    store.retry_after = 0.0
+    store.engine = _Engine()
+    assert store.record("searched") is True
+    assert store.retry_delay == trail_store.SCHEMA_RETRY_AFTER_S, (
+        "a recovered store kept its punitive wait"
+    )
+
+
+def test_a_destination_whose_writes_fail_backs_off_instead_of_cycling():
+    """The case where the schema check is not evidence of anything.
+
+    A role without INSERT, a hand-altered table, a `detail` that will not cast:
+    the DDL succeeds and every row fails. The wait used to grow only on a schema
+    failure and reset on a schema *success*, so this destination cycled for ever
+    at the floor — a schema check that passed, three failed inserts, a pause, and
+    round again, each one paying a connection on a reader's render path.
+
+    The dimension is which kind of failure occurred, so the store here differs
+    from the one above in exactly that: its transactions open, its inserts do not.
+    """
+    store = _store(fail_on_execute=OSError("permission denied"))
+    assert store.ensure_schema() is True, "the fixture did not reproduce a working DDL"
+    floor = store.retry_delay
+
+    for _ in range(trail_store.FAILURES_BEFORE_GIVING_UP):
+        assert store.record("searched") is False
+    assert store.ready is False, "the store did not give up on a destination that cannot be written"
+    assert store.retry_delay > floor, (
+        "the wait did not grow, so this destination is retried at the floor for ever"
+    )
+
+    # And the next round grows it again rather than resetting on the schema check.
+    grown = store.retry_delay
+    store.retry_after = 0.0
+    for _ in range(trail_store.FAILURES_BEFORE_GIVING_UP):
+        store.record("searched")
+    assert store.retry_delay > grown, "a passing schema check reset the wait"

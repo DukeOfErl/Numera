@@ -240,12 +240,74 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_trail_store.py::test_the_report_carries_no_traceback",
         "test_trail_store.py::test_a_schema_failure_is_reported_and_counted_apart_from_dropped_writes",
         "test_trail_store.py::test_the_handler_never_raises_so_logging_never_reaches_handle_error",
-        "test_trail_store.py::test_install_when_the_schema_cannot_be_created_adds_no_handler",
-        "test_trail_store.py::test_a_store_whose_schema_is_absent_does_not_connect_per_call",
+        "test_trail_store.py::test_install_attaches_a_handler_even_when_the_schema_cannot_be_created",
+        "test_trail_store.py::test_a_store_that_cannot_reach_its_destination_does_not_connect_per_call",
+        "test_trail_store.py::test_a_destination_that_was_asleep_at_startup_is_used_once_it_wakes",
         "test_trail_store_live.py::test_a_statement_that_runs_too_long_is_cancelled_rather_than_waited_out",
         "test_trail_store_live.py::test_the_timeout_does_not_leak_onto_the_next_pooled_transaction",
         "test_trail_store_live.py::test_an_unreachable_host_does_not_raise_out_of_record",
         "test_trail_store_live.py::test_the_schema_and_the_insert_are_valid_sql",
+    ),
+    # add-answer-feedback's, mapped with the change that adds them. Only the two
+    # that are genuinely asserted; the other three are in AWAITING_THE_WIDGET
+    # until the real script can be driven.
+    #
+    # The second is the one to compare against its words hardest. It is stated as
+    # what the model was *shown*, because the alternative phrasing -- "the next
+    # answer is unchanged" -- is a counterfactual about a non-deterministic run
+    # that nothing can assert. Its test carries a positive control for the same
+    # reason: every other assertion in it is a `not in`, which an empty haystack
+    # satisfies.
+    # Three of four scenarios. "A conversation is reopened and an answer rated"
+    # is **not** held: `test_one_session_s_ratings_do_not_suppress_another_s` is
+    # two session dictionaries sharing one identifier, which is state isolation
+    # and not the position-instability the scenario is about. Recorded here rather
+    # than left to read as covered, because that scenario needs the driver.
+    "A rating names the question it is about, and outlives the session": (
+        "test_feedback.py::test_a_verdict_is_recorded_against_its_question",
+        "test_feedback.py::test_two_answers_rated_in_one_session_name_different_questions",
+        "test_feedback.py::test_a_comment_is_a_second_record_naming_the_same_question",
+        "test_feedback.py::test_the_identifier_recorded_is_the_one_the_question_s_trail_uses",
+        "test_feedback.py::test_a_verdict_reaches_the_durable_store",
+        "test_trail_store_live.py::test_the_schema_and_the_insert_are_valid_sql",
+    ),
+    # "An answer is rated down -> no further retrieval or model call is made on
+    # account of the rating" is not separately asserted; it holds structurally,
+    # since `feedback` cannot reach the agent at all, which is what the
+    # independence test pins.
+    # The three that were AWAITING_THE_WIDGET. Each is mapped to the driver tests
+    # that answer the half a function cannot: what is *offered*, and where.
+    "A reader can rate an answer, and rating is never required": (
+        "test_web_driver_feedback.py::test_an_answered_question_offers_a_rating",
+        "test_web_driver_feedback.py::test_the_control_appears_on_the_run_that_answered",
+        "test_web_driver_feedback.py::test_each_answer_is_offered_exactly_one_control",
+        "test_web_driver_feedback.py::test_the_rating_sits_with_the_prose_and_not_with_the_evidence",
+        "test_web_driver_feedback.py::test_a_redrawn_turn_puts_the_rating_in_the_same_place",
+        "test_web_driver_feedback.py::test_an_unrated_answer_records_nothing_and_the_page_goes_on",
+        "test_feedback.py::test_a_verdict_is_recorded_against_its_question",
+    ),
+    "A rating may carry a comment, offered only once an answer has been disapproved of": (
+        "test_web_driver_feedback.py::test_a_comment_box_appears_only_after_a_rating",
+        "test_web_driver_feedback.py::test_approval_is_not_asked_what_went_wrong",
+        "test_web_driver_feedback.py::test_approval_is_still_recorded",
+        "test_web_driver_feedback.py::test_the_control_is_settled_once_a_rating_is_given",
+        "test_web_driver_feedback.py::test_the_comment_and_its_button_submit_together",
+        "test_web_driver_feedback.py::test_a_comment_is_recorded_against_the_same_answer",
+        "test_feedback.py::test_a_comment_without_a_rating_is_refused",
+    ),
+    "Recording a rating never disrupts the reader": (
+        "test_web_driver_feedback.py::"
+        "test_a_store_that_cannot_be_written_to_does_not_reach_the_reader",
+        "test_web_driver_feedback.py::test_the_page_survives_a_rating",
+        "test_feedback.py::test_a_rating_that_cannot_be_stored_does_not_raise",
+        "test_feedback.py::test_a_handler_that_raises_does_not_reach_the_reader",
+        "test_feedback.py::test_rating_the_same_answer_again_records_nothing",
+    ),
+    "The model is never shown a rating or a comment": (
+        "test_feedback.py::test_neither_a_verdict_nor_a_comment_reaches_the_model",
+        "test_feedback.py::test_a_comment_written_as_an_instruction_is_stored_as_given",
+        "test_driver_independence.py::test_the_agent_cannot_reach_a_reader_s_feedback",
+        "test_driver_independence.py::test_no_agent_module_reaches_for_presentation",
     ),
 }
 
@@ -501,6 +563,12 @@ AWAITING_THE_HARNESS = (
 # system prompt, not a harness, and the live-model check can only ever assert the
 # weak form of them -- that an opening is quantitative and attributed, not that it
 # carries the right conclusion. Kept apart so the list says which gap is which.
+# `add-answer-feedback`'s three widget requirements were listed here while the
+# widget did not exist -- the recording side was asserted, and what a reader is
+# *offered* needs the real script. Groups 3 and 4 built it, so they are mapped
+# above rather than recorded as gaps. The comment saying why they could not be is
+# gone with them; `git log` has it.
+
 AWAITING_THE_PROMPT = (
     "An answer leads with its quantitative conclusion",
     "Leading with a figure does not displace what qualifies it",

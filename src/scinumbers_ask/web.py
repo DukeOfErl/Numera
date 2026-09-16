@@ -22,15 +22,14 @@ from __future__ import annotations
 
 import os
 import uuid
-from collections.abc import Iterable, Iterator, MutableMapping
-from contextlib import nullcontext
+from collections.abc import Callable, Iterable, Iterator, MutableMapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
 
 import streamlit as st
 
-from . import bionumbers, entries_table, messages, trace, trail_store
+from . import bionumbers, entries_table, feedback, messages, trace, trail_store
 from .agent import AskAgent
 from .config import Config, env_setting, refuse_retired_env
 from .corpus import load
@@ -77,6 +76,12 @@ PROTOTYPE_BANNER_CSS = """
 """
 
 SESSION_KEY = "scinumbers_ask.session"
+
+# The question box's widget key. Named so the page can ask, before it draws
+# anything, whether a question is about to run -- Streamlit restores widget state
+# at the top of the run, so the submitted question is readable there, ahead of the
+# `st.chat_input` call that returns it. `question_pending` is that question.
+ASK_KEY = "scinumbers_ask.question"
 TRANSCRIPT_KEY = "scinumbers_ask.transcript"
 
 # The session identifier lives in the URL as well as in session state. Session
@@ -103,14 +108,52 @@ UNCITED_ROWS = 4
 # column rather than to the content on purpose: a table you have to scroll
 # sideways hides the identifier, which is the one cell a reader is checking. A
 # truncated cell opens in full on a double click, so nothing is lost.
+# Property and Reference are 20% narrower than the terminal's proportions would
+# give them, and they are the two that can afford it: both hold prose that
+# truncates gracefully and opens in full on a double click, where Value, Units
+# and ID hold short strings that either fit or are unreadable. The 62px this
+# frees is what pays for the wider gutter between the columns.
 COLUMN_WIDTHS = {
-    "Property": 190,
+    "Property": 152,
     "Organism": 115,
     "Value": 85,
     "Units": 70,
     "ID": 60,
-    "Reference": 120,
+    "Reference": 96,
 }
+
+#: How the turn's width is split: the prose on the left, the entries it rests on
+#: to the right of it. Two columns rather than one tall one, so a reader checking
+#: a number against the table is looking at both at once instead of scrolling
+#: between them.
+#:
+#: **The right-hand share has a floor, and it is not a matter of taste.** The
+#: table's widths above are fixed pixels; below their sum the dataframe grows a
+#: horizontal scrollbar, and the first column it takes away is the identifier --
+#: the one cell a reader is checking. `layout="wide"` follows from the same
+#: arithmetic: the centred layout's main area is about 700px, which no split
+#: divides into a side wide enough.
+#:
+#: Even, rather than the 5:6 it started at, and that is the most the evidence
+#: column can give back. Narrowing it further undoes the 20% the table's own
+#: columns just gave up and then some -- at 6:5 the layout would need a wider
+#: browser than it did before either change.
+#:
+#: `test_web_driver.py::test_the_evidence_column_can_hold_its_table` does that
+#: arithmetic, against the stated target below. An earlier version of this comment
+#: claimed the test existed before it did.
+READING_SPLIT = (1, 1)
+
+#: The narrowest browser this layout is designed for: a 16-inch laptop at full
+#: width, or any ordinary external monitor. Stated as a number so the split and
+#: the column widths can be checked against it instead of argued about -- every
+#: previous attempt to reason about this in prose got it wrong in one direction
+#: or the other.
+TARGET_BROWSER_WIDTH = 1650
+
+#: What the browser width loses before the two columns get any: Streamlit's
+#: sidebar, the main container's padding, and the gutter between them.
+LAYOUT_CHROME = 336 + 64 + 64
 
 
 class Kind(StrEnum):
@@ -550,8 +593,18 @@ def _draw_table(table: Table) -> None:
     for line in _legend(shown):
         st.caption(as_text(line))
     if rest:
-        st.markdown(f"**{entries_table.UNCITED_BANNER.capitalize()}**")
-        _dataframe(rest)
+        # Folded away, where the cited table is not. These rows are what the answer
+        # *did not* stand on: context for a reader who wants to know what else was
+        # there, and length in front of one who is checking the prose against its
+        # evidence. The label is the heading, so what is behind it is legible
+        # without opening it.
+        #
+        # Splitting the turn into columns weakened the original argument -- these
+        # rows no longer push anything downwards, they sit beside the prose. It
+        # still holds in the weaker form that matters: the page is as tall as its
+        # tallest column, so an unfolded second table scrolls the prose too.
+        with st.expander(entries_table.UNCITED_BANNER.capitalize()):
+            _dataframe(rest)
 
     note = entries_table.dimension_note(table.rows)
     if note:
@@ -690,14 +743,62 @@ def draw(item: Item) -> None:
         st.caption(as_text(item.text))
 
 
-def _retrieval_box(expanded: bool, state: str = "running"):
-    return st.status("Searching the corpus…", expanded=expanded, state=state)
+#: The retrieval box, running and finished. Two names because the box outlives
+#: the search: the live path opens it on the first retrieval and relabels it when
+#: the answer is done, and the replay path draws it already finished.
+#:
+#: Constants rather than two literals, because they drifted. The replay path was
+#: drawing a search that had finished under the present-tense label, so every past
+#: turn claimed to still be searching. Invisible while the live render was the one
+#: the reader saw after asking; the rerun that revives older ratings replaced it
+#: with the replay render, and a test that had only ever covered the live path
+#: failed.
+RETRIEVAL_RUNNING = "Searching the corpus…"
+RETRIEVAL_DONE = "Retrieval"
+
+
+def _retrieval_box(expanded: bool, state: str = "running", label: str = RETRIEVAL_RUNNING):
+    # `as_text` although both callers pass a constant of this project's own words:
+    # the escaping scan reads the call, not the call sites, and a parameter is
+    # exactly the shape it cannot clear. Wrapping is free -- neither constant holds
+    # a dollar -- and the alternative is teaching the scan to chase defaults.
+    return st.status(as_text(label), expanded=expanded, state=state)
+
+
+def _column_for(item: Item, prose: Any, evidence: Any) -> Any:
+    """Which of the turn's two columns this item belongs in.
+
+    Everything the reader reads goes left -- prose, the warnings about it, the
+    rating, the ending. Only the entries table goes right, because it is the one
+    thing they check the prose *against*, and side by side is the whole reason
+    for splitting the turn at all.
+    """
+    return evidence if item.kind is Kind.ENTRIES else prose
+
+
+def _ends_the_prose(item: Item) -> bool:
+    """Whether this item is the first thing after the answer's prose.
+
+    The turn arrives as prose, then any warning about that prose, then the table
+    of entries, then the ending. The rating goes at this seam, at the foot of the
+    prose it is about.
+
+    It used to earn its place by keeping the rating above a table long enough to
+    push it off the screen. The table is in the next column now, so that argument
+    is gone and the seam is kept for the plainer one: a reader forms a view at the
+    end of the prose, and that is where the control should be waiting.
+
+    Shared by the live path and the replay path deliberately. They draw the same
+    turn in two different places, and a seam computed twice is a seam that moves.
+    """
+    return item.kind in (Kind.ENTRIES, Kind.ENDING)
 
 
 def answer(
     events: Iterable[Event],
     repo: CorpusRepository | None = None,
     into: list[Item] | None = None,
+    after_prose: Callable[[], None] | None = None,
 ) -> list[Item]:
     """Draw a question's items as they arrive, recording each into `into` as it goes.
 
@@ -721,33 +822,332 @@ def answer(
     Opening it late also places it where the first retrieval falls rather than
     always at the top, so a warning raised before any tool call now appears above
     it instead of below. That is the order the events actually arrived in.
+
+    `after_prose` gets a *seat* at the seam `_ends_the_prose` names, and is called
+    into it once the generator is exhausted. **It must not be called at the seam
+    itself**, which is what this did first and is a defect a reader found by
+    clicking: a widget is live in the browser the moment it renders, a click on it
+    re-runs the script, and a re-run abandons this generator at whatever yield it
+    had reached. The agent persists the turn as it goes, so a rating pressed while
+    the answer was still arriving cancelled the tool call it was in the middle of
+    and left the turn half-finished.
+
+    A Streamlit container is bound to the place it was made, so reserving one at
+    the seam and filling it later puts the control exactly where calling at the
+    seam did -- without it existing while there is still work to interrupt. The
+    same trick the retrieval box already used, for the same reason.
     """
     box = None
+    seat = None
+    prose, evidence = st.columns(READING_SPLIT, gap="large")
     drawn: list[Item] = [] if into is None else into
     for item in items_for(events, repo):
         if item.kind is Kind.PROGRESS and box is None:
-            box = _retrieval_box(expanded=True)
-        with box if item.kind is Kind.PROGRESS else nullcontext():
+            # Created inside the column, drawn into afterwards. A Streamlit
+            # container is bound to the place it was made, so `with box` works
+            # from anywhere once it exists -- which is what lets the loop keep
+            # one flat shape while writing into two columns.
+            with prose:
+                box = _retrieval_box(expanded=True)
+        if after_prose is not None and seat is None and _ends_the_prose(item):
+            with prose:
+                seat = st.container()
+        with box if item.kind is Kind.PROGRESS else _column_for(item, prose, evidence):
             draw(item)
         drawn.append(item)
     if box is not None:
-        box.update(label="Retrieval", state="complete", expanded=False)
+        box.update(label=RETRIEVAL_DONE, state="complete", expanded=False)
+    if after_prose is not None:
+        # The generator is spent by now, so there is nothing left for a click to
+        # interrupt. A turn that never reached the seam gets the foot of its own
+        # column, which is where the seam would have put it anyway.
+        with seat if seat is not None else prose:
+            after_prose()
     return drawn
 
 
-def show(items: Iterable[Item]) -> None:
+#: Shown above the comment box. Short on purpose: a hint that wraps into a
+#: paragraph is one nobody reads, and this one has to survive being skimmed.
+#:
+#: It asks for an identifier by name because per-entry rating is not built, and
+#: what readers choose to write about entries is the evidence for whether it
+#: should be (ADR-0740). "e.g. 102345" rather than "e.g. BNID 102345": readers
+#: copy the format they are shown, and the bare number is what a query can find
+#: either way.
+FEEDBACK_HINT = "What was wrong? If an entry is incorrect, please give its ID (e.g. 102345)."
+
+FEEDBACK_THANKS = "Thanks — recorded."
+
+# The thumbs, in orange. `st.feedback` has no colour parameter in 1.61.1 -- its
+# whole signature is options, key, default, disabled, on_change, args, kwargs,
+# width -- so this is CSS over the rendered control.
+#
+# Orange rather than red, though both were offered. Red on a thumbs *up* reads as
+# an alarm about the thing the reader just approved of; orange is an attention
+# colour and not an error one, so the same rule can cover both thumbs without one
+# of them saying something wrong.
+#
+# **`stFeedback`, not `stButtonGroup`, and the difference was a shipped bug.**
+# `st.feedback` has its own module and enqueues as `"feedback"`, so the frontend
+# renders its `Feedback` component -- test ids `stFeedback` and
+# `stFeedbackButton`. `stButtonGroup` belongs to `st.pills` and
+# `st.segmented_control`. The first version of this rule named the latter, matched
+# nothing, and the thumbs stayed grey.
+#
+# The test that was supposed to prevent that asserted the id appeared in the
+# frontend bundle. It does -- in `ButtonGroup.DMpjOF8Q.js`, for a different
+# widget. So a grep-level check passed while the feature was dead, which is why
+# `test_the_colour_rule_names_an_id_st_feedback_actually_renders` now reads the
+# id out of the `Feedback` component's own bundle instead of looking for a string
+# anywhere in `static/`.
+#
+# **This degrades to nothing.** If a future version renames either id the rule
+# matches nothing and the thumbs keep their default colour -- a strictly safer
+# failure than the prototype banner's, which falls back to sitting in the page.
+#
+# **`:not(:disabled)` is the load-bearing part, and it took three attempts to get
+# right.** `answer-feedback` requires that a rating, once given, is *shown* as
+# settled. Streamlit does that itself: `Feedback`'s `&:disabled` rule replaces the
+# button's colour with `fadedText40` when selected and `fadedText10` when not.
+#
+# But it sets that colour on the *button*, and the icon is a separate span whose
+# own class declares `color: inherit` -- specificity 0,1,0. A rule reading
+# `[data-testid="stFeedback"] [data-testid="stIconMaterial"]` is 0,2,0, so it wins,
+# `inherit` never resolves, and the disabled colour has nothing to propagate to.
+# The thumbs would stay fully orange after rating, with `cursor: not-allowed` as
+# the only remaining signal -- the requirement quietly unmet by a stylesheet.
+# There is no `!important` in that bundle to save it.
+#
+# So the rule declines to apply to a disabled control rather than overriding it.
+# That also avoids naming which half of the pair is selected --
+# `stFeedbackButtonActive` is the markup most likely to move under us, and letting
+# Streamlit keep its own state styling means never having to track it.
+#: **Live thumbs only. The settled state is deliberately left alone.**
+#:
+#: Two attempts to style a *rated* thumb both went wrong — first by relying on
+#: Streamlit's disabled colour reaching the icon through `inherit`, then by
+#: fading it with `opacity` — and neither could be checked from here, because
+#: nothing in this suite renders CSS. The `:disabled` half also had a consequence
+#: nobody wanted: the control is disabled while any question is answering, not
+#: only once rated, so every earlier turn's thumbs changed appearance for the
+#: duration of every run.
+#:
+#: So the rule colours the thumbs and stops. Whatever a rated thumb looks like is
+#: Streamlit's business, and the widget is still disabled, still `aria-checked`,
+#: and still shows `cursor: not-allowed`.
+FEEDBACK_CSS = """
+<style>
+[data-testid="stFeedback"] [data-testid="stIconMaterial"] { color: #ff9d3c; }
+@media (prefers-color-scheme: light) {
+  [data-testid="stFeedback"] [data-testid="stIconMaterial"] { color: #c2410c; }
+}
+</style>
+"""
+
+
+def draw_feedback_style() -> None:
+    """Emit the thumbs' colour rule, once for the page.
+
+    Once, not per rating: `draw_feedback` runs for every turn in the transcript,
+    and a `<style>` block per turn is the same rule repeated as many times as the
+    conversation is long. It is a page-level element, so it is drawn where the
+    page's other one is.
+    """
+    st.markdown(FEEDBACK_CSS, unsafe_allow_html=True)
+
+
+def question_id_of(items: Iterable[Item]) -> str:
+    """The question a turn's items came from, or "" if none say.
+
+    Empty rather than raising: an item drawn before this field existed, or a turn
+    that produced nothing but an ending, is a turn with no rating rather than a
+    crash on a page somebody is reading.
+    """
+    for item in items:
+        if item.question_id:
+            return item.question_id
+    return ""
+
+
+def is_ratable(items: Iterable[Item]) -> bool:
+    """Whether this turn has something a reader could form a view about.
+
+    An answer. Not an ending alone: a question that stopped at a spend ceiling or
+    a missing key produced nothing the reader can judge, and offering a thumb
+    there collects a verdict on the infrastructure while looking like a verdict on
+    the science.
+    """
+    items = list(items)
+    return bool(question_id_of(items)) and any(item.kind is Kind.ANSWER for item in items)
+
+
+def question_pending(state: Any) -> bool:
+    """Whether a question has been submitted and is about to be answered.
+
+    True for the whole of the run that answers it, including the part before the
+    agent is called -- which is the point. Every control already on the page is
+    live in the browser while that run is working, and a click on any of them
+    re-runs the script, abandoning the agent's generator mid-tool-call. So the
+    page needs to know this *before* it redraws the transcript, not after.
+    """
+    return bool(state.get(ASK_KEY))
+
+
+def draw_feedback(
+    items: Iterable[Item], session_id: str, state: Any = None, *, answering: bool = False
+) -> None:
+    """Offer a rating for one answered turn, and a comment once it has been rated.
+
+    **Drawn once per turn per script run**, which is a property of where it is
+    called rather than of anything here: the transcript loop redraws past turns
+    and the live branch draws the new one, and the new turn joins the transcript
+    only after that loop has finished. Move the append above the loop and this
+    draws twice, which is a `DuplicateWidgetID` and not a subtle failure --
+    `test_web_driver_feedback.py` pins it anyway, because the subtle version is
+    what happens if the keys ever stop being unique.
+
+    Keys derive from the question identifier, never from the turn's position.
+    Position looks stable because the transcript is append-only, but it lives in
+    session state alone -- reopening the same `?session=` restarts it at 0 while
+    the conversation continues, so two different questions would share a key. The
+    loud version of that is a duplicate-key error; the quiet version is a rating
+    landing on the wrong answer with no error at all.
+    """
+    state = st.session_state if state is None else state
+    items = list(items)
+    if not is_ratable(items):
+        return
+    question_id = question_id_of(items)
+    given = feedback.rating_for(state, question_id)
+
+    st.feedback(
+        "thumbs",
+        key=_verdict_key(question_id),
+        # `or answering`: inert for the whole of a run that is answering a
+        # question. Everything on the page is clickable while the agent works, and
+        # a click re-runs the script, which abandons the generator at whatever
+        # yield it had reached -- so a thumb on a *past* answer could cancel the
+        # tool call of the question being asked now.
+        # Disabled once given, rather than left live. Clicking a selected thumb
+        # clears it, and Streamlit discards the state of a widget it did not
+        # render -- so an un-disabled control lets a reader wipe the comment box
+        # out from under their own half-typed comment. A rating is final for the
+        # answer (`answer-feedback`), and the control should look final too.
+        disabled=given is not None or answering,
+        on_change=_took_a_verdict,
+        args=(question_id, session_id, state),
+    )
+    if given is None:
+        return
+    # Only disapproval opens the box. The hint asks what was *wrong*, which is a
+    # question nobody can answer about an answer they just approved -- a reader
+    # who thumbs up and is then asked what went wrong reads it as the page not
+    # having registered the click. Approval is the cheap signal, and the whole
+    # point of it being cheap is that it asks for nothing further.
+    if given.verdict is not feedback.Verdict.DOWN or given.commented:
+        st.caption(FEEDBACK_THANKS)
+        return
+    _draw_comment_box(question_id, session_id, state, answering=answering)
+
+
+def _verdict_key(question_id: str) -> str:
+    return f"scinumbers_ask.verdict.{question_id}"
+
+
+def _comment_key(question_id: str) -> str:
+    return f"scinumbers_ask.comment.{question_id}"
+
+
+def _took_a_verdict(question_id: str, session_id: str, state: Any) -> None:
+    """Record on the click, not on the comment.
+
+    Most readers who rate will do nothing else, and a design that waits for a
+    second action to commit the first collects nothing from them.
+    """
+    verdict = feedback.Verdict.from_widget(state.get(_verdict_key(question_id)))
+    if verdict is None:
+        return
+    feedback.record_verdict(state, question_id=question_id, session_id=session_id, verdict=verdict)
+
+
+def _draw_comment_box(
+    question_id: str, session_id: str, state: Any, *, answering: bool = False
+) -> None:
+    """The comment, offered only after disapproval, and inside a form of its own.
+
+    **The thumb must stay outside this form** -- inside one it would read `None`
+    until the form submitted, so the box could never appear conditionally on it
+    at all. The form holds the text and its button, which is what a form is for:
+    several widgets submitted as one act.
+
+    It is a form rather than a text area beside a button because the plain pair
+    takes two actions to send. Typing leaves the text uncommitted; the first
+    click or Ctrl+Enter commits it and reruns; only a second one presses Send.
+    A `disabled=` on the button made that worse rather than better -- the first
+    click landed on a disabled control and did nothing at all. A form submits the
+    text and the press together, so one action sends.
+
+    **Where the draft actually lives, corrected.** This used to say the draft was
+    held in the widget's own session-state key. It is not: a form batches its
+    widgets and sends nothing to the server until the submit button is pressed
+    (`streamlit/elements/form.py` -- "all widget values inside the form will be
+    sent to Streamlit in a batch"), so before submit that key still holds `""`.
+    The draft is in the browser, kept by the frontend re-rendering the same
+    widget key across re-runs.
+
+    In practice that holds, and drawing the box disabled rather than skipping it
+    is still what keeps the widget mounted. But it is the frontend's behaviour and
+    not a guarantee this code provides, so `answer-feedback`'s "a comment in
+    progress SHALL NOT be lost when the page is redrawn" rests on something
+    nothing here can enforce and nothing here can test -- `AppTest.set_value`
+    writes straight into server-side widget state, which is exactly what a browser
+    does *not* do before submit, so the test that appears to cover this would pass
+    even if the draft were dropped.
+    """
+    key = _comment_key(question_id)
+    with st.form(key=f"{key}.form", border=False):
+        # Drawn while a question is being answered, not skipped -- only disabled.
+        # Streamlit discards the state of a widget it did not render, so leaving
+        # this out for the duration of a run would take a half-typed comment with
+        # it, which is exactly what the rating is disabled rather than hidden to
+        # avoid.
+        text = st.text_area(FEEDBACK_HINT, key=key, height=80, disabled=answering)
+        sent = st.form_submit_button("Send", disabled=answering)
+    # Empty is a no-op rather than a refusal: the button cannot be disabled for it
+    # without reintroducing the two-action problem above, and there is nothing to
+    # tell a reader who pressed Send with nothing typed that they do not know.
+    if sent and text.strip():
+        feedback.record_comment(state, question_id=question_id, session_id=session_id, text=text)
+        st.rerun()
+
+
+def show(items: Iterable[Item], after_prose: Callable[[], None] | None = None) -> None:
     """Put a finished question's items back on screen after a re-run.
 
     Retrieval is collapsed here, where the live path leaves it open: while a
     question is running the progress is the only thing to look at, and once it
     has an answer the progress is the thing in the way.
+
+    `after_prose` lands at the same seam as on the live path, by the same
+    predicate -- a past turn and the turn just answered must not put the rating in
+    two different places, or scrolling back changes the layout.
     """
     items = list(items)
+    prose, evidence = st.columns(READING_SPLIT, gap="large")
     progress = [item for item in items if item.kind is Kind.PROGRESS]
     if progress:
-        with _retrieval_box(expanded=False, state="complete"):
+        with prose, _retrieval_box(expanded=False, state="complete", label=RETRIEVAL_DONE):
             for item in progress:
                 draw(item)
     for item in items:
-        if item.kind is not Kind.PROGRESS:
+        if item.kind is Kind.PROGRESS:
+            continue
+        if after_prose is not None and _ends_the_prose(item):
+            with prose:
+                after_prose()
+            after_prose = None
+        with _column_for(item, prose, evidence):
             draw(item)
+    if after_prose is not None:
+        with prose:
+            after_prose()

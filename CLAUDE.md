@@ -67,8 +67,9 @@ what let the blocks drift: no branch can see another's copy.
 | `add-answer-shape` | `0560`–`0590` |
 | `add-provider-limit-ending` | `0600`–`0640` — `0600` written |
 | `add-durable-trail` | `0700`–`0730` |
-| `add-answer-feedback` | `0740`–`0770` — reserved, change not yet proposed |
+| `add-answer-feedback` | `0740`–`0770` — `0740`, `0750`, `0760` written |
 | `add-user-identity` | `0780`–`0830` — reserved, change not yet proposed |
+| `add-question-and-answer-records` | `0840`–`0870` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets
@@ -163,6 +164,7 @@ core, and a test there refuses a name with no file behind it.
 | `eval_cli.py` | The evaluation command (`scinumbers-eval`): `check`, `run` and `report` |
 | `trace.py` | The structured trail, one question id and one session id throughout |
 | `trail_store.py` | The trail's durable destination: one append-only table, written best-effort (ADR-0700, ADR-0710) |
+| `feedback.py` | A reader's judgement of an answer, recorded to the trail. **Presentation, not core** — see below |
 
 **The trail has two sinks.** `trace.py` writes to a logger; `trail_store.py`
 attaches to that logger as a second handler, so no call site knows about it. Two
@@ -174,6 +176,13 @@ things a reader will otherwise get wrong:
   clears the logger's handlers. Above it, the sink is attached and then discarded:
   an app that looks configured and records nothing. `test_web_driver_trail.py`
   pins the order; nothing below the driver can see it.
+
+`feedback.py` sits on the **presentation** side of the dependency line, and that
+placement is the guarantee rather than a filing choice: a comment is text a
+stranger wrote, and the agent must not be able to reach it even by accident.
+`test_driver_independence.py` asserts that no agent-core module imports it —
+under `PRESENTATION`, which is wider than the `ADAPTERS` set the older test
+checks, because a module can be presentation without being a driver (ADR-0750).
 
 `trail_store` is core rather than presentation by decision, not by subtraction —
 `test_driver_independence.py` names it and says why. The connect timeout is the
@@ -202,6 +211,15 @@ defects in the project. **Read it before changing anything in that package.**
 It is there rather than here because it warns about a package the other two work
 packages never touch, and this file is loaded into every session and every
 subagent.
+
+## What is planned, and in what order
+
+`docs/roadmap.md` holds the work packages and their sequence — what is done, what
+is next, and the reasons that would otherwise live only in a session transcript.
+It records decisions already taken, not proposals. Read it before proposing a
+change, and reconcile it when one lands; it names the severe findings that gate
+later work (the SQLite ledger on Cloud Run, the LangSmith env var) where a change
+author will meet them rather than rediscover them.
 
 ## Where the rest of the rules live
 
