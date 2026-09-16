@@ -20,6 +20,7 @@ re-run after the next question.
 
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from collections.abc import Callable, Iterable, Iterator, MutableMapping
@@ -34,6 +35,7 @@ from .agent import AskAgent
 from .config import Config, env_setting, refuse_retired_env
 from .corpus import load
 from .events import Answer, AnswerEntries, Event, QuestionEnded, Retrieval
+from .permissions import Identity
 from .repository import CorpusRepository
 
 # Namespaced, because session state is one flat dictionary shared with every
@@ -398,6 +400,59 @@ def install_trail(engine: Any | None) -> Any | None:
     return trail_store.install(engine, logger_name=trace.LOGGER_NAME)
 
 
+#: Which identity each open session is signed in as. Process-wide, keyed by the
+#: session identifier every trail record already carries, and read by nothing
+#: but `IdentityStamp`. Populated at sign-in, forgotten at sign-out and when the
+#: session registry prunes the session.
+#:
+#: This is where identity stops. The agent is never handed it; `trace.py` never
+#: sees it; `feedback.py` writes through the same logger and is stamped without
+#: knowing. `tests/test_driver_independence.py` asserts over the source that none
+#: of those three names it (ADR-0810, ADR-0820).
+IDENTITIES: dict[str, Identity] = {}
+
+
+def remember_identity(session_id: str, identity: Identity) -> None:
+    IDENTITIES[session_id] = identity
+
+
+def forget_identity(session_id: str) -> None:
+    IDENTITIES.pop(session_id, None)
+
+
+class IdentityStamp(logging.Filter):
+    """Stamps the account and role onto every trail record of a known session.
+
+    A `logging.Filter` on the trail's *logger*, so it runs before any handler --
+    the file, the durable store and the dev panel all see the stamped record --
+    and so it survives `trace.configure`, which clears the logger's handlers and
+    leaves its filters alone. `TrailHandler.emit` already reads `user_email` and
+    `user_role` off the record; a record from a session that is nobody's carries
+    neither attribute, and the handler's `or None` writes NULL.
+
+    The role is written as its value at the moment of the record, never looked
+    up afterwards: a rating's weight is the weight the role carried when it was
+    given (ADR-0810).
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        identity = IDENTITIES.get(getattr(record, "session_id", None) or "")
+        if identity is not None:
+            record.user_email = identity.email
+            record.user_role = identity.role.value
+        return True
+
+
+def install_identity_stamp() -> None:
+    """Attach the stamp to the trail's logger, once. Idempotent for the same
+    reason `trail_store.install` is: this runs inside a function Streamlit may
+    call again, and two stamps would be harmless today and a puzzle later."""
+    logger = logging.getLogger(trace.LOGGER_NAME)
+    for existing in [f for f in logger.filters if isinstance(f, IdentityStamp)]:
+        logger.removeFilter(existing)
+    logger.addFilter(IdentityStamp())
+
+
 @st.cache_resource(show_spinner="Loading the corpus…")
 def resources(corpus: str | None = None) -> tuple[CorpusRepository, AskAgent]:
     """The corpus index and the agent, built once for the life of the server.
@@ -416,6 +471,12 @@ def resources(corpus: str | None = None) -> tuple[CorpusRepository, AskAgent]:
     # whole change exists to end, reintroduced two lines further up.
     # `test_web_driver_trail.py` pins the ordering rather than this comment.
     install_trail(trail_destination())
+    # Beside the sinks rather than at sign-in: the stamp reads the registry at
+    # record time, so it is installed once per process and knows nobody until a
+    # session signs in. A logger-level filter would survive `to_file` either way;
+    # it sits here so that everything attached to the trail is attached in one
+    # place.
+    install_identity_stamp()
     # The corpus path is resolved by the caller, outside this function. Anything
     # drawn inside a cached function is recorded and replayed on every cache hit,
     # so an `st.info` announcing a build would be redrawn at the top of the page

@@ -81,32 +81,35 @@ doubles, both populations of the table. Its brief already says so.
 
 ## 3. Identity stamped at the sink, and a credential per agent
 
-- [ ] 3.1 `default_model(config, api_key=None)`: the key as a parameter, `None`
+- [x] 3.1 `default_model(config, api_key=None)`: the key as a parameter, `None`
       falling back to the environment. `AskAgent.__init__(…, api_key=None)` and
       nothing else. `ask`'s signature does not change.
-- [ ] 3.2 Test: two agents constructed with different keys send different keys
+- [x] 3.2 Test: two agents constructed with different keys send different keys
       to the provider (assert on the model double's construction, not on the
       environment). Test: `api_key=None` reads the environment exactly as
       before.
-- [ ] 3.3 `web.IdentityStamp(logging.Filter)` over a process-wide
+- [x] 3.3 `web.IdentityStamp(logging.Filter)` over a process-wide
       `session_id → Identity` registry: stamps `user_email` and `user_role` onto
       every record whose session is known. Installed once, after
       `trace.to_file`, pinned the way `test_web_driver_trail.py` pins that
-      ordering. Presentation side; imports `logging` only.
-- [ ] 3.4 `TrailHandler.emit` reads `user_role` the way it reads `user_email`
+      ordering. Presentation side; imports `logging` only. *Installed on the
+      logger, not a handler, so it survives `trace.configure`; the test asserts
+      that outcome (`test_the_stamp_survives_the_file_sink_being_configured_afterwards`)
+      rather than pinning an order that is not load-bearing for a filter.*
+- [x] 3.4 `TrailHandler.emit` reads `user_role` the way it reads `user_email`
       (task 2.5). Test through the trail, not the events: two sessions under two
       identities → each session's records carry its own email and role, so a
       constant or a shared stamp cannot pass.
-- [ ] 3.5 Test: feedback records are stamped **without `feedback.py` changing** —
+- [x] 3.5 Test: feedback records are stamped **without `feedback.py` changing** —
       a verdict recorded in a stamped session carries the identity; one recorded
       with no registry entry carries NULL for both, not `''`.
-- [ ] 3.6 Structural test, in `test_driver_independence.py`: `agent.py`,
+- [x] 3.6 Structural test, in `test_driver_independence.py`: `agent.py`,
       `trace.py` and `feedback.py` name none of `Identity`, `user_role`,
       `user_email`. Seed a violation in a copy and watch it fail.
-- [ ] 3.7 Test, the spec's scenario: the same question asked under two roles
+- [x] 3.7 Test, the spec's scenario: the same question asked under two roles
       hands the agent and the model identical inputs (`model.seen`, tool calls),
       with the positive control that the question itself reached the model.
-- [ ] 3.8 ADR-0810 and ADR-0820 written out. ADR-0820 records the principle for
+- [x] 3.8 ADR-0810 and ADR-0820 written out. ADR-0820 records the principle for
       later: if the agent must ever know what is permitted, it is handed
       permissions, never the role.
 - [ ] 3.9 `verifier` on group 3. Ask: is there any path — parameter, field,

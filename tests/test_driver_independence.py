@@ -256,3 +256,64 @@ def test_the_agent_takes_no_parameter_naming_its_caller():
         inspect.signature(AskAgent.__init__).parameters
     )
     assert not (taken & {"driver", "mode", "caller", "interactive", "web", "terminal"})
+    # Nor one naming the person. `add-user-identity` hands the agent a credential
+    # and nothing else about who holds it; the role and the account are stamped
+    # onto the trail at the sink, where this class cannot see them (ADR-0820).
+    assert not (taken & IDENTITY_TOKENS), sorted(taken & IDENTITY_TOKENS)
+
+
+# Identifiers that would mean identity had reached the code that decides an
+# answer, records the trail, or records a reader's judgement. Checked as
+# *identifiers* -- names, parameters, attributes, keywords, imports -- and not as
+# text, because `agent.py` legitimately writes `{"role": "user"}` as a string and
+# mentions an account in prose. A string is not a way for the role to arrive.
+IDENTITY_TOKENS = {"Identity", "identity", "role", "email", "account", "user_role", "user_email"}
+# The three modules identity must never enter. `agent.py` decides the answer;
+# `trace.py` builds the records; `feedback.py` records what a stranger said. All
+# three get stamped by the web driver's filter without knowing, which is the
+# design's whole point -- a parameter, a field or an import here would mean the
+# side door had been opened.
+IDENTITY_FREE = ("agent", "trace", "feedback")
+
+
+def identifiers_of(module: str) -> set[str]:
+    """Every identifier the module's source binds, reads, passes or imports."""
+    tree = ast.parse((PACKAGE / f"{module}.py").read_text())
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            names.add(node.attr)
+        elif isinstance(node, ast.arg):
+            names.add(node.arg)
+        elif isinstance(node, ast.keyword) and node.arg:
+            names.add(node.arg)
+        elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            names.add(node.name)
+        elif isinstance(node, ast.alias):
+            names.add((node.asname or node.name).split(".")[-1])
+    return names
+
+
+@pytest.mark.parametrize("module", IDENTITY_FREE)
+def test_identity_never_enters_the_agent_the_trail_or_the_feedback(module):
+    """The spec: "the role SHALL NOT reach the agent, and neither SHALL the
+    account" -- made structural, so that it is a property of the source and not
+    of the discipline of whoever edits it next.
+
+    A seeded `role` parameter on `AskAgent.__init__` fails this; so does
+    `from .permissions import Identity` in `trace.py`, or `feedback._record`
+    taking an `email`. Group 7 of `add-user-identity` seeds the first of those in
+    a copy and names this test as the one that must fail.
+    """
+    reached = identifiers_of(module) & IDENTITY_TOKENS
+    assert not reached, f"{module}.py names {sorted(reached)}; identity has a way in"
+
+
+def test_the_identity_free_modules_exist_and_are_core():
+    """A renamed module would make the test above pass over nothing."""
+    for module in IDENTITY_FREE:
+        assert (PACKAGE / f"{module}.py").exists(), module
+    assert {"agent", "trace"} <= set(AGENT_CORE)
+    assert "feedback" in PRESENTATION  # stamped from outside like the other two

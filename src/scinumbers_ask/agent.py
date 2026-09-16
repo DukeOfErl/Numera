@@ -166,10 +166,18 @@ def _tool_text(message: object) -> str:
     return _text_of(message) or str(content)
 
 
-def default_model(config: Config) -> BaseChatModel:
+def default_model(config: Config, api_key: str | None = None) -> BaseChatModel:
+    """The provider's model, funded by `api_key` -- or by the environment when None.
+
+    The key is a parameter so that a driver holding one credential per person can
+    hand each agent its own (ADR-0820). `None` reads `OPENROUTER_API_KEY` exactly
+    as before, which is what the terminal, the evaluation harness and a
+    deployment with no identity configured pass. The credential is the one
+    per-person fact the agent needs; who the person is never arrives here.
+    """
     from langchain_openai import ChatOpenAI
 
-    key = os.environ.get("OPENROUTER_API_KEY")
+    key = api_key or os.environ.get("OPENROUTER_API_KEY")
     if not key:
         # Raised as a named condition rather than a bare KeyError, so `ask` can
         # end the question properly instead of the driver seeing a question start
@@ -422,11 +430,17 @@ class AskAgent:
         config: Config,
         checkpoint_path: str,
         model: BaseChatModel | None = None,
+        api_key: str | None = None,
     ) -> None:
         self._repo = repo
         self._config = config
         self._checkpoint_path = checkpoint_path
         self._model = model
+        # The credential, and nothing else about the person it was issued to. An
+        # agent is built per browser session so that each holds its own; the
+        # account and the role stay in the driver and are stamped onto the trail
+        # at the sink, where this class cannot see them (ADR-0820).
+        self._api_key = api_key
 
     @contextmanager
     def _saver(self):
@@ -548,7 +562,7 @@ class AskAgent:
         budget = ToolBudget(TOOL_CALL_LIMIT)
         tools = build_tools(self._repo, trace, pending.append, budget)
         try:
-            model = self._model or default_model(self._config)
+            model = self._model or default_model(self._config, self._api_key)
         except NotConfigured as exc:
             # Every path out of this generator that does not raise must end with a
             # QuestionEnded: a driver pairing starts with endings, or rendering
