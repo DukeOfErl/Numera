@@ -678,3 +678,14 @@ def test_the_url_token_is_not_advertised_where_sign_in_decides_the_conversation(
     state, params = {}, {}
     web.session_id(state, params, advertise=True)
     assert params["session"], "a developer's machine keeps its bookmark"
+
+
+def test_the_suite_runs_as_though_no_sign_in_were_configured():
+    """The insulation `conftest` provides, pinned where it will be read.
+
+    Without it the suite's result depends on whether the developer running it
+    happens to have Google sign-in in their own `.streamlit/secrets.toml` --
+    which they will, the day they set up the deployment. Sixty-four tests failed
+    exactly that way, on a tree that had not changed.
+    """
+    assert web.identity_configured() is False

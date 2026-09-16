@@ -43,6 +43,34 @@ def _trail_stays_in_the_tmp_dir(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _the_suite_does_not_read_the_developer_s_secrets():
+    """Run every test against an empty secrets file, whatever is on this machine.
+
+    `web.identity_configured()` asks whether `[auth]` is in `st.secrets`, and
+    `st.secrets` reads the real, gitignored `.streamlit/secrets.toml`. So the
+    day a developer configures Google sign-in locally -- to try the deployment,
+    which is exactly when they would -- sixty-four tests start failing, because
+    every `AppTest` page meets the sign-in door and has no chat input. Nothing in
+    the repository changed; the suite simply stopped describing the code.
+
+    A test that wants sign-in configured says so: `AppTest.secrets` replaces this
+    for the length of that run (Streamlit only swaps it in when non-empty), and
+    the unit-level tests monkeypatch `identity_configured` directly. Imported
+    lazily so a test that never touches the web driver does not pay for
+    Streamlit.
+    """
+    import streamlit as st
+    from streamlit.runtime.secrets import Secrets
+
+    empty = Secrets()
+    empty._secrets = {}
+    original = st.secrets
+    st.secrets = empty
+    yield
+    st.secrets = original
+
+
+@pytest.fixture(autouse=True)
 def _each_test_starts_with_no_open_sessions():
     """The session cap's registry is a cached resource: one per process, which
     is what a cap on a server needs and exactly wrong for a test process that
