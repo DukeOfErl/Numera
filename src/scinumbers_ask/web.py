@@ -137,10 +137,23 @@ COLUMN_WIDTHS = {
 #: Even, rather than the 5:6 it started at, and that is the most the evidence
 #: column can give back. Narrowing it further undoes the 20% the table's own
 #: columns just gave up and then some -- at 6:5 the layout would need a wider
-#: browser than it did before either change. `test_web_driver.py` does that
-#: arithmetic against a stated target width rather than leaving it here as prose
-#: nobody recomputes.
+#: browser than it did before either change.
+#:
+#: `test_web_driver.py::test_the_evidence_column_can_hold_its_table` does that
+#: arithmetic, against the stated target below. An earlier version of this comment
+#: claimed the test existed before it did.
 READING_SPLIT = (1, 1)
+
+#: The narrowest browser this layout is designed for: a 16-inch laptop at full
+#: width, or any ordinary external monitor. Stated as a number so the split and
+#: the column widths can be checked against it instead of argued about -- every
+#: previous attempt to reason about this in prose got it wrong in one direction
+#: or the other.
+TARGET_BROWSER_WIDTH = 1650
+
+#: What the browser width loses before the two columns get any: Streamlit's
+#: sidebar, the main container's padding, and the gutter between them.
+LAYOUT_CHROME = 336 + 64 + 64
 
 
 class Kind(StrEnum):
@@ -1074,10 +1087,22 @@ def _draw_comment_box(
     click landed on a disabled control and did nothing at all. A form submits the
     text and the press together, so one action sends.
 
-    The draft lives in the widget's own key, which is safe *here* because the box
-    keeps being rendered for as long as the rating stands -- Streamlit only
-    discards the state of a widget it did not draw, and the thumb being disabled
-    is what guarantees it keeps drawing.
+    **Where the draft actually lives, corrected.** This used to say the draft was
+    held in the widget's own session-state key. It is not: a form batches its
+    widgets and sends nothing to the server until the submit button is pressed
+    (`streamlit/elements/form.py` -- "all widget values inside the form will be
+    sent to Streamlit in a batch"), so before submit that key still holds `""`.
+    The draft is in the browser, kept by the frontend re-rendering the same
+    widget key across re-runs.
+
+    In practice that holds, and drawing the box disabled rather than skipping it
+    is still what keeps the widget mounted. But it is the frontend's behaviour and
+    not a guarantee this code provides, so `answer-feedback`'s "a comment in
+    progress SHALL NOT be lost when the page is redrawn" rests on something
+    nothing here can enforce and nothing here can test -- `AppTest.set_value`
+    writes straight into server-side widget state, which is exactly what a browser
+    does *not* do before submit, so the test that appears to cover this would pass
+    even if the draft were dropped.
     """
     key = _comment_key(question_id)
     with st.form(key=f"{key}.form", border=False):

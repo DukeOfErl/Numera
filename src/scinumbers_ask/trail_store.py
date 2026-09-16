@@ -231,18 +231,30 @@ class TrailStore:
             global _FAILURES
             self.schema_failures += 1
             _FAILURES += 1
-            complain("trail store unavailable", exc)
             self.ready = False
-            # The backoff is owned here, so every route to a failed attempt defers
-            # the next one -- including the attempt `install` makes at startup.
-            # Leaving that one undeferred is what put a five-second stall in the
-            # first question after a broken startup.
-            self.retry_after = time.monotonic() + self.retry_delay
-            self.retry_delay = min(self.retry_delay * 2, SCHEMA_RETRY_CEILING_S)
+            self.pause("trail store unavailable", exc, already_reported=True)
             return False
         self.ready = True
-        self.retry_delay = SCHEMA_RETRY_AFTER_S
         return True
+
+    def pause(self, why: str, exc: BaseException, *, already_reported: bool = False) -> None:
+        """Defer the next attempt, and grow the wait before the one after.
+
+        **One place, because there are two ways to become unusable and they must
+        not disagree.** The schema failing and enough consecutive writes failing
+        both mean "do not come back immediately", and the growth used to live only
+        on the first: a destination whose DDL succeeded and whose INSERTs failed --
+        a role without INSERT, a hand-altered table, a `detail` that will not cast
+        -- reset the wait to its floor on every schema check and then failed three
+        more writes, for ever, at a fixed interval, each paying a connection on a
+        reader's render path.
+
+        Growing here and resetting only on a *successful write* is what makes
+        `SCHEMA_RETRY_CEILING_S` the ceiling its own comment claims it is.
+        """
+        self.retry_after = time.monotonic() + self.retry_delay
+        complain(f"{why}; retrying in {int(self.retry_delay)}s", exc)
+        self.retry_delay = min(self.retry_delay * 2, SCHEMA_RETRY_CEILING_S)
 
     def _reachable(self) -> bool:
         """Whether to attempt a write, retrying the schema when its wait is up.
@@ -326,10 +338,8 @@ class TrailStore:
                 # the same decision as `record`'s early refusal above, reached by
                 # evidence rather than by configuration.
                 self.ready = False
-                self.retry_after = time.monotonic() + self.retry_delay
-                complain(
-                    f"trail store pausing after {self.consecutive_failures}"
-                    f" consecutive failures; retrying in {int(self.retry_delay)}s",
+                self.pause(
+                    f"trail store pausing after {self.consecutive_failures} consecutive failures",
                     exc,
                 )
             return False
@@ -344,6 +354,9 @@ class TrailStore:
         self.writes += 1
         _WRITES += 1
         self.consecutive_failures = 0
+        # Reset here rather than in `ensure_schema`: a schema check that passes
+        # says the table is there, not that a row can be written to it.
+        self.retry_delay = SCHEMA_RETRY_AFTER_S
         return True
 
 

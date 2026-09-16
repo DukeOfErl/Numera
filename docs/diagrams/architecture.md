@@ -93,6 +93,7 @@ flowchart TB
         web[web.py]
         messages[messages.py]
         table[entries_table.py]
+        fb[feedback.py]
     end
     subgraph core["Agent core"]
         agent[agent.py]
@@ -125,6 +126,8 @@ flowchart TB
     trace -. "logging handler" .-> store
     store -. "best-effort" .-> pg
     web -- "supplies the engine" --> store
+    web --> fb
+    fb -- "a reader's judgement" --> trace
 ```
 
 **The dotted arrows are the trail, and neither is a dependency.** `trace.py` does
@@ -136,6 +139,17 @@ lands (ADR-0710).
 `web.py` supplies the engine because only a driver may know about `st.connection`;
 `trail_store` itself imports no framework, which is what keeps it on the core side
 of the line rather than beside `autobuild` in presentation.
+
+**`feedback.py` is in presentation, and that side is the whole guarantee.** A
+rating is a reader's judgement and a comment is text a stranger wrote — the one
+input to this system authored to be read by the people running it. Put it in the
+core and nothing structural stops a prompt reaching the model by that route, in a
+tool whose wrong answers look exactly like its right ones (ADR-0750). So a
+rating's path is entirely left-to-right on this diagram: reader → `feedback.py` →
+`trace.py`'s logger → `trail_store` → Postgres, joining the question's own rows on
+the identifier they share. The agent has no arrow to it, and
+`test_driver_independence.py` asserts that no core module may acquire one — under
+`PRESENTATION`, which is wider than the driver set the older test checks.
 
 **The one rule with a direction: no arrow runs from the core back into
 presentation.** Nothing in Python enforces it — an `import streamlit` in the tool

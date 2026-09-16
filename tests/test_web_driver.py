@@ -1095,3 +1095,27 @@ def test_a_finished_search_is_not_labelled_as_still_running(monkeypatch, repo, c
     # And still so after another turn puts it through the replay path a second time.
     at = ask(at, "and in yeast?")
     assert web.RETRIEVAL_RUNNING not in [box.label for box in at.status]
+
+
+def test_the_evidence_column_can_hold_its_table():
+    """The arithmetic `READING_SPLIT`'s comment claimed was tested, and was not.
+
+    The entries table's widths are fixed pixels. Below their sum the dataframe
+    grows a horizontal scrollbar and the first column it takes away is the
+    identifier — the one cell a reader is checking against the prose. So the
+    evidence column's share of the target width has to cover them.
+
+    Written as a derivation rather than a remembered number: it fails if someone
+    widens a column, skews the split toward the prose, or lowers the target. The
+    only width test before this bounded the table at 700px, which the wide layout
+    made meaningless — it names neither the split nor the layout it now lives in.
+    """
+    usable = web.TARGET_BROWSER_WIDTH - web.LAYOUT_CHROME
+    evidence = usable * web.READING_SPLIT[1] / sum(web.READING_SPLIT)
+    needed = sum(web.COLUMN_WIDTHS.values())
+
+    assert evidence >= needed, (
+        f"the evidence column gets {evidence:.0f}px of a {web.TARGET_BROWSER_WIDTH}px "
+        f"browser and the table needs {needed}px, so it scrolls sideways and hides "
+        f"the ID column. Narrow the columns or widen the split — not the target."
+    )

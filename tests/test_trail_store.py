@@ -724,3 +724,34 @@ def test_the_wait_before_retrying_grows_and_is_reset_by_success():
     assert store.retry_delay == trail_store.SCHEMA_RETRY_AFTER_S, (
         "a recovered store kept its punitive wait"
     )
+
+
+def test_a_destination_whose_writes_fail_backs_off_instead_of_cycling():
+    """The case where the schema check is not evidence of anything.
+
+    A role without INSERT, a hand-altered table, a `detail` that will not cast:
+    the DDL succeeds and every row fails. The wait used to grow only on a schema
+    failure and reset on a schema *success*, so this destination cycled for ever
+    at the floor — a schema check that passed, three failed inserts, a pause, and
+    round again, each one paying a connection on a reader's render path.
+
+    The dimension is which kind of failure occurred, so the store here differs
+    from the one above in exactly that: its transactions open, its inserts do not.
+    """
+    store = _store(fail_on_execute=OSError("permission denied"))
+    assert store.ensure_schema() is True, "the fixture did not reproduce a working DDL"
+    floor = store.retry_delay
+
+    for _ in range(trail_store.FAILURES_BEFORE_GIVING_UP):
+        assert store.record("searched") is False
+    assert store.ready is False, "the store did not give up on a destination that cannot be written"
+    assert store.retry_delay > floor, (
+        "the wait did not grow, so this destination is retried at the floor for ever"
+    )
+
+    # And the next round grows it again rather than resetting on the schema check.
+    grown = store.retry_delay
+    store.retry_after = 0.0
+    for _ in range(trail_store.FAILURES_BEFORE_GIVING_UP):
+        store.record("searched")
+    assert store.retry_delay > grown, "a passing schema check reset the wait"
