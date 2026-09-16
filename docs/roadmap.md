@@ -221,15 +221,38 @@ are copy-on-write, so the free tier absorbs several.
 | `production` | the deployed app | exists |
 | `dev` | local development | now — see below |
 | `test` | the `network`-marked live tests | now, if those tests are ever automated |
-| `alpha` | the first named testers | when there are testers |
+| `alpha` | the first named testers | when there are testers, from an empty `production` |
 | `beta` | a wider group | when there is a wider group |
 
-**`dev` is the one that matters today.** `run_label` is currently the only thing
-separating local runs from real feedback, it is a text column in the same table,
-and it only works if every query remembers to filter on it — `sql/feedback.sql`
-queries 2, 3 and 4 do not. The asymmetry decides it: a wrong row in a dev database
-costs nothing, a dev row counted as real feedback corrupts the one dataset this
-whole feature exists to produce.
+**`dev` is the one that matters today, and the reason is worse than it looked.**
+An earlier version of this file said `run_label` was separating local runs from
+real feedback. It is not separating anything: `SCINUMBERS_RUN` is set nowhere —
+not in `.streamlit/`, not in any deployment config — so `config.py` and
+`feedback.py` both fall back to `"dev"`, and *every* row in the table says `dev`
+whether it came from a laptop or the deployed app. There is no discriminator at
+all, only the timestamp.
+
+So physical separation is not the tidier of two options, it is the only one. The
+asymmetry settles the rest: a wrong row in a dev database costs nothing, a dev row
+counted as real feedback corrupts the one dataset this whole feature exists to
+produce, and `sql/feedback.sql` queries 2, 3 and 4 filter on nothing.
+
+**`production` is already contaminated and should be emptied, not inherited.**
+It holds every test question asked while this was being built. Branching `dev`
+off it is still right — that is how the history is kept, and a dev branch is
+where that history belongs — but `production` should then be cleared, so it
+starts empty for the first real user rather than answering its first query with
+a year of our own typing. Nothing in it is real, and `dev` holds the copy.
+
+The order matters and only in one direction: **create `dev` first**, which
+snapshots the data, and clear `production` after. Neon branches are copy-on-write
+from a point in time, so a later delete on `production` cannot reach `dev`.
+
+**Worth doing anyway: set `SCINUMBERS_RUN` per environment.** The code already
+reads it; nothing sets it. Separate branches make it belt-and-braces rather than
+load-bearing, which is the right relationship — a row that says where it came
+from is cheap, and a row that has to be *inferred* from which database it is in
+is one migration away from being unattributable.
 
 It is a configuration change, not a code change. Local `.streamlit/secrets.toml`
 points at `dev`; the Community Cloud secrets box points at `production`. They are
