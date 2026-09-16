@@ -53,21 +53,28 @@ doubles, both populations of the table. Its brief already says so.
 
 ## 2. Accounts and the schema
 
-- [ ] 2.1 `sql/accounts.sql`: the `accounts` table DDL and an insert template
+- [x] 2.1 `sql/accounts.sql`: the `accounts` table DDL and an insert template
       with placeholder values. No secret, no real email.
-- [ ] 2.2 `accounts.py`: `Account` and `lookup(engine, email) -> Account | None`,
+- [x] 2.2 `accounts.py`: `Account` and `lookup(engine, email) -> Account | None`,
       one select under the trail store's statement timeout. **Fail closed:** an
       unreachable table raises `EnrolmentUnavailable`, distinct from "not
       enrolled". Say why in the docstring — the trail's fail-open reasoning does
       not transfer.
-- [ ] 2.3 Tests with an engine double: enrolled → `Account`; absent → `None`;
+- [x] 2.3 Tests with an engine double: enrolled → `Account`; absent → `None`;
       disabled → `None`; engine raises → `EnrolmentUnavailable`, not `None`. The
       last is the one that matters.
-- [ ] 2.4 `trail_store._SCHEMA` gains `alter table … add column if not exists
+- [x] 2.4 `trail_store._SCHEMA` gains `alter table … add column if not exists
       user_role text`, in the same `ensure_schema` transaction. Test it runs
       idempotently on a table that already has the column and on one that does
       not (`test_trail_store_live.py`, network marker, for the real DDL).
-- [ ] 2.5 `TrailHandler.emit` reads `user_role` off the record the way it reads
+      *The live test is written but could not be run from the sandbox (no route
+      to 5432). The same DDL, insert and select were run by hand against Neon
+      `dev` over SQL-over-HTTP on a throwaway table created in the old shape:
+      column absent before, present after run 1, run 2 a no-op, row read back
+      with both columns; table dropped. `sql/accounts.sql`'s DDL and
+      `accounts._SELECT` likewise. Run `pytest -m network` from a machine that
+      can reach the pooler before merging.*
+- [x] 2.5 `TrailHandler.emit` reads `user_role` off the record the way it reads
       `user_email`; `_INSERT` writes it. Test: a record with identity writes both
       columns; one without writes NULL for both — not `''`.
 - [ ] 2.6 `verifier` on group 2.

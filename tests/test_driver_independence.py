@@ -127,10 +127,10 @@ def test_the_durable_trail_sink_is_core_and_that_is_deliberate():
 # The identity modules. Core by decision, like `trail_store`, and for a sharper
 # reason: the refusal in `authorization` has to be reachable by a test or a second
 # caller with no browser, and the grant table in `permissions` is the data that
-# refusal reads. `accounts` joins them when it lands (group 2 of `add-user-identity`);
-# `test_every_named_core_module_exists` refuses a name with no file behind it, so
-# it is not listed before then.
-IDENTITY_CORE = {"permissions", "authorization"}
+# refusal reads. `accounts` reads enrolment off a row and imports no framework
+# either; the driver hands it the engine. `test_every_named_core_module_exists`
+# refuses a name here with no file behind it.
+IDENTITY_CORE = {"permissions", "authorization", "accounts"}
 
 
 def test_the_identity_modules_are_core_and_that_is_deliberate():

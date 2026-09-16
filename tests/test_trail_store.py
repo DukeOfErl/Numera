@@ -541,6 +541,50 @@ def test_the_handler_carries_a_user_when_there_is_one():
     assert written["user_email"] == "someone@example.com"
 
 
+def test_the_handler_carries_the_role_beside_the_email():
+    """Both columns, from one record. The role is what the roles exist for -- the
+    weighting queries join on it -- and it is written here, at record time, so a
+    later change of role cannot rewrite what a rating weighed (ADR-0810)."""
+    store = _store()
+    handler = TrailHandler(store)
+    record = logging.LogRecord("x", logging.INFO, "f", 1, "feedback.verdict", None, None)
+    record.user_email = "someone@example.com"
+    record.user_role = "senior scientist"
+    handler.emit(record)
+    (written,) = store.engine.written
+    assert written["user_email"] == "someone@example.com"
+    assert written["user_role"] == "senior scientist"
+
+
+def test_a_record_with_no_identity_writes_null_for_both_columns_not_empty_strings():
+    """The unconfigured deployment, the CLI and the harness all write this row.
+    `''` in either column would make `where user_role is null` miss every row
+    from before identity existed, and `count(distinct user_role)` report a
+    phantom role -- the same trap `session_id` already fell into."""
+    store = _store()
+    handler = TrailHandler(store)
+    record = logging.LogRecord("x", logging.INFO, "f", 1, "searched", None, None)
+    record.user_email = ""
+    record.user_role = ""
+    handler.emit(record)
+    (written,) = store.engine.written
+    assert written["user_email"] is None
+    assert written["user_role"] is None
+
+
+def test_the_schema_adds_the_role_column_to_a_table_that_predates_it():
+    """The `alter ... add column if not exists`, run in the same transaction as
+    the `create`. Asserted on the statements because a double accepts anything;
+    that the SQL is valid and idempotent against Postgres is
+    `test_trail_store_live.py`'s to show."""
+    store = TrailStore(engine=_Engine())
+    assert store.ensure_schema()
+    (conn,) = store.engine.conns
+    statements = [s.lower() for s in conn.statements]
+    assert any("create table if not exists" in s and "user_role" in s for s in statements)
+    assert any("add column if not exists user_role" in s for s in statements)
+
+
 def test_the_previous_write_duration_travels_on_the_next_row():
     """The first row has none; the second carries the first's duration.
 
