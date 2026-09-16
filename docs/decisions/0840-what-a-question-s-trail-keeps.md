@@ -107,6 +107,17 @@ not wrap `emit` at all. That is unchanged by this change and is asserted at the
 real sink rather than assumed; `feedback.py` guards independently for the same
 reason.
 
+**A dead destination loses the answer's records before the question ends, and
+that is by design.** `FAILURES_BEFORE_GIVING_UP` is 3, and those three are spent
+on `question.asked` and the retrieval records that follow it — so when the
+database is down, `answer.given` and `answer.evidence` are not written *and are
+not even attempted*: the store has already paused for `SCHEMA_RETRY_AFTER_S`.
+The reader is unaffected, which is the guarantee. But an operator reading a
+half-written question's rows should know the tail is missing because the store
+stopped trying, not because these two records are broken. Worth knowing before
+somebody debugs the wrong thing; pinned by
+`test_a_dead_destination_stops_trying_before_the_answer_is_reached`.
+
 ## Where this leaves the data
 
 `sql/feedback.sql` can now show a rating beside the question it judged and the

@@ -123,7 +123,7 @@ def test_the_answer_is_recorded_verbatim_rather_than_shortened(repo, config, tmp
     assert len(recorded["answer"]) > 5000, "the fixture is too short to catch a truncation"
 
 
-def test_every_ending_that_gives_an_answer_records_it(repo, config, tmp_path, monkeypatch, trail):
+def test_every_ending_that_gives_an_answer_records_it(repo, config, tmp_path, monkeypatch):
     """The branch-complete property, not a sample of branches.
 
     `ask` can yield an `Answer` from eight places, seven of them endings -- a
@@ -142,6 +142,8 @@ def test_every_ending_that_gives_an_answer_records_it(repo, config, tmp_path, mo
     """
     from agent_endings import ending_builds
 
+    # No `trail` fixture: this configures its own stream per build, and asking for
+    # one that is then discarded reads as though it were what is asserted on.
     seen_endings = set()
     for build in ending_builds(repo, config, tmp_path, monkeypatch):
         # Built before the stream is attached: two of the builds ask a question
@@ -311,46 +313,99 @@ def test_nothing_recorded_here_reaches_the_model(repo, config, tmp_path, trail):
     assert "question.answered" not in shown
 
 
-def test_a_destination_that_cannot_be_written_does_not_fail_a_question(repo, config, tmp_path):
-    """Fail-open (ADR-0710), with the larger rows this change writes.
+class _RefusingEngine:
+    """An engine whose every transaction fails, counting the attempts.
+
+    `test_feedback._Engine(fail_on_begin=...)` raises from `begin()` and records
+    nothing, so a test using it cannot tell a record that was attempted and
+    swallowed from one that was never attempted at all. That distinction is the
+    whole of what the two tests below are about.
+    """
+
+    def __init__(self) -> None:
+        self.attempts = 0
+
+    def begin(self):
+        self.attempts += 1
+        raise OSError("the destination is gone")
+
+
+def _drive_with_a_dead_destination(repo, config, tmp_path, store) -> tuple[list, io.StringIO]:
+    """One retrieving question, with `store` attached beside a file-shaped sink.
+
+    The stream shows what reached the *logger*; the store's own counters show
+    what reached the destination. The two diverge, which is the point.
+    """
+    stream = io.StringIO()
+    configure(stream)
+    logger = logging.getLogger(trace.LOGGER_NAME)
+    logger.addHandler(trail_store.TrailHandler(store))
+    try:
+        model = scripted(tool_call("search_entries", property="Cell"), says("1 μm [[100002]]"))
+        return list(agent_with(repo, config, tmp_path, model).ask("s", "how wide?")), stream
+    finally:
+        logger.handlers.clear()
+
+
+def test_a_destination_that_cannot_be_written_does_not_fail_a_question(
+    repo, config, tmp_path, monkeypatch
+):
+    """Fail-open (ADR-0710), exercised on the records this change adds.
 
     The real sink, not a hand-rolled one: `TrailHandler.emit` is what swallows,
     and the guarantee is a property of that handler rather than of `logging`,
     which does not wrap `emit` at all.
 
-    A file-shaped handler is attached alongside, because `store.failures` alone
-    proves only that *something* was attempted. The stream proves all three of
-    this change's records travelled the path; the counter proves they were
-    attempted against a destination that refused.
+    **`FAILURES_BEFORE_GIVING_UP` is raised for this test, and that is not a
+    convenience.** At its real value of 3 the budget is consumed by
+    `question.asked`, a `spend.increment` and `search` — all records that predate
+    this change — after which the store pauses and `answer.given` and
+    `answer.evidence` are never attempted at all. A test at the real threshold
+    therefore exercises the swallow on none of the two new records while looking
+    exactly as though it does. The other regime is pinned by the test below.
     """
-    from test_feedback import _Engine
-
-    stream = io.StringIO()
-    configure(stream)
-    engine = _Engine(fail_on_begin=OSError("the destination is gone"))
+    monkeypatch.setattr(trail_store, "FAILURES_BEFORE_GIVING_UP", 99)
+    engine = _RefusingEngine()
     store = trail_store.TrailStore(engine=engine)
     store.ready = True
-    logger = logging.getLogger(trace.LOGGER_NAME)
-    logger.addHandler(trail_store.TrailHandler(store))
-    try:
-        model = scripted(tool_call("search_entries", property="Cell"), says("1 μm [[100002]]"))
-        events = list(agent_with(repo, config, tmp_path, model).ask("s", "how wide?"))
-    finally:
-        logger.handlers.clear()
+
+    events, stream = _drive_with_a_dead_destination(repo, config, tmp_path, store)
 
     assert events[-1].reason is EndReason.ANSWERED
     assert any(isinstance(e, Answer) for e in events)
-    for event in (ASKED, ANSWER, EVIDENCE):
-        assert records(stream, event), f"{event} never reached the logger at all"
 
-    # Exactly the give-up threshold, not more. `question.asked` is the first
-    # record of the question and fails, and the store stops attempting after
-    # `FAILURES_BEFORE_GIVING_UP` consecutive failures -- so a larger number here
-    # would mean the pause stopped working, and a smaller one that nothing was
-    # attempted. Asserting the number rather than truthiness is what makes this a
-    # positive control instead of a shape check.
+    # Every record the logger saw was attempted against the dead destination and
+    # swallowed -- the two counts being equal is what rules out "skipped".
+    emitted = records(stream)
+    assert engine.attempts == len(emitted) == store.failures
+    assert {ASKED, ANSWER, EVIDENCE} <= {r["event"] for r in emitted}
+    assert store.ready is True, "nothing should have given up at this threshold"
+
+
+def test_a_dead_destination_stops_trying_before_the_answer_is_reached(repo, config, tmp_path):
+    """The regime that actually holds in production, written down because it is
+    surprising.
+
+    Three consecutive failures and the store pauses for `SCHEMA_RETRY_AFTER_S`.
+    Those three are spent on `question.asked` and the retrieval records that
+    follow it, so the answer and its evidence are *skipped upstream of the write*
+    rather than swallowed by it. The reader is unaffected either way — which is
+    the guarantee — but an operator reading a half-written question's rows should
+    know the tail is missing by design and not because the two records are
+    broken.
+    """
+    engine = _RefusingEngine()
+    store = trail_store.TrailStore(engine=engine)
+    store.ready = True
+
+    events, stream = _drive_with_a_dead_destination(repo, config, tmp_path, store)
+
+    assert events[-1].reason is EndReason.ANSWERED, "the reader is unaffected"
     assert store.failures == trail_store.FAILURES_BEFORE_GIVING_UP
     assert store.ready is False, "the store should have paused rather than gone on trying"
+    # The give-up lands before the answer: fewer attempts than records emitted.
+    assert engine.attempts < len(records(stream))
+    assert records(stream, ANSWER), "the logger still saw it; only the store did not"
 
 
 def test_the_records_reach_the_durable_store_under_the_question_s_own_identifier(

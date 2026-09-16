@@ -77,11 +77,18 @@ cited set that differs from the retrieved set.
       fail-open guarantee must still hold with the larger rows; `logging` catches
       nothing on its own, which cost this project a defect already.
       Asserted at the real sink — a `TrailHandler` over an engine that refuses to
-      begin — because that is where the swallowing happens. A file-shaped handler
-      runs alongside, so the test proves all three records travelled the path
-      rather than only that *something* was attempted, and the failure count is
-      asserted at `FAILURES_BEFORE_GIVING_UP` exactly: more would mean the pause
-      stopped working, fewer that nothing was tried. `trace.record` itself
+      begin — because that is where the swallowing happens.
+      **Two tests, because there are two regimes, and the verifier caught the
+      first version claiming the wrong one.** At the real
+      `FAILURES_BEFORE_GIVING_UP` of 3 the budget is spent on `question.asked`, a
+      `spend.increment` and `search` — all records that predate this change —
+      after which the store pauses and `answer.given` and `answer.evidence` are
+      never attempted at all. So the swallow test raises the threshold and counts
+      `begin()` on the engine, which is the only way to tell "attempted and
+      swallowed" from "skipped"; the second test pins the give-up regime as a
+      property in its own right. A `StringIO` handler alongside shows what reached
+      the *logger*, which is all seven records either way — that is what the first
+      version mistook for proof that the store had seen them. `trace.record` itself
       still does not catch, which is unchanged by this change and said so in
       ADR-0840 rather than left to be discovered.
 - [x] 4.4 Confirm no driver records the question as well. Two records of one
@@ -97,15 +104,16 @@ cited set that differs from the retrieved set.
       3 skipped, 39 deselected. (One fewer than before the mapping: removing the
       requirement from `TESTED_BUT_UNNAMED` drops one parametrised gap test.)
 
-**Twelve canaries, twelve deaths**, seeded into a copy: a constant question, a
+**Fourteen canaries, fourteen deaths**, seeded into a copy: a constant question, a
 truncated answer, `cited` set from `event.retrieved`, the retrieved set sliced at
 the driver's cap, the answer recorded after the `yield`, only short answers
 recording, each interface notice removed, `at_provider_limit` dropped from the
 enumeration, the spent-key partial answer alone going unrecorded (which
 names its build in the failure message), and `question.asked` moved from before
 the work to after it — which kills the crash test, the one the comment in `ask`
-had been claiming without evidence, and a `TrailHandler` that lets the
-destination's failure escape (which is what fail-open means here). Recorded because the first run of
+had been claiming without evidence, a `TrailHandler` that lets the
+destination's failure escape (which is what fail-open means here), and a store
+that never pauses — which kills the give-up test alone, as it should. Recorded because the first run of
 the last two **passed vacuously** — `test_web_driver.py` resolves the app by
 absolute path, so a mutation applied to a copied `streamlit_app.py` was never
 read. They died once re-run from a self-contained copy of `src`, `tests` and the
