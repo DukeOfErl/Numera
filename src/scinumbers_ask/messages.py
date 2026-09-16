@@ -44,11 +44,18 @@ from .events import (
 # the whole of what this records.
 def records_note(identity_configured: bool) -> str:
     """What is kept -- one sentence, extended rather than doubled when a person is
-    attached to it. The terminal passes `False`: it has no sign-in."""
-    kept = "Questions, answers and the entries behind them"
-    if identity_configured:
-        kept += ", under your account and role,"
-    return f"{kept} are kept, so whoever runs this can see where it goes wrong."
+    attached to it. The terminal passes `False`: it has no sign-in.
+
+    Short, because a standing notice nobody finishes reading tells nobody
+    anything. It still names *what* is kept rather than only that something is:
+    "logged for product development" would leave a reader to guess whether their
+    words are in it, and the requirement is that they can learn what is kept
+    without reading the database afterwards.
+    """
+    under = ", under your account and role," if identity_configured else ""
+    return (
+        f"Questions, answers and the entries behind them are logged{under} for product development."
+    )
 
 
 # The door, before anything else is drawn. Each is a different sentence because

@@ -512,12 +512,12 @@ def test_the_page_says_that_questions_and_answers_are_kept(monkeypatch, repo, co
     # checked that the page contains the empty string. `False`: these tests run
     # with no `[auth]` in secrets, so the page shows the unconfigured variant.
     note = web.records_note(False)
-    assert "are kept" in note and "goes wrong" in note
+    assert "are logged" in note and "Questions, answers" in note
 
     at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
     panel = " ".join(c.value for c in at.sidebar.caption)
     assert note in panel
-    assert "kept" in panel and "goes wrong" in panel
+    assert "logged" in panel and "Questions, answers" in panel
 
 
 def test_the_terminal_says_it_too_including_for_a_single_question(
@@ -538,8 +538,8 @@ def test_the_terminal_says_it_too_including_for_a_single_question(
 
     captured = capsys.readouterr()
     assert messages.records_note(False) in captured.err
-    assert "kept" in captured.err and "goes wrong" in captured.err
-    assert "kept" not in captured.out, "stdout carries the answer, not this"
+    assert "logged" in captured.err and "Questions, answers" in captured.err
+    assert "logged" not in captured.out, "stdout carries the answer, not this"
 
 
 class _NoModel:
@@ -584,6 +584,6 @@ def test_the_terminal_does_not_claim_to_keep_what_it_discards(
 
     captured = capsys.readouterr()
     assert messages.records_note(False) not in captured.err
-    assert "kept" not in captured.err
+    assert "are logged" not in captured.err
     # Positive control: the run itself happened and said so.
     assert "no_answer" in captured.out

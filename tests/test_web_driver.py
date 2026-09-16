@@ -1015,7 +1015,10 @@ def test_the_prototype_caveat_is_on_the_page_and_stays_there(monkeypatch, repo, 
         "drawn as an ordinary element it scrolls away with the first answer, and the "
         "reader who has seen several answers is the one who most needs it"
     )
-    assert any(web.PROTOTYPE_SHORT in c.value for c in at.sidebar.caption), "missing in the panel"
+    assert not any(web.PROTOTYPE_SHORT in c.value for c in at.sidebar.caption), (
+        "the pinned banner already says this, above everything and unscrollable; "
+        "a second copy in the panel is the repetition a reader learns to skip"
+    )
 
 
 def test_the_page_and_the_readme_both_say_it_is_not_trustworthy_yet():

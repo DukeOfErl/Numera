@@ -450,7 +450,7 @@ def test_signed_in_email_is_none_without_is_logged_in(monkeypatch):
 def test_the_note_is_one_sentence_extended_not_two():
     plain, extended = messages.records_note(False), messages.records_note(True)
     for note in (plain, extended):
-        assert "are kept" in note and "goes wrong" in note
+        assert "are logged" in note and "Questions, answers" in note
     assert "account" not in plain and "role" not in plain
     assert "under your account and role" in extended
     assert extended.count(".") == 1

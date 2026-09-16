@@ -121,7 +121,8 @@ st.caption(web.as_text(f"{len(repo)} entries · session {session}"))
 # answer. The entries below are unbounded -- one question can fill the panel -- and
 # a run budget pushed past the scroll is not a standing figure.
 with st.sidebar:
-    st.caption(web.PROTOTYPE_SHORT)
+    # No prototype line here: the pinned banner says it at the top of the page,
+    # where it cannot be scrolled away, and twice is once too many.
     # What is kept, where a reader can find it without being made to read it
     # before every question. Not in the pinned banner, which is one line by
     # design; the sidebar is the page's standing statement about itself, and

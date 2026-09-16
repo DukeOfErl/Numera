@@ -46,8 +46,9 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
-- The side panel's statement of what is kept now names the account and the role
-  where sign-in is configured — the same sentence, extended, not a second one.
+- The side panel's statement of what is kept is shorter, and names the account and
+  the role where sign-in is configured — the same sentence, extended, not a second
+  one. The prototype caveat no longer appears twice: it stays in the pinned banner.
 - A signed-in tester whose allowance is spent, or who has no credential yet, is
   told to ask whoever runs the deployment, and that the allowance renews monthly.
   The funder-neutral wording stays for a developer on their own key.

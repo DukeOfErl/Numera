@@ -1091,11 +1091,8 @@ def draw_dev_panel(admission: Admission, session_id: str, seat: Any | None = Non
     import pandas as pd
 
     with seat:
-        st.caption(
-            as_text(
-                "This session's trail, for its last five questions. Nothing here reaches the model."
-            )
-        )
+        # No caption explaining what this is: the only people who can open this
+        # tab are the ones who built it.
         st.dataframe(pd.DataFrame(rows, columns=list(PANEL_COLUMNS)), hide_index=True)
 
 
