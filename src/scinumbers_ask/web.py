@@ -20,11 +20,13 @@ re-run after the next question.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import uuid
 from collections.abc import Callable, Iterable, Iterator, MutableMapping
 from dataclasses import dataclass, replace
+from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
@@ -33,10 +35,11 @@ import streamlit as st
 from . import accounts, bionumbers, entries_table, feedback, messages, trace, trail_store
 from .accounts import Account, EnrolmentUnavailable
 from .agent import AskAgent
+from .authorization import Refused, require
 from .config import Config, env_setting, refuse_retired_env
 from .corpus import load
 from .events import Answer, AnswerEntries, Event, QuestionEnded, Retrieval
-from .permissions import Identity
+from .permissions import Identity, Permission
 from .repository import CorpusRepository
 
 # Namespaced, because session state is one flat dictionary shared with every
@@ -350,6 +353,13 @@ class Admission:
     configured: bool
     account: Account | None = None
 
+    @property
+    def identity(self) -> Identity | None:
+        """Who, and as what -- for the grant table and the sidebar, never the agent."""
+        if self.account is None:
+            return None
+        return Identity(self.account.email, self.account.role)
+
 
 def identity_configured() -> bool:
     """Whether `[auth]` is in secrets. Absent means: run exactly as before.
@@ -644,6 +654,143 @@ def install_identity_stamp() -> None:
     logger.addFilter(IdentityStamp())
 
 
+# --- the dev panel: a third sink on the same logger ---------------------------------
+
+#: How many of a session's questions the panel keeps. Five, per the spec; the
+#: bound is what makes holding this in process memory acceptable.
+PANEL_QUESTIONS = 5
+PANEL_COLUMNS = ("when", "question", "event", "detail")
+
+
+class RecentTrail(logging.Handler):
+    """Keeps each session's trail records for its last few questions, in memory.
+
+    The third sink on the trail's logger, beside the file and the durable store,
+    and like them attached after `trace.to_file` because `configure` clears the
+    handlers. Unlike them it needs no file and no database, which is why the
+    panel works on a developer's machine -- the place it is most used.
+
+    Partitioned by `session_id` at write time, so the panel's "this session's
+    only" is a property of the data structure rather than a filter at render:
+    there is no query here that could be widened by mistake. Rows without a
+    session or without a question -- a refused sign-in has neither -- are not a
+    question's records and are not kept.
+
+    Never raises out of `emit`: the trail's other handlers hold the same line,
+    and a panel that could break a question would be a poor trade.
+    """
+
+    def __init__(self, questions: int = PANEL_QUESTIONS) -> None:
+        super().__init__(logging.INFO)
+        self.questions = questions
+        self._rows: dict[str, list[dict[str, Any]]] = {}
+        self._order: dict[str, list[str]] = {}
+        # `question.asked` carries the text; the other records of that question
+        # carry only its id. Remembered so the table can name the question.
+        self._asked: dict[str, str] = {}
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            session = getattr(record, "session_id", None) or None
+            question_id = getattr(record, "question_id", None) or None
+            if session is None or question_id is None:
+                return
+            fields = getattr(record, "fields", {}) or {}
+            event = record.getMessage()
+            if event == "question.asked" and "question" in fields:
+                self._asked[question_id] = str(fields["question"])
+            order = self._order.setdefault(session, [])
+            if question_id not in order:
+                order.append(question_id)
+                while len(order) > self.questions:
+                    dropped = order.pop(0)
+                    self._rows[session] = [
+                        r for r in self._rows.get(session, []) if r["question_id"] != dropped
+                    ]
+                    self._asked.pop(dropped, None)
+            self._rows.setdefault(session, []).append(
+                {
+                    "when": datetime.fromtimestamp(record.created),
+                    "question_id": question_id,
+                    "event": event,
+                    "detail": json.dumps(fields, default=str),
+                }
+            )
+        except Exception:  # noqa: BLE001 - a panel must not break a question
+            return
+
+    def rows(self, session_id: str) -> list[dict[str, Any]]:
+        """This session's rows, oldest first, the question named where its text is known."""
+        return [
+            {
+                "when": r["when"],
+                "question": self._asked.get(r["question_id"], r["question_id"]),
+                "event": r["event"],
+                "detail": r["detail"],
+            }
+            for r in self._rows.get(session_id, [])
+        ]
+
+    def forget(self, session_id: str) -> None:
+        for question_id in self._order.pop(session_id, []):
+            self._asked.pop(question_id, None)
+        self._rows.pop(session_id, None)
+
+
+#: The one installed handler, read by `dev_panel_rows`. None until `resources`
+#: runs, which on every real page it has.
+RECENT: RecentTrail | None = None
+
+
+def install_recent_trail() -> RecentTrail:
+    """Attach the panel's sink, once, after `trace.to_file` for the reason
+    `install_trail` gives. Idempotent: an existing one is replaced, not stacked."""
+    global RECENT
+    logger = logging.getLogger(trace.LOGGER_NAME)
+    for existing in [h for h in logger.handlers if isinstance(h, RecentTrail)]:
+        logger.removeHandler(existing)
+    RECENT = RecentTrail()
+    logger.addHandler(RECENT)
+    return RECENT
+
+
+def dev_panel_rows(admission: Admission, session_id: str) -> list[dict[str, Any]]:
+    """This session's recent trail -- **the operation the permission guards.**
+
+    `require` is here, in the accessor, and not on the page: whatever asks for
+    these rows -- the sidebar, a test, a later page -- meets the same refusal,
+    and a page that merely hid the section would have enforced nothing. Refused
+    with no identity, and for every role the table does not grant.
+
+    Where no identity is configured the rows are given: a session that is
+    nobody's is the developer's. That is the deferred decision the spec and the
+    roadmap both record -- to be decided again before this panel shows anything
+    more than the session's own trail.
+    """
+    if admission.configured:
+        require(admission.identity, Permission.DEV_PANEL)
+    return RECENT.rows(session_id) if RECENT is not None else []
+
+
+def draw_dev_panel(admission: Admission, session_id: str) -> None:
+    """The sidebar section, below the run status. Absent -- not disabled, not
+    empty -- when refused; present and empty on a fresh session, so a dev can
+    tell "nothing yet" from "not permitted"."""
+    try:
+        rows = dev_panel_rows(admission, session_id)
+    except Refused:
+        return
+    import pandas as pd
+
+    st.header("Dev")
+    st.caption(
+        as_text(
+            "This session's trail, for its last five questions. Nothing here reaches the model."
+        )
+    )
+    st.dataframe(pd.DataFrame(rows, columns=list(PANEL_COLUMNS)), hide_index=True)
+
+
 @st.cache_resource(show_spinner="Loading the corpus…")
 def resources(corpus: str | None = None) -> CorpusRepository:
     """The corpus index, built once for the life of the server, and the trail's
@@ -673,6 +820,7 @@ def resources(corpus: str | None = None) -> CorpusRepository:
     # it sits here so that everything attached to the trail is attached in one
     # place.
     install_identity_stamp()
+    install_recent_trail()
     # The corpus path is resolved by the caller, outside this function. Anything
     # drawn inside a cached function is recorded and replayed on every cache hit,
     # so an `st.info` announcing a build would be redrawn at the top of the page

@@ -381,10 +381,20 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_web_driver_identity.py::test_the_sidebar_says_who_is_signed_in_and_offers_sign_out",
         "test_web_driver_identity.py::test_the_note_is_one_sentence_extended_not_two",
     ),
+    "An operator can see a session's own trail": (
+        "test_web_driver_dev_panel.py::test_an_operator_s_page_has_the_section",
+        "test_web_driver_dev_panel.py::test_a_tester_s_page_has_no_such_section",
+        "test_web_driver_dev_panel.py::test_a_fresh_operator_session_shows_the_section_empty",
+        "test_web_driver_dev_panel.py::test_the_table_names_the_question_just_asked",
+        "test_web_driver_dev_panel.py::test_two_sessions_panels_show_only_their_own_records",
+        "test_web_driver_dev_panel.py::test_the_panel_s_contents_do_not_reach_the_model",
+        "test_web_driver_dev_panel.py::test_the_refusal_does_not_depend_on_the_caller",
+    ),
     "A deployment with no identity configured behaves as before": (
         "test_web_driver_identity.py::"
         "test_with_no_identity_configured_a_question_is_answered_without_signing_in",
         "test_web_driver_identity.py::test_with_no_identity_configured_the_page_says_so",
+        "test_web_driver_dev_panel.py::test_the_developer_s_machine_sees_the_panel",
         "test_identity_never_reaches_the_agent.py::test_no_key_reads_the_environment_exactly_as_before",
         "test_identity_never_reaches_the_agent.py::"
         "test_a_session_nobody_is_signed_in_to_writes_null_for_both",
@@ -685,16 +695,15 @@ AWAITING_THE_PROMPT = (
     "Leading with a figure does not displace what qualifies it",
 )
 
-# `add-user-identity`'s groups 5 and 6, not yet built. Listed by group so that
-# each leaves as its group lands, and so that a requirement of a half-built
-# change is a named gap rather than a missing line.
+# `add-user-identity`'s group 6, not yet built. Listed so that a requirement of a
+# half-built change is a named gap rather than a missing line; it leaves as the
+# group lands.
 AWAITING_IDENTITY_GROUPS = (
-    "An operator can see a session's own trail",
     "Concurrent sessions are capped for the whole deployment, not per client address",
 )
 
 UNMAPPED: dict[str, str] = {
-    **dict.fromkeys(AWAITING_IDENTITY_GROUPS, "add-user-identity groups 5-6 are unbuilt"),
+    **dict.fromkeys(AWAITING_IDENTITY_GROUPS, "add-user-identity group 6 is unbuilt"),
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_HARNESS, "add-answer-evaluation is unbuilt; no harness yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),

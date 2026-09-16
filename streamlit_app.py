@@ -110,6 +110,9 @@ with st.sidebar:
         # inline mathematics, so "$1.20 of $1.20" typeset the middle as an equation
         # and ate both currency signs. Same fault as the ending line's, same fix.
         st.caption(web.as_text(f"{format_usd(spent)} of {format_usd(cap)}"))
+    # Below the run status, and only for roles the grant table allows -- the
+    # refusal is inside `dev_panel_rows`, so this line decides nothing.
+    web.draw_dev_panel(admission, session)
     st.divider()
 
 for asked, drawn in web.transcript(st.session_state):

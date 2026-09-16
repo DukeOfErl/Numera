@@ -111,6 +111,21 @@ def test_the_sink_survives_the_file_sink_being_configured(monkeypatch, script, c
     assert handlers, "the durable sink was installed and then cleared"
 
 
+def test_the_panel_s_sink_survives_the_file_sink_being_configured(
+    monkeypatch, script, clean_logger
+):
+    """The same hazard for the third sink. `RecentTrail` is a handler, so
+    `configure` would clear it exactly as it would the durable one; the stamp
+    is a filter and is exempt, which is asserted where the stamp is tested."""
+    monkeypatch.setattr(web, "trail_destination", lambda: None)
+
+    script.run()
+
+    handlers = [h for h in clean_logger.handlers if isinstance(h, web.RecentTrail)]
+    assert len(handlers) == 1, "the panel's sink was installed and then cleared, or stacked"
+    assert web.RECENT is handlers[0]
+
+
 def test_reruns_do_not_reinstall_because_resources_is_cached(monkeypatch, script, clean_logger):
     """Three script runs, one handler -- and the reason is the cache, not idempotence.
 

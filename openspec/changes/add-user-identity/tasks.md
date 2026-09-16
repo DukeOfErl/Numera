@@ -156,19 +156,21 @@ doubles, both populations of the table. Its brief already says so.
 
 ## 5. The dev panel
 
-- [ ] 5.1 `web.RecentTrail` handler: per-session deque trimmed to the last five
+- [x] 5.1 `web.RecentTrail` handler: per-session deque trimmed to the last five
       question ids; installed once per process after `trace.to_file`, like
       `install_trail`, and pinned the same way `test_web_driver_trail.py` pins
       that ordering.
-- [ ] 5.2 `web.draw_dev_panel(state, identity)`: `require(identity, DEV_PANEL)`
+- [x] 5.2 `web.draw_dev_panel(state, identity)`: `require(identity, DEV_PANEL)`
+      *(landed as `dev_panel_rows(admission, session_id)`, the accessor holding
+      `require`, and `draw_dev_panel` over it; unconfigured is given the rows)*
       inside it; below run status; `st.dataframe` of when / question / event /
       detail; present and empty on a fresh session.
-- [ ] 5.3 Tests, both directions through `AppTest`: a dev's page has the section;
+- [x] 5.3 Tests, both directions through `AppTest`: a dev's page has the section;
       a student's page has **no** such section — assert on the absence of the
       element, not on a disabled one. A fresh dev session shows it empty.
-- [ ] 5.4 Test: two sessions' panels show only their own records. Vary the
+- [x] 5.4 Test: two sessions' panels show only their own records. Vary the
       question text between them so a shared buffer cannot pass.
-- [ ] 5.5 Test: the panel's contents do not reach the model (positive control
+- [x] 5.5 Test: the panel's contents do not reach the model (positive control
       first).
 - [ ] 5.6 `verifier` on group 5.
 
