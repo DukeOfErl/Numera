@@ -65,7 +65,8 @@ deferred cosmetic below.
 ## Next
 
 ### WP2.5 — The question and the answer in the trail
-**Not yet an OpenSpec change. Small, and blocking the value of WP2.**
+**`add-question-and-answer-records`**, proposed 2026-09-16. ADR block `0840`–`0870`.
+Planning artifacts complete; not implemented. Small, and blocking the value of WP2.
 
 The trail records `question_id` but neither the question nor the answer, so a
 thumbs-down says "answer `c23c83c16324` was wrong" with no way to learn what it

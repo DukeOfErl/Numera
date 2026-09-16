@@ -69,6 +69,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-durable-trail` | `0700`–`0730` |
 | `add-answer-feedback` | `0740`–`0770` — `0740`, `0750`, `0760` written |
 | `add-user-identity` | `0780`–`0830` — reserved, change not yet proposed |
+| `add-question-and-answer-records` | `0840`–`0870` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets
