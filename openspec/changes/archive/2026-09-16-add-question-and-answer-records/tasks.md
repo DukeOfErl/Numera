@@ -97,9 +97,25 @@ cited set that differs from the retrieved set.
 
 ## 5. Verification
 
-- [ ] 5.1 Hand groups 1–3 to a `verifier`. Ask it specifically whether any test
+- [x] 5.1 Hand groups 1–3 to a `verifier`. Ask it specifically whether any test
       would still pass if the recorded value were replaced by a constant, and
       whether any asserts only that a field exists.
+      **Verdict: the change does what it claims.** Four findings, all acted on,
+      and three of them were false claims of mine rather than weak code:
+      (1) "drives every ending" drove eight of ten — `PROVIDER_LIMIT` and
+      `INTERNAL_ERROR` were reached by nothing, found by measuring coverage of
+      `agent.py`, and the `== 8` count was *true*, which is why it hid the gap;
+      (2) one existence-only assertion that read no field;
+      (3) a length where identity was meant;
+      (4) `ask`'s own comment claimed a crash still leaves a record, with no test
+      behind it anywhere in the suite.
+      A fifth came from asking it to review the fix: the `StringIO`-alongside
+      trick measures the logger, not the store, so the "all three records were
+      attempted" claim was false — at the real threshold the two new records are
+      never attempted at all.
+      **The pattern worth keeping:** every one was a sentence about verification
+      that read like a result, and the instrument that caught them was coverage
+      and measurement, not re-reading.
 - [x] 5.2 Run the full suite once, at the end. Not per group. 1273 passed,
       3 skipped, 39 deselected. (One fewer than before the mapping: removing the
       requirement from `TESTED_BUT_UNNAMED` drops one parametrised gap test.)
