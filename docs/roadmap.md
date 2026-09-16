@@ -87,47 +87,79 @@ Reserved as `add-user-identity`, ADR block `0780`–`0830`. Not yet proposed.
   `{Role: set[Permission]}` grant table. Roles later weight ratings and gate
   human review of the AI-generated database.
 
-**The grant table, decided 2026-09-16.** Settled here, before the change is
-proposed, because it is a classification rule and every worker implementing a
-permission needs the same table — without one fixed first, each decides its own
-row, which is how a grant drifts in.
+**The grant table, decided 2026-09-16, revised the same day.** Settled here,
+before the change is proposed, because it is a classification rule and every
+worker implementing a permission needs the same table — without one fixed first,
+each decides its own row, which is how a grant drifts in.
 
-*Dropped for now:* suggest an edit, edit with provenance, ask for calculations.
-Each names a capability the app does not have; a permission for an absent
-feature is either dead code or a promise, and neither belongs in the first table.
+*The rule that pruned it:* a permission exists only where the app has a code
+path to refuse. A permission for an absent feature is dead code or a promise,
+and one for a distinction the app cannot yet make is a table row nobody can
+test. That removed five of the eight permissions first discussed:
+
+- *suggest an edit, edit with provenance, ask for calculations* — capabilities
+  the app does not have.
+- *rate an entry* — today it is the same widget as rating the prose; it becomes a
+  separate permission when per-entry rating exists, which may be much later.
+- *query aggregated results* — this meant **answering a question whose scope
+  spans more than one organism or property**, not reading the trail. The first
+  draft of this table misread it as the latter and reasoned about privacy from
+  that; the misreading reached nothing but this file (checked: no spec, change
+  or ADR mentions it), and the roadmap text is corrected here. The permission
+  itself waits until the agent can classify a question's scope, which it
+  cannot.
+- *suggest a problem* is folded into *feedback*, by the same reasoning as *rate
+  an entry*: the comment box lives inside the rating widget and requires a
+  thumbs-down first, so there is no place to refuse one without the other.
 
 *Default-deny, grants explicit.* A wrong deny announces itself — somebody clicks
 and is refused. A wrong grant is silent and looks like ordinary use. So the cheap
 direction absorbs the uncertainty: anything not in the table is refused, and the
 code says so where the table is defined.
 
-| | read | rate AI prose | suggest a problem | rate an entry | query aggregated results |
-|---|---|---|---|---|---|
-| student | ✓ | ✓ | ✓ | ✓ | – |
-| scientist | ✓ | ✓ | ✓ | ✓ | – |
-| senior scientist | ✓ | ✓ | ✓ | ✓ | – |
-| dev | ✓ | ✓ | ✓ | ✓ | ✓ |
-| admin | ✓ | ✓ | ✓ | ✓ | ✓ |
+| | read | feedback | dev panel |
+|---|---|---|---|
+| student / scientist / senior scientist | ✓ | ✓ | – |
+| dev / admin | ✓ | ✓ | ✓ |
 
-Two things the table says that are worth reading off it rather than assuming:
+- **`read` is what the allowlist grants.** Signed in but not allowlisted is a
+  role of none, and default-deny refuses even reading. That is the permission
+  that makes the allowlist mean something.
+- **The three tester roles are identical in WP3**, and so are dev and admin.
+  Testers differ in the *weight* their ratings will later carry — refusing
+  students would defeat WP2. Roles are kept as data now so that weighting and
+  the later gating of human review have something to read.
+- **`dev panel` exists so that enforcement has a deny direction to test.** A
+  table in which every role holds every permission cannot show that refusal
+  works. It is also a surface WP4 and WP5 will want anyway.
 
-- **The three tester roles have identical permissions in WP3.** They differ in
-  the *weight* their ratings will carry, which is later work. Withholding rating
-  from students would defeat WP2 — the point of an alpha is feedback from
-  everyone who reads — and a low-weight rating costs a footnote, which is the
-  cheap direction. `rate an entry` is granted to all on the same reasoning; its
-  UI is scoped out of WP2 and the comment-ID evidence decides whether it is
-  built, so the grant is reserved rather than live.
-- **`query aggregated results` is operator-only, and that became a privacy line
-  on 2026-09-16.** Since `add-question-and-answer-records` the aggregates
-  contain other testers' questions verbatim. A senior scientist's standing is
-  about weighting and later about gating review, not about reading what other
-  people typed. Dev and admin see it because they operate the deployment.
+**The dev panel** — a requirement for `add-user-identity`'s spec delta when it
+is proposed; drafted here so the delta is a copy, not a rewrite:
 
-*Open, needs a yes:* the table as it stands leaves admin and dev identical. The
-thing that separates them — allowlisting an account, minting its OpenRouter key,
-assigning its role — is a sixth permission, **manage accounts**, and it belongs
-to admin alone. Not added until confirmed.
+> A sidebar section, below the run status, SHALL be shown to roles granted `dev
+> panel` and SHALL be absent — not disabled — for every other role. It SHALL
+> show the trail records of this session's last five questions as a table:
+> when, which question, the event, and its detail. This session's only:
+> another tester's trail is not this permission's to show, and scoping to the
+> session is what keeps that true without a second rule. Nothing shown here
+> SHALL reach the model; these are records of questions already answered.
+>
+> Scenarios: a dev sees the section and a student's page has no such section
+> (both directions, because the point is the refusal); the table names the
+> question just asked; a session with no questions shows an empty section
+> rather than none, so a dev can tell "nothing yet" from "not permitted".
+
+Implementation note for the design, not the spec: the records are already on
+the trail's logger and carry `session_id`; a retaining handler filtered by
+session at render time is a third sink on the same logger, and needs neither
+the file nor the database.
+
+**`manage accounts` is not a permission, and the open item above is closed.**
+Allowlisting an account, minting its OpenRouter key and assigning its role are
+operator actions done outside the app — the OpenRouter dashboard, a row in the
+accounts table. There is no code path in the app to refuse, so a permission
+would gate nothing. Admin and dev therefore hold identical permissions in WP3;
+the role is kept as a label for later.
 
 **Role lands on the trail row, at write time.** A `user_role` beside the
 existing `user_email` column, recorded when the row is written and never looked
