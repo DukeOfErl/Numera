@@ -46,6 +46,9 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- The side panel names the signed-in account and role without the "Signed in as"
+  preamble — the sign-out button beside it says that — and its spend figure is
+  headed "Session budget", which is what it now scopes.
 - The side panel's statement of what is kept is one line — "All exchange in this
   app is logged for product development" — rather than an enumeration of the
   fields, which was accurate and too long to read. The fuller statement, shown
@@ -69,6 +72,12 @@ any release; `1.0.0` when it stabilizes.
   a reader once they are through the door rather than when they arrive — an
   abandoned sign-in page no longer holds a place ([ADR-0790]).
 
+- **A credential the model provider refuses is caught at sign-in**, with a
+  sentence saying whose job it is to reissue. It used to surface only when a
+  reader asked something: the model call failed, nothing was retrieved, and the
+  answer reported finding nothing in the corpus — a broken key wearing the face
+  of a thin corpus. An unreachable provider is deliberately not treated the same
+  way, since that would lock every tester out over a blip.
 - **Each tester's run budget is their own**, keyed to the account that pays for
   the questions rather than shared across the deployment, and the side panel
   shows what the model provider says is left on that tester's key.

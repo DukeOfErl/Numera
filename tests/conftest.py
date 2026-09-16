@@ -59,6 +59,11 @@ def _the_suite_does_not_call_the_model_provider(monkeypatch):
     from scinumbers_ask import allowance, web
 
     monkeypatch.setattr(allowance, "fetch", lambda api_key, **kwargs: allowance.Allowance())
+    # `probe` too: the page passes it to `admit` as the sign-in credential check,
+    # so every AppTest sign-in reached OpenRouter for real. The stub answers the
+    # way an unreachable provider does -- nothing known, nothing rejected -- which
+    # is the direction that admits the reader, so tests see the ordinary path.
+    monkeypatch.setattr(allowance, "probe", lambda api_key, **kwargs: allowance.Probe())
     clear = getattr(web._allowance, "clear", None)
     if clear:
         clear()

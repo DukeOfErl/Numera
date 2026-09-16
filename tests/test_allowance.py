@@ -23,9 +23,13 @@ from scinumbers_ask.allowance import Allowance
 _REAL_FETCH = allowance.fetch
 
 
+_REAL_PROBE = allowance.probe
+
+
 @pytest.fixture(autouse=True)
-def _exercise_the_real_fetch(monkeypatch):
+def _exercise_the_real_calls(monkeypatch):
     monkeypatch.setattr(allowance, "fetch", _REAL_FETCH)
+    monkeypatch.setattr(allowance, "probe", _REAL_PROBE)
 
 
 class _Response:
@@ -140,3 +144,59 @@ def test_the_credential_is_not_in_the_url_where_a_log_would_keep_it():
     opener = _opener({"data": {"limit_remaining": 1.0}})
     allowance.fetch("sk-or-v1-secret", opener=opener)
     assert "sk-or-v1-secret" not in opener.request.full_url
+
+
+# --- whether the key works at all ------------------------------------------------------
+
+
+def _refusing(status):
+    def open_it(request, timeout=None):
+        raise urllib.error.HTTPError(allowance.KEY_ENDPOINT, status, "no", {}, None)
+
+    return open_it
+
+
+@pytest.mark.parametrize("status", [401, 403], ids=["unauthorized", "forbidden"])
+def test_a_key_the_provider_refuses_is_reported_as_rejected(status):
+    assert allowance.probe("sk-or-v1-bad", opener=_refusing(status)).rejected is True
+
+
+@pytest.mark.parametrize(
+    "status", [402, 429, 500, 502, 503], ids=["no credit", "rate limited", "500", "502", "503"]
+)
+def test_every_other_status_leaves_the_key_believed_good(status):
+    """The distinction the door depends on. A 402 especially: a key with no credit
+    left is a *valid* key, and a spent allowance is an ending with its own
+    sentence -- refusing sign-in for it would replace a precise message with a
+    wrong one."""
+    assert allowance.probe("sk-or-v1-spent", opener=_refusing(status)).rejected is False
+
+
+@pytest.mark.parametrize(
+    "boom",
+    [urllib.error.URLError("no route"), TimeoutError("slow"), OSError("refused")],
+    ids=["unreachable", "timeout", "refused"],
+)
+def test_a_provider_we_cannot_reach_does_not_condemn_the_key(boom):
+    """Locking every tester out because OpenRouter had a bad minute is the worse
+    failure, and the question's own ending still covers a key that truly fails."""
+
+    def explode(request, timeout=None):
+        raise boom
+
+    probe = allowance.probe("sk-or-v1-fine", opener=explode)
+    assert probe.rejected is False
+    assert probe.allowance == Allowance()
+
+
+def test_a_working_key_comes_back_with_its_allowance_and_no_rejection():
+    probe = allowance.probe("sk-or-v1-ok", opener=_opener({"data": {"limit_remaining": 2.0}}))
+    assert probe.rejected is False
+    assert probe.allowance.remaining == 2.0
+
+
+def test_an_empty_key_is_not_probed():
+    def never(request, timeout=None):  # pragma: no cover - must not be called
+        raise AssertionError("the provider was asked about a key that does not exist")
+
+    assert allowance.probe("", opener=never) == allowance.Probe()

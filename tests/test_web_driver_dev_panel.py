@@ -98,12 +98,12 @@ def test_the_strip_is_below_the_run_status(page, recent):
     flat `header` list the previous version of this test compared against."""
     at = page(auth=True, email=DEV.email, enrolled={DEV.email: DEV}).run()
     kinds = [
-        "run budget" if getattr(child, "value", None) == "Run budget" else child.type
+        "session budget" if getattr(child, "value", None) == "Session budget" else child.type
         for child in at.sidebar.children.values()
     ]
-    assert "run budget" in kinds, "control: the run status was drawn"
+    assert "session budget" in kinds, "control: the run status was drawn"
     assert "tab_container" in kinds, "control: the strip was drawn"
-    assert kinds.index("run budget") < kinds.index("tab_container")
+    assert kinds.index("session budget") < kinds.index("tab_container")
 
 
 def test_installing_the_panel_s_sink_twice_leaves_one():

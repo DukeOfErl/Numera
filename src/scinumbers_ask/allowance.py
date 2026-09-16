@@ -23,6 +23,7 @@ disappears, never a page that breaks.
 from __future__ import annotations
 
 import json
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from typing import Any
@@ -86,6 +87,53 @@ def parse(payload: Any) -> Allowance:
         usage=_number(data.get("usage")),
         resets=resets if isinstance(resets, str) else None,
     )
+
+
+@dataclass(frozen=True)
+class Probe:
+    """What the provider said when asked about a key.
+
+    `rejected` is the narrow, load-bearing part: **the provider said this key is
+    not usable**, which is a 401 or a 403 and nothing else. Every other failure --
+    a timeout, DNS, a 500, a body we cannot read -- leaves it `False`, because
+    the two must not be confused. Refusing a reader on a rejected key is telling
+    them the truth; refusing one because OpenRouter blinked would lock out every
+    tester whenever the provider has a bad minute, to guard against a case the
+    question's own ending already handles.
+    """
+
+    allowance: Allowance = Allowance()
+    rejected: bool = False
+
+
+#: The statuses that mean the credential itself is the problem. A 402 is *not*
+#: here: a key with no credit left is a valid key, and a spent allowance is an
+#: ending with a sentence of its own (ADR-0600).
+REJECTING_STATUSES = (401, 403)
+
+
+def probe(api_key: str, *, opener=urllib.request.urlopen) -> Probe:
+    """Ask the provider about a key: what is left on it, and whether it works.
+
+    One cheap call, made once per account per session at sign-in. Without it an
+    unusable credential is discovered only when a reader asks something: the model
+    call fails, the tools retrieve nothing, and the answer that comes back says
+    it found nothing in the corpus -- which reads as a gap in the data rather than
+    a broken key, and is the one failure this project most wants not to look
+    ordinary.
+    """
+    if not api_key:
+        return Probe()
+    request = urllib.request.Request(
+        KEY_ENDPOINT, headers={"Authorization": f"Bearer {api_key}"}, method="GET"
+    )
+    try:
+        with opener(request, timeout=TIMEOUT_S) as response:
+            return Probe(parse(json.loads(response.read().decode("utf-8"))))
+    except urllib.error.HTTPError as refused:
+        return Probe(rejected=refused.code in REJECTING_STATUSES)
+    except Exception:  # noqa: BLE001 - see `fetch`
+        return Probe()
 
 
 def fetch(api_key: str, *, opener=urllib.request.urlopen) -> Allowance:

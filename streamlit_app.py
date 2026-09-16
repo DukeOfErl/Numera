@@ -65,7 +65,9 @@ tab = web.tab_id(st.session_state)
 # the one sentence that says why not -- no question, no answer, no record. Where
 # it is not configured the door is open and the page runs exactly as it did
 # before identity existed.
-admission = web.admit(st.session_state, web.trail_destination, url_session)
+admission = web.admit(
+    st.session_state, web.trail_destination, url_session, check_key=web.allowance.probe
+)
 if admission.door is not web.Door.OPEN:
     web.draw_closed_door(admission, url_session, tab)
     st.stop()
@@ -143,7 +145,7 @@ with st.sidebar:
     )
     if spent_and_cap:
         spent, cap = spent_and_cap
-        st.header("Run budget")
+        st.header("Session budget")
         st.progress(min(1.0, spent / cap) if cap else 0.0)
         # Escaped: two dollar signs in one caption are read as opening and closing
         # inline mathematics, so "$1.20 of $1.20" typeset the middle as an equation

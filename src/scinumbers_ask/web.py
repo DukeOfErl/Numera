@@ -368,6 +368,7 @@ class Door(StrEnum):
     SIGN_IN = "sign in"
     NOT_ENROLLED = "not enrolled"
     NO_CREDENTIAL = "no credential"
+    CREDENTIAL_REJECTED = "credential rejected"
     UNAVAILABLE = "enrolment check unavailable"
     NO_ACCOUNTS_DATABASE = "no accounts database"
 
@@ -420,6 +421,8 @@ def admit(
     state: MutableMapping[str, Any],
     engine: Any | Callable[[], Any | None] | None,
     session_id: str,
+    *,
+    check_key: Callable[[str], Any] | None = None,
 ) -> Admission:
     """Decide the door, reading enrolment once per account.
 
@@ -493,6 +496,15 @@ def admit(
         admission = Admission(Door.NOT_ENROLLED, configured=True)
     elif not account.openrouter_key:
         admission = Admission(Door.NO_CREDENTIAL, configured=True, account=account)
+    elif check_key is not None and check_key(account.openrouter_key).rejected:
+        # Asked once, here, rather than left for the first question to discover.
+        # A key the provider refuses produces a question whose model call fails,
+        # whose tools retrieve nothing, and whose answer reports finding nothing
+        # in the corpus -- a broken credential wearing the face of a thin corpus.
+        # Only an outright rejection closes this door: an unreachable provider
+        # leaves `rejected` false, because locking every tester out over a blip
+        # would be the worse failure.
+        admission = Admission(Door.CREDENTIAL_REJECTED, configured=True, account=account)
     else:
         admission = Admission(Door.OPEN, configured=True, account=account)
     state[ADMISSION_KEY] = (email, admission)
@@ -652,6 +664,9 @@ def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None =
         st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id))
     elif admission.door is Door.NO_CREDENTIAL:
         st.error(as_text(messages.NO_CREDENTIAL), icon=":material/key_off:")
+        st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id))
+    elif admission.door is Door.CREDENTIAL_REJECTED:
+        st.error(as_text(messages.CREDENTIAL_REJECTED), icon=":material/key_off:")
         st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id))
     elif admission.door is Door.NO_ACCOUNTS_DATABASE:
         st.error(as_text(messages.NO_ACCOUNTS_DATABASE), icon=":material/database_off:")

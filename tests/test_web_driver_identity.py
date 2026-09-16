@@ -186,6 +186,7 @@ def test_an_enrolled_account_is_admitted_and_its_records_carry_who_and_as_what(p
 def test_the_sidebar_says_who_is_signed_in_and_offers_sign_out(page):
     at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
     assert messages.SIGNED_IN_AS.format(email=TESTER.email, role="scientist") in _sidebar_text(at)
+    assert "Signed in as" not in _sidebar_text(at), "the sign-out button beside it says that"
     assert "Sign out" in [b.label for b in at.sidebar.button]
     assert web.RECORDS_NOTE in _sidebar_text(at)
 
@@ -200,6 +201,55 @@ def test_an_enrolled_account_with_no_credential_meets_a_door_of_its_own(page, ca
     assert messages.NO_CREDENTIAL in [e.value for e in at.error]
     assert page.built == [], "an agent was built, and would spend the environment's key"
     assert "Sign out" in [b.label for b in at.button], "no way out of the closed door"
+
+
+def test_a_credential_the_provider_refuses_is_caught_at_sign_in(monkeypatch):
+    """Not left for the first question to discover. Without this the model call
+    fails, the tools retrieve nothing, and the answer reports finding nothing in
+    the corpus -- a broken key wearing the face of a thin corpus, which is the one
+    failure this project most wants not to look ordinary."""
+    _configured(monkeypatch, TESTER.email)
+    monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: TESTER)
+    rejected = web.admit(
+        {}, object(), "s1", check_key=lambda key: web.allowance.Probe(rejected=True)
+    )
+    assert rejected.door is web.Door.CREDENTIAL_REJECTED
+    assert rejected.account == TESTER, "enrolled; it is the credential that is wrong"
+
+
+def test_a_provider_that_cannot_be_reached_does_not_shut_the_door(monkeypatch):
+    """The asymmetry: a rejected key is the reader's problem to be told about, an
+    unreachable provider is nobody's, and treating them alike would lock every
+    tester out whenever OpenRouter blinked."""
+    _configured(monkeypatch, TESTER.email)
+    monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: TESTER)
+    admitted = web.admit({}, object(), "s1", check_key=lambda key: web.allowance.Probe())
+    assert admitted.door is web.Door.OPEN
+
+
+def test_the_key_is_checked_once_per_session_not_once_per_rerun(monkeypatch):
+    """It is a network call on the render path; a held admission is what keeps it
+    off every click."""
+    _configured(monkeypatch, TESTER.email)
+    monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: TESTER)
+    asked: list[str] = []
+    state: dict = {}
+    for _ in range(3):
+        web.admit(
+            state,
+            object(),
+            "s1",
+            check_key=lambda key: asked.append(key) or web.allowance.Probe(),
+        )
+    assert asked == [TESTER.openrouter_key]
+
+
+def test_no_check_at_all_admits_as_before(monkeypatch):
+    """The terminal, the tests and any caller that passes nothing keep today's
+    behaviour: the credential is believed until a question proves otherwise."""
+    _configured(monkeypatch, TESTER.email)
+    monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: TESTER)
+    assert web.admit({}, object(), "s1").door is web.Door.OPEN
 
 
 def test_the_no_credential_door_is_its_own_state_not_an_open_one(monkeypatch):

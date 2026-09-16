@@ -64,10 +64,18 @@ NO_CREDENTIAL = (
     "Ask whoever runs this deployment to issue one — it is theirs to do, and nothing "
     "here can."
 )
+CREDENTIAL_REJECTED = (
+    "The credential issued for this account was refused by the model provider, so no "
+    "question can be asked with it. Ask whoever runs this deployment to reissue it — "
+    "nothing here can, and asking anyway would only produce an answer with nothing "
+    "behind it."
+)
 NO_SIGN_IN_CONFIGURED = (
     "No sign-in is configured: anyone with this address can ask, and records carry no account."
 )
-SIGNED_IN_AS = "Signed in as {email} ({role})."
+# Just who, and as what. The sign-out button sits beside it, which is what says
+# this is your account rather than a fact about somebody.
+SIGNED_IN_AS = "{email} ({role})"
 TRY_LATER = (
     "Too many sessions are open right now, so this one cannot start. "
     "Try again in a few minutes; nobody's session is ended to make room."

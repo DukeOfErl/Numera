@@ -290,7 +290,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], marker = "extra == 'ask'", specifier = ">=3.2" },
     { name = "pydantic", marker = "extra == 'ingest'", specifier = ">=2.6" },
     { name = "sqlalchemy", marker = "extra == 'ask'", specifier = ">=2.0" },
-    { name = "streamlit", marker = "extra == 'ask'" },
+    { name = "streamlit", marker = "extra == 'ask'", specifier = ">=1.42" },
 ]
 provides-extras = ["validator", "ask", "ingest", "eval"]
 
