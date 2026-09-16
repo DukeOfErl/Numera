@@ -874,21 +874,50 @@ FEEDBACK_THANKS = "Thanks — recorded."
 # colour and not an error one, so the same rule can cover both thumbs without one
 # of them saying something wrong.
 #
-# **This degrades to nothing.** Both test ids are Streamlit's own, verified
-# against 1.61.1's frontend bundle; if a future version renames either, the rule
-# matches nothing and the thumbs keep their default colour. Nothing moves and
-# nothing breaks -- a strictly safer failure than the prototype banner's, which
-# falls back to sitting in the page.
+# **`stFeedback`, not `stButtonGroup`, and the difference was a shipped bug.**
+# `st.feedback` has its own module and enqueues as `"feedback"`, so the frontend
+# renders its `Feedback` component -- test ids `stFeedback` and
+# `stFeedbackButton`. `stButtonGroup` belongs to `st.pills` and
+# `st.segmented_control`. The first version of this rule named the latter, matched
+# nothing, and the thumbs stayed grey.
 #
-# The settled look after a rating is left to Streamlit, which dims a disabled
-# control by opacity: that keeps the hue, so the thumb a reader chose stays
-# legible as the one they chose. A colour rule of our own for the disabled state
-# would have to guess which half of the pair is selected.
+# The test that was supposed to prevent that asserted the id appeared in the
+# frontend bundle. It does -- in `ButtonGroup.DMpjOF8Q.js`, for a different
+# widget. So a grep-level check passed while the feature was dead, which is why
+# `test_the_colour_rule_names_an_id_st_feedback_actually_renders` now reads the
+# id out of the `Feedback` component's own bundle instead of looking for a string
+# anywhere in `static/`.
+#
+# **This degrades to nothing.** If a future version renames either id the rule
+# matches nothing and the thumbs keep their default colour -- a strictly safer
+# failure than the prototype banner's, which falls back to sitting in the page.
+#
+# **`:not(:disabled)` is the load-bearing part, and it took three attempts to get
+# right.** `answer-feedback` requires that a rating, once given, is *shown* as
+# settled. Streamlit does that itself: `Feedback`'s `&:disabled` rule replaces the
+# button's colour with `fadedText40` when selected and `fadedText10` when not.
+#
+# But it sets that colour on the *button*, and the icon is a separate span whose
+# own class declares `color: inherit` -- specificity 0,1,0. A rule reading
+# `[data-testid="stFeedback"] [data-testid="stIconMaterial"]` is 0,2,0, so it wins,
+# `inherit` never resolves, and the disabled colour has nothing to propagate to.
+# The thumbs would stay fully orange after rating, with `cursor: not-allowed` as
+# the only remaining signal -- the requirement quietly unmet by a stylesheet.
+# There is no `!important` in that bundle to save it.
+#
+# So the rule declines to apply to a disabled control rather than overriding it.
+# That also avoids naming which half of the pair is selected --
+# `stFeedbackButtonActive` is the markup most likely to move under us, and letting
+# Streamlit keep its own state styling means never having to track it.
 FEEDBACK_CSS = """
 <style>
-[data-testid="stButtonGroup"] [data-testid="stIconMaterial"] { color: #ff9d3c; }
+[data-testid="stFeedback"] button:not(:disabled) [data-testid="stIconMaterial"] {
+  color: #ff9d3c;
+}
 @media (prefers-color-scheme: light) {
-  [data-testid="stButtonGroup"] [data-testid="stIconMaterial"] { color: #c2410c; }
+  [data-testid="stFeedback"] button:not(:disabled) [data-testid="stIconMaterial"] {
+    color: #c2410c;
+  }
 }
 </style>
 """

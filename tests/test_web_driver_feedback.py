@@ -16,6 +16,7 @@ click on the third writes onto the first.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 import pytest
@@ -355,20 +356,76 @@ def test_the_colour_rule_is_emitted_once_however_long_the_conversation(app):
     long. Two questions is enough to tell the two placements apart; one is not.
     """
     at = ask(ask(app.run(), "how many ribosomes?"), "and in yeast?")
-    blocks = [m.value for m in at.markdown if "stButtonGroup" in m.value]
+    blocks = [m.value for m in at.markdown if "stIconMaterial" in m.value]
     assert len(blocks) == 1, f"{len(blocks)} copies of the colour rule"
 
 
-def test_the_colour_rule_names_the_element_it_colours(app):
-    """A selector that matches nothing is a silent no-op, and no test here can see
-    the browser. What is asserted is that the rule names Streamlit's own test ids
-    — both verified against 1.61.1's bundle — so a rename shows up as this test
-    failing rather than as thumbs quietly going grey.
+def _feedback_bundle() -> str:
+    """The JavaScript Streamlit renders `st.feedback` with, as installed.
+
+    Found by name rather than by scanning `static/`, and that distinction is the
+    whole point of the test below: the id this rule used to name really is in
+    `static/` — in `ButtonGroup.*.js`, which is `st.pills` and
+    `st.segmented_control`. Scanning the directory cannot tell the two apart.
     """
+    import streamlit
+
+    js = Path(streamlit.__file__).parent / "static" / "static" / "js"
+    bundles = sorted(js.glob("Feedback.*.js"))
+    assert bundles, f"no Feedback bundle under {js}; Streamlit's layout has moved"
+    return bundles[0].read_text(errors="ignore")
+
+
+def test_the_colour_rule_names_an_id_st_feedback_actually_renders(app):
+    """A selector that matches nothing is a silent no-op, and no test here sees a
+    browser — so the id is read out of the component's own bundle and compared.
+
+    **This test previously asserted the wrong id and passed.** It looked for
+    `stButtonGroup` "verified against the bundle", and that string is in the
+    bundle — for `st.pills` and `st.segmented_control`. `st.feedback` has its own
+    module, enqueues as `"feedback"`, and renders as `stFeedback`. The rule matched
+    nothing, the thumbs stayed grey, and a grep-level check reported success.
+
+    Reading the id from `Feedback.*.js` is what makes the difference: a string
+    present somewhere in `static/` proves nothing about which widget renders it.
+    """
+    bundle = _feedback_bundle()
     at = app.run()
-    rule = next(m.value for m in at.markdown if "stButtonGroup" in m.value)
-    assert 'data-testid="stIconMaterial"' in rule
+    rule = next((m.value for m in at.markdown if "stIconMaterial" in m.value), None)
+    assert rule, "no colour rule was emitted"
+
+    named = [n for n in re.findall(r'data-testid="(st[A-Za-z]+)"', rule) if n != "stIconMaterial"]
+    assert named, f"the rule does not select the icon inside a named wrapper: {rule}"
+    wrapper = named[0]
+    assert wrapper in bundle, (
+        f"the rule targets {wrapper.group(1)!r}, which the Feedback component does not render. "
+        "That id may exist elsewhere in static/ — for a different widget."
+    )
+    assert "stButtonGroup" not in rule, "stButtonGroup is st.pills, not st.feedback"
     assert "prefers-color-scheme: light" in rule, "one colour cannot suit both themes"
+
+
+def test_the_colour_rule_leaves_a_settled_rating_looking_settled(app):
+    """`answer-feedback`: a rating once given is shown as settled, and a stylesheet
+    is enough to break that quietly.
+
+    Streamlit dims a disabled control by replacing the *button's* colour. The icon
+    is a separate span declaring `color: inherit` at specificity 0,1,0, so any rule
+    of ours that paints the icon directly outranks it, `inherit` never resolves,
+    and a rated pair stays as bright as an unrated one — with `cursor: not-allowed`
+    as the only surviving signal. Declining to apply to a disabled control is what
+    keeps the requirement met.
+
+    Structural, and says so: no test here renders CSS. What it pins is that the
+    rule cannot reach a disabled control, which is the property a revert removes.
+    """
+    rule = next((m.value for m in app.run().markdown if "stIconMaterial" in m.value), None)
+    assert rule, "no colour rule was emitted"
+    for selector in re.findall(r"\[data-testid=\"stFeedback\"\][^{]*", rule):
+        assert ":not(:disabled)" in selector, (
+            f"this selector paints a disabled thumb too, so a rated answer looks "
+            f"unrated: {selector.strip()}"
+        )
 
 
 # --- nothing interactive exists while the agent is still working -------------

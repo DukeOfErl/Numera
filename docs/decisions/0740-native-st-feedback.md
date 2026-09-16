@@ -230,3 +230,47 @@ immediately, and a test that had only ever exercised the live path failed.
 
 Both paths now take the label from one of two constants, so they cannot drift
 again — which is what two literals for one string had already done.
+
+
+### A sixth: the colour rule was aimed at the wrong widget, and then at the wrong state
+
+Found by a read-only verifier, not by the suite, and in two stages.
+
+**Stage one: the selector named a widget that is not on the page.** It read
+`[data-testid="stButtonGroup"]`, which is `st.pills` and `st.segmented_control`.
+`st.feedback` has its own module, enqueues as `"feedback"`, and the frontend's
+`case 'feedback'` loads a separate `Feedback` component rendering `stFeedback` and
+`stFeedbackButton`. The rule matched nothing and the thumbs stayed grey — the
+state a reader reported and this ADR recorded as deferred cosmetics.
+
+**The test written to prevent exactly that passed.** It asserted the id appeared
+in Streamlit's frontend bundle, and it does — in `ButtonGroup.*.js`, for a
+different widget. A commit message and a comment both claimed the ids were
+"verified against 1.61.1's bundle", and in the only sense the check performed,
+they were. A string present somewhere under `static/` says nothing about which
+component renders it. The test now reads the wrapper id out of `Feedback.*.js`
+specifically and asserts the rule targets something *that* component renders.
+
+**Stage two: fixing the selector broke a requirement.** `answer-feedback` says a
+rating once given is shown as settled, and Streamlit provides that — `Feedback`'s
+`&:disabled` rule replaces the button's colour with `fadedText40` selected,
+`fadedText10` unselected. But it sets that on the *button*, and the icon is a
+separate span whose own class declares `color: inherit` at specificity 0,1,0. A
+rule painting the icon directly is 0,2,0, so it wins, `inherit` never resolves,
+and the disabled colour has nothing to propagate to. There is no `!important` in
+that bundle. A corrected selector would therefore have left rated thumbs as bright
+as unrated ones, with `cursor: not-allowed` the only surviving signal — a spec
+requirement unmet by a stylesheet, which no test of behaviour would ever see.
+
+The rule now declines to apply to a disabled control (`button:not(:disabled)`)
+rather than overriding it. Letting Streamlit keep its own state styling also
+avoids naming which half of the pair is selected, and `stFeedbackButtonActive` is
+the markup most likely to move.
+
+**What this cost, stated plainly.** Three consecutive comments in the source made
+three different claims about the disabled state — that the hue survives, that it
+does not, and finally why our own rule decides which. Each was written
+confidently. The first two were wrong in opposite directions, and nothing in a
+green suite distinguished them, because none of it is behaviour a test can run.
+Both properties are now pinned structurally, with canaries: dropping
+`:not(:disabled)` fails one test, restoring the old wrapper fails the other.
