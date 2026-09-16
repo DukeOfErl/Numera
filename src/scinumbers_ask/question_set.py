@@ -85,6 +85,20 @@ class Question:
     # In the corpus's own vocabulary, so the score uses the repository's resolution
     # and not a paraphrase. Required even for an unsupported question: the terms are
     # what it asks about, and that they resolve to nothing is the point of it.
+    #
+    # **Name the quantity, not its dimension.** A bare "diameter" selects 319 stored
+    # properties and a bare "Nuclear" selects 155, which credits almost any search
+    # as having looked for the asked property -- measured in task 4.10. List the
+    # corpus's spellings of the quantity instead; there are usually two or three,
+    # and they often share no substring narrower than the dimension word, which is
+    # why this is plural.
+    #
+    # **It stays declared rather than derived, and the unsupported questions are
+    # why.** For a supported question this is very nearly "the property strings the
+    # expected entries carry", and deriving it would keep the two from drifting. But
+    # a question the corpus cannot answer has no expected entries and still has to
+    # say what it asked -- that the terms resolve to nothing is the whole point of
+    # it -- so the field cannot be derived for the questions that need it most.
     asked_properties: tuple[str, ...]
     asked_organisms: tuple[str, ...]
     expected_entries: tuple[int, ...] = ()

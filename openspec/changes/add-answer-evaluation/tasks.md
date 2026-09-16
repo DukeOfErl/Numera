@@ -551,7 +551,7 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     *should* be is a fact about the corpus, and a test that fixed them would fail every time the
     ingester improved. They go into a document beside the baseline when 5.3 records one.
 
-- [ ] 5.7b Fix `asked_properties` on the two questions where it cannot be scored. `diameter` selects
+- [x] 5.7b Fix `asked_properties` on the two questions where it cannot be scored. `diameter` selects
       **319** stored properties for `ribosome-diameter`, whose expectation is 3 entries; `Nuclear`
       selects **155** for `ecoli-nucleus`, which expects none. 4.10 measured the consequence — the
       property-match rule credits almost any search — and said to fix the set before tightening the
@@ -564,8 +564,28 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     knowing, because a declared field that duplicates a derived one goes stale silently. If it is
     genuinely a separate claim (what a *person* would call this quantity), say so where it is
     declared. Do not simply widen it and move on.
+  - **Settled 2026-09-16: the field stays declared, and the unsupported questions are why.** For a
+    supported question its value is very nearly "the property strings the expected entries carry",
+    and deriving it would stop the two drifting. But a question the corpus cannot answer has no
+    expected entries and still has to say what it asked — that its terms resolve to nothing is the
+    whole point of it — so the field cannot be derived for the questions that need it most. The rule
+    is now written where the field is declared: **name the quantity, not its dimension.**
+  - `ribosome-diameter` goes from `diameter` (319 stored properties, 2 of its 3 entries covered) to
+    the corpus's three spellings (3 properties, 3 of 3). `ecoli-nucleus` goes from `Nuclear` (155) to
+    `nuclear (dna` and `volume of nucleoid` (2) — which have to be listed separately because
+    "Nuclear (DNA+protein) volume" and "Volume of nucleoid" share no substring narrower than
+    "nuclear".
+  - **Both directions, and the honest result is that the headline did not move**: 23 of 30 credited
+    before and after, with both questions still credited on all three repeats. What changed is
+    whether the credit is *earned*: "size" genuinely selects one of the three spellings of ribosome
+    size, and "volume" genuinely selects "Volume of nucleoid". Before, the credits rested on the
+    asked set being so wide that almost anything intersected it.
+  - **The remaining over-credit is now unambiguously the rule's**, which is the diagnostic gain.
+    `yeast-vs-ecoli-volume` repeat 1 is still credited for searching only `size` against an asked
+    `Cell volume`, on one shared property in 492. The field is no longer a confound in that case, so
+    tightening the rule can be decided on its own evidence.
 
-- [~] 5.6 Review the branch before merging (see 1.5). Give the reviewer the *question set and the
+- [x] 5.6 Review the branch before merging (see 1.5). Give the reviewer the *question set and the
       baseline* as well as the code: a set that measures the wrong thing is not a defect any test
       can see
   - **Two passes, because they fail differently.** The code review is one pass; the artefacts --
@@ -584,6 +604,28 @@ fixed on that branch. Four are worth carrying forward as lessons rather than as 
     committed results file with `--expected-from-set`.
   - **The one artefact defect found: `asked_properties`.** See 5.7b. The code pass cannot see it,
     because the field is well-formed and the code reads it correctly.
+  - **Code pass done 2026-09-16, at `high`. Twelve findings, all acted on in this branch.**
+  - **The HIGH was a contradiction between the name and the spec**, and it changed a figure.
+    `reached_the_table` was `expected & retrieved`, but the table is `rows_for(cited, retrieved)`,
+    which carries a cited entry even when no retrieval returned it — the ordinary shape of a
+    follow-up answered in its parent's session. All three repeats of `ecoli-ribosomes-stationary`
+    cited an entry that *was* in the table and were reported under "a failure of search", and the
+    same entries vanished from the rank figure. `never_retrieved` is now `never_reached`.
+  - **Five were in `answer_sheet.py`, and the first undercut the module's own claim.** It re-derived
+    the value with the opposite precedence to `Entry.value_display`, so an entry carrying a scalar
+    *and* a range showed one number in the reader's table and another on the sheet — in the
+    artefact whose selling point is fidelity to that table. Also: one provenance header over a file
+    that may hold several runs, `units` interpolated unescaped where every sibling was escaped,
+    `lstrip(" -*")` turning "- -20 °C" into "20 °C", and `.4f` where `format_usd` exists.
+  - **Two were test gaps of the shape seeding had already found once**: no negative case varied
+    `units`, the half of the peer key added for a measured reason, so the mutant reinstating the
+    Liter-beside-µm³ defect survived. And the guard test *failed* rather than skipped in a copied
+    tree — which is where seeding runs, and a failure there buries the seeded defect being looked
+    for.
+  - **One was the conformance map in the state it exists to make impossible**: the change's headline
+    requirement was still recorded as an unmapped gap after 4.13 landed.
+  - Four defects re-seeded after the fixes, four caught. The corrected figures: 170 of 333 (51%)
+    reaching the table, `compound` 31%, median deepest rank 17. The conclusions are unchanged.
 
 ## 6. The judged layer — moved to `add-judged-faithfulness`
 
