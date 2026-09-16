@@ -25,8 +25,9 @@ import logging
 import os
 import time
 import uuid
+from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, MutableMapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
@@ -655,14 +656,32 @@ class IdentityStamp(logging.Filter):
         return True
 
 
-def install_identity_stamp() -> None:
-    """Attach the stamp to the trail's logger, once. Idempotent for the same
-    reason `trail_store.install` is: this runs inside a function Streamlit may
-    call again, and two stamps would be harmless today and a puzzle later."""
+def _install_once(kind: type, make: Callable[[], Any]) -> Any:
+    """Replace any attachment of `kind` on the trail's logger with a fresh one.
+
+    The idempotence is load-bearing (`trail_store.install`'s docstring says why:
+    a stacked handler writes each record once per rerun, and Streamlit reruns
+    the whole script on every interaction). Handlers and filters are removed and
+    added through different methods, so this branches on which `kind` is.
+    `trail_store.install` keeps its own copy: it is in the core, which may not
+    import this driver.
+    """
     logger = logging.getLogger(trace.LOGGER_NAME)
-    for existing in [f for f in logger.filters if isinstance(f, IdentityStamp)]:
-        logger.removeFilter(existing)
-    logger.addFilter(IdentityStamp())
+    made = make()
+    if isinstance(made, logging.Filter):
+        for existing in [f for f in logger.filters if isinstance(f, kind)]:
+            logger.removeFilter(existing)
+        logger.addFilter(made)
+    else:
+        for existing in [h for h in logger.handlers if isinstance(h, kind)]:
+            logger.removeHandler(existing)
+        logger.addHandler(made)
+    return made
+
+
+def install_identity_stamp() -> None:
+    """Attach the stamp to the trail's logger, once."""
+    _install_once(IdentityStamp, IdentityStamp)
 
 
 # --- the session cap --------------------------------------------------------------------
@@ -701,11 +720,7 @@ class SessionRegistry:
     max_sessions: int = DEFAULT_MAX_SESSIONS
     idle_s: float = DEFAULT_SESSION_IDLE_S
     clock: Callable[[], float] = time.monotonic
-    _last_seen: dict[str, float] = None  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        if self._last_seen is None:
-            self._last_seen = {}
+    _last_seen: dict[str, float] = field(default_factory=dict)
 
     def prune(self) -> None:
         cutoff = self.clock() - self.idle_s
@@ -758,6 +773,21 @@ PANEL_QUESTIONS = 5
 PANEL_COLUMNS = ("when", "question", "event", "detail")
 
 
+@dataclass
+class _PanelQuestion:
+    """One question's rows for the panel, and the text to name it by.
+
+    `text` starts as the question id and is replaced when `question.asked`
+    arrives -- the other records of a question carry only its id. Held per
+    (session, question) so one session's records can never rename or erase
+    another's, which a bare-question-id map could do for two sessions that
+    share an id.
+    """
+
+    text: str
+    rows: list[dict[str, Any]] = field(default_factory=list)
+
+
 class RecentTrail(logging.Handler):
     """Keeps each session's trail records for its last few questions, in memory.
 
@@ -766,11 +796,12 @@ class RecentTrail(logging.Handler):
     handlers. Unlike them it needs no file and no database, which is why the
     panel works on a developer's machine -- the place it is most used.
 
-    Partitioned by `session_id` at write time, so the panel's "this session's
-    only" is a property of the data structure rather than a filter at render:
-    there is no query here that could be widened by mistake. Rows without a
-    session or without a question -- a refused sign-in has neither -- are not a
-    question's records and are not kept.
+    One dict, keyed by `session_id`, of that session's last few questions in the
+    order they were asked. The panel's "this session's only" is then a property
+    of the data structure rather than a filter at render: there is no query here
+    that could be widened by mistake, and nothing shared between sessions to key
+    inconsistently. Rows without a session or without a question -- a refused
+    sign-in has neither -- are not a question's records and are not kept.
 
     Never raises out of `emit`: the trail's other handlers hold the same line,
     and a panel that could break a question would be a poor trade.
@@ -779,11 +810,7 @@ class RecentTrail(logging.Handler):
     def __init__(self, questions: int = PANEL_QUESTIONS) -> None:
         super().__init__(logging.INFO)
         self.questions = questions
-        self._rows: dict[str, list[dict[str, Any]]] = {}
-        self._order: dict[str, list[str]] = {}
-        # `question.asked` carries the text; the other records of that question
-        # carry only its id. Remembered so the table can name the question.
-        self._asked: dict[str, str] = {}
+        self._sessions: dict[str, OrderedDict[str, _PanelQuestion]] = {}
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
@@ -793,21 +820,18 @@ class RecentTrail(logging.Handler):
                 return
             fields = getattr(record, "fields", {}) or {}
             event = record.getMessage()
+            questions = self._sessions.setdefault(session, OrderedDict())
+            question = questions.get(question_id)
+            if question is None:
+                question = _PanelQuestion(text=question_id)
+                questions[question_id] = question
+                while len(questions) > self.questions:
+                    questions.popitem(last=False)
             if event == "question.asked" and "question" in fields:
-                self._asked[question_id] = str(fields["question"])
-            order = self._order.setdefault(session, [])
-            if question_id not in order:
-                order.append(question_id)
-                while len(order) > self.questions:
-                    dropped = order.pop(0)
-                    self._rows[session] = [
-                        r for r in self._rows.get(session, []) if r["question_id"] != dropped
-                    ]
-                    self._asked.pop(dropped, None)
-            self._rows.setdefault(session, []).append(
+                question.text = str(fields["question"])
+            question.rows.append(
                 {
                     "when": datetime.fromtimestamp(record.created),
-                    "question_id": question_id,
                     "event": event,
                     "detail": json.dumps(fields, default=str),
                 }
@@ -816,21 +840,20 @@ class RecentTrail(logging.Handler):
             return
 
     def rows(self, session_id: str) -> list[dict[str, Any]]:
-        """This session's rows, oldest first, the question named where its text is known."""
+        """This session's rows, oldest first, each named by its question's text."""
         return [
             {
                 "when": r["when"],
-                "question": self._asked.get(r["question_id"], r["question_id"]),
+                "question": question.text,
                 "event": r["event"],
                 "detail": r["detail"],
             }
-            for r in self._rows.get(session_id, [])
+            for question in self._sessions.get(session_id, {}).values()
+            for r in question.rows
         ]
 
     def forget(self, session_id: str) -> None:
-        for question_id in self._order.pop(session_id, []):
-            self._asked.pop(question_id, None)
-        self._rows.pop(session_id, None)
+        self._sessions.pop(session_id, None)
 
 
 #: The one installed handler, read by `dev_panel_rows`. None until `resources`
@@ -842,11 +865,7 @@ def install_recent_trail() -> RecentTrail:
     """Attach the panel's sink, once, after `trace.to_file` for the reason
     `install_trail` gives. Idempotent: an existing one is replaced, not stacked."""
     global RECENT
-    logger = logging.getLogger(trace.LOGGER_NAME)
-    for existing in [h for h in logger.handlers if isinstance(h, RecentTrail)]:
-        logger.removeHandler(existing)
-    RECENT = RecentTrail()
-    logger.addHandler(RECENT)
+    RECENT = _install_once(RecentTrail, RecentTrail)
     return RECENT
 
 
