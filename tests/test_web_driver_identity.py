@@ -24,7 +24,7 @@ from conftest import FIXTURE, agent_with, ask_question
 from streamlit.testing.v1 import AppTest
 
 from agent_doubles import says, scripted
-from scinumbers_ask import messages, trace, web
+from scinumbers_ask import allowance, messages, trace, web
 from scinumbers_ask.accounts import Account, EnrolmentUnavailable
 from scinumbers_ask.permissions import Identity, Role
 
@@ -189,6 +189,66 @@ def test_the_sidebar_says_who_is_signed_in_and_offers_sign_out(page):
     assert "Signed in as" not in _sidebar_text(at), "the sign-out button beside it says that"
     assert "Sign out" in [b.label for b in at.sidebar.button]
     assert web.RECORDS_NOTE in _sidebar_text(at)
+
+
+def _elements(block):
+    """A block's children, which AppTest keys by index rather than listing."""
+    children = getattr(block, "children", None) or {}
+    return list(children.values() if isinstance(children, dict) else children)
+
+
+def _identity_row(at: AppTest):
+    """The container holding the name and the button, or None if they are not in
+    one -- which is the whole claim, so it is read from the tree and not from a
+    string."""
+    for block in _elements(at.sidebar):
+        columns = [c for c in _elements(block) if getattr(c, "type", "") == "column"]
+        if len(columns) != 2:
+            continue
+        named = any("@" in str(getattr(e, "value", "")) for e in _elements(columns[0]))
+        signs_out = any(getattr(e, "label", "") == "Sign out" for e in _elements(columns[1]))
+        if named and signs_out:
+            return block
+    return None
+
+
+def test_the_sign_out_button_shares_a_row_with_the_name_it_belongs_to(page):
+    """Not "both appear somewhere in the panel", which was already true when they
+    were stacked. The claim is the layout, so it is read off the element tree."""
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    assert _identity_row(at) is not None, "the name and its button are in one row of two"
+
+
+def test_the_sign_out_button_is_the_quietest_kind(page):
+    """A way out rather than an action the page wants taken."""
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    out = next(b for b in at.sidebar.button if b.label == "Sign out")
+    assert out.proto.type == "tertiary"
+
+
+def test_the_spend_line_carries_what_is_left_on_the_reader_s_own_key(page, monkeypatch):
+    """One caption, not two: the run budget with the key's ceiling in the
+    parenthesis behind it."""
+    monkeypatch.setattr(
+        web,
+        "_allowance",
+        lambda key: allowance.Allowance(remaining=4.89, limit=5.0, resets="weekly"),
+    )
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    panel = _sidebar_text(at)
+    assert "4.89 on key of weekly" in panel and "5.00)" in panel
+    assert panel.count("on key") == 1, "one line, not a second caption beside it"
+    assert "left of" not in panel, "the old sentence form is gone, not merely joined"
+
+
+def test_a_reader_with_no_key_of_their_own_is_told_nothing_about_one(page):
+    """The deny case varies what the rule reads -- no account, so no key -- rather
+    than only changing the figure. The operator's balance is not a tester's
+    business, and a blank parenthesis would be worse than none."""
+    at = page(auth=False).run()
+    panel = _sidebar_text(at)
+    assert "on key" not in panel and "()" not in panel
+    assert "of \\$" in panel, "the run budget itself is still there"
 
 
 def test_an_enrolled_account_with_no_credential_meets_a_door_of_its_own(page, caught):
@@ -509,7 +569,7 @@ def test_the_note_is_one_short_sentence_whatever_is_configured():
     """Deliberately not an enumeration, and deliberately not two sentences: the
     fuller statement of what is kept about a person is deferred to a disclaimer
     shown once before use, when there are users to show it to."""
-    assert messages.RECORDS_NOTE == "All exchange in this app is logged for product development."
+    assert messages.RECORDS_NOTE == "All app exchange is logged for product development."
     assert messages.RECORDS_NOTE.count(".") == 1
     assert "account" not in messages.RECORDS_NOTE and "role" not in messages.RECORDS_NOTE
 

@@ -43,7 +43,7 @@ from .events import (
 # The same sentence whether or not sign-in is configured. It was a function of
 # that for one release; with both variants identical the parameter only invited
 # a caller to believe it changed something.
-RECORDS_NOTE = "All exchange in this app is logged for product development."
+RECORDS_NOTE = "All app exchange is logged for product development."
 
 # The door, before anything else is drawn. Each is a different sentence because
 # each asks the reader to do a different thing -- and "not enrolled" during an

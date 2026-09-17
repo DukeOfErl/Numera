@@ -15,7 +15,6 @@ from scinumbers_ask import autobuild, web
 from scinumbers_ask.config import (
     NotConfigured,
     env_setting,
-    format_usd,
     refuse_retired_env,
 )
 from scinumbers_ask.corpus import CorpusUnavailable
@@ -118,9 +117,15 @@ web.draw_prototype_banner()
 web.draw_feedback_style()
 
 st.title("SciNumbers ask")
-st.caption(web.as_text(f"{len(repo)} entries · session {session}"))
-# The identifier is in the URL, so this page can be reloaded, bookmarked or
-# reopened after a restart and still be the same conversation.
+if web.may_see_dev_panel(admission):
+    # The corpus size and the conversation's identifier: diagnostics, not things a
+    # tester came for, and behind the same grant as the dev panel rather than a
+    # second permission of their own -- one exists only where there is a code path
+    # to refuse (ADR-0800), and this is the population that panel already refuses.
+    #
+    # The identifier is in the URL regardless, so a reader who needs to reopen this
+    # conversation still can; what goes with the grant is putting it on the page.
+    st.caption(web.as_text(f"{len(repo)} entries · session {session}"))
 
 # Both pinned to the top of the panel, before anything whose length depends on an
 # answer. The entries below are unbounded -- one question can fill the panel -- and
@@ -150,10 +155,11 @@ with st.sidebar:
         # Escaped: two dollar signs in one caption are read as opening and closing
         # inline mathematics, so "$1.20 of $1.20" typeset the middle as an equation
         # and ate both currency signs. Same fault as the ending line's, same fix.
-        st.caption(web.as_text(f"{format_usd(spent)} of {format_usd(cap)}"))
-    # What the provider still honours on this reader's own key, which is the
-    # figure they would act on when told their allowance is spent.
-    web.draw_allowance(admission)
+        # One line: the run budget, and in the parenthesis what the provider still
+        # honours on this reader's own key. Escaped, because two dollar signs in
+        # one caption are read as opening and closing inline mathematics -- "$1.20
+        # of $1.20" typeset the middle as an equation and ate both currency signs.
+        st.caption(web.as_text(web.spend_line(spent, cap, admission)))
     st.divider()
     # The sidebar's two views, below the run status: the entries a reader came
     # for, and -- only for roles the grant table allows -- this session's trail.

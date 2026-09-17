@@ -41,7 +41,7 @@ from . import accounts, allowance, bionumbers, entries_table, feedback, messages
 from .accounts import Account, EnrolmentUnavailable
 from .agent import AskAgent
 from .authorization import Refused, allowed, require
-from .config import Config, env_setting, refuse_retired_env
+from .config import Config, env_setting, format_usd, refuse_retired_env
 from .corpus import load
 from .events import Answer, AnswerEntries, EndReason, Event, QuestionEnded, Retrieval
 from .permissions import Identity, Permission
@@ -684,11 +684,37 @@ def draw_identity(admission: Admission, session_id: str, tab_id: str | None = No
         st.caption(as_text(messages.NO_SIGN_IN_CONFIGURED))
         return
     account = admission.account
-    if account is not None:
+    if account is None:
+        st.button(
+            "Sign out",
+            on_click=_sign_out,
+            args=(session_id, tab_id),
+            type="tertiary",
+            icon=":material/logout:",
+        )
+        return
+    # One row, because the two belong to each other: the button is what you do
+    # about the name beside it. Centred vertically so the caption's smaller line
+    # sits level with the button rather than riding above it. `vertical_alignment`
+    # and the tertiary button style are both read from the installed Streamlit
+    # 1.61.1.
+    name, action = st.columns([0.68, 0.32], vertical_alignment="center", gap="small")
+    with name:
         st.caption(
             as_text(messages.SIGNED_IN_AS.format(email=account.email, role=account.role.value))
         )
-    st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id), icon=":material/logout:")
+    with action:
+        # Tertiary: no border and no fill, which is the smallest thing Streamlit
+        # offers that is still a button. This one is a way out, not an action the
+        # page wants taken, and it was drawing more of the eye than the identity
+        # it belongs to.
+        st.button(
+            "Sign out",
+            on_click=_sign_out,
+            args=(session_id, tab_id),
+            type="tertiary",
+            icon=":material/logout:",
+        )
 
 
 #: The secrets section naming the durable trail's database.
@@ -990,21 +1016,26 @@ def _allowance(api_key: str) -> allowance.Allowance:
     return allowance.fetch(api_key)
 
 
-def draw_allowance(admission: Admission) -> None:
-    """What the provider says is left on this reader's key, under the run budget.
+def spend_line(spent: int, cap: int, admission: Admission) -> str:
+    """One line for the run budget, carrying the key's own ceiling behind it.
 
-    Only where a reader has a key of their own: an unconfigured deployment's key
-    is the operator's, and its balance is not a tester's business. Silent when the
-    provider cannot be reached or says nothing we recognise -- a figure that might
-    be wrong is worse here than no figure, because this is the number a tester
-    would act on.
+    Two captions before this -- the budget, then the key -- and a reader had to
+    work out which of the two would stop them first. The budget is what this app
+    enforces and goes first; the key is the provider's cap behind it and goes in
+    the parenthesis.
+
+    The parenthesis is absent, rather than empty or guessed, where a reader has
+    no key of their own or the provider says nothing we recognise: an
+    unconfigured deployment's key is the operator's and its balance is not a
+    tester's business, and a figure that might be wrong is worse here than none,
+    because this is the number a tester would act on.
     """
+    line = f"{format_usd(spent)} of {format_usd(cap)}"
     account = admission.account
     if not admission.configured or account is None or not account.openrouter_key:
-        return
-    line = allowance.as_text(_allowance(account.openrouter_key))
-    if line:
-        st.caption(as_text(line))
+        return line
+    on_key = allowance.as_text(_allowance(account.openrouter_key))
+    return f"{line} ({on_key})" if on_key else line
 
 
 def draw_try_later() -> None:

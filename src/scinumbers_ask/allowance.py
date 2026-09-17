@@ -167,7 +167,13 @@ def fetch(api_key: str, *, opener=urllib.request.urlopen) -> Allowance:
 
 
 def as_text(allowance: Allowance) -> str:
-    """One line for the panel, or "" when there is nothing worth saying.
+    """The key's own standing, as a fragment for the spend line, or "" when there
+    is nothing worth saying.
+
+    A fragment rather than a sentence: it is read inside the parenthesis of
+    "$0.12 of $2.00 ($4.89 on key of weekly $5.00)", where the run budget is the
+    subject and this is the ceiling behind it. Two captions said the same kind of
+    thing in two registers and made the reader work out which bound them first.
 
     Dollars, formatted here rather than through `config.format_usd`, which takes
     the integer micro-dollars this project counts spend in. The provider answers
@@ -178,11 +184,11 @@ def as_text(allowance: Allowance) -> str:
         return ""
     if allowance.limit is None:
         spent = f"{allowance.usage:,.2f}" if allowance.usage is not None else "?"
-        return f"Key: ${spent} used, no cap set."
+        return f"${spent} used on key, no cap"
     left = allowance.remaining
     if left is None and allowance.usage is not None:
         left = allowance.limit - allowance.usage
     if left is None:
-        return f"Key: ${allowance.limit:,.2f} cap."
-    renews = f", renews {allowance.resets}" if allowance.resets else ""
-    return f"Key: ${left:,.2f} left of ${allowance.limit:,.2f}{renews}."
+        return f"${allowance.limit:,.2f} cap on key"
+    every = f"{allowance.resets} " if allowance.resets else ""
+    return f"${left:,.2f} on key of {every}${allowance.limit:,.2f}"
