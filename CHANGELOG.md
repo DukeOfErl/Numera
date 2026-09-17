@@ -46,11 +46,21 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- The side panel's spend is one line rather than two: the run budget, with what
+  the provider still honours on the reader's own key in the parenthesis behind it
+  — "$0 of $2.00 ($4.89 on key of weekly $5.00)". Two captions in two registers
+  left a reader working out which of the two would stop them first.
+- The sign-out button shares a row with the account it belongs to, and is drawn in
+  Streamlit's quietest button style: it is a way out, not an action the page wants
+  taken.
+- The entry count and the conversation's identifier are shown only to the roles
+  that hold the dev panel. They are diagnostics, and they sat above what a tester
+  came for.
 - The side panel names the signed-in account and role without the "Signed in as"
   preamble — the sign-out button beside it says that — and its spend figure is
   headed "Session budget", which is what it now scopes.
-- The side panel's statement of what is kept is one line — "All exchange in this
-  app is logged for product development" — rather than an enumeration of the
+- The side panel's statement of what is kept is one line — "All app exchange is
+  logged for product development" — rather than an enumeration of the
   fields, which was accurate and too long to read. The fuller statement, shown
   once before use, is deferred until there are users rather than invited testers.
   The prototype caveat no longer appears twice: it stays in the pinned banner.
