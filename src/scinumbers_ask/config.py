@@ -182,10 +182,17 @@ class Config:
         )
 
 
-# Development runs on a cheap, strong instruction-follower; the capable target is
-# Claude Opus 4.7. The exact OpenRouter slug is confirmed in task 1.7 rather than
-# assumed here.
-DEFAULT_MODEL = "anthropic/claude-haiku-4.5"
+# The capable model, for the reader in front of the deployed app. Development ran
+# on `anthropic/claude-haiku-4.5`, which is still a one-variable change away:
+# `SCINUMBERS_MODEL` is how a cheap run says otherwise, and the evaluation harness
+# sets it per run.
+#
+# Not chosen on the reach figure. The three-model comparison of 2026-09-17 -- one
+# repeat of ten questions each -- had Haiku reach the entries table for 67% of the
+# expected entries and Opus 4.7 for 68%, at six times the cost. One repeat cannot
+# tell those apart, and the figure it does not measure is the prose: what a reader
+# is handed is the answer, not the table.
+DEFAULT_MODEL = "anthropic/claude-opus-4.7"
 
 # Where notice is given, as a fraction of the stop. Integer arithmetic throughout,
 # because money here is integer micro-dollars and a float ratio would reintroduce

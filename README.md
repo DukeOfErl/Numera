@@ -117,7 +117,7 @@ measurement.
 | --- | --- | --- |
 | `OPENROUTER_API_KEY` | — | required; a question ends as `not_configured` without it |
 | `SCINUMBERS_CORPUS` | — | required; path to the JSONL corpus |
-| `SCINUMBERS_MODEL` | `anthropic/claude-haiku-4.5` | the model, as an OpenRouter slug |
+| `SCINUMBERS_MODEL` | `anthropic/claude-opus-4.7` | the model, as an OpenRouter slug; `anthropic/claude-haiku-4.5` is the cheap one |
 | `SCINUMBERS_QUESTION_CEILING_USD` | `0.60` | hard per-question limit; the warning is derived at 80% of it |
 | `SCINUMBERS_RUN_BUDGET_USD` | `1.20` | total across every question in a run; where sign-in is configured, per account rather than shared |
 | `SCINUMBERS_RUN` | `dev` | names the run spend is counted against; a new name starts a fresh budget |
@@ -125,6 +125,20 @@ measurement.
 | `SCINUMBERS_TRACE` | `logs/trace.jsonl` | the structured trail; `-` for stderr, empty to discard |
 | `SCINUMBERS_MAX_SESSIONS` | `20` | how many browser sessions the deployment holds open at once; the next is told to try later |
 | `SCINUMBERS_SESSION_IDLE_S` | `600` | how long a quiet session keeps its place before it is freed |
+
+Every variable above is read from the process environment. A hosted deployment has
+no shell to export one from, so **put it in the app's Secrets box as a top-level
+key** — Streamlit promotes every top-level string, int or float in secrets to an
+environment variable at server start, before the script runs (verified against the
+installed Streamlit 1.61.1: `runtime/secrets.py`, `_maybe_set_environment_variable`,
+called from `web/bootstrap.py`). The `[auth]` and `[connections.usage]` *sections*
+below are the exception: a table is not promoted, and is read as `st.secrets`.
+
+```toml
+OPENROUTER_API_KEY = "sk-or-..."
+SCINUMBERS_MODEL = "anthropic/claude-opus-4.7"
+SCINUMBERS_RUN_BUDGET_USD = "1.20"
+```
 
 ### The durable trail (hosted deployments only)
 

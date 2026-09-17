@@ -46,6 +46,15 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **The default model is `anthropic/claude-opus-4.7`**, where it was
+  `anthropic/claude-haiku-4.5`. Haiku remains a one-variable change away
+  (`SCINUMBERS_MODEL`), and the evaluation harness names the model per run. The
+  switch is not made on the reach figure: a one-repeat comparison of ten questions
+  on 2026-09-17 had the two within a point of each other (67% against 68% of
+  expected entries reaching the entries table) at six times the cost. It is made
+  for the prose a reader is actually handed, which that figure does not measure.
+  A deployment paying per question should know the per-question ceiling and the
+  run budget were set against the cheap model and have not moved.
 - The side panel names the signed-in account and role without the "Signed in as"
   preamble — the sign-out button beside it says that — and its spend figure is
   headed "Session budget", which is what it now scopes.
