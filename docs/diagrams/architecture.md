@@ -164,11 +164,11 @@ sequenceDiagram
         Page-->>Reader: one sentence, and nothing else
     else enrolled, with a credential
         Door-->>Page: open, with the account
-        Page->>Page: session keyed on the account; identity stamped; cap counted
+        Page->>Page: session keyed on the account, identity stamped, cap counted
         Page-->>Reader: the page, and an agent on that account's key
     end
     Page->>Trail: every record of this session
-    Note over Page,Trail: the stamp adds the account and role;<br/>the agent is told neither
+    Note over Page,Trail: the stamp adds the account and role —<br/>the agent is told neither
 ```
 
 *Caption: what the page decides before it draws anything, and where identity
