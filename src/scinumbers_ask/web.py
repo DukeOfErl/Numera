@@ -693,13 +693,26 @@ def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None =
 #: below reach this button and no other.
 SIGN_OUT_KEY = "sign-out"
 
-# A narrow side panel broke "Sign out" across two lines, which reads as two
-# controls for a moment. `nowrap` rather than a fixed width: a width in pixels is
-# a guess about a font the reader may have changed, and the label is two words.
-SIGN_OUT_CSS = f"""
+#: Narrower than this and the identity row has nowhere left to go.
+SIDEBAR_MIN_WIDTH_PX = 300
+
+# Three rules the layout cannot express on its own.
+#
+# The row is a flex container, and a flex item may be squeezed below the size of
+# its own content: a narrow panel shrank the button until "Sign out" broke across
+# two lines, and then until the frame no longer contained it. `flex: 0 0 auto`
+# says this item keeps its content's width and the caption beside it does the
+# yielding, which is the right way round -- an email can wrap, a control cannot.
+#
+# `min-width` on the panel itself, because the reader can drag it narrower than
+# anything here can survive. The selector is Streamlit's stable test id, verified
+# against 1.61.1; if a future version renames it the rule stops applying and the
+# panel goes back to being draggable to nothing, which is where it is today.
+SIDEBAR_CSS = f"""
 <style>
+[data-testid="stSidebar"] {{ min-width: {SIDEBAR_MIN_WIDTH_PX}px; }}
+.st-key-{SIGN_OUT_KEY} {{ flex: 0 0 auto; }}
 .st-key-{SIGN_OUT_KEY} button {{ white-space: nowrap; }}
-.st-key-{SIGN_OUT_KEY} button p {{ white-space: nowrap; }}
 </style>
 """
 
@@ -717,17 +730,20 @@ def draw_identity(admission: Admission, session_id: str, tab_id: str | None = No
         )
         return
     # One row, because the two belong to each other: the button is what you do
-    # about the name beside it. Centred vertically so the caption's smaller line
-    # sits level with the button rather than riding above it. `vertical_alignment`
-    # and the tertiary button style are both read from the installed Streamlit
-    # 1.61.1.
-    st.markdown(SIGN_OUT_CSS, unsafe_allow_html=True)
-    name, action = st.columns([0.62, 0.38], vertical_alignment="center", gap="xsmall")
-    with name:
+    # about the name beside it. Centred vertically so the caption's two lines sit
+    # level with the button rather than riding above it. `st.container(horizontal=)`
+    # and its alignment arguments are read from the installed Streamlit 1.61.1.
+    st.markdown(SIDEBAR_CSS, unsafe_allow_html=True)
+    # A horizontal container rather than two columns: columns divide the panel by
+    # proportion, so a wide panel put the button far from the name it belongs to,
+    # and a narrow one squeezed it. This packs both to the left at the size of
+    # their own content, whatever the panel is doing.
+    with st.container(
+        horizontal=True, horizontal_alignment="left", vertical_alignment="center", gap="small"
+    ):
         st.caption(
             as_text(messages.SIGNED_IN_AS.format(email=account.email, role=account.role.value))
         )
-    with action:
         # An ordinary button. Tertiary was tried for one release and drew no
         # border or fill at all, which reads as a stray line of text rather than
         # something to click -- smaller, and no longer recognisable as the way

@@ -51,7 +51,11 @@ any release; `1.0.0` when it stabilizes.
   — "$0 of $2.00 ($4.89 on key of weekly $5.00)". Two captions in two registers
   left a reader working out which of the two would stop them first.
 - The sign-out button shares a row with the account it belongs to, which is set
-  over two lines — the email, and the role beneath it.
+  over two lines — the email, and the role beneath it. The row is a horizontal
+  container rather than two columns, so the button stays beside the name however
+  wide the panel is, and it keeps its own width when the panel is narrow. The side
+  panel has a minimum width, because it could be dragged narrower than its
+  contents can survive.
 - The data credit is behind a "Data: BioNumbers (Milo et al.)" popover rather than a standing
   caption, and it is now shown wherever the app runs rather than only where it is
   deployed. Attribution has to be present on every page view; it does not have to

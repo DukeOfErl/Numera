@@ -202,11 +202,9 @@ def _identity_row(at: AppTest):
     one -- which is the whole claim, so it is read from the tree and not from a
     string."""
     for block in _elements(at.sidebar):
-        columns = [c for c in _elements(block) if getattr(c, "type", "") == "column"]
-        if len(columns) != 2:
-            continue
-        named = any("@" in str(getattr(e, "value", "")) for e in _elements(columns[0]))
-        signs_out = any(getattr(e, "label", "") == "Sign out" for e in _elements(columns[1]))
+        inside = _elements(block)
+        named = any("@" in str(getattr(e, "value", "")) for e in inside)
+        signs_out = any(getattr(e, "label", "") == "Sign out" for e in inside)
         if named and signs_out:
             return block
     return None
@@ -216,7 +214,24 @@ def test_the_sign_out_button_shares_a_row_with_the_name_it_belongs_to(page):
     """Not "both appear somewhere in the panel", which was already true when they
     were stacked. The claim is the layout, so it is read off the element tree."""
     at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
-    assert _identity_row(at) is not None, "the name and its button are in one row of two"
+    row = _identity_row(at)
+    assert row is not None, "the name and its button share one container"
+    assert row.type == "flex_container", (
+        "a horizontal container, not columns: columns divide the panel by "
+        "proportion, which put the button far from the name on a wide panel and "
+        "squeezed it on a narrow one"
+    )
+
+
+def test_the_panel_keeps_the_identity_row_from_being_squeezed(page):
+    """The reader can drag the panel narrower than its contents can survive, and a
+    flex item can be squeezed below its own content. Neither is visible to a test
+    that only reads elements, so the rules themselves are asserted."""
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    css = "".join(m.value for m in at.sidebar.markdown if "<style>" in str(m.value))
+    assert f"min-width: {web.SIDEBAR_MIN_WIDTH_PX}px" in css
+    assert f".st-key-{web.SIGN_OUT_KEY} {{ flex: 0 0 auto; }}" in css
+    assert f".st-key-{web.SIGN_OUT_KEY} button {{ white-space: nowrap; }}" in css
 
 
 def test_the_sign_out_button_looks_like_a_button(page):
