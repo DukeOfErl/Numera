@@ -1020,7 +1020,7 @@ def test_the_prototype_caveat_is_on_the_page_and_stays_there(monkeypatch, repo, 
     assert banner, "the pinned banner was not drawn"
     # The words survive the markdown-to-HTML rendering: `**` inside a raw HTML
     # element renders as two asterisks, so the emphasis has to be translated.
-    assert "not scientifically trustworthy" in banner[0]
+    assert "not yet scientifically trustworthy" in banner[0]
     assert "original source" in banner[0]
     assert "**" not in banner[0], "markdown emphasis left unrendered inside raw HTML"
     assert "position: fixed" in "".join(m.value for m in at.markdown), (
@@ -1038,8 +1038,8 @@ def test_the_page_and_the_readme_both_say_it_is_not_trustworthy_yet():
     first. Checks the claim survives in both, not that the wording matches."""
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()
     assert "prototype, not an instrument" in readme.lower()
-    assert "not scientifically trustworthy" in readme
-    assert "not scientifically trustworthy" in web.PROTOTYPE_NOTE
+    assert "not yet scientifically trustworthy" in readme
+    assert "not yet scientifically trustworthy" in web.PROTOTYPE_NOTE
     # Both point past this project's own copy. "Check the cited entry" would read as
     # this page's rendering of it, which is the one thing checking cannot verify.
     assert "original source" in readme and "original source" in web.PROTOTYPE_NOTE

@@ -21,9 +21,10 @@ Three commitments shape the design:
   token count, and every question ends with a stated reason and what it consumed. No tool can
   create, modify or delete an entry.
 
-> **A prototype, not an instrument.** More careful than a general-purpose model, but not yet
-> scientifically trustworthy: verify every number against the original source before relying on it.
-> What has been measured is retrieval, not truth — see the evaluation below.
+> **A prototype, not an instrument.** More careful than a general-purpose model, but
+> not yet scientifically trustworthy: verify every number against the original source
+> before relying on it. What has been measured is retrieval, not truth — see the
+> evaluation below.
 
 ## How it works
 
@@ -323,8 +324,9 @@ entries, takes the same refusal.
 
 ### What it measures, by example
 
-Ten questions, three repeats each, 2026-09-17 — the run that chose the default model. Questions are
-tiered: `basic` is one property of one organism, `compound` needs a comparison or a calculation.
+Ten questions, three repeats each, 2026-09-17 — the run that chose the default model
+([full findings](docs/evaluations/2026-09-17-three-models.md)). Questions are tiered: `basic` is one
+property of one organism, `compound` needs a comparison or a calculation.
 
 | | Haiku 4.5 | **Opus 4.7** | MiniMax M2.7 |
 |---|---:|---:|---:|
