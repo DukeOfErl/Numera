@@ -43,6 +43,32 @@ class QuestionSetError(Exception):
     """A question set that cannot be scored against, and what to do about it."""
 
 
+class Tier(StrEnum):
+    """What a question demands of the agent, so a gain in one kind is not paid for
+    out of another.
+
+    The report gives its figures per tier because the tiers fail differently and
+    the trade between them is real: a prompt that makes the agent search harder for
+    a comparison can easily cost it precision on the single-property questions that
+    are most of what anyone asks. A headline averaged over all three hides exactly
+    that.
+
+    **A closed vocabulary, unlike `tags`.** Tags are free-form because the report
+    merely groups by them; a tier is compared against the same tier in an earlier
+    run, and a typo would silently open a fourth bucket with one question in it and
+    leave the one it should have joined looking improved.
+    """
+
+    #: One property, one organism, answered from what was retrieved.
+    BASIC = "basic"
+    #: More than one organism or property, a figure that has to be computed, or a
+    #: follow-up that depends on what an earlier question established.
+    COMPOUND = "compound"
+    #: The corpus cannot answer it as asked -- absent organism, or a false premise.
+    #: Scored on whether the agent declines rather than on what it brings back.
+    DECLINING = "declining"
+
+
 @dataclass(frozen=True)
 class Question:
     """One question, its expected support, and what it is in the set to exercise."""
@@ -59,16 +85,52 @@ class Question:
     # In the corpus's own vocabulary, so the score uses the repository's resolution
     # and not a paraphrase. Required even for an unsupported question: the terms are
     # what it asks about, and that they resolve to nothing is the point of it.
+    #
+    # **Name the quantity, not its dimension.** A bare "diameter" selects 319 stored
+    # properties and a bare "Nuclear" selects 155, which credits almost any search
+    # as having looked for the asked property -- measured in task 4.10. List the
+    # corpus's spellings of the quantity instead; there are usually two or three,
+    # and they often share no substring narrower than the dimension word, which is
+    # why this is plural.
+    #
+    # **It stays declared rather than derived, and the unsupported questions are
+    # why.** For a supported question this is very nearly "the property strings the
+    # expected entries carry", and deriving it would keep the two from drifting. But
+    # a question the corpus cannot answer has no expected entries and still has to
+    # say what it asked -- that the terms resolve to nothing is the whole point of
+    # it -- so the field cannot be derived for the questions that need it most.
     asked_properties: tuple[str, ...]
     asked_organisms: tuple[str, ...]
     expected_entries: tuple[int, ...] = ()
+    # Entries recording a *different* property that nonetheless answers the
+    # question -- the nucleoid where a bacterium was asked for a nucleus, a radius
+    # where a volume was asked for. Citing one is not unexpected and not citing one
+    # is not a miss; the list exists so that `unexpected` means something (ADR-0530).
+    #
+    # Unlike `expected_entries` this is **not** copied into a result record. It is
+    # read from the set at report time, because borderline cases are found by
+    # reading a run's answers (task 5.4) and freezing it would price every
+    # discovery at a fresh run. The two lists therefore behave differently, which
+    # is a wart accepted deliberately and recorded in the ADR.
+    #
+    # A question may rest on this list **alone**, and that is the third state the
+    # set needs: a false premise. "What is the volume of the nucleus of an E. coli
+    # cell?" has no expected entry, because nothing records the volume of a thing
+    # that does not exist, and it is not unsupported either, because the corpus
+    # holds the nucleoid. Marking it unsupported would score a correct answer --
+    # cite the nucleoid, say the premise does not hold -- as a failure to decline.
+    admissible_entries: tuple[int, ...] = ()
     unsupported: bool = False
     # The question this one follows, asked in that question's session.
     follows: str | None = None
+    # What the question demands of the agent. A closed vocabulary, and `Tier` says
+    # why -- it is compared against the same tier in an earlier run.
+    tier: Tier = Tier.BASIC
     # What the question exercises -- a comparison, a conversion, an unsupported ask.
-    # Free-form on purpose: the report gives its figures per tag, and a fixed
-    # vocabulary here would have to be widened by whoever adds the next kind of
-    # question, which is the moment they are least likely to touch this file.
+    # Free-form on purpose, unlike the tier above: the report merely groups by a
+    # tag, and a fixed vocabulary here would have to be widened by whoever adds the
+    # next kind of question, which is the moment they are least likely to touch
+    # this file.
     tags: tuple[str, ...] = ()
     notes: str = ""
 
@@ -84,10 +146,23 @@ class Question:
             raise QuestionSetError(
                 f"{self.question_id!r} is marked unsupported and names expected entries."
             )
-        if not self.unsupported and not self.expected_entries:
+        if self.unsupported and self.admissible_entries:
             raise QuestionSetError(
-                f"{self.question_id!r} names no expected entries and is not marked "
-                f"unsupported; it would score as citing 0 of 0, which reads as a pass."
+                f"{self.question_id!r} is marked unsupported and names admissible entries."
+            )
+        both = set(self.expected_entries) & set(self.admissible_entries)
+        if both:
+            raise QuestionSetError(
+                f"{self.question_id!r} names {sorted(both)} as both expected and "
+                f"admissible. The lists mean opposite things about a missing citation "
+                f"-- expected is a miss, admissible is not -- so an entry in both makes "
+                f"the score depend on which list is read first."
+            )
+        if not self.unsupported and not (self.expected_entries or self.admissible_entries):
+            raise QuestionSetError(
+                f"{self.question_id!r} names neither expected nor admissible entries and "
+                f"is not marked unsupported; it would score as citing 0 of 0, which reads "
+                f"as a pass."
             )
         if self.follows == self.question_id:
             raise QuestionSetError(f"{self.question_id!r} follows itself.")
@@ -201,7 +276,15 @@ def load_question_set(
 # list, and a key that differs from the attribute it fills is how a later author
 # comes to write one and read the other.
 _REQUIRED = ("question_id", "question", "asked_properties", "asked_organisms")
-_OPTIONAL = ("expected_entries", "unsupported", "follows", "tags", "notes")
+_OPTIONAL = (
+    "expected_entries",
+    "admissible_entries",
+    "tier",
+    "unsupported",
+    "follows",
+    "tags",
+    "notes",
+)
 
 
 def _question(raw: object, where: str) -> Question:
@@ -221,22 +304,31 @@ def _question(raw: object, where: str) -> Question:
 
     identifier = _text(raw["question_id"], "question_id", where)
     expected = _entry_identifiers(raw.get("expected_entries", []), where)
+    admissible = _entry_identifiers(
+        raw.get("admissible_entries", []), where, key="admissible_entries"
+    )
     unsupported = _boolean(raw.get("unsupported", False), "unsupported", where)
 
     # Each direction of the disagreement is its own sentence: they are different
     # mistakes and the fix for one is not the fix for the other. `Question` refuses
     # both as well; these run first because they can name the line and the flag.
+    if unsupported and admissible:
+        raise QuestionSetError(
+            f"{where} is marked unsupported but names admissible entries {list(admissible)}. "
+            f"An admissible entry is one a citation may rest on; an unsupported question "
+            f"has none."
+        )
     if unsupported and expected:
         raise QuestionSetError(
             f"{where} is marked unsupported but names expected entries {list(expected)}. "
             f"An unsupported question is one the corpus cannot answer; if these entries "
             f"do support it, drop the flag."
         )
-    if not unsupported and not expected:
+    if not unsupported and not (expected or admissible):
         raise QuestionSetError(
-            f"{where} names no expected entries and is not marked unsupported. "
-            f"Nothing could be scored for it: add the entries that should support "
-            f"the answer, or mark it unsupported."
+            f"{where} names neither expected nor admissible entries and is not marked "
+            f"unsupported. Nothing could be scored for it: add the entries that should "
+            f"support the answer, or mark it unsupported."
         )
 
     follows = raw.get("follows")
@@ -247,10 +339,12 @@ def _question(raw: object, where: str) -> Question:
 
     return Question(
         question_id=identifier,
+        tier=_tier(raw.get("tier", Tier.BASIC), where),
         question=_text(raw["question"], "question", where),
         asked_properties=_terms(raw["asked_properties"], "asked_properties", where),
         asked_organisms=_terms(raw["asked_organisms"], "asked_organisms", where),
         expected_entries=expected,
+        admissible_entries=admissible,
         unsupported=unsupported,
         follows=follows,
         tags=_tags(raw.get("tags", []), where),
@@ -287,24 +381,48 @@ def _boolean(value: object, key: str, where: str) -> bool:
     return value
 
 
-def _entry_identifiers(value: object, where: str) -> tuple[int, ...]:
+def _entry_identifiers(value: object, where: str, key: str = "expected_entries") -> tuple[int, ...]:
+    """`key` names the list in every message: two lists share this reader now, and
+    a refusal that always said "expected_entries" would send a reader to the wrong
+    one."""
     if not isinstance(value, list):
-        raise QuestionSetError(f"{where}: expected_entries must be a list.")
+        raise QuestionSetError(f"{where}: {key} must be a list.")
     identifiers = []
     for item in value:
         # `isinstance(True, int)` is true, so booleans are excluded explicitly --
         # `[true]` would otherwise become entry 1.
         if isinstance(item, bool) or not isinstance(item, int):
             raise QuestionSetError(
-                f"{where}: expected_entries holds {item!r}. Entry identifiers are "
+                f"{where}: {key} holds {item!r}. Entry identifiers are "
                 f"written as bare integers, the way the corpus and the citation form "
                 f"carry them; a quoted one would never match a citation."
             )
         identifiers.append(item)
     duplicates = sorted({i for i in identifiers if identifiers.count(i) > 1})
     if duplicates:
-        raise QuestionSetError(f"{where}: expected_entries repeats {duplicates}.")
+        raise QuestionSetError(f"{where}: {key} repeats {duplicates}.")
     return tuple(identifiers)
+
+
+def _tier(value: object, where: str) -> Tier:
+    """Refused by name against the closed vocabulary, with the choices listed.
+
+    A tier the reader does not know cannot be defaulted: silently filing a
+    mistyped "compund" question under `basic` moves it into the bucket whose whole
+    purpose is to stay honest about the simple questions.
+    """
+    if isinstance(value, Tier):
+        return value
+    if not isinstance(value, str):
+        raise QuestionSetError(f"{where}: tier must be a string, not {type(value).__name__}.")
+    try:
+        return Tier(value.strip().lower())
+    except ValueError:
+        raise QuestionSetError(
+            f"{where}: tier {value!r} is not one of {[str(t) for t in Tier]}. The "
+            f"report compares a tier against the same tier in an earlier run, so an "
+            f"unknown one would open a bucket of its own rather than join a figure."
+        ) from None
 
 
 def _tags(value: object, where: str) -> tuple[str, ...]:
@@ -409,6 +527,25 @@ def check_against_corpus(questions: tuple[Question, ...], entries: tuple[Entry, 
             f"The corpus does not hold every expected entry: {listed}. Either the set "
             f"predates this corpus or an identifier is wrong; nothing can be scored "
             f"against an entry that is not there."
+        )
+
+    # Checked with the same force as the expected list, and for the same reason: an
+    # admissible identifier the corpus does not hold stops a citation being called
+    # unexpected only for an entry nothing can cite, so the list silently does
+    # nothing. Reported apart because the fix differs -- an expected entry that has
+    # gone means the question lost support, an admissible one means the exemption
+    # lapsed.
+    unheld = {
+        question.question_id: sorted(set(question.admissible_entries) - set(held))
+        for question in questions
+        if set(question.admissible_entries) - set(held)
+    }
+    if unheld:
+        listed = "; ".join(f"{qid} admits {ids}" for qid, ids in sorted(unheld.items()))
+        problems.append(
+            f"The corpus does not hold every admissible entry: {listed}. An admissible "
+            f"entry exempts a citation from being reported as unexpected, and one the "
+            f"corpus lacks exempts nothing."
         )
 
     # Only the identifiers the corpus holds: the absent ones are already reported,

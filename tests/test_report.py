@@ -17,8 +17,8 @@ from conftest import write_all_shapes_corpus
 
 from scinumbers_ask.corpus import Entry, load
 from scinumbers_ask.evaluation import Provenance, Result
-from scinumbers_ask.question_set import Question
-from scinumbers_ask.report import render
+from scinumbers_ask.question_set import Question, Tier
+from scinumbers_ask.report import expected_taken_from_the_set, render
 
 PROVENANCE = Provenance(
     recorded_at="2026-09-05T09:00:00+00:00",
@@ -102,7 +102,7 @@ def test_a_partial_run_says_so_before_any_figure(corpus):
     set it never finished asking."""
     text = render((a_result(),), (a_question("q1"), a_question("q2")), corpus, repeats=1)
     assert "PARTIAL: 1 of 2 expected results are absent" in text
-    assert text.index("PARTIAL") < text.index("expected entries cited")
+    assert text.index("PARTIAL") < text.index("expected entries that reached the table")
 
 
 def test_a_run_stopped_on_its_budget_is_distinguished_from_a_completed_one(corpus):
@@ -154,13 +154,13 @@ def test_the_two_kinds_of_missed_entry_are_reported_apart(corpus):
     which is happening."""
     missed = a_result(expected_entries=(1, 2), cited=(), retrieved=(1,))
     text = render((missed,), (a_question(expected_entries=(1, 2)),), corpus)
-    assert "passed over (retrieved, not cited): 1" in text
-    assert "never retrieved: 1" in text
+    assert "passed over: 1" in text
+    assert "never reached it: 1" in text
 
 
 def test_an_unexpected_citation_is_reported_as_not_an_error(corpus):
     text = render((a_result(cited=(1, 2)),), (a_question(),), corpus)
-    assert "cited but not expected: 1" in text
+    assert "cited and in neither list: 1" in text
     assert "not counted as errors" in text
 
 
@@ -208,9 +208,13 @@ def test_an_outlier_is_listed_with_the_interval_its_peers_occupy():
         for i, value in enumerate((1.76, 2.0, 2.5, 3.0, 3.3), start=1)
     ]
     entries = tuple(peers) + (replace(AN_ENTRY, entry_id=99, value=10.3),)
+    # The peers must be *expected*, not merely present: under ADR-0540 the pool is
+    # the question's own expected entries, because a pool keyed on property wording
+    # judged nothing at all on the real corpus.
+    expected = tuple(entry.entry_id for entry in entries)
     text = render(
-        (a_result(cited=(99,), expected_entries=(99,)),),
-        (a_question(expected_entries=(99,)),),
+        (a_result(cited=(99,), expected_entries=expected),),
+        (a_question(expected_entries=expected),),
         entries,
     )
     assert "at odds with their peers" in text
@@ -279,7 +283,10 @@ def test_a_result_whose_question_has_left_the_set_does_not_break_the_report(corp
     let an edited set destroy a paid-for run, and inventing an expectation for the
     missing question would be worse than reporting it as unexpected."""
     text = render((a_result("gone"),), (a_question(),), corpus)
-    assert "expected entries cited" in text
+    # Said, not omitted: the citation figures cover no result here, and a report
+    # that simply left them out would read as a run with nothing to report.
+    assert "the set no longer holds" in text
+    assert "no citation figures" in text
 
 
 # -- What the branch review of group 4 found -------------------------------------
@@ -361,3 +368,78 @@ def test_a_question_no_longer_in_the_set_is_left_out_of_the_asked_terms_figures(
     # its absence is stated rather than left to be inferred from the count.
     assert "searched for the asked organism: 1 of 1" in text
     assert "the current set no longer holds" in text
+
+
+# -- The tier split: a gain in one kind must not be paid for out of another -----
+
+
+def test_the_headline_is_split_by_what_the_question_demands(corpus):
+    """The aggregate hides the trade this exists to expose. On the first baseline
+    it read 64% while `basic` stood at 90% and `compound` at 24%."""
+    basic = a_result("easy", expected_entries=(1, 2), cited=(1, 2), retrieved=(1, 2))
+    hard = a_result("hard", expected_entries=(1, 2), cited=(), retrieved=())
+    text = render(
+        (basic, hard),
+        (
+            a_question("easy", expected_entries=(1, 2), tier=Tier.BASIC),
+            a_question("hard", expected_entries=(1, 2), tier=Tier.COMPOUND),
+        ),
+        corpus,
+    )
+    assert "by what the question demands:" in text
+    assert "basic: 2 of 2 reached the table (100%)" in text
+    assert "compound: 0 of 2 reached the table (0%)" in text
+
+
+def test_a_tier_expecting_nothing_is_not_reported_as_nought_per_cent(corpus):
+    """ "0 of 0 (0%)" beside a tier that genuinely missed everything reads as the
+    same failure.
+
+    The question that lands here is the **false-premise** one, not the unsupported
+    one: an unsupported question never reaches the tier split, because it is scored
+    on whether it was declined. A false premise is neither -- it expects no entries
+    and still wants an answer -- which is why it needs saying rather than omitting.
+    """
+    question = a_question(
+        "nucleus", expected_entries=(), admissible_entries=(1,), tier=Tier.DECLINING
+    )
+    # The result carries its own frozen `expected_entries`, which is what scoring
+    # reads; a false-premise question records none, so neither does its result.
+    result = a_result("nucleus", expected_entries=(), cited=(1,), retrieved=(1,))
+    text = render((result,), (question,), corpus)
+    assert "expecting no entries" in text
+    assert "declining: 0 of 0" not in text
+
+
+# -- Re-scoring against the set as it reads now ---------------------------------
+
+
+def test_expected_entries_can_be_taken_from_the_set_instead_of_the_record(corpus):
+    """`expected_entries` is frozen into each result so a file is self-describing,
+    which is right when a set is edited and wrong when the *method* that built it
+    was faulty. The first lists were swept by property wording and missed every
+    entry recording a cell volume under the word "size"; re-running to fix a number
+    the agent never saw would be paying for nothing."""
+    result = a_result(expected_entries=(1,), cited=(1,), retrieved=(1, 2))
+    question = a_question(expected_entries=(1, 2))
+    text = render((result,), (question,), corpus, expected_from_set=True)
+    assert "2 of 2" in text
+    assert "taken from the question set as it reads now" in text
+
+
+def test_the_recorded_expectation_is_used_unless_asked_otherwise(corpus):
+    """The default must not quietly restate what a run was scored against."""
+    result = a_result(expected_entries=(1,), cited=(1,), retrieved=(1, 2))
+    question = a_question(expected_entries=(1, 2))
+    text = render((result,), (question,), corpus)
+    assert "1 of 1" in text
+    assert "taken from the question set" not in text
+
+
+def test_a_result_whose_question_left_the_set_keeps_what_it_recorded(corpus):
+    """There is nothing to take an expectation from, and inventing an empty one
+    would score it as a question with nothing to find."""
+    kept = expected_taken_from_the_set(
+        (a_result("gone", expected_entries=(1, 2)),), {"q1": a_question()}
+    )
+    assert kept[0].expected_entries == (1, 2)

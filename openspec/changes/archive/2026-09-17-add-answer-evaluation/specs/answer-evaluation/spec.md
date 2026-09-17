@@ -45,27 +45,96 @@ measures the happy path and says nothing about the behaviour most questions will
 - **THEN** it holds questions whose expected entries have no scalar value, an unclassified unit, a fused range, no measurement method, and a hedged range
 - **AND** the report gives its figures for each of those shapes apart from the complete ones
 
-### Requirement: Scoring is based on cited entries, not answer text
+### Requirement: Scoring is based on entry identifiers, not answer text
 
-The evaluation SHALL score an answer by comparing the entry identifiers it cited against those
-recorded for the question, reporting how many expected entries were cited and how many cited
-entries were not expected. It SHALL NOT score by string comparison of the answer prose.
+The evaluation SHALL score an answer by comparing entry identifiers, never by string comparison of
+the answer prose.
 
-Of the expected entries an answer did not cite, the evaluation SHALL report separately those the
-agent retrieved and passed over from those it never retrieved. The two are different failures — one
-of selection, one of search — and a single "missed" count would hide which is happening.
+A question's **expected entries** SHALL be every entry in the corpus that *records the quantity the
+question asks for*, for the asked organism, whatever spelling it uses. `property` is free text, so
+one quantity is recorded under many spellings, and a set naming one of them describes the search that
+built it rather than the corpus.
 
-#### Scenario: Answer cites the expected entries
-- **WHEN** an answer cites every entry recorded for the question
-- **THEN** it is scored as citing all expected entries
+**"Records the quantity" is not "names it".** An entry whose property mentions the quantity while
+measuring something else — a fraction of it, a ratio to it, a mass per unit of it, a dispersion
+statistic over it — SHALL NOT be expected, though a substring match on the property would select it.
+Membership is therefore a judgement made against the corpus by a person and reviewed, not a query;
+where such an entry nonetheless answers the question by a short derivation, it belongs in the
+admissible list instead. A **follow-up** narrows to the condition it asks about rather than
+inheriting its parent's whole expectation.
 
-#### Scenario: Answer cites unexpected entries
-- **WHEN** an answer cites entries not recorded for the question
+The set SHALL be built from the corpus vocabulary and SHALL NOT be widened to what an agent cited: a
+set grown to what the system found is one the system passes by construction.
+
+An expected entry discharges its obligation by **reaching the entries table** — the table lists
+every retrieved entry, the cited ones first — rather than by being cited in the prose. Requiring
+prose citation of every expected entry would fail every good answer to a question the corpus
+answers many times over. The evaluation SHALL therefore report, separately:
+
+- whether every expected entry reached the table, and which did not;
+- the rank of each expected entry within the table's ordering, because an entry ranked far down is
+  one a reader never sees, and a search failure and a ranking failure need different fixes;
+- how many expected entries the prose cited.
+
+Where a driver truncates the table for display SHALL NOT be scored: the cut differs between drivers,
+and scoring it would make one answer score differently depending on which driver asked.
+
+A question MAY also record **admissible entries**: entries recording a *different* property that
+nonetheless answers the question — the nucleoid where a bacterium was asked for a nucleus, cell
+width where a rod was asked for a diameter. Citing one SHALL NOT be reported as unexpected, and
+failing to cite one SHALL NOT be reported as a miss. A cited entry that is neither expected nor
+admissible SHALL be reported as unexpected.
+
+A question MAY record admissible entries and **no** expected entries. This is the false-premise
+shape, and neither of the other two states describes it: nothing records the asked property, because
+the thing asked about does not exist, yet the corpus holds material that answers what was meant.
+Marking such a question unsupported would score the desired answer — cite the related entries and
+say the premise does not hold — as a failure to decline. A question SHALL record at least one of the
+two lists, or be marked unsupported; a question with neither would score as citing none of none,
+which reads as a pass.
+
+Of the expected entries an answer did not cite in prose, the evaluation SHALL report separately
+those the agent retrieved and passed over from those it never retrieved. The two are different
+failures — one of selection, one of search — and a single "missed" count would hide which is
+happening. A passed-over entry SHALL NOT on its own be counted as an error: with the expected set
+covering every spelling of a property, an answer citing some of them and leaving the rest to the
+table is the intended shape.
+
+#### Scenario: Every expected entry reaches the table
+- **WHEN** every entry recorded for the question was retrieved during the question
+- **THEN** the answer is scored as having brought every expected entry to the table, whether or not the prose cited each one
+
+#### Scenario: An expected entry is never retrieved
+- **WHEN** an entry recorded for the question was not retrieved during the question
+- **THEN** it is reported as never retrieved, and the question fails the table check
+
+#### Scenario: An expected entry reaches the table far down the ordering
+- **WHEN** an expected entry was retrieved but is ranked below the entries the answer cited
+- **THEN** its rank is reported, so a ranking failure is distinguishable from a search failure
+
+#### Scenario: The display truncates the table
+- **WHEN** a driver shows fewer rows than the table holds
+- **THEN** the score is unchanged, because the cut belongs to the driver and not to the answer
+
+#### Scenario: A question rests on admissible entries alone
+- **WHEN** a question's premise is false and the corpus records only material answering what was meant
+- **THEN** the question records those entries as admissible, records no expected entries, and is not marked unsupported
+
+#### Scenario: Answer cites an admissible entry
+- **WHEN** an answer cites an entry recorded for the question as admissible rather than expected
+- **THEN** it is not reported as unexpected, and not counted towards the expected entries
+
+#### Scenario: An entry names the quantity but measures something else
+- **WHEN** an entry's property mentions the asked quantity while recording a fraction of it, a ratio to it, or a quantity per unit of it
+- **THEN** it is not an expected entry, although a substring match on the property would select it
+
+#### Scenario: Answer cites entries recorded as neither expected nor admissible
+- **WHEN** an answer cites entries the question set does not record
 - **THEN** those are reported separately rather than counted as errors, since the corpus may support the answer through entries the question set does not list
 
 #### Scenario: An expected entry was retrieved and passed over
 - **WHEN** an expected entry was returned by a retrieval during the question and the answer did not cite it
-- **THEN** it is reported as passed over, apart from expected entries that were never retrieved
+- **THEN** it is reported as passed over, apart from expected entries that were never retrieved, and is not on its own counted as an error
 
 ### Requirement: The asked property and organism are recognised
 
@@ -93,14 +162,25 @@ are both on record, so this needs no judge.
 
 ### Requirement: A cited entry at odds with its peers is flagged
 
-The evaluation SHALL compare each cited entry's recorded value against the values recorded by the
-other entries for the same property and organism, and SHALL flag a citation whose entry is a distant
-outlier among them. The flag SHALL name the entry, its value, and the interval the other entries
-occupy, and SHALL NOT be counted as an error.
+The evaluation SHALL compare each cited entry's recorded value against its **peers** — the entries
+the question records as expected, sharing the cited entry's organism and its unit — and SHALL flag a
+citation whose entry is a distant outlier among them. The flag SHALL name the entry, its value, and
+the interval the peers occupy, and SHALL NOT be counted as an error.
 
-This asks only which entries were cited and what the corpus records for their neighbours, so it
-needs no reading of the answer's prose. An answer can cite an entry that exists, attribute its number
-correctly, and still lead with the one figure in the corpus that disagrees with every other
+**Peers are drawn from the question's expected entries, not from a property string.** `property` is
+free text, so one quantity is recorded under many spellings — `Nuclear volume`, `Volume of nucleus`,
+`Volume of nuclei during S phase` — and a pool keyed on wording is a pool keyed on coincidence. The
+expected list is that vocabulary resolved against the corpus by hand and reviewed, so the comparison
+reuses it rather than resolving a second time.
+
+**Peers SHALL share the cited entry's unit**, and sameness of unit means the same recorded unit,
+not merely the same dimension. A pool matched on dimension alone can place a volume in litres beside
+one in cubic micrometres, which spans fifteen orders of magnitude and makes the interval meaningless
+rather than wide.
+
+This asks only which entries were cited, what the question expected, and what the corpus records, so
+it needs no reading of the answer's prose. An answer can cite an entry that exists, attribute its
+number correctly, and still lead with the one figure in the corpus that disagrees with every other
 measurement of the same quantity. Every check that compares an answer against its own citations
 passes such an answer, because nothing about it is internally wrong.
 
@@ -108,15 +188,23 @@ An outlier is a fact about the corpus rather than about the answer, so it is rep
 rather than scored against the answer: the entry may be measuring something its neighbours do not.
 
 #### Scenario: A cited entry is an outlier
-- **WHEN** a cited entry's value is a distant outlier among the entries for the same property and organism
-- **THEN** the citation is flagged with that entry's value and the interval the other entries occupy
+- **WHEN** a cited entry's value is a distant outlier among the question's expected entries sharing its organism and unit
+- **THEN** the citation is flagged with that entry's value and the interval those peers occupy
 
 #### Scenario: Every cited entry sits with its peers
 - **WHEN** no cited entry's value is an outlier among its peers
 - **THEN** no outlier is reported for the answer
 
+#### Scenario: A citation the question did not expect
+- **WHEN** an answer cites an entry the question does not record as expected
+- **THEN** it is still compared against the question's expected entries that share its organism and unit, since it is judged against what the question is about rather than against its own neighbours
+
+#### Scenario: Peers recorded in a different unit
+- **WHEN** entries share the organism but record their values in a different unit
+- **THEN** they are not peers, and the comparison is not made across them
+
 #### Scenario: Too few peers to judge
-- **WHEN** a property has fewer entries than the comparison needs
+- **WHEN** fewer entries share the cited entry's organism and unit than the comparison needs
 - **THEN** no outlier is reported for it
 - **AND** the report states that the comparison could not be made
 
@@ -305,88 +393,3 @@ that a change improving accuracy at several times the cost is visible as such.
 - **WHEN** a run finishes
 - **THEN** the report states the model cost and the total tool calls
 - **AND** states them per question as well as in aggregate
-
-### Requirement: Faithfulness is judged per claim, with a reason
-
-When a judge is configured, the evaluation SHALL judge each answer that states a quantity by
-separating it into claims and judging each claim against the recorded context, and SHALL record for
-each claim its verdict and the judge's reason. A faithfulness score for the answer SHALL be derived
-from the claim verdicts. An answer that states no quantity SHALL be recorded as not judged rather
-than given a score.
-
-The reason is the point of this layer, not the score: the identifier scoring already says that an
-answer cited the wrong entry, and what it cannot say is that a right citation sits beside a wrong
-number. A reason names the claim, which is what a user can be warned with and what a developer can
-fix from.
-
-#### Scenario: A claim is not supported by the context
-- **WHEN** a judged answer contains a claim the recorded context does not support
-- **THEN** the result records that claim, an unsupported verdict, and the judge's reason
-
-#### Scenario: Every claim is supported
-- **WHEN** every claim in a judged answer is supported by the recorded context
-- **THEN** the answer's faithfulness score is the maximum
-- **AND** no claim is reported as unsupported
-
-#### Scenario: A refusal is not judged
-- **WHEN** an answer states no quantity
-- **THEN** it is recorded as not judged for faithfulness
-- **AND** it does not contribute to the faithfulness aggregate
-
-### Requirement: The judged layer is secondary and optional
-
-The evaluation SHALL run and produce its full report with no judge configured. When a judge is
-configured, the identifier and refusal scores SHALL be reported unchanged, and the judged figures
-SHALL be reported beside them and SHALL NOT be combined with them into a single figure.
-
-#### Scenario: No judge configured
-- **WHEN** the evaluation runs without a judge
-- **THEN** every result is recorded and the report is produced from the identifier and refusal scores
-
-#### Scenario: A judge is configured
-- **WHEN** the evaluation runs with a judge
-- **THEN** the report gives the identifier and refusal figures as it would without one
-- **AND** gives the judged figures separately
-
-### Requirement: A judge is trusted only after measured agreement
-
-The evaluation SHALL measure the agreement between the judge's verdicts and the identifier and
-refusal scoring on every result where both can speak, SHALL list each disagreement for reading, and
-SHALL mark the judged figures as not yet validated while the agreement is below a stated floor. A
-judge finding an answer faithful where the refusal scoring recorded a fabrication SHALL be reported
-as a judge miss.
-
-The deterministic scoring is the reference against which the judge is validated, not the other way
-round; a judge's verdicts are known to move under pushback and a disagreement is only informative
-once the judge has been shown to agree where it must.
-
-#### Scenario: Agreement below the floor
-- **WHEN** the measured agreement is below the stated floor
-- **THEN** the report marks the judged figures as not yet validated
-- **AND** lists every disagreement
-
-#### Scenario: The judge misses a fabrication
-- **WHEN** the refusal scoring records a fabrication and the judge finds the same answer faithful
-- **THEN** that result is reported as a judge miss
-
-#### Scenario: The judge disagrees where it adds information
-- **WHEN** the identifier scoring finds every cited entry expected and the judge finds a claim unsupported
-- **THEN** that result is listed as a disagreement with the claim and reason, not counted as a judge miss
-
-### Requirement: Every judgement records the judge model and its cost
-
-Each recorded judgement SHALL name the model that produced it, the report SHALL break judged figures
-down per judge model, and the judge's spend SHALL be reported separately from the agent's spend.
-
-#### Scenario: A judgement is recorded
-- **WHEN** a claim's verdict is written
-- **THEN** it names the judge model that produced it
-
-#### Scenario: Judgements from several judge models
-- **WHEN** a report covers judgements from more than one judge model
-- **THEN** the judged figures are reported per judge model
-- **AND** no judged figure combines them
-
-#### Scenario: A run with a judge completes
-- **WHEN** a run with a judge configured finishes
-- **THEN** the report states the judge's spend apart from the agent's

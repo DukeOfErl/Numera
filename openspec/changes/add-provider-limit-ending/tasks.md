@@ -117,6 +117,36 @@ cut before the evaluation work, and this behaviour has to reach the deployed app
 - [x] 3.3 Conformance mapping in `tests/test_spec_conformance.py`, in this change rather than later.
 - [x] 3.4 `CHANGELOG.md` under Unreleased.
 
+## 4. What a failure tells a reader afterwards
+
+- [ ] 4.1 **Carry the provider's own reason into the recorded result.** `Result.failure` is empty on
+      every `provider_failure` record: the reason goes to the trace as
+      `trace.record("provider.failed", error=..., message=...)` and nowhere a reader of the results
+      file can reach it. Put the same message in `failure`, and report it in the report's
+      never-reached-the-model line, which today says only `provider_failure 10`
+  - **Found by three real runs, 2026-09-17, at a cost of an hour.** An evaluation of ten questions
+    returned `provider_failure` ten times, exit code 0, "Recorded 10 of 10", $0 spent. The report was
+    honest — *"nothing was answered, so there is nothing to score"* — but nothing said **why**, so
+    finding out meant reproducing the call with `curl` outside the harness. The answer turned out to
+    be two different causes on two different days: first a sandboxed network refusing
+    `openrouter.ai`, then an OpenRouter workspace guardrail blocking the Sonnet models entirely
+    (*"Model blocked by guardrail: 6 endpoints excluded"*). Both are one sentence from the provider,
+    and the harness had that sentence and threw it away.
+  - **Why this belongs to an evaluation rather than to a driver.** An interactive reader sees the
+    ending line and asks a person. A run is unattended by design: the results file is the only thing
+    that outlives it, and a record saying `provider_failure` with an empty `failure` field cannot be
+    told apart from any other — a spent key, a blocked model, a dropped network, a bad slug all look
+    identical afterwards. `PROVIDER_LIMIT` exists precisely because one of those deserved its own
+    name; the rest still need their words.
+  - **Both directions.** The message comes from an external service and may be long or may carry
+    detail nobody should paste into a file that is already refused on committable paths. Truncate as
+    the trace does (200 characters) and do not add a second field for a provider's raw payload.
+  - A second, smaller gap seen in the same runs: a model slug the account cannot reach fails exactly
+    like an outage, ten times, once per question. Whether the first failure should stop the run — as
+    `PROVIDER_LIMIT` does — is a real question and **not** settled here: a gateway that failed once
+    may answer the next call, which is why `PROVIDER_FAILURE` is outside `STOP_THE_RUN`. Measure how
+    often a run's first provider failure is followed by a second before changing that.
+
 ## Not in this change
 
 - **Per-visitor budgets.** One run label per hosted instance means one shared pot; splitting it

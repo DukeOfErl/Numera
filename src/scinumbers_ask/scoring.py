@@ -19,10 +19,10 @@ first real run rather than trusting the choice.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from statistics import median
 
 from .citations import citations
 from .corpus import Entry
+from .entries_table import rows_for
 from .evaluation import Result
 from .events import EndReason, QuestionEnded
 from .messages import STOP_THE_RUN
@@ -32,36 +32,92 @@ from .repository import CorpusRepository
 
 @dataclass(frozen=True)
 class CitationScore:
-    """What an answer cited, against what the question expected. Task 4.1."""
+    """What an answer brought to the reader, against what the question expected.
+
+    Tasks 4.1 and 4.13, under ADR-0530. **An expected entry discharges by reaching
+    the entries table, not by being cited in the prose.** The table lists every
+    retrieved entry, cited ones first, so reaching it is what the reader actually
+    gets; requiring prose citation of every expected entry fails every good answer
+    to a question the corpus answers ten times over -- and after the expected lists
+    were widened to cover every spelling of a property, that is most of them.
+
+    Both figures are kept. Prose citation is what a reader follows, so it stays as
+    a secondary; it is simply no longer the pass.
+    """
 
     expected: int
+    #: Expected and in the table the reader was shown. The headline.
+    reached_the_table: int
+    #: Expected and absent from that table. A failure of *search*.
+    #:
+    #: Not "never retrieved": `rows_for` carries a cited entry into the table even
+    #: when no retrieval returned it, which is the ordinary shape of a follow-up
+    #: answered in its parent's session. Counting those as a search failure marked
+    #: three results of the first baseline as missing an entry the reader could see.
+    never_reached: tuple[int, ...]
+    #: Expected and cited in the prose. Secondary to reaching the table.
     cited_expected: int
-    #: Cited but not expected. Reported, never counted as an error: the corpus may
-    #: support the answer through entries the question set does not list, and a set
-    #: is a claim about which entries suffice rather than about which exist.
-    unexpected: tuple[int, ...]
-    #: Expected, retrieved, and not cited. A failure of selection.
+    #: Expected, retrieved, not cited. **Not an error on its own**: with the
+    #: expected set covering every spelling of a property, an answer citing some
+    #: and leaving the rest to the table is the intended shape. Task 6.10 asks a
+    #: judge whether a particular omission changed the answer.
     passed_over: tuple[int, ...]
-    #: Expected and never retrieved. A failure of search. Kept apart from the
-    #: above because they are different failures and a single "missed" count would
-    #: hide which is happening.
-    never_retrieved: tuple[int, ...]
+    #: Cited and recorded as admissible -- a different property that still answers.
+    #: Neither a hit nor an error; counted apart so `unexpected` means something.
+    admissible_cited: tuple[int, ...]
+    #: Cited and in neither list. Reported, never counted as an error: the corpus
+    #: may support an answer through entries the set does not record.
+    unexpected: tuple[int, ...]
+    #: Where each expected entry sits in the table the reader would have seen,
+    #: ascending. An entry at rank 40 reached the table and no reader will see it,
+    #: which is a *ranking* failure and needs a different fix from a search one.
+    ranks: tuple[int, ...]
 
     @property
-    def all_expected_cited(self) -> bool:
-        return self.expected > 0 and self.cited_expected == self.expected
+    def all_expected_reached_the_table(self) -> bool:
+        """The pass. False when a question expects nothing -- a false-premise
+        question is scored on its admissible list, not on this."""
+        return self.expected > 0 and not self.never_reached
+
+    @property
+    def deepest_rank(self) -> int | None:
+        """How far down a reader would have had to look. `None` when none reached."""
+        return max(self.ranks) if self.ranks else None
 
 
-def citation_score(result: Result) -> CitationScore:
+def citation_score(result: Result, question: Question, repo: CorpusRepository) -> CitationScore:
+    """The question and the repository are required, not optional.
+
+    `admissible_entries` lives on the question and is deliberately not copied into
+    a result, and the rank comes from the table's own ordering. A signature that
+    defaulted either would let a caller silently score without them -- every
+    admissible citation reported as unexpected, every rank absent -- and the
+    figures would look ordinary.
+    """
     expected = set(result.expected_entries)
     cited = set(result.cited)
-    retrieved = set(result.retrieved)
+    admissible = set(question.admissible_entries)
+
+    # The table as a reader would have seen it, from the module that builds it
+    # rather than a second ordering that can drift from the first.
+    order = [
+        row.entry_id for row in rows_for(repo, result.cited, result.retrieved, result.question)
+    ]
+    place = {entry_id: index + 1 for index, entry_id in enumerate(order)}
+
+    # The table, not the retrieval set. `rows_for` carries a cited entry even when
+    # no retrieval returned it, and the spec's pass is reaching the table -- so the
+    # membership test is the table's own keys, which `place` already holds.
+    shown = expected & set(place)
     return CitationScore(
         expected=len(expected),
+        reached_the_table=len(shown),
+        never_reached=tuple(sorted(expected - set(place))),
         cited_expected=len(expected & cited),
-        unexpected=tuple(sorted(cited - expected)),
-        passed_over=tuple(sorted((expected & retrieved) - cited)),
-        never_retrieved=tuple(sorted(expected - retrieved)),
+        passed_over=tuple(sorted(shown - cited)),
+        admissible_cited=tuple(sorted(cited & admissible)),
+        unexpected=tuple(sorted(cited - expected - admissible)),
+        ranks=tuple(sorted(place[e] for e in shown)),
     )
 
 
@@ -262,7 +318,6 @@ class Outlier:
     peers: int
     peer_low: float
     peer_high: float
-    peer_median: float
     #: How far outside the peers' interval it sits, as a factor. Above 1 by
     #: construction: at or below the factor it would not be reported.
     outside_by: float
@@ -284,43 +339,84 @@ def representative_value(entry: Entry) -> float | None:
     return None
 
 
-def _values_by_quantity(entries: tuple[Entry, ...]) -> dict[tuple[str, str], list[float]]:
-    """Usable values grouped by the quantity they measure: property and organism.
+def _peer_pool(
+    expected: tuple[int, ...], entries: tuple[Entry, ...]
+) -> dict[tuple[str, str], list[float]]:
+    """The question's expected entries, grouped by organism and unit string.
 
-    Built once instead of scanning the corpus for every cited entry. The report
-    calls the two peer functions for the group and again for each tag and each
-    shape, so the old shape was O(results x cited x entries x buckets) -- tens of
-    millions of comparisons on a real corpus with both breakdowns asked for.
+    Built once per question rather than scanned per citation: the report calls the
+    peer functions for the group and again for each tag and each shape.
     """
-    grouped_values: dict[tuple[str, str], list[float]] = {}
+    grouped: dict[tuple[str, str], list[float]] = {}
+    wanted = set(expected)
     for entry in entries:
+        if entry.entry_id not in wanted:
+            continue
         value = representative_value(entry)
-        if value is not None:
-            grouped_values.setdefault((entry.property, entry.organism), []).append(value)
-    return grouped_values
+        if value is not None and entry.units:
+            grouped.setdefault(_quantity_of(entry), []).append(value)
+    return grouped
 
 
-def _peers_of(entry: Entry, index: dict[tuple[str, str], list[float]]) -> list[float]:
-    """The other entries' values for the same quantity.
+def _quantity_of(entry: Entry) -> tuple[str, str]:
+    """What must match for two entries to be comparable: organism and unit.
 
-    One copy of this entry's own value is removed rather than the entry being
-    excluded by identity: two entries can record the same number, and dropping
-    every match would shrink the population the floor is measured against.
+    **The unit is the literal string, not its dimension**, and that is measured
+    rather than fastidious. A pool matched on dimension put `1.8e-15 Liter` beside
+    `2.95 um^3` -- both volumes, fifteen orders of magnitude apart -- and the lower
+    bound of the interval became meaningless. `units.py` gives dimensional
+    compatibility and deliberately no conversion (ADR-0160), so nothing here could
+    bring two spellings onto one scale.
+
+    The cost is real and is the cheap direction: `um^3` and the micro-sign form are
+    one quantity and two pools, which cost six judgeable citations of 62 on the
+    first baseline. A split pool judges less; a fused pool judges wrongly.
     """
-    values = list(index.get((entry.property, entry.organism), ()))
+    return (entry.organism, (entry.units or "").strip().lower())
+
+
+def _peers_of(
+    entry: Entry, pool: dict[tuple[str, str], list[float]], expected: set[int]
+) -> list[float]:
+    """The pool's other values for this entry's organism and unit.
+
+    Where the entry is itself expected, one copy of its value is removed rather
+    than every match: two entries can record the same number, and dropping all of
+    them would shrink the population the floor is measured against.
+
+    Where it is **not** expected, nothing is removed. It is not in the pool, so
+    there is no copy of it there to take out -- and a coincidentally equal value
+    belongs to some other entry, which is a real peer. Removing it anyway cost a
+    peer and was found by seeding: the rule read the *value* where it meant the
+    *entry*, and only a cited entry from outside the expected list can tell the
+    two apart.
+    """
+    values = list(pool.get(_quantity_of(entry), ()))
+    if entry.entry_id not in expected:
+        return values
     own = representative_value(entry)
     if own is not None and own in values:
         values.remove(own)
     return values
 
 
-def outliers_among_peers(cited: tuple[int, ...], entries: tuple[Entry, ...]) -> tuple[Outlier, ...]:
-    """Cited entries whose value sits far outside their peers'. Task 4.5.
+def outliers_among_peers(
+    cited: tuple[int, ...], expected: tuple[int, ...], entries: tuple[Entry, ...]
+) -> tuple[Outlier, ...]:
+    """Cited entries whose value sits far outside their peers'. Tasks 4.5 and 4.15.
 
-    Peers are the corpus's other entries recording the same property for the same
-    organism. The answer's prose is never read: the inputs are the citation set and
-    the corpus, which is what makes this cheap enough to survive in a change that
-    has no parser.
+    **Peers are the question's own expected entries** for the cited entry's organism
+    and unit -- ADR-0540, superseding ADR-0520. The answer's prose is never read:
+    the inputs are the citation set, the question's expectation and the corpus.
+
+    The old definition -- the corpus's other entries with an *identical property
+    string* -- judged nothing at all. Measured over the first baseline: 0 of 91
+    citations judged, 91 unjudgeable, including the entry that motivated the check.
+    `property` is free text, so `Nuclear volume` and `Volume of nucleus` are two
+    quantities to a string comparison and one to a reader, and four peers sharing a
+    spelling almost never exist. The expected list is that vocabulary resolution,
+    done by hand against the corpus and reviewed; this reuses it rather than
+    building a second one to get wrong.
 
     **Reported, never scored.** An outlier is a fact about the corpus, not about
     the answer: the entry may be measuring something its neighbours are not, which
@@ -332,7 +428,8 @@ def outliers_among_peers(cited: tuple[int, ...], entries: tuple[Entry, ...]) -> 
     a pass.
     """
     by_id = {entry.entry_id: entry for entry in entries}
-    index = _values_by_quantity(entries)
+    pool = _peer_pool(expected, entries)
+    wanted = set(expected)
     found = []
     for entry_id in cited:
         entry = by_id.get(entry_id)
@@ -341,7 +438,7 @@ def outliers_among_peers(cited: tuple[int, ...], entries: tuple[Entry, ...]) -> 
         value = representative_value(entry)
         if value is None:
             continue
-        peer_values = _peers_of(entry, index)
+        peer_values = _peers_of(entry, pool, wanted)
         if len(peer_values) < MIN_PEERS:
             continue
         low, high = min(peer_values), max(peer_values)
@@ -358,29 +455,38 @@ def outliers_among_peers(cited: tuple[int, ...], entries: tuple[Entry, ...]) -> 
                 peers=len(peer_values),
                 peer_low=low,
                 peer_high=high,
-                peer_median=median(peer_values),
                 outside_by=outside,
             )
         )
     return tuple(found)
 
 
-def peers_too_few(cited: tuple[int, ...], entries: tuple[Entry, ...]) -> tuple[int, ...]:
+def peers_too_few(
+    cited: tuple[int, ...], expected: tuple[int, ...], entries: tuple[Entry, ...]
+) -> tuple[int, ...]:
     """Cited entries the outlier comparison could not be made for.
 
     Reported beside the outliers so that "nothing flagged" is distinguishable from
     "nothing could be judged" -- an absence that reads as a pass is the failure
-    this exists to prevent.
+    this exists to prevent, and under ADR-0540 it is 35 of 91 on the first
+    baseline rather than a handful.
+
+    **The blind spot is an organism the question did not expect.** A citation to
+    another organism entirely -- the baseline has one, a Mycoplasma ribosome cited
+    for a question about E. coli -- shares its pool key with nothing and is never
+    judged. That is the citation most likely to be wrong, and the one this cannot
+    see.
     """
     by_id = {entry.entry_id: entry for entry in entries}
-    index = _values_by_quantity(entries)
+    pool = _peer_pool(expected, entries)
+    wanted = set(expected)
     unjudged = []
     for entry_id in cited:
         entry = by_id.get(entry_id)
         if entry is None or representative_value(entry) is None:
             unjudged.append(entry_id)
             continue
-        if len(_peers_of(entry, index)) < MIN_PEERS:
+        if len(_peers_of(entry, pool, wanted)) < MIN_PEERS:
             unjudged.append(entry_id)
     return tuple(unjudged)
 

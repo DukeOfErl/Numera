@@ -222,6 +222,68 @@ it makes "never combined into one figure" structural rather than a reporting con
 model as judge directly, per-statement verdicts) — a real option, rejected for wanting a hand-written
 harness where DeepEval has one; RAGAS, rejected on maintenance and compatibility. ADR-0500 records it.
 
+### What DeepEval's faithfulness metric actually returns, measured
+
+Read against the installed 4.2.1 on 2026-09-10, after installing the vendor's own
+Claude Code skill (which ships 4.2.0 source, one patch behind what we run). Four
+things that change decisions here, none of them guessable from the design:
+
+**A verdict is three-valued: `yes`, `no`, `idk`** -- not a boolean. That decides the
+shape of the hand labels in 5.4, which are what agreement is computed against in
+6.6: a binary label file could not be compared with a three-valued judge without
+collapsing one of its states arbitrarily, and the collapse would be invisible in
+the agreement figure. The labels take the same three states. It also matches the
+project's existing three-valued unit compatibility (ADR-0160), which is a
+coincidence but a convenient one.
+
+**By default `idk` counts as faithful.** `_calculate_score` counts every verdict
+that is not `no`, and only subtracts for `idk` when `penalize_ambiguous_claims` is
+set. So the shipped default takes the lenient direction on exactly the claims the
+judge was least sure about. **Set `penalize_ambiguous_claims=True`**: the expensive
+direction here is calling an unfaithful answer faithful, and the whole point of the
+judged layer is to catch what the deterministic layer cannot see.
+
+**An answer yielding no claims scores 1.0.** `_calculate_score` returns 1 when
+`len(self.verdicts) == 0`. A refusal, or an answer whose claims the extractor fails
+to parse, is therefore *perfectly faithful*. Task 6.2 already says to record a
+refusal as not judged, which was written on principle; this is the measurement that
+makes it load-bearing rather than tidy. The check has to be "did the extractor
+produce claims", not "did the metric return a high score" -- those are the same
+number and different facts.
+
+**`truths_extraction_limit` caps the truths drawn from the context.** Our contexts
+are whole tool results, several thousand characters each, so a low limit would judge
+an answer against a fraction of what the agent was shown and report the difference
+as unfaithfulness. Unset by default; measure before setting it.
+
+### The vendor skill describes a different topology, and that is worth knowing
+
+Its prescribed workflow is a committed pytest suite driven by `deepeval test run`,
+over goldens produced by `deepeval generate`, iterating five rounds, with tracing
+and Confident AI recommended for anything hosted. That is a coherent way to use
+DeepEval and it is not ours: we built our own harness and use `FaithfulnessMetric`
+as one metric inside it, because the deterministic layer is the primary instrument
+and the judge is secondary and optional (ADR-0510).
+
+Two of its defaults are ones this project has already refused, and the reasons stand:
+
+- **`deepeval generate` for the question set.** `question_set.py` exists because a
+  set the system under test produced is a set it passes. A generated golden set is
+  the same objection wearing a different hat.
+- **Confident AI for results.** Every record carries the retrieval results
+  verbatim, so a results file holds corpus text -- which is why `evaluation.py`
+  refuses to write one where git would track it. Sending the same content to a
+  hosted service is that mistake by another route. The library runs locally with
+  telemetry off; keep it there.
+
+What the skill *does* supply that we should use: `GEval` is the framework's answer
+for custom single-turn criteria, so the deferred judged metrics in the proposal
+(conciseness, scientific caution, answer shape) are `GEval` criteria rather than
+hand-written rubrics. And `ToolCorrectnessMetric` / `ArgumentCorrectnessMetric`
+cover judged versions of what 4.2 scores deterministically from retrieval
+arguments -- ours stays, because it is exact and needs no model, but a disagreement
+between the two would be worth reading once the judged layer exists.
+
 ### The judge is calibrated against hand labels, not against the deferred parser
 
 ADR-0510 requires the judge be validated against something before its figures are read. The reference

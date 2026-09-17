@@ -81,7 +81,7 @@ def test_an_unusable_set_exits_non_zero_with_the_reason(tmp_path):
     with pytest.raises(SystemExit) as exit_info:
         main(["check", write_set(tmp_path, {**SUPPORTED, "expected_entries": []})])
     assert "scinumbers-eval:" in str(exit_info.value)
-    assert "names no expected entries" in str(exit_info.value)
+    assert "neither expected nor admissible" in str(exit_info.value)
 
 
 def test_no_question_set_file_exits_rather_than_raising(tmp_path):

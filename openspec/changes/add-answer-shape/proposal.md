@@ -1,11 +1,11 @@
 ## Why
 
 `grounded-answering` says nine things about what an answer must contain and nothing about the order
-it says them in. That gap has a cost, and it showed up the moment specimen answers were put in front
-of a domain reader on 2026-09-04: an answer written to satisfy every existing requirement opened with
-"*E. coli* cell volume is not a single number. The corpus spans about fourfold across strains and
-conditions" — two sentences that are true, careful, and withhold the answer. The reader's objection
-was immediate: give the range, or a typical value, in the first line, and put the reasoning below it.
+it says them in. That gap has a cost, and it showed up on 2026-09-04 in a draft specimen answer
+written to satisfy every existing requirement, which opened with "*E. coli* cell volume is not a
+single number. The corpus spans about fourfold across strains and conditions" — two sentences that
+are true, careful, and withhold the answer. The project owner's objection, reviewing that draft, was
+immediate: give the range, or a typical value, in the first line, and put the reasoning below it.
 
 The gap is structural rather than accidental. Every requirement in force pushes toward hedging: cite
 everything, refuse beyond the corpus, do not present one entry as settled, report disagreement with
@@ -32,8 +32,9 @@ noticed because no requirement was being violated.
 
 Not in scope: how long an answer should be, which is a question for the evaluation's conciseness
 figures rather than for a requirement; any change to what an answer must contain; and the shape of a
-refusal, which `A refusal follows a search` already governs and which the reviewer page confirmed
-reads correctly as it stands.
+refusal, which `A refusal follows a search` already governs and which the draft specimens did not
+put in question — a weaker statement than "confirmed", since those specimens were written by the
+same hand that would have had to spot the problem.
 
 ## Capabilities
 

@@ -191,6 +191,12 @@ class Config:
 # It is five times the price of the Haiku it replaces, in both directions. The
 # per-question ceiling and the run budget are unchanged and still bind, so what
 # changes is how few questions a budget buys, not whether it is enforced.
+#
+# Not chosen on a measured gain in retrieval. The three-model comparison of
+# 2026-09-17 -- one repeat of ten questions each -- had Haiku reach the entries
+# table for 67% of the expected entries and Opus 4.7 for 68%. One repeat cannot
+# tell those apart, and what it does not measure at all is the prose, which is
+# what a reader is handed.
 DEFAULT_MODEL = "anthropic/claude-opus-4.7"
 
 # Where notice is given, as a fraction of the stop. Integer arithmetic throughout,

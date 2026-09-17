@@ -92,10 +92,20 @@ ingest = [
 # adapter over the same agent, so it needs the `ask` stack to run at all, and this
 # extra carries only what is new. Install both:
 #   uv sync --extra ask --extra eval
-# `deepeval` is used by one module, for the judged layer alone (ADR-0500). A
-# deterministic evaluation run needs none of it, which is why it is separable.
-eval = [
-    "deepeval>=4.2",
+# `deepeval` has left: the judged layer is its own work package now
+# (`add-judged-faithfulness`), deferred because the reference a judge must be
+# validated against came back 29 sound of 30 and cannot gate anything. It returns
+# with the change that uses it. A deterministic evaluation run needs none of it,
+# which is what made it separable at all (ADR-0500).
+eval = []
+# `scinumbers-eval report --sheet` writes HTML with no dependency at all; this
+# extra only adds the PDF renderer. Kept out of `eval` deliberately: weasyprint
+# needs system libraries (pango, cairo) that a given machine may not have, and a
+# native dependency that can fail at import has no business being mandatory for a
+# harness whose actual job is asking questions. The command says so when asked
+# for a PDF without it.
+sheet = [
+    "weasyprint>=60",
 ]
 
 # All three entry points are declared here so no branch has to edit this table.

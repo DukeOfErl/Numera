@@ -75,11 +75,19 @@ COVERED: dict[str, tuple[str, ...]] = {
     # structure-only wording, which appears in no clause of the requirement. A
     # mapping that names a test checking something else is exactly the failure this
     # file admits it cannot detect, so it is worth not making by hand.
-    "Scoring is based on cited entries, not answer text": (
-        "test_scoring.py::test_an_answer_citing_every_expected_entry_scores_as_such",
-        "test_scoring.py::test_an_unexpected_citation_is_reported_and_is_not_an_error",
-        "test_scoring.py::test_a_missed_entry_is_split_by_whether_it_was_ever_retrieved",
+    # Remapped when 4.13 landed. It was a recorded gap while ADR-0530's rewrite was
+    # unbuilt, because the tests then present asserted the superseded semantics --
+    # prose citation -- and would have read as covering three clauses they never
+    # mentioned.
+    "Scoring is based on entry identifiers, not answer text": (
+        "test_scoring.py::test_every_expected_entry_reaching_the_table_is_the_pass",
+        "test_scoring.py::test_an_expected_entry_never_reaching_the_table_fails_the_check",
+        "test_scoring.py::test_an_entry_cited_without_being_retrieved_has_still_reached_the_table",
+        "test_scoring.py::test_the_rank_of_each_expected_entry_in_the_table_is_reported",
+        "test_scoring.py::test_an_admissible_citation_is_neither_a_hit_nor_unexpected",
+        "test_scoring.py::test_a_question_expecting_nothing_does_not_pass_the_table_check",
         "test_report.py::test_the_two_kinds_of_missed_entry_are_reported_apart",
+        "test_report.py::test_an_unexpected_citation_is_reported_as_not_an_error",
     ),
     "The asked property and organism are recognised": (
         "test_scoring.py::test_an_abbreviated_search_counts_as_searching_for_the_organism",
@@ -107,7 +115,11 @@ COVERED: dict[str, tuple[str, ...]] = {
     "A cited entry at odds with its peers is flagged": (
         "test_scoring.py::test_the_entry_that_motivated_the_check_is_flagged",
         "test_scoring.py::test_an_entry_inside_its_peers_interval_is_not_flagged",
-        "test_scoring.py::test_a_property_with_too_few_peers_is_not_judged_and_says_so",
+        "test_scoring.py::test_peers_are_the_same_organism",
+        "test_scoring.py::test_peers_must_share_the_unit_as_well_as_the_organism",
+        "test_scoring.py::test_an_entry_the_question_does_not_expect_is_not_a_peer",
+        "test_scoring.py::test_an_unexpected_citation_is_still_judged_against_what_was_expected",
+        "test_scoring.py::test_a_citation_with_too_few_peers_is_reported_as_unjudged",
         "test_report.py::test_an_outlier_is_listed_with_the_interval_its_peers_occupy",
         "test_report.py::test_a_comparison_that_could_not_be_made_is_said_rather_than_omitted",
     ),
@@ -726,7 +738,10 @@ COVERED.update(
 # requirement left this list as its tests landed. A different kind of gap from the
 # one above and kept apart from it -- otherwise finishing 10.9 would look
 # impossible rather than merely unfinished.
-AWAITING_THE_HARNESS = (
+# Renamed from AWAITING_THE_HARNESS: the harness is built, and these four moved
+# out of `add-answer-evaluation` into `add-judged-faithfulness` on 2026-09-16.
+# They are still read from that change's open delta, so they still need a bucket.
+AWAITING_THE_JUDGE = (
     "Faithfulness is judged per claim, with a reason",
     "The judged layer is secondary and optional",
     "A judge is trusted only after measured agreement",
@@ -750,7 +765,7 @@ AWAITING_THE_PROMPT = (
 
 UNMAPPED: dict[str, str] = {
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
-    **dict.fromkeys(AWAITING_THE_HARNESS, "add-answer-evaluation is unbuilt; no harness yet"),
+    **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),
 }
 

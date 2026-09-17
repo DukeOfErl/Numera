@@ -32,9 +32,9 @@ _BY_DIMENSION: dict[str, str] = {
         "g, kg, mg, ug, ng, pg, fg, da, kda, mda, amu, dalton, daltons, "
         # The spelled-out forms of the four symbols above. `kda` was in the table
         # and `kDalton` was not, so a molecular mass compared against a length
-        # returned unknown instead of incompatible -- found on the reviewer page
-        # of 2026-09-04, where an answer presented 2,700 kDa as the top of a range
-        # of nanometres and nothing could say so.
+        # returned unknown instead of incompatible -- found while writing specimen
+        # answers on 2026-09-04, one of which presented 2,700 kDa as the top of a
+        # range of nanometres with nothing able to say so.
         "kdalton, mdalton, kilodalton, megadalton"
     ),
     "time": (
