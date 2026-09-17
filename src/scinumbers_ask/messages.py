@@ -45,6 +45,18 @@ from .events import (
 # a caller to believe it changed something.
 RECORDS_NOTE = "All app exchange is logged for product development."
 
+# Whose money the questions cost. It lived on the deployment branch for a release,
+# on the reasoning that someone running the app locally pays for their own calls --
+# but locally the developer *is* the developer, and once a tester's key is minted
+# by the operator the sentence is true wherever the app runs. A page that says
+# something different depending on which branch built it is the drift this project
+# has now decided against: what a reader sees is the same everywhere, and only
+# deployment mechanics differ.
+BUDGET_NOTE = (
+    "Model usage is paid for by the developer — please keep questions "
+    "purposeful, and don't abuse budget."
+)
+
 # The door, before anything else is drawn. Each is a different sentence because
 # each asks the reader to do a different thing -- and "not enrolled" during an
 # outage would send a person to the operator, who finds them already enrolled.

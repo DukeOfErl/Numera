@@ -78,6 +78,7 @@ DATA_CREDIT_LABEL = "Data: BioNumbers (Milo et al.)"
 # reads it from here so that `streamlit_app.py` needs one import, as it does for
 # every other piece of wording on the page.
 RECORDS_NOTE = messages.RECORDS_NOTE
+BUDGET_NOTE = messages.BUDGET_NOTE
 
 # Pinned to the viewport rather than written into the page. Drawn as an ordinary
 # element it sat above the conversation and scrolled away with the first answer --

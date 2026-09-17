@@ -56,6 +56,9 @@ any release; `1.0.0` when it stabilizes.
   wide the panel is, and it keeps its own width when the panel is narrow. The side
   panel has a minimum width, because it could be dragged narrower than its
   contents can survive.
+- The page says whose money the questions cost — "Model usage is paid for by the
+  developer" — wherever it runs, rather than only on the deployment branch. What a
+  reader sees does not depend on which branch built the page.
 - The data credit is behind a "Data: BioNumbers (Milo et al.)" popover rather than a standing
   caption, and it is now shown wherever the app runs rather than only where it is
   deployed. Attribution has to be present on every page view; it does not have to

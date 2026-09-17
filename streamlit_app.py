@@ -120,6 +120,9 @@ web.draw_feedback_style()
 # icon beside it on hover. On a deep-linkable document that is useful; on a page
 # with one title it is a control that does nothing a reader wants.
 st.title("SciNumbers ask", anchor=False)
+# Under the title rather than in the side panel, which Streamlit collapses on a
+# phone: a reader who never opens the panel would otherwise never see this.
+st.caption(web.as_text(web.BUDGET_NOTE))
 if web.may_see_dev_panel(admission):
     # The corpus size and the conversation's identifier: diagnostics, not things a
     # tester came for, and behind the same grant as the dev panel rather than a

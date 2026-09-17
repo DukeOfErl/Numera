@@ -264,6 +264,22 @@ def test_the_data_credit_is_one_click_from_every_page_view(page):
     assert not any("BioNumbers (Milo" in text for text in beside), "behind it, not beside it"
 
 
+def test_the_page_says_whose_money_the_questions_cost(page):
+    """On the page itself rather than the side panel, which Streamlit collapses on
+    a phone -- and on every deployment, not only the hosted one. A sentence that
+    appears depending on which branch built the page is drift, not configuration.
+    """
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    assert any(web.BUDGET_NOTE in c.value for c in at.main.caption)
+
+
+def test_the_budget_note_is_there_without_sign_in_too(page):
+    """The deny case varies what the old arrangement keyed on -- the deployment,
+    which sign-in configuration stands for here -- rather than the wording."""
+    at = page(auth=False).run()
+    assert any(web.BUDGET_NOTE in c.value for c in at.main.caption)
+
+
 def test_no_heading_offers_a_link_to_itself(page):
     """Streamlit gives every heading an anchor and a chain icon on hover. This
     page is one screen with one reading order, so the icon is a control that does
