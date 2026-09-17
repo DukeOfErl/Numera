@@ -243,7 +243,7 @@ it binds — the number you set is the one that stops work
 
 ## Hosted deployment: what the deploy branch adds
 
-**`deploy/streamlit-cloud` is never merged back.** It carries four changes `main` must
+**`deploy/streamlit-cloud` is never merged back.** It carries three changes `main` must
 not have.
 
 **Update it by merging `main` into it — do not rebase.** This branch has a second
@@ -267,8 +267,6 @@ instruction here used to say "rebase", written before anything else could write 
    once whole. A truncated download is valid JSONL that answers plausibly from
    whatever arrived, so an unverified corpus is refused — including when no digest is
    configured at all.
-4. **The run budget shows as a figure, not a bar**, because the cap is set far above
-   what a visitor will spend; the API key's own limit is the real ceiling.
 
 ### Configuration this branch adds
 
