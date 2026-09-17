@@ -269,6 +269,9 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_feedback.py::test_a_comment_is_a_second_record_naming_the_same_question",
         "test_feedback.py::test_the_identifier_recorded_is_the_one_the_question_s_trail_uses",
         "test_feedback.py::test_a_verdict_reaches_the_durable_store",
+        "test_feedback.py::test_a_rating_carries_the_run_label_the_question_s_records_carry",
+        "test_feedback.py::"
+        "test_with_no_run_configured_a_rating_carries_the_same_default_a_question_does",
         "test_trail_store_live.py::test_the_schema_and_the_insert_are_valid_sql",
     ),
     # "An answer is rated down -> no further retrieval or model call is made on
@@ -360,6 +363,23 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_web_driver_identity.py::test_no_database_at_all_says_so_rather_than_asking_the_reader_to_wait",
         "test_accounts.py::test_an_unreadable_table_raises_rather_than_answering_none",
         "test_accounts.py::test_a_disabled_account_is_none_exactly_as_an_absent_one_is",
+        "test_accounts.py::test_the_refusal_preserves_what_could_not_be_read",
+        "test_accounts.py::test_two_causes_do_not_produce_the_same_refusal",
+        "test_web_driver_identity.py::test_the_operator_is_told_what_could_not_be_read",
+    ),
+    # `state-what-a-credential-shows`. All four scenarios are held, each by a test
+    # whose fixture makes the two candidate figures different: the one that hid the
+    # third finding for a release had 5.0 - 1.6 equal to the provider's own 3.4, so
+    # no assertion over it could say which figure was shown.
+    "What the interface states about a credential is the provider's own figures, or nothing": (
+        "test_allowance.py::"
+        "test_the_renewal_comes_off_the_payload_and_is_stated_as_the_provider_gave_it",
+        "test_allowance.py::test_a_renewal_the_provider_does_not_put_in_words_is_not_stated_at_all",
+        "test_allowance.py::test_what_the_provider_answered_is_what_the_fetch_returns",
+        "test_allowance.py::"
+        "test_the_providers_own_remaining_is_what_is_shown_where_it_disagrees_with_the_cap",
+        "test_allowance.py::test_with_no_remaining_from_the_provider_there_is_none_of_theirs_to_prefer",
+        "test_allowance.py::test_a_response_we_cannot_read_says_nothing",
     ),
     "Every enrolled account holds one role, and permissions are granted by a default-deny table": (
         "test_permissions.py::test_dev_and_admin_are_granted_the_dev_panel",

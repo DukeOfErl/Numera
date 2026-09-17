@@ -103,6 +103,10 @@ Every rating SHALL record which question it concerns, using the same identifier
 the deterministic trail records for that question, so a rating can be read
 alongside what the question actually retrieved.
 
+A rating SHALL carry the same run label as the question it rates. A rating
+whose label is blank or different is a well-formed row that every grouping by run
+drops, and nothing in the data announces the loss.
+
 A rating SHALL NOT be identified by its position in the conversation. Position is
 not stable: a conversation reloaded from its identifier begins counting again
 while the conversation itself continues, so the same position names two different
@@ -143,6 +147,15 @@ never be attributed afterwards, which is why the space was kept from the start.
 #### Scenario: The rater's role changes afterwards
 - **WHEN** an account's role is changed after it has rated
 - **THEN** the rating still carries the role held when it was given
+
+#### Scenario: A run is labelled
+- **WHEN** a run label is configured and a reader rates an answer in it
+- **THEN** the rating's record carries that label
+- **AND** it is the label the question's own records carry
+
+#### Scenario: No run label is configured
+- **WHEN** no run label is configured and a reader rates an answer
+- **THEN** the rating's record carries the same label the question's records carry
 
 ### Requirement: Recording a rating never disrupts the reader
 

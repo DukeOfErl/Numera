@@ -121,6 +121,49 @@ def test_an_unreadable_table_raises_rather_than_answering_none(engine):
         lookup(engine, "tester@example.org")
 
 
+@pytest.mark.parametrize(
+    ("failure", "clue"),
+    [
+        (ValueError("Could not parse SQLAlchemy URL from string 'postgres//db'"), "parse"),
+        (
+            ConnectionError('could not translate host name "db.example.invalid"'),
+            "db.example.invalid",
+        ),
+        (PermissionError('password authentication failed for user "scinumbers"'), "password"),
+    ],
+    ids=["a misconfigured address", "an unreachable host", "a refused password"],
+)
+def test_the_refusal_preserves_what_could_not_be_read(failure, clue):
+    """`user-identity`: the refusal preserves what could not be read, so that a
+    misconfigured address, an unreachable host and a refused password are
+    distinguishable to whoever runs the app.
+
+    Two mutants kept the refusal and destroyed the reason, and nothing noticed:
+    an operator then has a page saying "try again shortly" and no way to tell
+    which of these three they are looking at. The parameters vary the cause
+    rather than the outcome -- every one of them raises `EnrolmentUnavailable`,
+    and what has to differ is what it carries.
+    """
+    with pytest.raises(EnrolmentUnavailable) as refused:
+        lookup(_Engine(fail_on_execute=failure), "tester@example.org")
+
+    said = str(refused.value)
+    assert type(failure).__name__ in said, "the type is half of what tells them which failure it is"
+    assert clue in said, "the provider's own words are the other half"
+    assert refused.value.__cause__ is failure
+
+
+def test_two_causes_do_not_produce_the_same_refusal():
+    """Distinguishable is a claim about two refusals, and no parametrised case can
+    make it: each sees one cause. This one sees both."""
+    said = []
+    for failure in (ConnectionError("no route to host"), PermissionError("password refused")):
+        with pytest.raises(EnrolmentUnavailable) as refused:
+            lookup(_Engine(fail_on_begin=failure), "tester@example.org")
+        said.append(str(refused.value))
+    assert said[0] != said[1]
+
+
 def test_enrolment_unavailable_is_not_a_permission_error():
     """A caller catching `PermissionError` for a `Refused` must not catch this."""
     assert not issubclass(EnrolmentUnavailable, PermissionError)
