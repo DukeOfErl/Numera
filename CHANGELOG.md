@@ -52,10 +52,12 @@ any release; `1.0.0` when it stabilizes.
   left a reader working out which of the two would stop them first.
 - The sign-out button shares a row with the account it belongs to, which is set
   over two lines — the email, and the role beneath it.
-- The data credit is behind a "Data source" popover rather than a standing
+- The data credit is behind a "Data: BioNumbers (Milo et al.)" popover rather than a standing
   caption, and it is now shown wherever the app runs rather than only where it is
   deployed. Attribution has to be present on every page view; it does not have to
   be read on every page view.
+- Headings no longer offer a link to themselves. Streamlit gives every heading an
+  anchor and a chain icon on hover; this page is one screen with one reading order.
 - The entry count and the conversation's identifier are shown only to the roles
   that hold the dev panel. They are diagnostics, and they sat above what a tester
   came for.

@@ -116,7 +116,10 @@ web.draw_prototype_banner()
 # everything that uses it, rather than once per turn from inside `draw_feedback`.
 web.draw_feedback_style()
 
-st.title("SciNumbers ask")
+# `anchor=False`: Streamlit gives every heading a link target and shows a chain
+# icon beside it on hover. On a deep-linkable document that is useful; on a page
+# with one title it is a control that does nothing a reader wants.
+st.title("SciNumbers ask", anchor=False)
 if web.may_see_dev_panel(admission):
     # The corpus size and the conversation's identifier: diagnostics, not things a
     # tester came for, and behind the same grant as the dev panel rather than a
@@ -150,7 +153,7 @@ with st.sidebar:
     )
     if spent_and_cap:
         spent, cap = spent_and_cap
-        st.header("Session budget")
+        st.header("Session budget", anchor=False)
         st.progress(min(1.0, spent / cap) if cap else 0.0)
         # Escaped: two dollar signs in one caption are read as opening and closing
         # inline mathematics, so "$1.20 of $1.20" typeset the middle as an equation

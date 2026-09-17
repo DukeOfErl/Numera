@@ -239,10 +239,24 @@ def test_the_data_credit_is_one_click_from_every_page_view(page):
     it is the failure this guards."""
     at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
     popovers = [b for b in _elements(at.sidebar) if getattr(b, "type", "") == "popover"]
+    assert [p.proto.popover.label for p in popovers] == [web.DATA_CREDIT_LABEL]
+    assert web.DATA_CREDIT.startswith(web.DATA_CREDIT_LABEL.rstrip(")")), (
+        "the button says whose data this is, not a generic word for it"
+    )
     inside = [str(getattr(e, "value", "")) for pop in popovers for e in _elements(pop)]
     assert any("BioNumbers (Milo et al." in text for text in inside)
     beside = [str(getattr(e, "value", "")) for e in _elements(at.sidebar)]
     assert not any("BioNumbers (Milo" in text for text in beside), "behind it, not beside it"
+
+
+def test_no_heading_offers_a_link_to_itself(page):
+    """Streamlit gives every heading an anchor and a chain icon on hover. This
+    page is one screen with one reading order, so the icon is a control that does
+    nothing a reader wants."""
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    headings = list(at.title) + list(at.header) + list(at.subheader)
+    assert headings, "the page has headings to check"
+    assert all(h.proto.hide_anchor for h in headings)
 
 
 def test_the_spend_line_carries_what_is_left_on_the_reader_s_own_key(page, monkeypatch):

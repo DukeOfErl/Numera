@@ -71,7 +71,7 @@ DATA_CREDIT = (
     "Data: BioNumbers (Milo et al., Nucl. Acids Res. 2010;38:D750–D753) — "
     "verify each figure at its source."
 )
-DATA_CREDIT_LABEL = "Data source"
+DATA_CREDIT_LABEL = "Data: BioNumbers (Milo et al.)"
 
 # Re-exported rather than restated: the sentence is shared with the terminal
 # driver and lives in `messages` for the same reason every warning does. The page
@@ -666,7 +666,7 @@ def _sign_out(conversation_id: str, tab_id: str | None = None) -> None:
 def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None = None) -> None:
     """What a visitor sees instead of the page. Sign-in and nothing else, or the
     one sentence that says why not. The caller stops the script after this."""
-    st.title("SciNumbers ask")
+    st.title("SciNumbers ask", anchor=False)
     if admission.door is Door.SIGN_IN:
         st.info(as_text(messages.SIGN_IN_NEEDED), icon=":material/login:")
         st.button("Sign in with Google", on_click=st.login, icon=":material/login:")
@@ -688,6 +688,22 @@ def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None =
         st.button("Try again", on_click=lambda: None, icon=":material/refresh:")
 
 
+#: The button's own key, which Streamlit also emits as the CSS class
+#: `st-key-<key>` (read from the installed 1.61.1). That is what makes the rule
+#: below reach this button and no other.
+SIGN_OUT_KEY = "sign-out"
+
+# A narrow side panel broke "Sign out" across two lines, which reads as two
+# controls for a moment. `nowrap` rather than a fixed width: a width in pixels is
+# a guess about a font the reader may have changed, and the label is two words.
+SIGN_OUT_CSS = f"""
+<style>
+.st-key-{SIGN_OUT_KEY} button {{ white-space: nowrap; }}
+.st-key-{SIGN_OUT_KEY} button p {{ white-space: nowrap; }}
+</style>
+"""
+
+
 def draw_identity(admission: Admission, session_id: str, tab_id: str | None = None) -> None:
     """Who the page thinks you are -- or that it is nobody's, so the state is
     visible rather than inferred."""
@@ -705,7 +721,8 @@ def draw_identity(admission: Admission, session_id: str, tab_id: str | None = No
     # sits level with the button rather than riding above it. `vertical_alignment`
     # and the tertiary button style are both read from the installed Streamlit
     # 1.61.1.
-    name, action = st.columns([0.68, 0.32], vertical_alignment="center", gap="small")
+    st.markdown(SIGN_OUT_CSS, unsafe_allow_html=True)
+    name, action = st.columns([0.62, 0.38], vertical_alignment="center", gap="xsmall")
     with name:
         st.caption(
             as_text(messages.SIGNED_IN_AS.format(email=account.email, role=account.role.value))
@@ -717,6 +734,7 @@ def draw_identity(admission: Admission, session_id: str, tab_id: str | None = No
         # out.
         st.button(
             "Sign out",
+            key=SIGN_OUT_KEY,
             on_click=_sign_out,
             args=(session_id, tab_id),
             icon=":material/logout:",
@@ -1059,7 +1077,7 @@ def draw_data_credit() -> None:
 def draw_try_later() -> None:
     """The page at the cap: one sentence, before sign-in is offered, so the cap
     also bounds the OAuth round trips. The caller stops the script after this."""
-    st.title("SciNumbers ask")
+    st.title("SciNumbers ask", anchor=False)
     st.warning(as_text(messages.TRY_LATER), icon=":material/hourglass_top:")
 
 
@@ -1505,7 +1523,7 @@ def draw_full_entries(table: Table | None, seat: Any | None = None) -> None:
         # The tab's own label is the heading when there is a strip; a header
         # repeating it underneath is the same word twice.
         if seat is None:
-            st.header(ENTRIES_TAB)
+            st.header(ENTRIES_TAB, anchor=False)
         if table is None:
             st.caption("The entries behind an answer appear here once you ask something.")
             return
