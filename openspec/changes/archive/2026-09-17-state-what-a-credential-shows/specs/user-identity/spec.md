@@ -3,9 +3,10 @@
 ### Requirement: What the interface states about a credential is the provider's own figures, or nothing
 
 What the interface states about a reader's credential SHALL be the provider's own
-figures, or nothing. Where the provider gives a figure, that figure is shown
-unchanged; where the provider gives none, the interface says nothing rather than
-deriving one.
+figures. Where the provider states a figure, the interface SHALL state that
+figure unchanged rather than one derived from the provider's other figures. Where
+the provider states neither a figure nor the figures it would follow from, the
+interface SHALL say nothing rather than supply one.
 
 #### Scenario: The provider names a renewal period
 - **WHEN** the provider's answer about a credential names the period on which it renews
@@ -23,6 +24,10 @@ deriving one.
 - **WHEN** the provider gives a remaining figure that is not its cap less its usage
 - **THEN** the interface states the provider's own remaining figure
 - **AND** it does not state the figure worked out from the cap and the usage
+
+#### Scenario: The provider states a cap and a usage but no remaining
+- **WHEN** the provider states no remaining figure, and states the cap and the usage it would follow from
+- **THEN** the interface states what is left, worked out from those two
 
 ## MODIFIED Requirements
 

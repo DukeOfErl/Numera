@@ -379,6 +379,7 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_allowance.py::"
         "test_the_providers_own_remaining_is_what_is_shown_where_it_disagrees_with_the_cap",
         "test_allowance.py::test_with_no_remaining_from_the_provider_there_is_none_of_theirs_to_prefer",
+        "test_allowance.py::test_what_is_left_is_worked_out_when_only_usage_and_a_cap_are_given",
         "test_allowance.py::test_a_response_we_cannot_read_says_nothing",
     ),
     "Every enrolled account holds one role, and permissions are granted by a default-deny table": (
