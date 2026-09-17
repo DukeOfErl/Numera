@@ -182,10 +182,16 @@ class Config:
         )
 
 
-# Development runs on a cheap, strong instruction-follower; the capable target is
-# Claude Opus 4.7. The exact OpenRouter slug is confirmed in task 1.7 rather than
-# assumed here.
-DEFAULT_MODEL = "anthropic/claude-haiku-4.5"
+# The capable target, now the default: development ran on a cheap, strong
+# instruction-follower while the shape of the thing was still moving, and what is
+# being read now is answers rather than plumbing. Slug confirmed against
+# OpenRouter's live model list on 2026-09-17, where its price is also the $5/$25
+# per million tokens `FALLBACK_PRICES` carries below.
+#
+# It is five times the price of the Haiku it replaces, in both directions. The
+# per-question ceiling and the run budget are unchanged and still bind, so what
+# changes is how few questions a budget buys, not whether it is enforced.
+DEFAULT_MODEL = "anthropic/claude-opus-4.7"
 
 # Where notice is given, as a fraction of the stop. Integer arithmetic throughout,
 # because money here is integer micro-dollars and a float ratio would reintroduce
