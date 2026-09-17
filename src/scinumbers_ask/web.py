@@ -21,9 +21,11 @@ re-run after the next question.
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import logging
 import os
+import re
 import sys
 import threading
 import time
@@ -33,6 +35,8 @@ from collections.abc import Callable, Iterable, Iterator, MutableMapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import streamlit as st
@@ -667,7 +671,7 @@ def _sign_out(conversation_id: str, tab_id: str | None = None) -> None:
 def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None = None) -> None:
     """What a visitor sees instead of the page. Sign-in and nothing else, or the
     one sentence that says why not. The caller stops the script after this."""
-    st.title("SciNumbers ask", anchor=False)
+    draw_title()
     if admission.door is Door.SIGN_IN:
         st.info(as_text(messages.SIGN_IN_NEEDED), icon=":material/login:")
         st.button("Sign in with Google", on_click=st.login, icon=":material/login:")
@@ -1094,7 +1098,7 @@ def draw_data_credit() -> None:
 def draw_try_later() -> None:
     """The page at the cap: one sentence, before sign-in is offered, so the cap
     also bounds the OAuth round trips. The caller stops the script after this."""
-    st.title("SciNumbers ask", anchor=False)
+    draw_title()
     st.warning(as_text(messages.TRY_LATER), icon=":material/hourglass_top:")
 
 
@@ -1564,6 +1568,74 @@ def latest_table(transcript: Iterable[tuple[str, list[Item]]]) -> Table | None:
                 return item.table
         return None
     return None
+
+
+#: What the page calls itself, in the tab and at the head of every view of it.
+TITLE = "SciNumbers ask"
+
+#: The mark, beside the title. Kept as the file it arrived as -- the provenance
+#: manifest inside it is 7.7KB of the 8.3KB, and stripping it to save bytes would
+#: also discard the record of where the artwork came from. What is stripped is at
+#: render time, for the page only.
+LOGO = Path(__file__).resolve().parents[2] / "assets" / "scinumbers-mark.svg"
+
+#: The one structural colour in the mark, which becomes the reader's text colour.
+LOGO_INK = "#15181C"
+
+#: The page title, with the mark inlined before it.
+#:
+#: Inlined rather than linked as an `<img>`, because an image is a document of its
+#: own: `currentColor` inside it resolves against the image, not the page, and the
+#: mark's near-black strokes would be all but invisible to a reader on a dark
+#: theme. Nothing here pins a theme, so that is a reader's choice to respect
+#: rather than a case to ignore. Inlined, the strokes inherit the heading's colour
+#: and the red accent stays the red accent in both.
+TITLE_HTML = '<h1 class="bn-title">{mark}<span>{text}</span></h1>'
+TITLE_CSS = """
+<style>
+.bn-title { display: flex; align-items: center; gap: 0.5rem; }
+.bn-title svg { height: 1em; width: auto; flex: 0 0 auto; }
+</style>
+"""
+
+
+@lru_cache(maxsize=1)
+def logo_svg() -> str:
+    """The mark as markup ready to inline, or "" when the file is not there.
+
+    Empty rather than raising: the page is the product and the logo is decoration,
+    so a missing or unreadable asset costs the mark and nothing else. Read once per
+    process -- it cannot change under a running server.
+
+    The provenance manifest goes here rather than in the file: it is 7.7KB of
+    metadata that no browser reads, and it would otherwise be re-sent on every
+    rerun of every session.
+    """
+    try:
+        markup = LOGO.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    markup = re.sub(r"<metadata>.*?</metadata>", "", markup, flags=re.DOTALL)
+    return markup.replace(LOGO_INK, "currentColor")
+
+
+def draw_title(text: str = TITLE) -> None:
+    """The title, with the mark before the words where there is one.
+
+    Raw HTML because the mark has to sit *inside* the heading: `st.title` takes
+    markdown, and a markdown image is an `<img>`, which is the arrangement the
+    theme note above rules out. This is the page's own markup and the project's
+    own asset -- no corpus text and no reader's text reaches it.
+
+    Streamlit's heading anchor is not lost here so much as never created, which is
+    what the rest of the page asks for anyway.
+    """
+    mark = logo_svg()
+    if not mark:
+        st.title(as_text(text), anchor=False)
+        return
+    st.markdown(TITLE_CSS, unsafe_allow_html=True)
+    st.markdown(TITLE_HTML.format(mark=mark, text=html.escape(text)), unsafe_allow_html=True)
 
 
 def draw_prototype_banner() -> None:

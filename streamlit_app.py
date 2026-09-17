@@ -23,7 +23,7 @@ from scinumbers_ask.corpus import CorpusUnavailable
 # rests on, side by side. The entries table is fixed-width and needs about
 # 640px before it grows a horizontal scrollbar that hides the ID column, which
 # the centred layout's ~700px main area cannot give half of. See READING_SPLIT.
-st.set_page_config(page_title="SciNumbers ask", page_icon=":material/biotech:", layout="wide")
+st.set_page_config(page_title=web.TITLE, page_icon=":material/biotech:", layout="wide")
 
 try:
     # Before the corpus is resolved. A reader who still exports the old variable
@@ -119,7 +119,7 @@ web.draw_feedback_style()
 # `anchor=False`: Streamlit gives every heading a link target and shows a chain
 # icon beside it on hover. On a deep-linkable document that is useful; on a page
 # with one title it is a control that does nothing a reader wants.
-st.title("SciNumbers ask", anchor=False)
+web.draw_title()
 # Under the title rather than in the side panel, which Streamlit collapses on a
 # phone: a reader who never opens the panel would otherwise never see this.
 st.caption(web.as_text(web.BUDGET_NOTE))

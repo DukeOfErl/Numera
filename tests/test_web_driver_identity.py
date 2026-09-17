@@ -152,7 +152,13 @@ def test_a_visitor_who_is_not_signed_in_is_offered_sign_in_and_nothing_else(page
     at = page(auth=True, email=None).run()
     assert not at.exception
     assert not at.chat_input, "a question could be asked"
-    assert not at.markdown and not at.chat_message, "something was drawn"
+    # The title and its style rule are the page saying what it is, and they are
+    # drawn before the door decides anything. What must not be here is the
+    # conversation: a visitor who has not signed in sees no question, no answer
+    # and no record of either.
+    assert not at.chat_message, "a conversation was drawn"
+    drawn = [m.value for m in at.markdown]
+    assert all("bn-title" in text or "<style>" in text for text in drawn), drawn
     assert [b.label for b in at.button] == ["Sign in with Google"]
     assert caught.events() == [], "a record was written for a visitor who asked nothing"
 
@@ -278,6 +284,33 @@ def test_the_budget_note_is_there_without_sign_in_too(page):
     which sign-in configuration stands for here -- rather than the wording."""
     at = page(auth=False).run()
     assert any(web.BUDGET_NOTE in c.value for c in at.main.caption)
+
+
+def test_the_mark_is_drawn_inside_the_title_before_the_words(page):
+    """Inside the heading, not above it: the mark is part of what the page calls
+    itself. Inlined rather than linked, because an `<img>` is a document of its own
+    and `currentColor` in it would resolve against the image instead of the page --
+    which is how a near-black mark becomes invisible to a reader on a dark theme.
+    """
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    title = next(m.value for m in at.markdown if "<h1" in m.value)
+    assert title.index("<svg") < title.index(web.TITLE), "the mark comes before the words"
+    assert "currentColor" in title, "the strokes take the reader's own text colour"
+    assert "#15181C" not in title, "and none of them is left pinned to one theme"
+    assert "c2pa:manifest" not in title, "the provenance manifest is not re-sent per rerun"
+
+
+def test_a_missing_mark_costs_the_mark_and_nothing_else(page, monkeypatch, tmp_path):
+    """The page is the product and the logo is decoration. An asset that did not
+    survive a deployment must not take the title with it."""
+    monkeypatch.setattr(web, "LOGO", tmp_path / "absent.svg")
+    web.logo_svg.cache_clear()
+    try:
+        at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+        assert not at.exception
+        assert [t.value for t in at.title] == [web.TITLE]
+    finally:
+        web.logo_svg.cache_clear()
 
 
 def test_no_heading_offers_a_link_to_itself(page):

@@ -12,6 +12,13 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **The SciNumbers mark, beside the page's title** — on the conversation and on
+  the sign-in and refusal pages, so the app looks like itself before a reader is
+  admitted. Inlined rather than linked, so its strokes take the reader's own text
+  colour: nothing here pins a theme, and a near-black mark would be invisible to
+  anyone reading in a dark one. A missing asset costs the mark and nothing else.
+
+
 - **Sign-in, enrolment and a credential per tester, for hosted deployments.** With
   `[auth]` in secrets every visitor signs in with Google and must be enrolled — a
   row the operator inserts in an `accounts` table beside the trail, naming the
