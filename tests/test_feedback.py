@@ -16,6 +16,7 @@ from conftest import RecordingEngine, agent_with
 
 from agent_doubles import says, scripted
 from scinumbers_ask import feedback, trace, trail_store
+from scinumbers_ask.config import Config
 from scinumbers_ask.events import QuestionStarted
 from scinumbers_ask.feedback import Verdict
 
@@ -39,6 +40,17 @@ def state() -> dict:
 
 
 def test_a_verdict_is_recorded_against_its_question(state, written):
+    """What a record must carry: the event, the question, the session, the verdict.
+
+    The run label a record also carries is deliberately not asserted, here or
+    anywhere. Mutation testing rewrites that expression nine ways -- the variable
+    renamed, the default emptied, the `"dev"` fallback altered -- and every one
+    survives. That is the trail's own content rather than this module's contract,
+    and no requirement fixes it; two of those rewrites (`run_label=None`, and the
+    `or` turned into an `and`) do change what is stored, and they are reported
+    rather than pinned, because inventing the requirement here would settle by
+    assertion a question nobody has asked.
+    """
     assert feedback.record_verdict(state, question_id="q1", session_id="s1", verdict=Verdict.DOWN)
     (record,) = written()
     assert record["event"] == feedback.VERDICT_EVENT
@@ -274,6 +286,62 @@ def test_the_identifier_recorded_is_the_one_the_question_s_trail_uses(
     rated = {r["question_id"] for r in records if r["event"] == feedback.VERDICT_EVENT}
     assert rated, "no feedback record was written"
     assert rated <= asked, f"the rating names {rated}, which no record of the question uses"
+
+
+# --- the run a rating belongs to ------------------------------------------
+
+
+def test_a_rating_carries_the_run_label_the_question_s_records_carry(
+    monkeypatch, repo, tmp_path, state
+):
+    """`answer-feedback`: a rating carries the same run label as the question it rates.
+
+    A rating whose label is blank reaches the store as a NULL run, which is a
+    well-formed row that every grouping by run drops -- the loss is silent, and
+    nothing in the data announces it.
+
+    Driven from the one environment variable both sides read, with a label that
+    is neither side's default, so a record carrying "dev" fails here rather than
+    agreeing by coincidence. The question's own records are read back rather than
+    assumed, because the requirement is agreement between the two and not a
+    literal.
+    """
+    monkeypatch.setenv("SCINUMBERS_RUN", "run-42")
+    stream = io.StringIO()
+    trace.configure(stream)
+    agent = agent_with(repo, Config.from_env(), tmp_path, scripted(says("an answer")))
+    (start,) = [e for e in agent.ask("s1", "how many?") if isinstance(e, QuestionStarted)]
+
+    feedback.record_verdict(
+        state, question_id=start.question_id, session_id="s1", verdict=Verdict.UP
+    )
+
+    records = [json.loads(line) for line in stream.getvalue().splitlines() if line.strip()]
+    asked = {r.get("run") for r in records if r["event"] != feedback.VERDICT_EVENT}
+    rated = {r.get("run") for r in records if r["event"] == feedback.VERDICT_EVENT}
+    assert asked == {"run-42"}, "the question's own records did not carry the configured run"
+    assert rated == asked, f"the rating says {rated} of a question recorded under {asked}"
+
+
+@pytest.mark.parametrize(
+    "configured", [None, "", "   "], ids=["nothing set", "set to empty", "set to spaces"]
+)
+def test_with_no_run_configured_a_rating_carries_the_same_default_a_question_does(
+    monkeypatch, state, written, configured
+):
+    """The negative varies what the rule reads -- the configured label -- rather
+    than the outcome. Each of these is a deployment that names no run, and the
+    rating has to land on the same default the question's records use, not on an
+    empty string that reaches the store as NULL."""
+    if configured is None:
+        monkeypatch.delenv("SCINUMBERS_RUN", raising=False)
+    else:
+        monkeypatch.setenv("SCINUMBERS_RUN", configured)
+
+    feedback.record_verdict(state, question_id="q1", session_id="s1", verdict=Verdict.UP)
+
+    (record,) = written()
+    assert record["run"] == Config.from_env().run_label == "dev"
 
 
 def test_a_comment_written_as_an_instruction_is_stored_as_given(state, written):

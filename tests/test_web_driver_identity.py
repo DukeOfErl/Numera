@@ -281,6 +281,21 @@ def test_an_unreadable_accounts_table_admits_nobody_and_says_a_different_sentenc
     assert page.built == []
 
 
+def test_the_operator_is_told_what_could_not_be_read(page, caught, capsys):
+    """The other half of the refusal: the reader is told to try again shortly,
+    which is all they can act on, and whoever runs the app is told which failure
+    it was. A refusal that reaches the operator with the reason stripped leaves
+    them a page that says "try again shortly" and nothing to look at."""
+    at = page(
+        auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}, unavailable=True
+    ).run()
+
+    err = capsys.readouterr().err
+    assert "EnrolmentUnavailable" in err
+    assert "relation does not exist" in err, "the reason the lookup failed, on the operator's log"
+    assert "relation does not exist" not in " ".join(e.value for e in at.error)
+
+
 def test_the_credential_is_never_on_the_page(page):
     at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
     at = _ask(at, "how many?")
