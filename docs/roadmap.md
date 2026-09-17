@@ -247,8 +247,8 @@ change that is not happening.
 ## Deferred, deliberately
 
 - **The interface says only that exchanges are logged, not what is kept about a
-  person.** The side-panel notice is one line — "All exchange in this app is
-  logged for product development" — rather than the enumeration of question,
+  person.** The side-panel notice is one line — "All app exchange is logged for
+  product development" — rather than the enumeration of question,
   answer, entries, account and role it carried for one release. That list was
   accurate and too long to read, and it sat above the controls a tester came
   for. The obligation is not dropped: when there are real users rather than

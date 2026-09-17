@@ -272,3 +272,30 @@ def test_the_panel_s_contents_do_not_reach_the_model(page, recent, repo, config,
     assert "how many ribosomes?" in seen, "control: the question reached the model"
     for fragment in ("question.asked", "answer.given", "spend.increment"):
         assert fragment not in seen
+
+
+# --- the diagnostics line under the title -----------------------------------------------
+
+
+def _diagnostics(at) -> list[str]:
+    """The entry count and conversation identifier, wherever on the page they are."""
+    return [c.value for c in at.caption if "entries \u00b7 session" in c.value]
+
+
+@pytest.mark.parametrize("account", [DEV, ADMIN], ids=["dev", "admin"])
+def test_the_entry_count_and_session_go_to_the_roles_that_hold_the_panel(page, account):
+    at = page(auth=True, email=account.email, enrolled={account.email: account}).run()
+    assert _diagnostics(at), "a dev reads the corpus size and the session id off the page"
+
+
+@pytest.mark.parametrize("account", [STUDENT, TESTER], ids=["student", "scientist"])
+def test_a_tester_is_not_shown_the_entry_count_or_the_session_identifier(page, account):
+    """The deny case varies the dimension the rule reads -- an enrolled account
+    with a real role, not a visitor with no identity -- because the grant is what
+    decides this and a role of none would pass for the wrong reason.
+
+    Absent, not blanked: the line is diagnostics, and a tester reading it learns
+    only that the page has something it is not saying.
+    """
+    at = page(auth=True, email=account.email, enrolled={account.email: account}).run()
+    assert not _diagnostics(at)

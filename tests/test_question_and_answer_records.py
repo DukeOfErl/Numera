@@ -511,12 +511,12 @@ def test_the_page_says_that_questions_and_answers_are_kept(monkeypatch, repo, co
     # so an empty one would satisfy `in` everywhere and this would pass having
     # checked that the page contains the empty string.
     note = web.RECORDS_NOTE
-    assert "is logged" in note and "All exchange" in note
+    assert "is logged" in note and "All app exchange" in note
 
     at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
     panel = " ".join(c.value for c in at.sidebar.caption)
     assert note in panel
-    assert "logged" in panel and "All exchange" in panel
+    assert "logged" in panel and "All app exchange" in panel
 
 
 def test_the_terminal_says_it_too_including_for_a_single_question(
@@ -537,7 +537,7 @@ def test_the_terminal_says_it_too_including_for_a_single_question(
 
     captured = capsys.readouterr()
     assert messages.RECORDS_NOTE in captured.err
-    assert "logged" in captured.err and "All exchange" in captured.err
+    assert "logged" in captured.err and "All app exchange" in captured.err
     assert "logged" not in captured.out, "stdout carries the answer, not this"
 
 
