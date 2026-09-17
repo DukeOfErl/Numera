@@ -53,6 +53,14 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **The default model is `anthropic/claude-opus-4.7`**, where it was
+  `anthropic/claude-haiku-4.5`. Development ran on a cheap instruction-follower
+  while the shape of the app was still moving; what is read now is answers. It
+  costs five times as much per token in both directions, so a budget buys fewer
+  questions — the per-question ceiling and the run budget are unchanged and still
+  bind. Override with `SCINUMBERS_MODEL`.
+
+
 - The side panel's spend is one line rather than two: the run budget, with what
   the provider still honours on the reader's own key in the parenthesis behind it
   — "$0 of $2.00 ($4.89 on key of weekly $5.00)". Two captions in two registers

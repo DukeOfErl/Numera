@@ -117,7 +117,7 @@ measurement.
 | --- | --- | --- |
 | `OPENROUTER_API_KEY` | — | required; a question ends as `not_configured` without it |
 | `SCINUMBERS_CORPUS` | — | required; path to the JSONL corpus |
-| `SCINUMBERS_MODEL` | `anthropic/claude-haiku-4.5` | the model, as an OpenRouter slug |
+| `SCINUMBERS_MODEL` | `anthropic/claude-opus-4.7` | the model, as an OpenRouter slug |
 | `SCINUMBERS_QUESTION_CEILING_USD` | `0.60` | hard per-question limit; the warning is derived at 80% of it |
 | `SCINUMBERS_RUN_BUDGET_USD` | `1.20` | total across every question in a run; where sign-in is configured, per account rather than shared |
 | `SCINUMBERS_RUN` | `dev` | names the run spend is counted against; a new name starts a fresh budget |
