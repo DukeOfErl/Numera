@@ -61,7 +61,7 @@ from .repository import CorpusRepository
 # one thing checking it cannot verify. The README makes the same claim; if one
 # changes, change both.
 PROTOTYPE_NOTE = (
-    "**Prototype — not scientifically trustworthy.** "
+    "**Prototype — not yet scientifically trustworthy.** "
     "Verify every number against the original source."
 )
 PROTOTYPE_SHORT = "Prototype — verify numbers against the original source."

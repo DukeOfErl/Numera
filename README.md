@@ -21,9 +21,10 @@ Three commitments shape the design:
   token count, and every question ends with a stated reason and what it consumed. No tool can
   create, modify or delete an entry.
 
-> **A prototype, not an instrument.** More careful than a general-purpose model, but not yet
-> scientifically trustworthy: verify every number against the original source before relying on it.
-> What has been measured is retrieval, not truth — see the evaluation below.
+> **A prototype, not an instrument.** More careful than a general-purpose model, but
+> not yet scientifically trustworthy: verify every number against the original source
+> before relying on it. What has been measured is retrieval, not truth — see the
+> evaluation below.
 
 ## How it works
 
