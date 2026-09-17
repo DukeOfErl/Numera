@@ -21,11 +21,9 @@ Three commitments shape the design:
   token count, and every question ends with a stated reason and what it consumed. No tool can
   create, modify or delete an entry.
 
-> **A prototype, not an instrument.** More careful than a general-purpose model, and not
+> **A prototype, not an instrument.** More careful than a general-purpose model, but not yet
 > scientifically trustworthy: verify every number against the original source before relying on it.
-> It is no longer unevaluated — a baseline is below — but what has been measured is *retrieval*,
-> and about half of what the corpus holds for a question reaches the reader. Nothing yet checks
-> whether a sentence is true.
+> What has been measured is retrieval, not truth — see the evaluation below.
 
 ## How it works
 
@@ -144,52 +142,36 @@ SCINUMBERS_RUN_BUDGET_USD = "1.20"
 
 ### The durable trail (hosted deployments only)
 
-`SCINUMBERS_TRACE` writes to a file, which is enough on your own machine and
-nothing at all on a host whose container filesystem does not survive a redeploy.
-There, every record from every real session is discarded — the trail is written
-correctly and then thrown away, which is the failure it exists to prevent, one
-layer further out.
-
-To keep it, add a Postgres connection to `.streamlit/secrets.toml` (and to the
-hosting platform's own secrets box). `.streamlit/secrets.toml.example` carries
-the shape and the three things a URL copied from a provider's console usually
-gets wrong:
+Locally the trail goes to a file (`SCINUMBERS_TRACE`). A Streamlit Cloud
+container's disk does not survive a redeploy, so the deployment writes it to a
+Neon Postgres database instead. `.streamlit/secrets.toml.example` carries the
+shape, and the three things a URL copied from a provider's console usually gets
+wrong:
 
 ```toml
 [connections.usage]
 url = "postgresql+psycopg://USER:PASSWORD@HOST-pooler.REGION.provider.tech/DB?sslmode=require"
 ```
 
-The table is created on first use; there is nothing to migrate. **Configure
-nothing and the app behaves exactly as it does today** — refusing to start
-without a telemetry database would make the absence of telemetry an outage.
+The table is created on first use; there is nothing to migrate, and configuring
+nothing leaves the app running exactly as before, without a trail.
 
-Two properties worth knowing before you rely on it:
+Recording never blocks a question. If a write fails you are not told and the
+conversation carries on — a lost row costs less than a reader stopped by a
+telemetry fault, which is the deliberate opposite of the spend limits
+([ADR-0710](docs/decisions/0710-recording-fails-open.md)). Conversations
+themselves are still ephemeral: the trail outlives a redeploy, the checkpoints
+do not.
 
-- **A failed write never fails a question.** This is the deliberate opposite of
-  the spend limits, which stop work when they cannot be established: proceeding
-  past a spend limit costs unbounded real money, proceeding past a failed
-  telemetry write costs one row. Failures are reported to the operator's log and
-  counted, never to the person asking
-  ([ADR-0710](docs/decisions/0710-recording-fails-open.md)).
-- **Conversations are still ephemeral.** The trail outlives a redeploy; the
-  checkpoints do not. A hosted session that survives a restart is a separate
-  decision and has not been made.
-
-**What the trail keeps about you.** Your question, the answer you were given and the
-identifiers of the entries behind it, under a per-question identifier and the
-identifier of your session — and, where sign-in is configured, the account you
-were signed in as and the role it held at the time. They are kept because a rating
-on an answer nobody can read is worth nothing, and they are read by whoever
-operates the deployment in order to improve it. The app says that exchanges are
-logged in its own side panel and on the terminal's first line; this section is
-the thorough version, and a fuller notice shown before use is deferred until
-there are users rather than invited testers
+**What it keeps about you:** your question, the answer, the identifiers of the
+entries behind it, a per-question and a per-session identifier, and — where
+sign-in is configured — your account and the role it held at the time. It is kept
+so a rating can be read beside what that question actually retrieved, and it is
+read by whoever operates the deployment. `sql/feedback.sql` query 8 finds
+everything kept about one account. Deletion on request, and any retention limit,
+are deferred until there are users rather than invited testers
 ([ADR-0840](docs/decisions/0840-what-a-question-s-trail-keeps.md),
 [ADR-0810](docs/decisions/0810-the-role-is-written-at-record-time.md)).
-`sql/feedback.sql` is how it is read back; its query 8 finds everything kept about
-one account. A request path for deleting it, and any retention limit, are
-deliberately deferred until there is somebody to ask.
 
 ### Sign-in and enrolment (hosted deployments only)
 
@@ -216,13 +198,13 @@ gates it. The operator's steps, in order:
    ([ADR-0780](docs/decisions/0780-accounts-live-in-the-trail-database.md),
    [ADR-0820](docs/decisions/0820-one-agent-per-session-handed-a-credential-not-an-identity.md)).
 
-The five roles — student, scientist, senior scientist, dev, admin — differ today
-in one thing: the side panel is a tab strip, and dev and admin get a second
-**Dev** tab beside the entries, showing this session's trail for its last five
-questions. The three tester roles get no such tab, and no strip at all. Nothing about the role reaches the agent, so an answer cannot depend on
-who asked
-([ADR-0800](docs/decisions/0800-default-deny-and-the-pruning-rule.md)). The
-roles exist now so that ratings can later be weighted by who gave them.
+**Five roles exist — student, scientist, senior scientist, dev and admin — as
+foundations, built and tested now so that ratings can later be weighted by who
+gave them.** Today they differ in one visible thing: dev and admin get an extra
+**Dev** tab in the side panel, showing this session's recent trail. Permissions
+are a default-deny table, and nothing about a role reaches the agent, so an
+answer cannot depend on who asked
+([ADR-0800](docs/decisions/0800-default-deny-and-the-pruning-rule.md)).
 
 A deployment also holds at most `SCINUMBERS_MAX_SESSIONS` sessions open at once;
 the next visitor is told to try again shortly, and no open session is ended to
@@ -286,10 +268,31 @@ results file holds corpus text, which must not be committed (ADR-0170). The harn
 it would track the path and refuses to write if it would — and the answer sheet, which tabulates
 entries, takes the same refusal.
 
-The first baseline and what it showed are in
-[`docs/evaluations/`](docs/evaluations/2026-09-11-baseline.md). The judged layer — a model separating
-an answer into claims — is deferred to its own change, `add-judged-faithfulness`, because the
-hand-labelled reference a judge must be validated against came back 29 sound of 30 and cannot gate
+### What it measures, by example
+
+Ten questions, three repeats each, 2026-09-17 — the run that chose the default model. Questions are
+tiered: `basic` is one property of one organism, `compound` needs a comparison or a calculation.
+
+| | Haiku 4.5 | **Opus 4.7** | MiniMax M2.7 |
+|---|---:|---:|---:|
+| Expected entries reaching the table | 53% | **65%** | 9% |
+| — on `basic` questions | 70% | 68% | 12% |
+| — on `compound` questions | 31% | **62%** | 6% |
+| Unsupported questions correctly declined | 4 of 6 | **6 of 6** | 6 of 6 |
+| Cost per 30 questions | $0.40 | $2.89 | $0.29 |
+
+**The whole of Opus's lead is the compound questions** — on lookups the two Claude models are a tie.
+So the model choice buys multi-organism comparisons and calculations, not better lookups, which is
+what the tiering exists to show. The figure that is not about coverage: Haiku answered two of the six
+unsupported questions with a quantity instead of saying the corpus does not hold it, which is the
+failure this app is most meant to avoid.
+
+Read no single repeat. The same comparison at one repeat each, that morning, had the two models a
+point apart and looked like a tie.
+
+Earlier runs are in [`docs/evaluations/`](docs/evaluations/2026-09-11-baseline.md). The judged
+layer — a model separating an answer into claims — is deferred to `add-judged-faithfulness`: the
+hand-labelled reference a judge must be validated against came back 29 sound of 30, and cannot gate
 anything.
 
 ## What it does not do
@@ -307,12 +310,11 @@ deterministic: they say what was cited and retrieved, never whether a sentence i
 withdrawn on account of a thumbs-down; the rating is evidence for whoever is improving the tool, and
 it reaches them rather than the agent.
 
-**Ratings given before 2026-09-16 name answers nobody can read.** The trail now records the question
-as asked, the answer as given and the entries behind it, so a rating can be read next to what it
-judged — but a trail cannot be backfilled, and the ratings collected before that change name
-questions whose words were never kept anywhere
-([ADR-0840](docs/decisions/0840-what-a-question-s-trail-keeps.md)). Ratings given before sign-in
-was configured — and every rating on a deployment without it — carry no account either.
+**There is no tracing instrumentation yet.** LangSmith or Langfuse — per-question traces with
+per-user attribution, and ratings pushed as scores — is planned and deliberately not enabled:
+`langsmith` is already present as a transitive dependency, and turning tracing on ships prompts,
+tool results and corpus text to a third-party service. That is a decision to take deliberately
+rather than by setting an environment variable.
 
 **Enrolment is not managed from the app.** Adding a tester, assigning a role and issuing a
 credential are rows and keys the operator writes by hand (`sql/accounts.sql`); there is no page for
@@ -325,10 +327,11 @@ documentation. Those are covered above. Where the project went past the brief:
 
 | Beyond the brief | Where |
 |---|---|
+| Deployed and multi-user, not a local demo: Streamlit Cloud with Google sign-in, an enrolled account per tester funded by its own capped API key, and a Neon Postgres database behind it — the platform alone has an ephemeral disk and no notion of a user | ADR-0700, ADR-0780, ADR-0820, `hosted.py`, `accounts.py` |
 | Provenance as a hard requirement, not a prompt instruction — citations are checked against what was actually retrieved, and unsupported ones flagged | `citations.py`, `entries_table.py` |
 | The source's own notation restated only where the model reads it, never in the corpus — so the stored entry stays quotable | ADR-0420, `bionumbers.py` |
 | Agentic retrieval over a 14,294-entry corpus: capped summaries with an honest total, then full entries on demand | ADR-0150, `tools.py` |
-| Spend enforced in middleware — a per-question ceiling and a run budget that stop the next call rather than reporting after the fact | ADR-0120, ADR-0180, `spend.py` |
+| Spend bounded twice over — a per-question ceiling and a run budget enforced in middleware, stopping the next call rather than reporting after the fact; and, where testers are enrolled, each one funded by their own OpenRouter key with its own monthly cap, issued from the accounts table | ADR-0120, ADR-0180, ADR-0820, `spend.py`, `accounts.py` |
 | The agent separated from its drivers, so a web page and an evaluation harness run the identical agent with no mode flag | ADR-0110, `test_driver_independence.py` |
 | Fault injection at the seams that fail silently — a spend ledger that cannot write, a marker whose condition can never fire | `test_spend.py`, `test_markers_against_corpus.py` |
 | Decisions recorded as ADRs, and behaviour specified in OpenSpec rather than prose | `docs/decisions/`, `openspec/` |
@@ -338,16 +341,10 @@ Of the optional tasks: token usage and cost are displayed per question and per r
 long-term memory are LangGraph checkpoints resumable across processes; the model is configurable and
 reached through OpenRouter; and retrieval is agentic rather than a single similarity lookup.
 
-**Measured since:** a baseline of ten questions over three repeats, with the figures and what they
-showed in [`docs/evaluations/`](docs/evaluations/2026-09-11-baseline.md). Half of what the corpus
-holds for a question reaches the reader's table, and the gap is a failure of search rather than of
-selection. The honest remaining gap is that nothing yet judges whether a *sentence* is true.
-
-**That baseline ran on `anthropic/claude-haiku-4.5`, which is no longer the default.** It has not
-been re-run on `anthropic/claude-opus-4.7`; a one-repeat comparison of the same ten questions on
-2026-09-17 put the two within a point of each other on entries reaching the table, which is why the
-switch was made on the prose rather than on a measured gain in retrieval. Read the figures above as
-describing the harness and the corpus, not as a measurement of the model the app ships with.
+**Measured:** the table under *Evaluating the answers* above. About two-thirds of what the corpus
+holds for a question reaches the reader's table on the default model, and the gap is a failure of
+search rather than of selection. The honest remaining gap is that nothing yet judges whether a
+*sentence* is true.
 
 ## Where to read next
 
