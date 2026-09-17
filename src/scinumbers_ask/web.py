@@ -21,9 +21,11 @@ re-run after the next question.
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import logging
 import os
+import re
 import sys
 import threading
 import time
@@ -33,6 +35,8 @@ from collections.abc import Callable, Iterable, Iterator, MutableMapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import streamlit as st
@@ -41,7 +45,7 @@ from . import accounts, allowance, bionumbers, entries_table, feedback, messages
 from .accounts import Account, EnrolmentUnavailable
 from .agent import AskAgent
 from .authorization import Refused, allowed, require
-from .config import Config, env_setting, refuse_retired_env
+from .config import Config, env_setting, format_usd, refuse_retired_env
 from .corpus import load
 from .events import Answer, AnswerEntries, EndReason, Event, QuestionEnded, Retrieval
 from .permissions import Identity, Permission
@@ -71,12 +75,14 @@ DATA_CREDIT = (
     "Data: BioNumbers (Milo et al., Nucl. Acids Res. 2010;38:D750–D753) — "
     "verify each figure at its source."
 )
+DATA_CREDIT_LABEL = "Data: BioNumbers (Milo et al.)"
 
 # Re-exported rather than restated: the sentence is shared with the terminal
 # driver and lives in `messages` for the same reason every warning does. The page
 # reads it from here so that `streamlit_app.py` needs one import, as it does for
 # every other piece of wording on the page.
 RECORDS_NOTE = messages.RECORDS_NOTE
+BUDGET_NOTE = messages.BUDGET_NOTE
 
 # Pinned to the viewport rather than written into the page. Drawn as an ordinary
 # element it sat above the conversation and scrolled away with the first answer --
@@ -665,7 +671,7 @@ def _sign_out(conversation_id: str, tab_id: str | None = None) -> None:
 def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None = None) -> None:
     """What a visitor sees instead of the page. Sign-in and nothing else, or the
     one sentence that says why not. The caller stops the script after this."""
-    st.title("SciNumbers ask")
+    draw_title()
     if admission.door is Door.SIGN_IN:
         st.info(as_text(messages.SIGN_IN_NEEDED), icon=":material/login:")
         st.button("Sign in with Google", on_click=st.login, icon=":material/login:")
@@ -687,6 +693,35 @@ def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None =
         st.button("Try again", on_click=lambda: None, icon=":material/refresh:")
 
 
+#: The button's own key, which Streamlit also emits as the CSS class
+#: `st-key-<key>` (read from the installed 1.61.1). That is what makes the rule
+#: below reach this button and no other.
+SIGN_OUT_KEY = "sign-out"
+
+#: Narrower than this and the identity row has nowhere left to go.
+SIDEBAR_MIN_WIDTH_PX = 300
+
+# Three rules the layout cannot express on its own.
+#
+# The row is a flex container, and a flex item may be squeezed below the size of
+# its own content: a narrow panel shrank the button until "Sign out" broke across
+# two lines, and then until the frame no longer contained it. `flex: 0 0 auto`
+# says this item keeps its content's width and the caption beside it does the
+# yielding, which is the right way round -- an email can wrap, a control cannot.
+#
+# `min-width` on the panel itself, because the reader can drag it narrower than
+# anything here can survive. The selector is Streamlit's stable test id, verified
+# against 1.61.1; if a future version renames it the rule stops applying and the
+# panel goes back to being draggable to nothing, which is where it is today.
+SIDEBAR_CSS = f"""
+<style>
+[data-testid="stSidebar"] {{ min-width: {SIDEBAR_MIN_WIDTH_PX}px; }}
+.st-key-{SIGN_OUT_KEY} {{ flex: 0 0 auto; }}
+.st-key-{SIGN_OUT_KEY} button {{ white-space: nowrap; }}
+</style>
+"""
+
+
 def draw_identity(admission: Admission, session_id: str, tab_id: str | None = None) -> None:
     """Who the page thinks you are -- or that it is nobody's, so the state is
     visible rather than inferred."""
@@ -694,11 +729,37 @@ def draw_identity(admission: Admission, session_id: str, tab_id: str | None = No
         st.caption(as_text(messages.NO_SIGN_IN_CONFIGURED))
         return
     account = admission.account
-    if account is not None:
+    if account is None:
+        st.button(
+            "Sign out", on_click=_sign_out, args=(session_id, tab_id), icon=":material/logout:"
+        )
+        return
+    # One row, because the two belong to each other: the button is what you do
+    # about the name beside it. Centred vertically so the caption's two lines sit
+    # level with the button rather than riding above it. `st.container(horizontal=)`
+    # and its alignment arguments are read from the installed Streamlit 1.61.1.
+    st.markdown(SIDEBAR_CSS, unsafe_allow_html=True)
+    # A horizontal container rather than two columns: columns divide the panel by
+    # proportion, so a wide panel put the button far from the name it belongs to,
+    # and a narrow one squeezed it. This packs both to the left at the size of
+    # their own content, whatever the panel is doing.
+    with st.container(
+        horizontal=True, horizontal_alignment="left", vertical_alignment="center", gap="small"
+    ):
         st.caption(
             as_text(messages.SIGNED_IN_AS.format(email=account.email, role=account.role.value))
         )
-    st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id), icon=":material/logout:")
+        # An ordinary button. Tertiary was tried for one release and drew no
+        # border or fill at all, which reads as a stray line of text rather than
+        # something to click -- smaller, and no longer recognisable as the way
+        # out.
+        st.button(
+            "Sign out",
+            key=SIGN_OUT_KEY,
+            on_click=_sign_out,
+            args=(session_id, tab_id),
+            icon=":material/logout:",
+        )
 
 
 #: The secrets section naming the durable trail's database.
@@ -1000,27 +1061,44 @@ def _allowance(api_key: str) -> allowance.Allowance:
     return allowance.fetch(api_key)
 
 
-def draw_allowance(admission: Admission) -> None:
-    """What the provider says is left on this reader's key, under the run budget.
+def spend_line(spent: int, cap: int, admission: Admission) -> str:
+    """One line for the run budget, carrying the key's own ceiling behind it.
 
-    Only where a reader has a key of their own: an unconfigured deployment's key
-    is the operator's, and its balance is not a tester's business. Silent when the
-    provider cannot be reached or says nothing we recognise -- a figure that might
-    be wrong is worse here than no figure, because this is the number a tester
-    would act on.
+    Two captions before this -- the budget, then the key -- and a reader had to
+    work out which of the two would stop them first. The budget is what this app
+    enforces and goes first; the key is the provider's cap behind it and goes in
+    the parenthesis.
+
+    The parenthesis is absent, rather than empty or guessed, where a reader has
+    no key of their own or the provider says nothing we recognise: an
+    unconfigured deployment's key is the operator's and its balance is not a
+    tester's business, and a figure that might be wrong is worse here than none,
+    because this is the number a tester would act on.
     """
+    line = f"{format_usd(spent)} of {format_usd(cap)}"
     account = admission.account
     if not admission.configured or account is None or not account.openrouter_key:
-        return
-    line = allowance.as_text(_allowance(account.openrouter_key))
-    if line:
-        st.caption(as_text(line))
+        return line
+    on_key = allowance.as_text(_allowance(account.openrouter_key))
+    return f"{line} ({on_key})" if on_key else line
+
+
+def draw_data_credit() -> None:
+    """The attribution, behind a popover rather than under the spend figure.
+
+    Attribution has to be present and does not have to be read on every visit:
+    as a caption it was a third standing line in a panel whose job is the run's
+    own state. A popover keeps it one click from every page view -- which is what
+    the obligation asks -- without spending a line on it.
+    """
+    with st.popover(DATA_CREDIT_LABEL, icon=":material/database:", width="stretch"):
+        st.caption(as_text(DATA_CREDIT))
 
 
 def draw_try_later() -> None:
     """The page at the cap: one sentence, before sign-in is offered, so the cap
     also bounds the OAuth round trips. The caller stops the script after this."""
-    st.title("SciNumbers ask")
+    draw_title()
     st.warning(as_text(messages.TRY_LATER), icon=":material/hourglass_top:")
 
 
@@ -1466,7 +1544,7 @@ def draw_full_entries(table: Table | None, seat: Any | None = None) -> None:
         # The tab's own label is the heading when there is a strip; a header
         # repeating it underneath is the same word twice.
         if seat is None:
-            st.header(ENTRIES_TAB)
+            st.header(ENTRIES_TAB, anchor=False)
         if table is None:
             st.caption("The entries behind an answer appear here once you ask something.")
             return
@@ -1490,6 +1568,74 @@ def latest_table(transcript: Iterable[tuple[str, list[Item]]]) -> Table | None:
                 return item.table
         return None
     return None
+
+
+#: What the page calls itself, in the tab and at the head of every view of it.
+TITLE = "SciNumbers ask"
+
+#: The mark, beside the title. Kept as the file it arrived as -- the provenance
+#: manifest inside it is 7.7KB of the 8.3KB, and stripping it to save bytes would
+#: also discard the record of where the artwork came from. What is stripped is at
+#: render time, for the page only.
+LOGO = Path(__file__).resolve().parents[2] / "assets" / "scinumbers-mark.svg"
+
+#: The one structural colour in the mark, which becomes the reader's text colour.
+LOGO_INK = "#15181C"
+
+#: The page title, with the mark inlined before it.
+#:
+#: Inlined rather than linked as an `<img>`, because an image is a document of its
+#: own: `currentColor` inside it resolves against the image, not the page, and the
+#: mark's near-black strokes would be all but invisible to a reader on a dark
+#: theme. Nothing here pins a theme, so that is a reader's choice to respect
+#: rather than a case to ignore. Inlined, the strokes inherit the heading's colour
+#: and the red accent stays the red accent in both.
+TITLE_HTML = '<h1 class="bn-title">{mark}<span>{text}</span></h1>'
+TITLE_CSS = """
+<style>
+.bn-title { display: flex; align-items: center; gap: 0.5rem; }
+.bn-title svg { height: 1em; width: auto; flex: 0 0 auto; }
+</style>
+"""
+
+
+@lru_cache(maxsize=1)
+def logo_svg() -> str:
+    """The mark as markup ready to inline, or "" when the file is not there.
+
+    Empty rather than raising: the page is the product and the logo is decoration,
+    so a missing or unreadable asset costs the mark and nothing else. Read once per
+    process -- it cannot change under a running server.
+
+    The provenance manifest goes here rather than in the file: it is 7.7KB of
+    metadata that no browser reads, and it would otherwise be re-sent on every
+    rerun of every session.
+    """
+    try:
+        markup = LOGO.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    markup = re.sub(r"<metadata>.*?</metadata>", "", markup, flags=re.DOTALL)
+    return markup.replace(LOGO_INK, "currentColor")
+
+
+def draw_title(text: str = TITLE) -> None:
+    """The title, with the mark before the words where there is one.
+
+    Raw HTML because the mark has to sit *inside* the heading: `st.title` takes
+    markdown, and a markdown image is an `<img>`, which is the arrangement the
+    theme note above rules out. This is the page's own markup and the project's
+    own asset -- no corpus text and no reader's text reaches it.
+
+    Streamlit's heading anchor is not lost here so much as never created, which is
+    what the rest of the page asks for anyway.
+    """
+    mark = logo_svg()
+    if not mark:
+        st.title(as_text(text), anchor=False)
+        return
+    st.markdown(TITLE_CSS, unsafe_allow_html=True)
+    st.markdown(TITLE_HTML.format(mark=mark, text=html.escape(text)), unsafe_allow_html=True)
 
 
 def draw_prototype_banner() -> None:

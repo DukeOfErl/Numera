@@ -24,7 +24,7 @@ from conftest import FIXTURE, agent_with, ask_question
 from streamlit.testing.v1 import AppTest
 
 from agent_doubles import says, scripted
-from scinumbers_ask import messages, trace, web
+from scinumbers_ask import allowance, messages, trace, web
 from scinumbers_ask.accounts import Account, EnrolmentUnavailable
 from scinumbers_ask.permissions import Identity, Role
 
@@ -152,7 +152,13 @@ def test_a_visitor_who_is_not_signed_in_is_offered_sign_in_and_nothing_else(page
     at = page(auth=True, email=None).run()
     assert not at.exception
     assert not at.chat_input, "a question could be asked"
-    assert not at.markdown and not at.chat_message, "something was drawn"
+    # The title and its style rule are the page saying what it is, and they are
+    # drawn before the door decides anything. What must not be here is the
+    # conversation: a visitor who has not signed in sees no question, no answer
+    # and no record of either.
+    assert not at.chat_message, "a conversation was drawn"
+    drawn = [m.value for m in at.markdown]
+    assert all("bn-title" in text or "<style>" in text for text in drawn), drawn
     assert [b.label for b in at.button] == ["Sign in with Google"]
     assert caught.events() == [], "a record was written for a visitor who asked nothing"
 
@@ -189,6 +195,157 @@ def test_the_sidebar_says_who_is_signed_in_and_offers_sign_out(page):
     assert "Signed in as" not in _sidebar_text(at), "the sign-out button beside it says that"
     assert "Sign out" in [b.label for b in at.sidebar.button]
     assert web.RECORDS_NOTE in _sidebar_text(at)
+
+
+def _elements(block):
+    """A block's children, which AppTest keys by index rather than listing."""
+    children = getattr(block, "children", None) or {}
+    return list(children.values() if isinstance(children, dict) else children)
+
+
+def _identity_row(at: AppTest):
+    """The container holding the name and the button, or None if they are not in
+    one -- which is the whole claim, so it is read from the tree and not from a
+    string."""
+    for block in _elements(at.sidebar):
+        inside = _elements(block)
+        named = any("@" in str(getattr(e, "value", "")) for e in inside)
+        signs_out = any(getattr(e, "label", "") == "Sign out" for e in inside)
+        if named and signs_out:
+            return block
+    return None
+
+
+def test_the_sign_out_button_shares_a_row_with_the_name_it_belongs_to(page):
+    """Not "both appear somewhere in the panel", which was already true when they
+    were stacked. The claim is the layout, so it is read off the element tree."""
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    row = _identity_row(at)
+    assert row is not None, "the name and its button share one container"
+    assert row.type == "flex_container", (
+        "a horizontal container, not columns: columns divide the panel by "
+        "proportion, which put the button far from the name on a wide panel and "
+        "squeezed it on a narrow one"
+    )
+
+
+def test_the_panel_keeps_the_identity_row_from_being_squeezed(page):
+    """The reader can drag the panel narrower than its contents can survive, and a
+    flex item can be squeezed below its own content. Neither is visible to a test
+    that only reads elements, so the rules themselves are asserted."""
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    css = "".join(m.value for m in at.sidebar.markdown if "<style>" in str(m.value))
+    assert f"min-width: {web.SIDEBAR_MIN_WIDTH_PX}px" in css
+    assert f".st-key-{web.SIGN_OUT_KEY} {{ flex: 0 0 auto; }}" in css
+    assert f".st-key-{web.SIGN_OUT_KEY} button {{ white-space: nowrap; }}" in css
+
+
+def test_the_sign_out_button_looks_like_a_button(page):
+    """Tertiary was tried for one release: no border, no fill, and a reader saw a
+    stray line of text where the way out should be."""
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    out = next(b for b in at.sidebar.button if b.label == "Sign out")
+    assert out.proto.type != "tertiary"
+
+
+def test_the_role_sits_under_the_email_rather_than_beside_it(page):
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    named = next(c for c in at.sidebar.caption if TESTER.email in c.value)
+    assert named.value.endswith("\n(scientist)"), "a line break, not a parenthesis on the end"
+
+
+def test_the_data_credit_is_one_click_from_every_page_view(page):
+    """Present on every view and not spending a standing line on itself. Asserted
+    on the popover's own content, because a citation drawn where nobody can reach
+    it is the failure this guards."""
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    popovers = [b for b in _elements(at.sidebar) if getattr(b, "type", "") == "popover"]
+    assert [p.proto.popover.label for p in popovers] == [web.DATA_CREDIT_LABEL]
+    assert web.DATA_CREDIT.startswith(web.DATA_CREDIT_LABEL.rstrip(")")), (
+        "the button says whose data this is, not a generic word for it"
+    )
+    inside = [str(getattr(e, "value", "")) for pop in popovers for e in _elements(pop)]
+    assert any("BioNumbers (Milo et al." in text for text in inside)
+    beside = [str(getattr(e, "value", "")) for e in _elements(at.sidebar)]
+    assert not any("BioNumbers (Milo" in text for text in beside), "behind it, not beside it"
+
+
+def test_the_page_says_whose_money_the_questions_cost(page):
+    """On the page itself rather than the side panel, which Streamlit collapses on
+    a phone -- and on every deployment, not only the hosted one. A sentence that
+    appears depending on which branch built the page is drift, not configuration.
+    """
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    assert any(web.BUDGET_NOTE in c.value for c in at.main.caption)
+
+
+def test_the_budget_note_is_there_without_sign_in_too(page):
+    """The deny case varies what the old arrangement keyed on -- the deployment,
+    which sign-in configuration stands for here -- rather than the wording."""
+    at = page(auth=False).run()
+    assert any(web.BUDGET_NOTE in c.value for c in at.main.caption)
+
+
+def test_the_mark_is_drawn_inside_the_title_before_the_words(page):
+    """Inside the heading, not above it: the mark is part of what the page calls
+    itself. Inlined rather than linked, because an `<img>` is a document of its own
+    and `currentColor` in it would resolve against the image instead of the page --
+    which is how a near-black mark becomes invisible to a reader on a dark theme.
+    """
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    title = next(m.value for m in at.markdown if "<h1" in m.value)
+    assert title.index("<svg") < title.index(web.TITLE), "the mark comes before the words"
+    assert "currentColor" in title, "the strokes take the reader's own text colour"
+    assert "#15181C" not in title, "and none of them is left pinned to one theme"
+    assert "c2pa:manifest" not in title, "the provenance manifest is not re-sent per rerun"
+
+
+def test_a_missing_mark_costs_the_mark_and_nothing_else(page, monkeypatch, tmp_path):
+    """The page is the product and the logo is decoration. An asset that did not
+    survive a deployment must not take the title with it."""
+    monkeypatch.setattr(web, "LOGO", tmp_path / "absent.svg")
+    web.logo_svg.cache_clear()
+    try:
+        at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+        assert not at.exception
+        assert [t.value for t in at.title] == [web.TITLE]
+    finally:
+        web.logo_svg.cache_clear()
+
+
+def test_no_heading_offers_a_link_to_itself(page):
+    """Streamlit gives every heading an anchor and a chain icon on hover. This
+    page is one screen with one reading order, so the icon is a control that does
+    nothing a reader wants."""
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    headings = list(at.title) + list(at.header) + list(at.subheader)
+    assert headings, "the page has headings to check"
+    assert all(h.proto.hide_anchor for h in headings)
+
+
+def test_the_spend_line_carries_what_is_left_on_the_reader_s_own_key(page, monkeypatch):
+    """One caption, not two: the run budget with the key's ceiling in the
+    parenthesis behind it."""
+    monkeypatch.setattr(
+        web,
+        "_allowance",
+        lambda key: allowance.Allowance(remaining=4.89, limit=5.0, resets="weekly"),
+    )
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    panel = _sidebar_text(at)
+    assert "4.89 on key of weekly" in panel and "5.00)" in panel
+    assert panel.count("on key") == 1, "one line, not a second caption beside it"
+    assert "left of" not in panel, "the old sentence form is gone, not merely joined"
+
+
+def test_a_reader_with_no_key_of_their_own_is_told_nothing_about_one(page):
+    """The deny case varies what the rule reads -- no account, so no key -- rather
+    than only changing the figure. The operator's balance is not a tester's
+    business, and a blank parenthesis would be worse than none."""
+    at = page(auth=False).run()
+    panel = _sidebar_text(at)
+    assert "on key" not in panel and "()" not in panel
+    assert "of \\$" in panel, "the run budget itself is still there"
 
 
 def test_an_enrolled_account_with_no_credential_meets_a_door_of_its_own(page, caught):
@@ -279,6 +436,21 @@ def test_an_unreadable_accounts_table_admits_nobody_and_says_a_different_sentenc
     assert messages.NOT_ENROLLED not in errors, "an outage must not read as 'not enrolled'"
     assert "signin.refused" not in caught.events()
     assert page.built == []
+
+
+def test_the_operator_is_told_what_could_not_be_read(page, caught, capsys):
+    """The other half of the refusal: the reader is told to try again shortly,
+    which is all they can act on, and whoever runs the app is told which failure
+    it was. A refusal that reaches the operator with the reason stripped leaves
+    them a page that says "try again shortly" and nothing to look at."""
+    at = page(
+        auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}, unavailable=True
+    ).run()
+
+    err = capsys.readouterr().err
+    assert "EnrolmentUnavailable" in err
+    assert "relation does not exist" in err, "the reason the lookup failed, on the operator's log"
+    assert "relation does not exist" not in " ".join(e.value for e in at.error)
 
 
 def test_the_credential_is_never_on_the_page(page):
@@ -509,7 +681,7 @@ def test_the_note_is_one_short_sentence_whatever_is_configured():
     """Deliberately not an enumeration, and deliberately not two sentences: the
     fuller statement of what is kept about a person is deferred to a disclaimer
     shown once before use, when there are users to show it to."""
-    assert messages.RECORDS_NOTE == "All exchange in this app is logged for product development."
+    assert messages.RECORDS_NOTE == "All app exchange is logged for product development."
     assert messages.RECORDS_NOTE.count(".") == 1
     assert "account" not in messages.RECORDS_NOTE and "role" not in messages.RECORDS_NOTE
 

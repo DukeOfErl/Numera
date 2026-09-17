@@ -43,7 +43,19 @@ from .events import (
 # The same sentence whether or not sign-in is configured. It was a function of
 # that for one release; with both variants identical the parameter only invited
 # a caller to believe it changed something.
-RECORDS_NOTE = "All exchange in this app is logged for product development."
+RECORDS_NOTE = "All app exchange is logged for product development."
+
+# Whose money the questions cost. It lived on the deployment branch for a release,
+# on the reasoning that someone running the app locally pays for their own calls --
+# but locally the developer *is* the developer, and once a tester's key is minted
+# by the operator the sentence is true wherever the app runs. A page that says
+# something different depending on which branch built it is the drift this project
+# has now decided against: what a reader sees is the same everywhere, and only
+# deployment mechanics differ.
+BUDGET_NOTE = (
+    "Model usage is paid for by the developer — please keep questions "
+    "purposeful, and don't abuse budget."
+)
 
 # The door, before anything else is drawn. Each is a different sentence because
 # each asks the reader to do a different thing -- and "not enrolled" during an
@@ -75,7 +87,7 @@ NO_SIGN_IN_CONFIGURED = (
 )
 # Just who, and as what. The sign-out button sits beside it, which is what says
 # this is your account rather than a fact about somebody.
-SIGNED_IN_AS = "{email} ({role})"
+SIGNED_IN_AS = "{email}  \n({role})"
 TRY_LATER = (
     "Too many sessions are open right now, so this one cannot start. "
     "Try again in a few minutes; nobody's session is ended to make room."

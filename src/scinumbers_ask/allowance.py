@@ -167,22 +167,39 @@ def fetch(api_key: str, *, opener=urllib.request.urlopen) -> Allowance:
 
 
 def as_text(allowance: Allowance) -> str:
-    """One line for the panel, or "" when there is nothing worth saying.
+    """The key's own standing, as a fragment for the spend line, or "" when there
+    is nothing worth saying.
+
+    A fragment rather than a sentence: it is read inside the parenthesis of
+    "$0.12 of $2.00 ($4.89 on key of weekly $5.00)", where the run budget is the
+    subject and this is the ceiling behind it. Two captions said the same kind of
+    thing in two registers and made the reader work out which bound them first.
 
     Dollars, formatted here rather than through `config.format_usd`, which takes
     the integer micro-dollars this project counts spend in. The provider answers
     in dollars as a float, and converting between the two to print a caption is
     two chances to be out by a million.
+
+    Where the provider states a `remaining`, that figure is what goes on the page,
+    even when it disagrees with `limit - usage` -- a cap changed mid-period, or a
+    key spent elsewhere, and the provider's own figure is the one a tester acts
+    on. The subtraction is only for a response that states no remaining at all.
+
+    A `limit_remaining` arriving with no `limit` beside it is deliberately not
+    shown: with no cap there is nothing for a remaining figure to be remaining
+    of, so the uncapped line reports the usage the provider gave and says there is
+    no cap. An omission, decided, rather than a figure derived from something
+    else.
     """
     if not allowance.known:
         return ""
     if allowance.limit is None:
         spent = f"{allowance.usage:,.2f}" if allowance.usage is not None else "?"
-        return f"Key: ${spent} used, no cap set."
+        return f"${spent} used on key, no cap"
     left = allowance.remaining
     if left is None and allowance.usage is not None:
         left = allowance.limit - allowance.usage
     if left is None:
-        return f"Key: ${allowance.limit:,.2f} cap."
-    renews = f", renews {allowance.resets}" if allowance.resets else ""
-    return f"Key: ${left:,.2f} left of ${allowance.limit:,.2f}{renews}."
+        return f"${allowance.limit:,.2f} cap on key"
+    every = f"{allowance.resets} " if allowance.resets else ""
+    return f"${left:,.2f} on key of {every}${allowance.limit:,.2f}"
