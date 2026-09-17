@@ -85,6 +85,15 @@ def test_what_is_left_is_worked_out_when_only_usage_and_a_cap_are_given():
 
 
 def test_the_renewal_is_named_when_the_provider_names_it():
+    """The renewal is named when there is one; that no clause appears when there
+    is not is deliberately *not* asserted here.
+
+    Mutation testing offers both -- appending ", renews None" to every line, and
+    swapping the empty alternative for a sentinel, both survive the suite. Left
+    alive on purpose: this is the panel's wording, which no requirement fixes and
+    which a reader would see and report the moment it were wrong. Pinning the
+    absent clause would make the caption's punctuation a contract.
+    """
     assert "monthly" in allowance.as_text(Allowance(remaining=1.0, limit=2.0, resets="monthly"))
 
 
@@ -200,3 +209,50 @@ def test_an_empty_key_is_not_probed():
         raise AssertionError("the provider was asked about a key that does not exist")
 
     assert allowance.probe("", opener=never) == allowance.Probe()
+
+
+def test_the_probe_asks_about_this_account_s_own_key_and_is_bounded():
+    """`user-identity`: an enrolled account that signs in proceeds with its role.
+
+    The request is the input to the one classification the door depends on, and
+    nothing held it: blanking the request, dropping the `Authorization` header or
+    removing the key from it all passed the whole suite, because every probe test
+    asserts what came *back* and none asserts what went *out*. The fetch beside it
+    has had this assertion since it was written; the probe never did.
+
+    What that costs is the whole deployment rather than one caption. A probe with
+    no credential in it is refused 401 by the provider, `rejected` is True for
+    every account, and every enrolled tester meets the credential-rejected door
+    instead of the page -- the exact failure the module's own docstring says must
+    not happen because OpenRouter had a bad minute, arrived at by our own request
+    instead.
+
+    The endpoint and the bound are here for the same reason they are on the fetch:
+    `user-identity` requires that no credential appears on any page a reader sees,
+    and a key in a URL is a key in every log and every error line; an unbounded
+    call hangs the sign-in door, which is a page that never proceeds.
+    """
+    opener = _opener({"data": {"limit_remaining": 1.0, "limit": 2.0}})
+    allowance.probe("sk-or-v1-secret", opener=opener)
+
+    assert opener.request.get_header("Authorization") == "Bearer sk-or-v1-secret"
+    assert opener.request.full_url == allowance.KEY_ENDPOINT
+    assert "sk-or-v1-secret" not in opener.request.full_url
+    assert opener.request.get_method() == "GET", "asking about a key is a read"
+    assert opener.timeout == allowance.TIMEOUT_S, "an unbounded call hangs the door"
+
+
+def test_two_accounts_are_asked_about_separately():
+    """The dimension the request actually reads is *which* key it was handed.
+
+    A probe that carried a constant -- the environment's key, the first key it
+    ever saw -- would satisfy the test above completely, and would report one
+    account's standing as another's. So this varies the credential and nothing
+    else, which the test above cannot do with one key in it.
+    """
+    first, second = _opener({"data": {}}), _opener({"data": {}})
+    allowance.probe("sk-or-v1-alice", opener=first)
+    allowance.probe("sk-or-v1-bob", opener=second)
+
+    assert first.request.get_header("Authorization") == "Bearer sk-or-v1-alice"
+    assert second.request.get_header("Authorization") == "Bearer sk-or-v1-bob"

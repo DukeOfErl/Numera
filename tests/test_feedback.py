@@ -39,6 +39,17 @@ def state() -> dict:
 
 
 def test_a_verdict_is_recorded_against_its_question(state, written):
+    """What a record must carry: the event, the question, the session, the verdict.
+
+    The run label a record also carries is deliberately not asserted, here or
+    anywhere. Mutation testing rewrites that expression nine ways -- the variable
+    renamed, the default emptied, the `"dev"` fallback altered -- and every one
+    survives. That is the trail's own content rather than this module's contract,
+    and no requirement fixes it; two of those rewrites (`run_label=None`, and the
+    `or` turned into an `and`) do change what is stored, and they are reported
+    rather than pinned, because inventing the requirement here would settle by
+    assertion a question nobody has asked.
+    """
     assert feedback.record_verdict(state, question_id="q1", session_id="s1", verdict=Verdict.DOWN)
     (record,) = written()
     assert record["event"] == feedback.VERDICT_EVENT
