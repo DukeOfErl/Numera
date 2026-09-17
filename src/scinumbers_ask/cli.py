@@ -210,3 +210,11 @@ def main(argv: list[str] | None = None) -> None:
     print(f"{len(repo)} entries · session {session_id} · {config.model}")
     print("Ask a question, or 'exit'. Continue this session later with --session.")
     raise SystemExit(run(agent, session_id, _questions_from_terminal(sys.stdout), repo=repo))
+
+
+if __name__ == "__main__":  # pragma: no cover
+    # `python -m scinumbers_ask.<module>` imported this and exited 0 without it --
+    # a command that does nothing and reports success, which is how a baseline run
+    # came to be "finished" in seconds having asked no questions. `main` raises
+    # `SystemExit` itself on every failure, so there is no status to forward.
+    main()

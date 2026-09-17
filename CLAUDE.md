@@ -63,9 +63,10 @@ what let the blocks drift: no branch can see another's copy.
 | `add-corpus-ingestion` | `0200`–`0250` — all written |
 | `add-corpus-autobuild` | `0300`–`0340` |
 | `rename-to-scinumbers` | `0400`–`0450` |
-| `add-answer-evaluation` | `0500`–`0550` — `0500`, `0510`, `0520` written |
+| `add-answer-evaluation` | `0500`–`0550` — `0500`, `0510`, `0520`, `0530`, `0540` written |
 | `add-answer-shape` | `0560`–`0590` |
 | `add-provider-limit-ending` | `0600`–`0640` — `0600` written |
+| `add-judged-faithfulness` | `0650`–`0690` |
 | `add-durable-trail` | `0700`–`0730` |
 | `add-answer-feedback` | `0740`–`0770` — `0740`, `0750`, `0760` written |
 | `add-user-identity` | `0780`–`0830` — all written |
@@ -104,7 +105,8 @@ the same source tree: `bionumbers_ingest` (`ingest`), `scinumbers_ask` (`ask`), 
 
 A fourth extra, `eval`, is **additive to `ask` rather than a package of its own**: the evaluation
 harness lives in `scinumbers_ask` because it is an adapter over that agent, and the extra carries only
-what is new (`deepeval`, for the judged layer alone). Install both: `uv sync --extra ask --extra eval`.
+what is new. Install both: `uv sync --extra ask --extra eval`. The extra is currently empty:
+`deepeval` left with the judged layer, which is now `add-judged-faithfulness`, and returns with it.
 A deterministic evaluation run needs none of DeepEval, which is why it is separable at all.
 
 Diagrams — including the agent's graph generated from the compiled object — are in
@@ -157,10 +159,11 @@ core, and a test there refuses a name with no file behind it.
 | `entries_table.py` | Rows, marks and legends — shared by both drivers |
 | `messages.py` | Wording both drivers use, and `STOP_THE_RUN` |
 | `cli.py` / `web.py` | The two interactive adapters |
-| `question_set.py` | The evaluation's question set: the format, its reader, and the entry shapes derived from the corpus |
+| `question_set.py` | The question set: the format, its reader, the entry shapes derived from the corpus, and the tier (`basic` / `compound` / `declining`) that keeps a gain in one kind of question from being paid for out of another |
 | `evaluation.py` | The evaluation driver: asks, records one line per result, resumes, fingerprints what produced each, and refuses a results path git would track |
 | `scoring.py` | Every score needing no model and no prose parser, as pure functions; the outlier check (ADR-0520) |
 | `report.py` | Figures read out of a results file, never combined across model, prompt or corpus |
+| `answer_sheet.py` | Every answer and the entries that bear on it, as HTML or PDF; never the recorded context |
 | `eval_cli.py` | The evaluation command (`scinumbers-eval`): `check`, `run` and `report` |
 | `trace.py` | The structured trail, one question id and one session id throughout |
 | `trail_store.py` | The trail's durable destination: one append-only table, written best-effort (ADR-0700, ADR-0710) |

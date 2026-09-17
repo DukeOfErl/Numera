@@ -4,6 +4,30 @@ Every assertion here comes from a requirement or from the rule's own stated
 direction of error, never from running the function and writing down what it said.
 Where a rule classifies, both directions are tested -- the one it is meant to catch
 and the one it must not.
+
+**Mutation testing, 2026-09-07: 338 mutants, 25 knowingly left alive.** The first
+run had 57 survivors and most were real -- fault seeding had passed over all of
+them, because a seed encodes a belief and nobody had a belief about, for instance,
+`bounds_reached` having no direct test at all. What it found: every field of the
+event `bounds_reached` rebuilds could be nulled; each part of the provenance
+carried "never combine two runs" alone, so nulling any one merged runs that differ
+in it; the `property` key was read from a retrieval by a literal no test
+exercised; a one-sided range was never given to `representative_value`, which
+would have raised on it; `MIN_PEERS` was never tested at exactly the floor; and
+every `continue` in the two peer functions could be a `break`, which would have
+silenced the outlier check for everything cited after the first entry it could not
+judge. It also found a field with no reader at all -- `Outlier.peer_median`, left
+over from the median comparison ADR-0520 rejected -- which is now gone.
+
+The 25 that remain, and why each is not worth a test: thirteen permute the
+sentinel strings in the no-provenance fallback, where the contract is that the
+group is *distinct* and not what it is called; five null fields of the event
+`bounds_reached` rebuilds that its three properties do not read, and the
+constructor requires them; two rewrite a `dict.get` default that cannot be reached,
+since the index is built from the same entries the lookup keys come from; two turn
+a `False` initialiser into `None`, which is falsy either way; and the rest are
+equivalent boolean rewrites. Zero control-flow flips survive, which is the line
+worth holding.
 """
 
 from __future__ import annotations
@@ -12,7 +36,7 @@ import pytest
 from conftest import FIXTURE
 
 from scinumbers_ask.corpus import Entry, load
-from scinumbers_ask.evaluation import Result
+from scinumbers_ask.evaluation import Provenance, Result
 from scinumbers_ask.events import EndReason
 from scinumbers_ask.messages import STOP_THE_RUN
 from scinumbers_ask.question_set import Question
@@ -22,10 +46,13 @@ from scinumbers_ask.scoring import (
     OUTLIER_FACTOR,
     Spread,
     asked_terms,
+    bounds_reached,
     citation_score,
     cites_in_full,
     correctly_declined,
     grounding_score,
+    group_of,
+    grouped,
     outliers_among_peers,
     peers_too_few,
     quantity_score,
@@ -36,9 +63,27 @@ from scinumbers_ask.scoring import (
     unsupported_score,
 )
 
+A_PROVENANCE = Provenance(
+    recorded_at="2026-09-07T09:00:00+00:00",
+    model="fake/model",
+    question_ceiling=600_000,
+    run_budget=1_200_000,
+    run_label="test",
+    prompt_digest="prompt0000000001",
+    corpus_digest="corpus0000000001",
+    corpus_entries=6,
+    code_version="git abc1234",
+)
+
 
 def a_result(**kwargs) -> Result:
-    base = dict(question_id="q1", repeat=1, question="how big?", answer="an answer")
+    base = dict(
+        question_id="q1",
+        repeat=1,
+        question="how big?",
+        answer="an answer",
+        provenance=A_PROVENANCE,
+    )
     base.update(kwargs)
     return Result(**base)
 
@@ -77,32 +122,76 @@ def an_entry(**kwargs) -> Entry:
 # -- 4.1: cited against expected -------------------------------------------------
 
 
-def test_an_answer_citing_every_expected_entry_scores_as_such():
-    score = citation_score(a_result(expected_entries=(1, 2), cited=(1, 2), retrieved=(1, 2)))
-    assert score.all_expected_cited
-    assert (score.expected, score.cited_expected) == (2, 2)
+def a_repo(*entry_ids: int) -> CorpusRepository:
+    """A corpus holding exactly these identifiers, so `rows_for` can rank them.
+    `rows_for` drops an identifier the corpus does not hold, and a rank silently
+    absent is the shape of a ranking figure that reports nothing."""
+    return CorpusRepository(tuple(an_entry(entry_id=i) for i in entry_ids))
 
 
-def test_an_unexpected_citation_is_reported_and_is_not_an_error():
-    """The corpus may support the answer through entries the set does not list: a
-    question set is a claim about which entries suffice, not about which exist."""
-    score = citation_score(a_result(expected_entries=(1,), cited=(1, 9), retrieved=(1, 9)))
+def test_every_expected_entry_reaching_the_table_is_the_pass():
+    """ADR-0530: the table lists every retrieved entry, so reaching it is what the
+    reader gets. Prose citation is reported beside it and is no longer the pass."""
+    score = citation_score(
+        a_result(expected_entries=(1, 2), cited=(1,), retrieved=(1, 2)),
+        a_question(expected_entries=(1, 2)),
+        a_repo(1, 2),
+    )
+    assert score.all_expected_reached_the_table
+    assert (score.expected, score.reached_the_table) == (2, 2)
+    # The half that used to be the pass: one of two, and not a failure.
+    assert (score.cited_expected, score.passed_over) == (1, (2,))
+
+
+def test_an_expected_entry_never_reaching_the_table_fails_the_check():
+    """A failure of search, and the only thing that fails the headline."""
+    score = citation_score(
+        a_result(expected_entries=(1, 2), cited=(1,), retrieved=(1,)),
+        a_question(expected_entries=(1, 2)),
+        a_repo(1, 2),
+    )
+    assert not score.all_expected_reached_the_table
+    assert score.never_reached == (2,)
+    assert score.passed_over == ()
+
+
+def test_an_admissible_citation_is_neither_a_hit_nor_unexpected():
+    """Its whole job: a different property that still answers, so that a citation
+    outside both lists means something."""
+    score = citation_score(
+        a_result(expected_entries=(1,), cited=(1, 5, 9), retrieved=(1, 5, 9)),
+        a_question(expected_entries=(1,), admissible_entries=(5,)),
+        a_repo(1, 5, 9),
+    )
+    assert score.admissible_cited == (5,)
     assert score.unexpected == (9,)
-    assert score.all_expected_cited
+    assert score.cited_expected == 1
 
 
-def test_a_missed_entry_is_split_by_whether_it_was_ever_retrieved():
-    """Two different failures -- one of selection, one of search -- and a single
-    "missed" count would hide which is happening."""
-    score = citation_score(a_result(expected_entries=(1, 2), cited=(), retrieved=(1,)))
-    assert score.passed_over == (1,)
-    assert score.never_retrieved == (2,)
+def test_the_rank_of_each_expected_entry_in_the_table_is_reported():
+    """Reaching the table is not being seen. `rows_for` puts cited entries first,
+    so an expected entry the answer passed over sits behind every cited one --
+    and a driver showing five rows would not show it."""
+    score = citation_score(
+        a_result(expected_entries=(7,), cited=(1, 2, 3), retrieved=(1, 2, 3, 7)),
+        a_question(expected_entries=(7,)),
+        a_repo(1, 2, 3, 7),
+    )
+    assert score.ranks == (4,)
+    assert score.deepest_rank == 4
 
 
-def test_a_question_expecting_nothing_is_not_reported_as_fully_cited():
-    """An unsupported question expects no entries, and "0 of 0" must not read as a
-    pass in the same column as an answer that cited everything asked of it."""
-    assert not citation_score(a_result(expected_entries=(), cited=())).all_expected_cited
+def test_a_question_expecting_nothing_does_not_pass_the_table_check():
+    """An unsupported question expects no entries, and a false-premise question
+    expects none either. "0 of 0" must not read as a pass in the same column as an
+    answer that brought every expected entry to the reader."""
+    score = citation_score(
+        a_result(expected_entries=(), cited=()),
+        a_question(expected_entries=(), unsupported=True),
+        a_repo(),
+    )
+    assert not score.all_expected_reached_the_table
+    assert score.deepest_rank is None
 
 
 # -- 4.2: the asked organism and property ----------------------------------------
@@ -300,8 +389,18 @@ def test_a_follow_up_that_states_no_quantity_is_not_marked_for_citing_nothing():
 # -- 4.5: the outlier check ------------------------------------------------------
 
 
+def all_ids(population: tuple[Entry, ...]) -> tuple[int, ...]:
+    """Every entry in the population, as the question's expected list.
+
+    Under ADR-0540 peers come from the question's expected entries rather than from
+    the whole corpus, so a test that wants the old "compare against everything
+    here" shape says so explicitly.
+    """
+    return tuple(entry.entry_id for entry in population)
+
+
 def yeast_population() -> tuple[Entry, ...]:
-    """The case this check exists for, from the reviewer page of 2026-09-04:
+    """The case this check exists for, from the specimen answers of 2026-09-04:
     eight entries between 1.76 and 3.3, and one at 10.3."""
     peers = [
         an_entry(entry_id=i, value=value)
@@ -313,7 +412,7 @@ def yeast_population() -> tuple[Entry, ...]:
 def test_the_entry_that_motivated_the_check_is_flagged():
     """10.3 against a peer maximum of 3.3 is 3.1 times outside. An order-of-
     magnitude threshold would have missed the very answer this exists for."""
-    (flagged,) = outliers_among_peers((99,), yeast_population())
+    (flagged,) = outliers_among_peers((99,), all_ids(yeast_population()), yeast_population())
     assert flagged.entry_id == 99
     assert flagged.peer_low == 1.76 and flagged.peer_high == 3.3
     assert flagged.outside_by > OUTLIER_FACTOR
@@ -324,7 +423,7 @@ def test_an_entry_inside_its_peers_interval_is_not_flagged():
     reports a list nobody can act on."""
     population = yeast_population()
     inside = tuple(entry.entry_id for entry in population if entry.entry_id != 99)
-    assert outliers_among_peers(inside, population) == ()
+    assert outliers_among_peers(inside, all_ids(population), population) == ()
 
 
 def test_an_entry_just_inside_the_factor_is_not_flagged():
@@ -332,7 +431,7 @@ def test_an_entry_just_inside_the_factor_is_not_flagged():
     the code: at the factor exactly, an entry is not outside it."""
     peers = tuple(an_entry(entry_id=i, value=2.0) for i in range(1, MIN_PEERS + 1))
     population = peers + (an_entry(entry_id=99, value=2.0 * OUTLIER_FACTOR),)
-    assert outliers_among_peers((99,), population) == ()
+    assert outliers_among_peers((99,), all_ids(population), population) == ()
 
 
 def test_a_value_inside_a_skewed_population_is_not_flagged_though_it_beats_the_median():
@@ -349,13 +448,13 @@ def test_a_value_inside_a_skewed_population_is_not_flagged_though_it_beats_the_m
         for i, value in enumerate((1.0, 1.0, 1.0, 1.0, 10.0), start=1)
     )
     population = peers + (an_entry(entry_id=99, value=5.0),)
-    assert outliers_among_peers((99,), population) == ()
+    assert outliers_among_peers((99,), all_ids(population), population) == ()
 
 
 def test_a_value_far_below_its_peers_is_flagged_too():
     peers = tuple(an_entry(entry_id=i, value=10.0) for i in range(1, MIN_PEERS + 1))
     population = peers + (an_entry(entry_id=99, value=0.5),)
-    (flagged,) = outliers_among_peers((99,), population)
+    (flagged,) = outliers_among_peers((99,), all_ids(population), population)
     assert flagged.outside_by > OUTLIER_FACTOR
 
 
@@ -366,29 +465,38 @@ def test_an_entry_with_a_twin_still_counts_its_twin_as_a_peer():
     """
     twins = tuple(an_entry(entry_id=i, value=2.0) for i in range(1, MIN_PEERS + 2))
     population = twins + (an_entry(entry_id=99, value=100.0),)
-    assert peers_too_few((1,), population) == ()
-    (flagged,) = outliers_among_peers((99,), population)
+    assert peers_too_few((1,), all_ids(population), population) == ()
+    (flagged,) = outliers_among_peers((99,), all_ids(population), population)
     assert flagged.peers == MIN_PEERS + 1
 
 
-def test_a_property_with_too_few_peers_is_not_judged_and_says_so():
-    """An absence that reads as a pass is the failure this exists to prevent."""
+def test_a_citation_with_too_few_peers_is_reported_as_unjudged():
+    """An absence that reads as a pass is the failure this exists to prevent.
+
+    Renamed with ADR-0540: it is the *citation* that goes unjudged, and what it
+    lacks is peers sharing its organism and unit, not entries sharing a property
+    name. The old name pointed a reader at a rule that no longer exists.
+    """
     peers = tuple(an_entry(entry_id=i, value=2.0) for i in range(1, MIN_PEERS))
     population = peers + (an_entry(entry_id=99, value=100.0),)
-    assert outliers_among_peers((99,), population) == ()
-    assert peers_too_few((99,), population) == (99,)
+    assert outliers_among_peers((99,), all_ids(population), population) == ()
+    assert peers_too_few((99,), all_ids(population), population) == (99,)
 
 
-def test_peers_are_the_same_property_for_the_same_organism():
+def test_peers_are_the_same_organism():
     """Another organism's entries are not peers: comparing across them would flag
-    every legitimate difference between species."""
+    every legitimate difference between species.
+
+    Renamed: property is no longer part of the pool key at all (ADR-0540), and a
+    name claiming it would send a reader looking for a rule that is not there.
+    """
     others = tuple(
         an_entry(entry_id=i, value=2.0, organism="Bacteria Escherichia coli")
         for i in range(1, MIN_PEERS + 2)
     )
     population = others + (an_entry(entry_id=99, value=100.0),)
-    assert outliers_among_peers((99,), population) == ()
-    assert peers_too_few((99,), population) == (99,)
+    assert outliers_among_peers((99,), all_ids(population), population) == ()
+    assert peers_too_few((99,), all_ids(population), population) == (99,)
 
 
 def test_a_zero_or_negative_value_is_not_judged():
@@ -406,7 +514,7 @@ def test_an_entry_with_only_a_range_is_compared_by_its_midpoint():
 def test_an_entry_with_no_usable_number_is_reported_as_unjudged():
     peers = tuple(an_entry(entry_id=i, value=2.0) for i in range(1, MIN_PEERS + 2))
     population = peers + (an_entry(entry_id=99, value=None),)
-    assert peers_too_few((99,), population) == (99,)
+    assert peers_too_few((99,), all_ids(population), population) == (99,)
 
 
 # -- 4.7: spread and stability ----------------------------------------------------
@@ -448,3 +556,316 @@ def test_each_question_is_reported_separately():
     reported = {item.question_id: item for item in stability(results)}
     assert reported["q1"].unstable
     assert not reported["q2"].unstable
+
+
+# -- What mutation testing found -------------------------------------------------
+
+
+def test_a_matching_property_argument_counts_as_looking_for_the_property():
+    """The `property` key was read from the retrieval by a literal no test
+    exercised: every test here searched by *keyword*, or by a property that was
+    meant not to match. Rewriting the literal to nonsense changed nothing."""
+    repo = CorpusRepository(load(FIXTURE))
+    result = a_result(retrievals=({"tool": "search_entries", "property": "Cell diameter"},))
+    assert asked_terms(result, a_question(), repo).searched_property
+
+
+def test_the_grounding_score_carries_every_signal_the_agent_emitted():
+    """Each field was a pass-through that no assertion read, so any of them could
+    have been dropped. `ungrounded_refusal` in particular decides whether a
+    refusal can be a correct decline."""
+    result = a_result(
+        ungrounded_refusal=True,
+        claimed_searching=True,
+        retrievals=({"tool": "search_entries"}, {"tool": "list_values"}),
+    )
+    scored = grounding_score(result)
+    assert scored.ungrounded_refusal is True
+    assert scored.claimed_searching is True
+    assert scored.retrievals == 2
+
+
+def test_stability_reports_the_entries_each_repeat_cited():
+    """The verdict is the headline and the sets are the evidence for it; a reader
+    told "unstable" and shown nothing cannot act on it."""
+    results = (a_result(repeat=1, cited=(1, 2)), a_result(repeat=2, cited=(1,)))
+    (reported,) = stability(results)
+    assert reported.cited_sets == ((1, 2), (1,))
+
+
+def test_each_bound_is_read_from_the_endings_own_definition():
+    """`bounds_reached` had no direct test at all -- the only assertions were on
+    the report's rendering of it, so every field of the event it rebuilds could
+    have been dropped or nulled."""
+    at_tools = a_result(tool_calls=20, tool_call_limit=20)
+    at_calls = a_result(model_calls=12, call_limit=12)
+    at_spend = a_result(spend=600_000, spend_ceiling=600_000)
+    assert bounds_reached(at_tools).at_tool_bound
+    assert bounds_reached(at_calls).at_retrieval_bound
+    assert bounds_reached(at_spend).at_spend_ceiling
+
+
+def test_room_to_spare_is_not_reported_as_a_bound():
+    """The other direction, and the one that matters: an answer produced with room
+    left is a different thing from one produced at a limit, and reporting every
+    answer as bounded would retire the distinction."""
+    with_room = a_result(
+        tool_calls=3,
+        tool_call_limit=20,
+        model_calls=2,
+        call_limit=12,
+        spend=1_000,
+        spend_ceiling=600_000,
+    )
+    reached = bounds_reached(with_room)
+    assert not (reached.at_tool_bound or reached.at_retrieval_bound or reached.at_spend_ceiling)
+
+
+def test_a_bound_of_zero_is_not_a_bound_that_was_reached():
+    """An unrecorded limit reads as zero, and `0 >= 0` would report every question
+    as having exhausted a limit nobody set."""
+    unrecorded = a_result(tool_calls=0, tool_call_limit=0, model_calls=0, call_limit=0)
+    reached = bounds_reached(unrecorded)
+    assert not (reached.at_tool_bound or reached.at_retrieval_bound)
+
+
+def test_a_result_with_no_provenance_is_never_grouped_with_one_that_has_it():
+    """A record that cannot say what produced it cannot be compared with one that
+    can, so it gets its own group instead of joining any other -- the alternative
+    is averaging it into figures it may not belong to."""
+    known = a_result(provenance=A_PROVENANCE)
+    unknown = a_result(question_id="q2", provenance=None)
+    groups = grouped((known, unknown))
+    assert len(groups) == 2
+    assert group_of(unknown) != group_of(known)
+
+
+def test_results_from_the_same_run_share_one_group():
+    """The other direction: grouping that separated identical runs would print
+    every question apart and refuse to combine any of them."""
+    assert len(grouped((a_result(), a_result(question_id="q2")))) == 1
+
+
+def test_a_one_sided_range_has_no_representative_value():
+    """594 entries in the corpus record a bound rather than a range. Averaging one
+    bound with a missing one is not a midpoint, and the arithmetic would raise
+    rather than answer."""
+    assert representative_value(an_entry(value=None, range_low=2.0, range_high=None)) is None
+    assert representative_value(an_entry(value=None, range_high=2.0, range_low=None)) is None
+
+
+def test_a_midpoint_of_exactly_zero_is_not_judged():
+    """The boundary the rule states: zero is not judged, and a range of -1 to 1
+    has a midpoint of exactly zero."""
+    assert representative_value(an_entry(value=None, range_low=-1.0, range_high=1.0)) is None
+
+
+def test_a_midpoint_below_one_is_still_a_value():
+    """The other side of that boundary. Sub-unit values are ordinary here -- cell
+    volumes in cubic micrometres -- and refusing them would silence the check on
+    much of the corpus."""
+    assert representative_value(an_entry(value=None, range_low=0.4, range_high=0.6)) == 0.5
+
+
+def test_exactly_the_peer_floor_is_enough_to_judge():
+    """`MIN_PEERS` is the number needed, not the number to exceed. Off by one, the
+    check goes quiet on every population sitting exactly at the floor."""
+    peers = tuple(an_entry(entry_id=i, value=2.0) for i in range(1, MIN_PEERS + 1))
+    population = peers + (an_entry(entry_id=99, value=100.0),)
+    assert peers_too_few((99,), all_ids(population), population) == ()
+    assert len(outliers_among_peers((99,), all_ids(population), population)) == 1
+
+
+def test_the_factor_reported_is_how_far_outside_the_entry_sits():
+    """Asserted as a number, not just as "more than the threshold": the figure is
+    what a reader judges the entry by, and a multiplication in place of the
+    division would still have been "more than the threshold"."""
+    (flagged,) = outliers_among_peers((99,), all_ids(yeast_population()), yeast_population())
+    assert flagged.outside_by == pytest.approx(10.3 / 3.3)
+
+
+def test_a_value_at_the_low_boundary_is_not_flagged():
+    """The low side of the interval, which only the high side had covered."""
+    peers = tuple(an_entry(entry_id=i, value=4.0) for i in range(1, MIN_PEERS + 1))
+    population = peers + (an_entry(entry_id=99, value=4.0 / OUTLIER_FACTOR),)
+    assert outliers_among_peers((99,), all_ids(population), population) == ()
+
+
+def test_an_unjudgeable_citation_does_not_stop_the_ones_after_it():
+    """Skipping the rest of the citation list instead of one entry: every
+    `continue` here could have been a `break`, and a single entry with no usable
+    number would have silenced the check for everything cited alongside it."""
+    population = yeast_population() + (an_entry(entry_id=50, value=None),)
+    flagged = outliers_among_peers((50, 99), all_ids(population), population)
+    assert [outlier.entry_id for outlier in flagged] == [99]
+    assert peers_too_few((50, 99), all_ids(population), population) == (50,)
+
+
+@pytest.mark.parametrize(
+    "field,other",
+    [
+        ("model", "another/model"),
+        ("prompt_digest", "prompt0000000002"),
+        ("corpus_digest", "corpus0000000002"),
+        ("corpus_entries", 7),
+        ("code_version", "git def5678"),
+    ],
+)
+def test_every_part_of_the_provenance_separates_one_run_from_another(field, other):
+    """ "Never combined across model, prompt or corpus" is a requirement, and each
+    field carried it alone. Nulling any one of them merged two runs that differ in
+    it -- the figures would be averaged and the report would say they came from one
+    system.
+    """
+    from dataclasses import replace as with_field
+
+    first = a_result()
+    second = a_result(question_id="q2", provenance=with_field(A_PROVENANCE, **{field: other}))
+    assert group_of(first) != group_of(second)
+    assert len(grouped((first, second))) == 2
+
+
+def test_a_citation_the_corpus_does_not_hold_does_not_stop_the_check():
+    """The other `continue` in the loop. One stale identifier in a citation list
+    would have silenced the outlier check for every entry cited after it."""
+    population = yeast_population()
+    flagged = outliers_among_peers((999999, 99), all_ids(population), population)
+    assert [outlier.entry_id for outlier in flagged] == [99]
+
+
+def test_the_factor_below_the_interval_is_also_how_far_outside_it_sits():
+    """The low side of the figure, asserted as a number for the reason the high
+    side is: a multiplication would also have been "more than the threshold"."""
+    peers = tuple(an_entry(entry_id=i, value=10.0) for i in range(1, MIN_PEERS + 1))
+    population = peers + (an_entry(entry_id=99, value=2.0),)
+    (flagged,) = outliers_among_peers((99,), all_ids(population), population)
+    assert flagged.outside_by == pytest.approx(10.0 / 2.0)
+
+
+def test_neither_a_lonely_entry_nor_an_ordinary_one_stops_the_check_after_it():
+    """The last two `continue`s in the loop, and they matter for the same reason
+    the others do: the outlier is usually not the first entry an answer cites.
+
+    The first cited entry here has no peers at all, the second sits inside its
+    peers' interval, and the third is the outlier. With either `continue` turned
+    into a `break`, the check reports nothing at all for this answer -- which is
+    indistinguishable from an answer with nothing wrong in it.
+    """
+    # Lonely by *unit*, which is what separates pools under ADR-0540. It used to
+    # be lonely by property, and that no longer isolates anything: a pool is keyed
+    # on organism and unit, because property wording is exactly what made the old
+    # rule judge nothing at all.
+    lonely = an_entry(entry_id=40, property="Doubling time", units="min", value=30.0)
+    population = yeast_population() + (lonely,)
+    flagged = outliers_among_peers((40, 1, 99), all_ids(population), population)
+    assert [outlier.entry_id for outlier in flagged] == [99]
+
+
+def test_every_citation_that_could_not_be_judged_is_reported_not_just_the_first():
+    """The count is what the report puts in front of a reader, so stopping at the
+    first would understate how much of an answer went unchecked."""
+    population = yeast_population() + (
+        an_entry(entry_id=50, value=None),
+        an_entry(entry_id=51, value=None),
+    )
+    assert peers_too_few((50, 51), all_ids(population), population) == (50, 51)
+
+
+def test_an_entry_the_question_does_not_expect_is_not_a_peer():
+    """The claim ADR-0540 actually makes, and nothing asserted it.
+
+    Every other test here passes the whole population as the expected list, so
+    removing the restriction entirely left the suite green -- the negative case
+    never varied the dimension the rule reads. Here the corpus holds eight further
+    entries of the same organism and unit that the question does *not* expect, and
+    they must not enter the pool: with them, 10.3 sits inside a 1.76-40.0 interval
+    and nothing is flagged.
+    """
+    expected = yeast_population()
+    strangers = tuple(
+        an_entry(entry_id=i, value=value)
+        for i, value in enumerate((12.0, 15.0, 20.0, 25.0, 30.0, 35.0, 38.0, 40.0), start=200)
+    )
+    population = expected + strangers
+    cited, wanted = (99,), all_ids(expected)
+
+    (flagged,) = outliers_among_peers(cited, wanted, population)
+    assert flagged.entry_id == 99
+    assert flagged.peer_high == 3.3, "a stranger entered the pool and raised the interval"
+    assert flagged.peers == 8
+
+    # And the other direction: expecting them makes 10.3 ordinary, which is what
+    # the expected list is for -- it decides what this entry is being compared to.
+    assert outliers_among_peers(cited, all_ids(population), population) == ()
+
+
+def test_an_unexpected_citation_is_still_judged_against_what_was_expected():
+    """A cited entry need not itself be expected. It keeps the whole pool, because
+    it is compared against the question's entries rather than its own neighbours --
+    which is what lets the check see a citation the set did not anticipate."""
+    # 30.0: the expected pool runs to 10.3 (entry 99 is in it), so the value has to
+    # clear 2x that to be an outlier at all. 12.0 would not, and would test nothing.
+    population = yeast_population() + (an_entry(entry_id=300, value=30.0),)
+    wanted = all_ids(yeast_population())
+    (flagged,) = outliers_among_peers((300,), wanted, population)
+    assert flagged.entry_id == 300
+    # All nine expected entries, none removed: 300 is not in the pool, so there is
+    # no copy of it to take out. Removing a coincidentally equal value instead was
+    # a real defect, and only a citation from outside the expected list shows it.
+    assert flagged.peers == 9
+    assert flagged.peer_high == 10.3
+
+
+def test_an_entry_cited_without_being_retrieved_has_still_reached_the_table():
+    """`rows_for` carries a cited entry into the table whether or not a retrieval
+    returned it, and the pass is *reaching the table*. Scoring against the
+    retrieval set instead marked the follow-up in the first question set as
+    missing an entry the reader could plainly see -- three results of the baseline,
+    reported under "a failure of search"."""
+    result = a_result(expected_entries=(1,), cited=(1,), retrieved=())
+    score = citation_score(result, a_question(expected_entries=(1,)), a_repo(1))
+    assert score.all_expected_reached_the_table
+    assert score.never_reached == ()
+    assert score.ranks == (1,), "it is in the table, so it has a place in it"
+
+
+def test_peers_must_share_the_unit_as_well_as_the_organism():
+    """The other half of the pool key, and nothing varied it.
+
+    Every other peer test uses `an_entry`'s single default unit, so the mutant
+    `return (entry.organism, "")` -- which reinstates the exact defect
+    `_quantity_of`'s docstring says was measured, a Liter pooled with a cubic
+    micrometre -- survived the whole suite. Here the peers are the same organism
+    and quantity recorded in a different unit, and they must not be compared: 3.4
+    litres is not 3.4 cubic micrometres, and a pool spanning both makes the
+    interval meaningless rather than wide.
+    """
+    in_litres = tuple(
+        an_entry(entry_id=i, value=value, units="Liter")
+        for i, value in enumerate((1.0e-15, 1.2e-15, 1.4e-15, 1.6e-15, 1.8e-15), start=1)
+    )
+    cited = an_entry(entry_id=99, value=2.0, units="um^3")
+    population = in_litres + (cited,)
+    wanted = all_ids(population)
+
+    assert outliers_among_peers((99,), wanted, population) == ()
+    assert peers_too_few((99,), wanted, population) == (99,)
+
+    # And the positive case, so the rule is not merely refusing everything: the
+    # same five values recorded in the cited entry's own unit do form a pool.
+    from dataclasses import replace
+
+    same_unit = tuple(replace(entry, units="um^3") for entry in in_litres)
+    population = same_unit + (cited,)
+    assert peers_too_few((99,), all_ids(population), population) == ()
+
+
+def test_an_entry_with_no_unit_at_all_is_not_pooled():
+    """`_peer_pool` skips an entry with no unit, and nothing asserted it. A blank
+    unit is not a quantity two entries can be said to share."""
+    unitless = tuple(
+        an_entry(entry_id=i, value=float(i), units="") for i in range(1, MIN_PEERS + 2)
+    )
+    cited = an_entry(entry_id=99, value=100.0, units="")
+    population = unitless + (cited,)
+    assert peers_too_few((99,), all_ids(population), population) == (99,)

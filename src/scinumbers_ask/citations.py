@@ -33,13 +33,16 @@ from .bionumbers import cross_references, occurrences
 if TYPE_CHECKING:
     from .trace import QuestionTrace
 
-__all__ = ["FORM", "citations", "cross_references", "format_citation"]
+__all__ = ["DELIMITED", "FORM", "citations", "cross_references", "format_citation"]
 
 # The delimiters are the whole contract. Nothing about the identifier's shape is
 # asserted here -- `[^\[\]]+` is "whatever is between them" -- so the only thing a
 # corpus with wider, padded or non-numeric identifiers would change is the
 # coercion in `_identifier`, not the pattern.
-_DELIMITED = re.compile(r"\[\[([^\[\]]+)\]\]")
+# Public because the answer sheet marks citations up for a reader, and a second
+# copy of the pattern there would be a second definition of the citation form --
+# which is the thing ADR-0410 exists to prevent.
+DELIMITED = re.compile(r"\[\[([^\[\]]+)\]\]")
 
 
 def format_citation(entry_id: int) -> str:
@@ -111,7 +114,7 @@ def citations(text: str, *, trace: QuestionTrace | None = None) -> tuple[int, ..
     """
     text = text or ""
     found: list[tuple[int, int]] = []
-    for match in _DELIMITED.finditer(text):
+    for match in DELIMITED.finditer(text):
         group = _identifiers(match.group(1))
         if group is None:
             # Recorded, not dropped in silence. A bracket group that holds no

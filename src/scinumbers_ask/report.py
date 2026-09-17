@@ -14,14 +14,16 @@ no report, because it retires the suspicion that would have found the gap.
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
 
 from .config import format_usd
 from .corpus import Entry
 from .evaluation import Result
 from .messages import STOP_THE_RUN
-from .question_set import Question, shapes_of
+from .question_set import Question, Tier, shapes_of
 from .repository import CorpusRepository
 from .scoring import (
+    CitationScore,
     asked,
     asked_terms,
     bounds_reached,
@@ -47,6 +49,7 @@ def render(
     repeats: int = 1,
     by_tag: bool = False,
     by_shape: bool = False,
+    expected_from_set: bool = False,
 ) -> str:
     """The whole report as text. Empty results are said to be empty, not scored."""
     lines: list[str] = ["SciNumbers evaluation report", ""]
@@ -55,6 +58,15 @@ def render(
         return "\n".join(lines) + "\n"
 
     by_id = {question.question_id: question for question in questions}
+    if expected_from_set:
+        results = expected_taken_from_the_set(results, by_id)
+        lines += [
+            "Expected entries are taken from the question set as it reads now, not from what each",
+            "result recorded. Said here because every figure below then answers a "
+            "different question",
+            "from the one the run answered, and nothing in the numbers would show it.",
+            "",
+        ]
     repo = CorpusRepository(entries)
     lines += _coverage(results, questions, repeats)
     for group, members in grouped(results).items():
@@ -77,6 +89,35 @@ def render(
             "is a different system, and one average over them would describe none of them.",
         ]
     return "\n".join(lines) + "\n"
+
+
+def expected_taken_from_the_set(
+    results: tuple[Result, ...], by_id: dict[str, Question]
+) -> tuple[Result, ...]:
+    """Re-score against the set as it reads now, rather than as it read at run time.
+
+    `expected_entries` is copied into each result so a results file is
+    self-describing (ADR-0530), and that is right for the usual case: a set edited
+    after a run must not silently restate what the run was scored against.
+
+    It is wrong for one case, and that case has already happened. When the *method*
+    that built the set turns out to be faulty -- the first lists were swept by
+    property wording, which missed every entry recording a cell volume under the
+    word "size" -- the recorded denominator is not a historical fact worth
+    preserving, it is a bug. The alternative is paying for the whole run again to
+    change a number the run never saw, since the expected list is not shown to the
+    agent and cannot have altered a single answer.
+
+    A result whose question has left the set keeps what it recorded: there is
+    nothing to take it from, and inventing an empty expectation would score it as a
+    question with nothing to find.
+    """
+    return tuple(
+        replace(result, expected_entries=by_id[result.question_id].expected_entries)
+        if result.question_id in by_id
+        else result
+        for result in results
+    )
 
 
 def _coverage(
@@ -152,22 +193,67 @@ def _figures(
     unsupported = [r for r in scored if _question_of(r, by_id).unsupported]
 
     if supported:
-        scores = [citation_score(r) for r in supported]
+        # Only results whose question the current set still holds: the admissible
+        # list lives on the question, and a stand-in would score every admissible
+        # citation as unexpected. A results file outlives the set that produced it,
+        # so this is a normal state and not an error -- but it is said out loud,
+        # because figures that quietly cover fewer results than the header claims
+        # are the thing this module exists to prevent.
+        scorable = [r for r in supported if r.question_id in by_id]
+        left_the_set = len(supported) - len(scorable)
+        if left_the_set:
+            lines.append(
+                f"{left_the_set} answered result(s) name a question the set no longer "
+                f"holds and are scored in no citation figure below"
+            )
+        if not scorable:
+            lines.append("no citation figures: no answered result's question is in the current set")
+            return lines + _cost(results) + _endings(results)
+        scores = [citation_score(r, by_id[r.question_id], repo) for r in scorable]
         expected_total = sum(score.expected for score in scores)
+        reached_total = sum(score.reached_the_table for score in scores)
         cited_total = sum(score.cited_expected for score in scores)
+        passes = sum(1 for s in scores if s.all_expected_reached_the_table)
+        with_expected = sum(1 for s in scores if s.expected > 0)
+        # The headline, per ADR-0530: an expected entry discharges by reaching the
+        # table a reader sees, not by appearing in the prose.
         lines.append(
-            f"expected entries cited: {cited_total} of {expected_total} "
-            f"({_percent(cited_total, expected_total)})"
+            f"expected entries that reached the table: {reached_total} of "
+            f"{expected_total} ({_percent(reached_total, expected_total)})"
         )
         lines.append(
-            f"  passed over (retrieved, not cited): "
-            f"{sum(len(s.passed_over) for s in scores)}; never retrieved: "
-            f"{sum(len(s.never_retrieved) for s in scores)}"
+            f"  questions where every expected entry reached it: {passes} of {with_expected}"
         )
         lines.append(
-            f"  cited but not expected: {sum(len(s.unexpected) for s in scores)} "
-            f"(reported, not counted as errors)"
+            f"  never reached it: {sum(len(s.never_reached) for s in scores)} (a failure of search)"
         )
+        deepest = [s.deepest_rank for s in scores if s.deepest_rank is not None]
+        if deepest:
+            # Reaching the table is not being seen. A driver cuts the table for
+            # display -- the CLI at five rows -- and where it cuts is not scored,
+            # but how far down an expected entry sits is, because that is a
+            # ranking failure and needs a different fix from a search failure.
+            deepest.sort()
+            middle = deepest[len(deepest) // 2]
+            # No denominator. The obvious one -- the largest retrieval count in
+            # the group -- belongs to some other result, and the rank indexes
+            # `rows_for` (cited and retrieved) rather than the retrieval set, so
+            # "worst 45 of 45" could describe an entry nowhere near its own
+            # table's bottom. A rank is read against what a driver shows.
+            lines.append(
+                f"  deepest expected entry in the table: median rank {middle}, worst {deepest[-1]}"
+            )
+        lines.append(
+            f"  and cited in the prose: {cited_total} of {expected_total} "
+            f"({_percent(cited_total, expected_total)}); passed over: "
+            f"{sum(len(s.passed_over) for s in scores)} (not an error on its own)"
+        )
+        admitted = sum(len(s.admissible_cited) for s in scores)
+        lines.append(
+            f"  cited and admissible: {admitted}; cited and in neither list: "
+            f"{sum(len(s.unexpected) for s in scores)} (reported, not counted as errors)"
+        )
+        lines += _per_tier(scorable, scores, by_id)
 
         # Only questions the current set still holds. A stand-in question asks
         # about "(unknown)", which resolves to nothing, so every such result was
@@ -245,10 +331,14 @@ def _figures(
         f"refusals that searched first: {sum(1 for r in results if correctly_declined(r))}"
     )
 
+    # The expectation comes from the result, not the question: it is what the run
+    # was scored against, and `--expected-from-set` has already substituted it
+    # where that was asked for. Reading the question here would quietly ignore
+    # that flag for this one figure.
     flagged = [
         (result, outlier)
         for result in results
-        for outlier in outliers_among_peers(result.cited, entries)
+        for outlier in outliers_among_peers(result.cited, result.expected_entries, entries)
     ]
     if flagged:
         lines.append("cited entries at odds with their peers (reported, not scored):")
@@ -258,7 +348,7 @@ def _figures(
                 f"peers {outlier.peer_low:g}-{outlier.peer_high:g} over {outlier.peers} "
                 f"entries ({outlier.outside_by:.1f}x outside)"
             )
-    unjudged = {i for r in results for i in peers_too_few(r.cited, entries)}
+    unjudged = {i for r in results for i in peers_too_few(r.cited, r.expected_entries, entries)}
     if unjudged:
         # Said rather than left out: an absence that reads as a pass is what this
         # line exists to prevent.
@@ -282,6 +372,49 @@ def _figures(
     lines += _cost(results)
     lines += _endings(results)
     return lines
+
+
+def _per_tier(
+    scored: list[Result],
+    scores: list[CitationScore],
+    by_id: dict[str, Question],
+) -> list[str]:
+    """The same headline, split by what the question demands of the agent.
+
+    Always given rather than hidden behind a flag, because the trade it exposes is
+    the one most likely to be made by accident: a prompt that searches harder for a
+    two-organism comparison can cost precision on the single-property questions
+    that are most of what anyone asks, and an average over both moves the right way
+    while the basic questions get worse. A tier with no questions is omitted; a
+    tier whose questions expect nothing -- `declining` -- is reported as such rather
+    than as nought per cent.
+    """
+    per: dict[Tier, list[CitationScore]] = {}
+    for result, score in zip(scored, scores, strict=True):
+        per.setdefault(by_id[result.question_id].tier, []).append(score)
+    lines = []
+    for tier in Tier:
+        group = per.get(tier)
+        if not group:
+            continue
+        expected = sum(s.expected for s in group)
+        if not expected:
+            # Said as an absence, not as a different scoring. A false-premise
+            # question is not `unsupported`, so `unsupported_score` never sees
+            # it either: nothing scores it, and claiming otherwise is exactly
+            # the absence-that-reads-as-a-pass this module exists to avoid.
+            lines.append(
+                f"    {tier}: {len(group)} result(s) expecting no entries — no "
+                f"citation figure applies, and no other check scores them either"
+            )
+            continue
+        reached = sum(s.reached_the_table for s in group)
+        passes = sum(1 for s in group if s.all_expected_reached_the_table)
+        lines.append(
+            f"    {tier}: {reached} of {expected} reached the table "
+            f"({_percent(reached, expected)}), every one in {passes} of {len(group)} result(s)"
+        )
+    return ["  by what the question demands:"] + lines if lines else []
 
 
 def _cost(results: tuple[Result, ...]) -> list[str]:

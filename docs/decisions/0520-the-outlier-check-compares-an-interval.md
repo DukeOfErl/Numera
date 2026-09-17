@@ -1,6 +1,6 @@
 # ADR-0520: An outlier is measured against its peers' interval, not their median
 
-- **Status:** accepted
+- **Status:** superseded by [ADR-0540](0540-peers-come-from-the-expected-entries.md)
 - **Date:** 2026-09-05
 - **Pull request:** _(not yet opened — branch `feat/eval-scoring`)_
 
@@ -15,9 +15,18 @@ Two numbers had to be chosen, and the design recorded both as open questions: wh
 make, and how far outside is far enough. The design's starting form was a ratio against the peers'
 median, with the note that these populations are small and skewed.
 
-The case the check exists for is concrete. On the reviewer page of 2026-09-04, an answer about yeast
-nuclear volume cited nine entries: eight between 1.76 and 3.3 µm³, and one at 10.3. The biologist
-reading the page found it immediately; no automated check in the project would have.
+The case the check exists for is concrete. While writing specimen answers for a review page on
+2026-09-04, one answer about yeast nuclear volume cited nine entries: eight between 1.76 and 3.3 µm³,
+and one at 10.3. Noticing that took only reading the nine values side by side — and no automated
+check in the project would have done it.
+
+**An earlier draft of this ADR credited that observation to the biologist the page was written for.
+He never saw the page.** The finding was the author's, made while assembling the specimens. The
+correction matters beyond politeness: a decision recorded as resting on a domain expert's judgement
+carries weight that a decision resting on the author reading a column of numbers does not, and a
+later reader weighing whether to revisit this rule would have been misled about how well
+established it is. Commit messages from 2026-09-07 carry the same misattribution and are left as
+written, since history is not rewritten here.
 
 That example rules out the obvious threshold. 10.3 is 3.1 times the peers' maximum, so an
 order-of-magnitude rule — the factor `Entry.spans_implausibly` uses for a single entry's own bounds —
