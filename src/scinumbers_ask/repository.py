@@ -157,7 +157,7 @@ class CorpusRepository:
         # from the end -- silently dropping the last match while reporting
         # truncation -- and zero returns nothing against a non-zero total.
         limit = max(1, min(int(limit), MAX_LIMIT))
-        resolved = self._resolve_organism(organism) if organism else None
+        resolved = self.resolve_organism(organism) if organism else None
         matched = [
             e
             for e in self._entries
@@ -185,13 +185,36 @@ class CorpusRepository:
             )
         return result
 
-    def _resolve_organism(self, term: str) -> frozenset[str]:
-        """Stored organism values a term refers to: aliases first, then substrings."""
+    def resolve_organism(self, term: str) -> frozenset[str]:
+        """Stored organism values a term refers to: aliases first, then substrings.
+
+        Public because the evaluation has to judge "did the agent search for the
+        asked organism" with the same resolution `search` uses. A harness that
+        compared the strings would score a search for "E. coli" as not being a
+        search for "Escherichia coli", and report the resolution's success as the
+        agent's failure.
+        """
         key = " ".join(term.lower().split())
         canonical = self._alias_keys.get(_unpunctuated(term))
         stored = set(self._aliases.get(canonical or key, ()))
         stored.update(o for o in self._organisms if key in o.lower())
         return frozenset(stored)
+
+    def resolve_property(self, term: str) -> frozenset[str]:
+        """Stored property values a term selects, the way `search` selects them.
+
+        Search matches a property by case-insensitive substring, and this is that
+        rule read through the corpus rather than applied to two free-text strings:
+        "volume" and "Cell volume" both select the stored value `Cell volume`, so
+        they agree, while comparing the strings directly would not.
+
+        No alias index. Organisms have abbreviated binomials, which are a closed
+        and enumerable pattern; property names have no equivalent, and inventing
+        one here would be a heuristic reasoned from the shape of the input rather
+        than measured against the corpus.
+        """
+        key = " ".join(term.lower().split())
+        return frozenset(p for p in self._properties if key in p.lower())
 
     # -- vocabulary -------------------------------------------------------
 

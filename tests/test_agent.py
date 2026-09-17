@@ -9,7 +9,6 @@ from langchain_core.messages import AIMessage
 from agent_doubles import (
     OutOfCreditModel,
     batched_tool_calls,
-    costing,
     out_of_credit_error,
     provider_error,
     says,
@@ -95,6 +94,95 @@ def test_a_new_session_does_not_inherit(repo, config, tmp_path):
     agent2 = agent_with(repo, config, tmp_path, scripted(says("second")))
     run(agent2, "s2", "What about yeast?")
     assert agent2.conversation_length("s2") == 2
+
+
+def test_the_context_a_session_was_shown_is_readable_from_it(repo, config, tmp_path):
+    """The evaluation records what the agent was shown, and this is the only source
+    that is that by construction: a search for "Cell diameter" against the fixture
+    corpus must have put entry 100002 in front of the model, so the recorded text
+    has to carry it."""
+    model = scripted(tool_call("search_entries", property="Cell diameter"), says("done"))
+    agent = agent_with(repo, config, tmp_path, model)
+    run(agent, "s1", "How wide is E. coli?")
+    (shown,) = agent.tool_results("s1")
+    assert "100002" in shown
+
+
+def test_a_session_shown_nothing_records_nothing(repo, config, tmp_path):
+    agent = agent_with(repo, config, tmp_path, scripted(says("from memory")))
+    run(agent, "s1", "How wide is E. coli?")
+    assert agent.tool_results("s1") == ()
+
+
+def test_every_tool_result_is_recorded_in_order_not_only_the_last(repo, config, tmp_path):
+    """A question makes several retrievals, and the context is all of them.
+
+    Keeping only the last would misreport the evidence of exactly the questions
+    that took the most work to answer.
+    """
+    model = scripted(
+        tool_call("search_entries", property="Cell diameter"),
+        tool_call("search_entries", property="Cell length"),
+        says("done"),
+    )
+    agent = agent_with(repo, config, tmp_path, model)
+    run(agent, "s1", "How big is E. coli?")
+    first, second = agent.tool_results("s1")
+    assert "100002" in first
+    assert "100001" in second
+
+
+def test_a_search_that_matched_nothing_is_recorded_rather_than_dropped(repo, config, tmp_path):
+    """It is what the model was shown, and it is why a refusal was right.
+
+    A record that held only fruitful retrievals would make a correct refusal look
+    like a refusal with no search behind it.
+    """
+    model = scripted(tool_call("search_entries", property="Number of neoblasts"), says("no"))
+    agent = agent_with(repo, config, tmp_path, model)
+    run(agent, "s1", "How many neoblasts?")
+    (shown,) = agent.tool_results("s1")
+    assert "No entries matched" in shown
+
+
+def test_each_session_records_only_its_own_context(repo, config, tmp_path):
+    a = agent_with(
+        repo,
+        config,
+        tmp_path,
+        scripted(tool_call("search_entries", property="Cell diameter"), says("a")),
+    )
+    run(a, "alpha", "question one")
+    b = agent_with(
+        repo,
+        config,
+        tmp_path,
+        scripted(tool_call("search_entries", property="Cell length"), says("b")),
+    )
+    run(b, "beta", "question two")
+    assert "100002" in a.tool_results("alpha")[0]
+    assert "100002" not in b.tool_results("beta")[0]
+
+
+def test_a_follow_up_sees_its_parent_context_too(repo, config, tmp_path):
+    """A follow-up shares its parent's session, so the context recorded for it is
+    the whole session's -- which is what the harness needs, since a follow-up's
+    answer may rest on an entry retrieved for the question before it."""
+    first = agent_with(
+        repo,
+        config,
+        tmp_path,
+        scripted(tool_call("search_entries", property="Cell diameter"), says("a")),
+    )
+    run(first, "s1", "How wide is E. coli?")
+    second = agent_with(
+        repo,
+        config,
+        tmp_path,
+        scripted(tool_call("search_entries", property="Cell length"), says("b")),
+    )
+    run(second, "s1", "And how long?")
+    assert len(second.tool_results("s1")) == 2
 
 
 def test_two_sessions_share_nothing(repo, config, tmp_path):
@@ -745,65 +833,9 @@ def test_every_non_raising_path_ends_with_a_question_ended(repo, config, tmp_pat
     comes. Enumerated per-case tests keep missing the path nobody thought of --
     this asserts the invariant across every ending the agent can produce.
     """
-    from langchain_core.messages import AIMessage
+    from agent_endings import ending_builds
 
-    from scinumbers_ask.agent import AskAgent
-
-    def normal():
-        return agent_with(repo, config, tmp_path, scripted(says("an answer")), "n.sqlite"), "s"
-
-    def blank():
-        return agent_with(repo, config, tmp_path, scripted(AIMessage(content="")), "b.sqlite"), "s"
-
-    def provider_dead():
-        return agent_with(repo, config, tmp_path, scripted(says("x"), failures=99), "p.sqlite"), "s"
-
-    def call_limit():
-        model = scripted(tool_call("search_entries", property="Cell"))
-        return agent_with(repo, config, tmp_path, model, "l.sqlite"), "s"
-
-    def unconfigured():
-        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-        return AskAgent(repo, config, str(tmp_path / "u.sqlite")), "s"
-
-    def at_conversation_bound():
-        # Must ask once first: with a fresh session the bound is not yet reached,
-        # so lowering it alone produced an ordinary answer rather than a refusal.
-        # Last in the list, because the patched bound outlives this closure.
-        monkeypatch.setattr("scinumbers_ask.agent.CONVERSATION_BOUND", 1)
-        agent = agent_with(repo, config, tmp_path, scripted(says("a"), says("b")), "c.sqlite")
-        list(agent.ask("s", "a first question, which fills the conversation"))
-        return agent, "s"
-
-    def at_spend_ceiling():
-        tight = Config(model=config.model, question_ceiling=usd("0.000120"), run_budget=usd("1.20"))
-        model = scripted(costing(tool_call("search_entries", property="Cell"), 0.000_200))
-        return AskAgent(repo, tight, str(tmp_path / "sc.sqlite"), model=model), "s"
-
-    def at_run_budget():
-        budgeted = Config(
-            model=config.model, question_ceiling=usd("0.60"), run_budget=usd("0.000050")
-        )
-        model = scripted(costing(says("an answer"), 0.000_110))
-        agent = AskAgent(repo, budgeted, str(tmp_path / "rb.sqlite"), model=model)
-        list(agent.ask("s", "a first question, which exhausts the budget"))
-        return agent, "s"
-
-    def unpriceable():
-        model = scripted(says("an answer"), reports_cost=False)
-        return agent_with(repo, config, tmp_path, model, "up.sqlite"), "s"
-
-    builds = (
-        normal,
-        blank,
-        provider_dead,
-        call_limit,
-        unconfigured,
-        at_spend_ceiling,
-        at_run_budget,
-        unpriceable,
-        at_conversation_bound,
-    )
+    builds = ending_builds(repo, config, tmp_path, monkeypatch)
     reasons = set()
     for build in builds:
         agent, session = build()
@@ -823,10 +855,13 @@ def test_every_non_raising_path_ends_with_a_question_ended(repo, config, tmp_pat
         )
         reasons.add(end.reason)
 
-    # Nine builds, eight distinct endings -- the unconfigured and unpriceable paths
-    # share NOT_CONFIGURED. Asserting the exact count so a build that silently
-    # collapsed onto another ending would be caught rather than absorbed.
-    assert len(reasons) == 8, sorted(r.value for r in reasons)
+    # The exact set, not a count. A count said `== 8` here for months while
+    # `PROVIDER_LIMIT` was reached by no build at all, and adding a tenth
+    # `EndReason` would not have failed it. Against `EndReason` itself, so a new
+    # member with no build behind it breaks this by construction.
+    from agent_endings import COVERED
+
+    assert reasons == COVERED, sorted(r.value for r in COVERED - reasons)
 
 
 # -- gaps found by coverage, not by reading -------------------------------

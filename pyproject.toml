@@ -34,7 +34,10 @@ dependencies = [
     "langgraph",
     "langgraph-checkpoint-sqlite",
     "langchain-openai",
-    "streamlit",
+    # Floored with the `ask` extra: `st.login` arrived in 1.42, and a fresh
+    # resolve here without that floor would install a Streamlit that has no
+    # sign-in at all.
+    "streamlit>=1.42",
     # The durable trail's store. `[binary]` for the prebuilt wheel: the host has
     # no libpq to build against, so a source build fails at deploy time.
     "sqlalchemy>=2.0",
@@ -64,10 +67,35 @@ ask = [
     # is load-bearing here, so it is a direct dependency rather than an option.
     "langgraph-checkpoint-sqlite",
     "langchain-openai",
-    "streamlit",
+    # `st.login`, `st.user` and `st.logout` arrived in 1.42; the behaviour of
+    # `st.user` when `[auth]` is absent, which `identity_configured` relies on,
+    # was read from 1.61.1. Floored so a fresh resolve without the lock fails at
+    # install rather than at the sign-in button.
+    "streamlit>=1.42",
+    # The usage and feedback store. Streamlit's own `st.connection("sql")` is
+    # SQLAlchemy-backed, and it is preferred over a hand-rolled connection
+    # because it caches the engine at global scope across sessions -- without
+    # that, every rerun would pay TCP, TLS and Postgres auth before its INSERT.
+    "sqlalchemy>=2.0",
+    # `[binary]` for the prebuilt wheel: the host has no libpq to build against,
+    # and a source build would fail at deploy time rather than here.
+    "psycopg[binary]>=3.2",
+    # What `st.login` needs and Streamlit does not install: the OIDC client.
+    # Streamlit's own extra is `streamlit[auth]`; named directly so the floor is
+    # ours to read. Verified against the installed Streamlit 1.61.1 on 2026-09-16.
+    "authlib>=1.3.2",
 ]
 ingest = [
     "pydantic>=2.6",
+]
+# Additive to `ask`, not a replacement for it: the evaluation harness is a third
+# adapter over the same agent, so it needs the `ask` stack to run at all, and this
+# extra carries only what is new. Install both:
+#   uv sync --extra ask --extra eval
+# `deepeval` is used by one module, for the judged layer alone (ADR-0500). A
+# deterministic evaluation run needs none of it, which is why it is separable.
+eval = [
+    "deepeval>=4.2",
 ]
 
 # All three entry points are declared here so no branch has to edit this table.
@@ -77,6 +105,7 @@ ingest = [
 bionumbers = "bionumbers.cli:main"
 scinumbers-ask = "scinumbers_ask.cli:main"
 bionumbers-ingest = "bionumbers_ingest.cli:main"
+scinumbers-eval = "scinumbers_ask.eval_cli:main"
 
 [dependency-groups]
 dev = [
@@ -112,7 +141,14 @@ only-include = ["src"]
 testpaths = ["tests"]
 # Tests import the doubles in tests/ directly, and default to offline.
 pythonpath = ["tests"]
-addopts = "-m 'not network and not corpus'"
+# `-p no:deepeval` because the `eval` extra installs DeepEval, which registers a
+# pytest plugin that prints "Running teardown with pytest sessionfinish..." after
+# every run -- including runs that touch none of its code. Collection is unchanged;
+# it is the output that moved, and a line that appears only for developers who
+# installed one extra makes "the suite output is unchanged" unverifiable. Harmless
+# where deepeval is absent: `-p no:<name>` for an uninstalled plugin is not an error,
+# which matters because this file is shared by all three work packages.
+addopts = "-m 'not network and not corpus' -p no:deepeval"
 markers = [
     "network: hits a real external service; run with `pytest -m network`",
     # The corpus is an external input kept out of the repository (ADR-0170), so

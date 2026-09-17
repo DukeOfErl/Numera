@@ -16,7 +16,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from conftest import FIXTURE, agent_with
+from conftest import FIXTURE, agent_with, ask_question
 from streamlit.testing.v1 import AppTest
 
 from agent_doubles import batched_tool_calls, costing, says, scripted, tool_call
@@ -45,6 +45,15 @@ APP = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 # from a hang in the agent.
 TIMEOUT = 30
 
+# The session-state keys feedback is allowed to keep, named exactly rather than
+# matched by a wildcard: a rule that permitted anything under a namespace would
+# permit the copies of the conversation and the spend it exists to forbid.
+FEEDBACK_PREFIXES = (
+    "scinumbers_ask.feedback",
+    "scinumbers_ask.verdict.",
+    "scinumbers_ask.comment.",
+)
+
 
 def app(monkeypatch, repo, agent) -> AppTest:
     """The real script, with the corpus and agent a test chose.
@@ -53,12 +62,12 @@ def app(monkeypatch, repo, agent) -> AppTest:
     is cached for the life of the process: a second test would be served the
     first one's agent.
     """
-    monkeypatch.setattr(web, "resources", lambda corpus=None: (repo, agent))
+    monkeypatch.setattr(web, "resources", lambda corpus=None: repo)
+    monkeypatch.setattr(web, "agent_for", lambda state, repo, admission: agent)
     return AppTest.from_file(APP, default_timeout=TIMEOUT)
 
 
-def ask(at: AppTest, question: str) -> AppTest:
-    return at.chat_input[0].set_value(question).run()
+ask = ask_question
 
 
 # -- events become items --------------------------------------------------
@@ -216,12 +225,43 @@ def test_session_state_holds_the_identifier_and_what_was_drawn_and_nothing_else(
     monkeypatch, repo, config, tmp_path
 ):
     """A copy of the conversation, the spend or the ceiling here would be a
-    second source of truth for something the checkpoint already owns."""
+    second source of truth for something the checkpoint already owns.
+
+    Feedback is the one exception, and it is allowed by name rather than by
+    loosening the rule. What a reader has rated *in this session* is not
+    something the checkpoint owns: the durable record is a row in the trail, and
+    this is only what stops a redraw recording the same judgement twice. It
+    disappears with the session, and losing it costs at most one duplicate.
+
+    The question box's key is the second exception, and a different kind. It is
+    not state this driver keeps at all -- it is a Streamlit widget's own value,
+    which lands in session state because the widget was given a key. It is given
+    one so the page can read, before it draws anything, whether a question is
+    about to run: every control already on screen is live while that run works,
+    and a click on one abandons the agent's generator mid-tool-call.
+
+    The tab's own identifier is the third, and it is here for the reason the
+    session identifier is: it is an identity this driver mints and must keep,
+    because the session cap counts browser sessions and a browser session is
+    exactly what this dictionary outlives nothing of. It cannot come from the
+    URL -- that is the conversation's token, which anyone holding the link can
+    supply (ADR-0830).
+
+    The rule keeps its teeth: anything else namespaced here still fails, and the
+    allowance is a prefix rather than a wildcard, so `scinumbers_ask.spend` or a
+    second copy of the conversation would still be caught.
+    """
     model = scripted(says("an answer"))
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
     kept = {k for k in at.session_state.filtered_state if k.startswith("scinumbers_ask.")}
-    assert kept == {web.SESSION_KEY, web.TRANSCRIPT_KEY}
+    feedback_keys = {k for k in kept if k.startswith(FEEDBACK_PREFIXES)}
+    assert kept - feedback_keys == {
+        web.SESSION_KEY,
+        web.TAB_KEY,
+        web.TRANSCRIPT_KEY,
+        web.ASK_KEY,
+    }
 
 
 def test_a_missing_corpus_is_explained_rather_than_raised(monkeypatch):
@@ -387,6 +427,38 @@ def test_each_retrieval_is_its_own_element_rather_than_one_line_rewritten(
     assert "search_entries" in progress[0] and "get_entry" in progress[1]
 
 
+def test_a_question_that_retrieved_nothing_draws_no_retrieval_box(
+    monkeypatch, repo, config, tmp_path
+):
+    """An empty box claims a search that never happened.
+
+    Driven through `AppTest` rather than over items, because the defect is not in
+    what the items say -- there are no progress items at all -- but in an element
+    the driver creates on its own. Nothing below the script can see it.
+    """
+    model = scripted(says("I could not answer this."))
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    assert [box.label for box in at.status] == []
+
+
+def test_a_question_that_retrieved_something_still_draws_the_box(
+    monkeypatch, repo, config, tmp_path
+):
+    """The other direction: the fix must not be "never draw it".
+
+    The two differ only in whether a retrieval happened, which is the one thing the
+    rule reads.
+    """
+    model = scripted(
+        tool_call("search_entries", property="Cell"),
+        says("about 1 micrometre (BNID 100002)"),
+    )
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    assert [box.label for box in at.status] == ["Retrieval"]
+
+
 # -- warnings are said, not swallowed --------------------------------------
 
 
@@ -462,7 +534,7 @@ def test_a_follow_up_continues_the_conversation_after_a_restart(
     # The server restarts: a new agent over the same store, and a page that knows
     # only what the URL carried.
     restarted = AskAgent(repo, config, store, model=scripted(says("second answer")))
-    monkeypatch.setattr(web, "resources", lambda corpus=None: (repo, restarted))
+    monkeypatch.setattr(web, "agent_for", lambda state, repo, admission: restarted)
     after = AppTest.from_file(APP, default_timeout=TIMEOUT)
     after.query_params = {web.QUERY_KEY: session}
     after.run()
@@ -549,7 +621,7 @@ def test_the_openable_entries_are_in_the_side_panel_not_the_main_column(
 
     labels = [e.label for e in at.sidebar.expander]
     assert any("BNID 100002" in label for label in labels), labels
-    assert any("Full entries" in h.value for h in at.sidebar.header)
+    assert any(t.label == web.ENTRIES_TAB for t in at.sidebar.tabs)
 
 
 def test_an_opened_row_shows_the_entry_the_model_never_saw(monkeypatch, repo, config, tmp_path):
@@ -617,7 +689,7 @@ def test_the_side_panel_is_there_before_any_question(monkeypatch, repo, config, 
     """A panel that materialises after the first answer reads as a glitch."""
     at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
 
-    assert any("Full entries" in h.value for h in at.sidebar.header)
+    assert any(t.label == web.ENTRIES_TAB for t in at.sidebar.tabs)
     assert not at.sidebar.expander, "entries before anything was retrieved"
 
 
@@ -720,7 +792,37 @@ def test_an_answer_that_cited_nothing_says_so_where_the_cited_table_would_be(
 
     headings = [m.value for m in at.markdown]
     assert any(entries_table.NOTHING_CITED in h for h in headings), headings
-    assert any(entries_table.UNCITED_BANNER.capitalize() in h for h in headings)
+    # The uncited rows are folded away, so their banner is an expander's label
+    # rather than a heading. Still asserted: folded is not the same as unlabelled,
+    # and a reader has to be able to tell what is behind it without opening it.
+    assert any(entries_table.UNCITED_BANNER.capitalize() in e.label for e in at.expander)
+
+
+def test_the_uncited_rows_are_folded_away_and_the_cited_ones_are_not(
+    monkeypatch, repo, config, tmp_path
+):
+    """The asymmetry is the point, not the folding.
+
+    The cited rows are what the prose stands on: a reader checking an answer
+    against its evidence must not have to open anything to see them. The uncited
+    rows are what it did *not* stand on — context, and length in front of that
+    reader. Folding both would hide the evidence; folding neither is what put the
+    rating and the summary below a screenful of rows nobody asked for.
+    """
+    model = scripted(
+        tool_call("search_entries", property="Cell"), says("about 1 micrometre (BNID 100002)")
+    )
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+
+    folded = at.main.expander
+    assert len(folded) == 1, [e.label for e in folded]
+    assert entries_table.UNCITED_BANNER.capitalize() in folded[0].label
+    assert not folded[0].proto.expanded, "the uncited rows were not folded away"
+    assert folded[0].dataframe, "the fold is empty -- the rows went somewhere else"
+    assert any("Cited in the answer" in m.value for m in at.main.markdown), (
+        "the cited heading is gone"
+    )
+    assert len(at.main.dataframe) == 2, "the cited table is behind the fold too"
 
 
 def test_the_uncited_heading_says_what_the_rows_are_not_only_what_they_are_not():
@@ -925,7 +1027,10 @@ def test_the_prototype_caveat_is_on_the_page_and_stays_there(monkeypatch, repo, 
         "drawn as an ordinary element it scrolls away with the first answer, and the "
         "reader who has seen several answers is the one who most needs it"
     )
-    assert any(web.PROTOTYPE_SHORT in c.value for c in at.sidebar.caption), "missing in the panel"
+    assert not any(web.PROTOTYPE_SHORT in c.value for c in at.sidebar.caption), (
+        "the pinned banner already says this, above everything and unscrollable; "
+        "a second copy in the panel is the repetition a reader learns to skip"
+    )
 
 
 def test_the_page_and_the_readme_both_say_it_is_not_trustworthy_yet():
@@ -984,3 +1089,48 @@ def test_the_page_refuses_a_retired_variable_before_it_looks_for_a_corpus(monkey
     assert any("SCINUMBERS_CORPUS" in text for text in errors), errors
     assert not any("No corpus path supplied" in text for text in errors), errors
     assert not at.exception, "the page raised instead of explaining"
+
+
+def test_a_finished_search_is_not_labelled_as_still_running(monkeypatch, repo, config, tmp_path):
+    """Both paths name the finished box the same thing.
+
+    The live path opens the box on the first retrieval and relabels it when the
+    answer is done; the replay path draws it already finished. They had two
+    literals and had drifted, so every redrawn turn claimed to still be searching
+    a corpus it had finished with. It stayed invisible while the live render was
+    what a reader saw after asking — the rerun that revives older ratings replaced
+    it with the replay render, and that is what exposed it.
+    """
+    model = scripted(
+        tool_call("search_entries", property="Cell"), says("about 1 micrometre (BNID 100002)")
+    )
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+    assert [box.label for box in at.status] == [web.RETRIEVAL_DONE]
+
+    # And still so after another turn puts it through the replay path a second time.
+    at = ask(at, "and in yeast?")
+    assert web.RETRIEVAL_RUNNING not in [box.label for box in at.status]
+
+
+def test_the_evidence_column_can_hold_its_table():
+    """The arithmetic `READING_SPLIT`'s comment claimed was tested, and was not.
+
+    The entries table's widths are fixed pixels. Below their sum the dataframe
+    grows a horizontal scrollbar and the first column it takes away is the
+    identifier — the one cell a reader is checking against the prose. So the
+    evidence column's share of the target width has to cover them.
+
+    Written as a derivation rather than a remembered number: it fails if someone
+    widens a column, skews the split toward the prose, or lowers the target. The
+    only width test before this bounded the table at 700px, which the wide layout
+    made meaningless — it names neither the split nor the layout it now lives in.
+    """
+    usable = web.TARGET_BROWSER_WIDTH - web.LAYOUT_CHROME
+    evidence = usable * web.READING_SPLIT[1] / sum(web.READING_SPLIT)
+    needed = sum(web.COLUMN_WIDTHS.values())
+
+    assert evidence >= needed, (
+        f"the evidence column gets {evidence:.0f}px of a {web.TARGET_BROWSER_WIDTH}px "
+        f"browser and the table needs {needed}px, so it scrolls sideways and hides "
+        f"the ID column. Narrow the columns or widen the split — not the target."
+    )

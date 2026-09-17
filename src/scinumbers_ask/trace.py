@@ -23,8 +23,13 @@ from typing import Any
 LOGGER_NAME = "scinumbers_ask"
 
 # Inside the repository but gitignored: the trail is this project's own output, not
-# corpus data, and the records carry search terms, identifiers and token counts --
-# no entry text, so nothing of the corpus's licensing travels with them.
+# corpus data. Until ADR-0840 the records carried only search terms, identifiers and
+# token counts. `answer.given` now carries the model's prose verbatim, which restates
+# corpus values and may quote a reference string -- so the trail is no longer free
+# of the corpus's text, and a trail written to a tracked path is a file to look at
+# before committing. The default stays under `logs/`, which is gitignored; unlike
+# `evaluation.py`, nothing here refuses a tracked path, because the answer is a
+# reader's own output and goes to stdout regardless.
 DEFAULT_FILE = "logs/trace.jsonl"
 
 # Set at import, not only in configure(). An unconfigured logger inherits the
@@ -45,6 +50,12 @@ class JsonLines(logging.Formatter):
         question_id = getattr(record, "question_id", None)
         if question_id is not None:
             payload["question_id"] = question_id
+        # Omitted when absent rather than written as null: a trail read by a
+        # person should not carry a column that is empty on every line from the
+        # terminal driver, which has a session but no reason to name it twice.
+        session_id = getattr(record, "session_id", None)
+        if session_id:
+            payload["session_id"] = session_id
         run_label = getattr(record, "run_label", None)
         if run_label is not None:
             payload["run"] = run_label
@@ -73,12 +84,22 @@ class QuestionTrace:
 
     question_id: str
     run_label: str = "dev"
+    # The session the question was asked in. The question identifier locates one
+    # question; without this, a sequence of questions asked by one person cannot
+    # be reassembled, and one person asking ten is indistinguishable from ten
+    # people asking one.
+    #
+    # Defaulted rather than required, because a caller that has no session is a
+    # real case -- a test, a direct `QuestionTrace` -- and forcing a placeholder
+    # would put a fabricated identifier in the record instead of nothing.
+    session_id: str = ""
 
     def record(self, event: str, **fields: Any) -> None:
         logging.getLogger(LOGGER_NAME).info(
             event,
             extra={
                 "question_id": self.question_id,
+                "session_id": self.session_id,
                 "run_label": self.run_label,
                 "fields": fields,
             },
@@ -90,15 +111,23 @@ class QuestionTrace:
         Names and tags cost nothing now and cannot be retrofitted onto traces
         already recorded; a trace of runs all called the same thing is unusable.
         """
+        metadata = {"question_id": self.question_id, "run": self.run_label}
+        # Only when there is one. A tracing tool treats metadata keys as facets,
+        # and a facet that is the empty string on some runs and an identifier on
+        # others is worse than one that is simply absent.
+        if self.session_id:
+            metadata["session_id"] = self.session_id
         return {
             "run_name": f"{name}:{self.question_id}",
             "tags": ["scinumbers-ask", name, f"run:{self.run_label}"],
-            "metadata": {"question_id": self.question_id, "run": self.run_label},
+            "metadata": metadata,
         }
 
 
-def start_question(run_label: str = "dev") -> QuestionTrace:
-    return QuestionTrace(question_id=uuid.uuid4().hex[:12], run_label=run_label)
+def start_question(run_label: str = "dev", session_id: str = "") -> QuestionTrace:
+    return QuestionTrace(
+        question_id=uuid.uuid4().hex[:12], run_label=run_label, session_id=session_id
+    )
 
 
 def to_file(spec: str) -> None:

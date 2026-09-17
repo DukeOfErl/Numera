@@ -94,3 +94,45 @@ def test_unrecognised_units_contribute_no_dimension():
         "mass",
     )
     assert dimensions_of(["N/A", "kJ/mol"]) == ()
+
+
+def test_a_spelled_out_dalton_is_a_mass_like_its_symbol():
+    """`kda` was in the table and `kDalton` was not, so the corpus's seven
+    `kDalton` entries classified as nothing at all. Both spellings of one unit
+    must not disagree."""
+    for spelling in ("kDa", "kDalton", "Kdalton", "kilodalton", "Daltons", "megadalton"):
+        assert dimension(spelling) == "mass", spelling
+
+
+def test_a_mass_is_incompatible_with_a_length_rather_than_unknown():
+    """The case found on the reviewer page of 2026-09-04: an answer offered
+    2,700 kDa as the top of a range of nanometres, and this returned None -- so
+    the one check that should have refused the comparison said nothing."""
+    assert comparable("nm", "kDalton") is False
+    assert comparable("kDalton", "nm^3") is False
+
+
+def test_a_per_cell_count_matches_the_other_spellings_of_itself():
+    """`Copies/cell` classified and `ribosomes/cell` did not, so two entries
+    counting the same kind of thing per cell were not comparable."""
+    assert dimension("ribosomes/cell") == "count"
+    assert dimension("Ribosomes/cell") == "count"
+    assert dimension("atoms per cell") == "count"
+    assert comparable("ribosomes/cell", "Copies/cell") is True
+
+
+def test_an_amount_per_cell_is_not_promoted_to_a_count():
+    """The other direction, and the reason `<X>/cell` is enumerated rather than
+    matched by a rule. Under a blanket per-cell rule these become counts, and a
+    mass per cell then compares compatible with a ribosome count -- 38 entries
+    in the reference corpus. Unrecognised is the correct answer for them."""
+    for unit in ("pg/cell", "fg/cell", "g/cell", "μL/cell"):
+        assert dimension(unit) is None, unit
+    assert comparable("pg/cell", "ribosomes/cell") is None
+
+
+def test_a_rate_or_a_density_per_cell_is_not_a_count():
+    """`ribosomes/cell` is a count; `Ribosomes/μm^3` is a number density and
+    `ATP/cell/sec` is a rate. Adding the first must not drag in the others."""
+    for unit in ("Ribosomes/μm^3", "ATP/cell/sec", "mol/cell/sec", "molecules/cell/sec"):
+        assert dimension(unit) is None, unit
