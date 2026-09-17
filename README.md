@@ -241,7 +241,7 @@ established, marked incomplete, rather than being cut off mid-sentence. A limit 
 it binds — the number you set is the one that stops work
 ([ADR-0180](docs/decisions/0180-limits-named-where-they-bind.md)).
 
-## This branch: hosted deployment
+## Hosted deployment: what the deploy branch adds
 
 **`deploy/streamlit-cloud` is never merged back.** It carries four changes `main` must
 not have.
@@ -299,7 +299,7 @@ this branch redeploys, whether or not the checks pass.
 ## Tests
 
 ```bash
-uv run pytest                                  # 1,559 tests on a six-entry fixture; no API key needed
+uv run pytest                                  # 1,572 tests on a six-entry fixture; no API key needed
 uv run pre-commit install                      # once per clone: ruff check and ruff format at each commit
 ```
 
