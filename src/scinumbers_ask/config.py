@@ -192,11 +192,19 @@ class Config:
 # per-question ceiling and the run budget are unchanged and still bind, so what
 # changes is how few questions a budget buys, not whether it is enforced.
 #
-# Not chosen on a measured gain in retrieval. The three-model comparison of
-# 2026-09-17 -- one repeat of ten questions each -- had Haiku reach the entries
-# table for 67% of the expected entries and Opus 4.7 for 68%. One repeat cannot
-# tell those apart, and what it does not measure at all is the prose, which is
-# what a reader is handed.
+# What the switch buys, measured over three repeats of ten questions on
+# 2026-09-17: Opus reaches the entries table for 65% of the expected entries
+# against Haiku's 53% -- and the whole of that lead is the `compound` questions,
+# 62% against 31%. On `basic` ones the two are a tie, 68% against 70%. So this is
+# a decision about comparisons and calculations, and it buys nothing on lookups.
+#
+# The finding that is not about coverage: Haiku answered two of the six
+# unsupported questions with a quantity, where Opus declined all six. Saying the
+# corpus does not hold something is the thing this app is for.
+#
+# Read nothing from a single repeat. The same comparison at one repeat each, the
+# morning of the same day, had the two one point apart and was taken for a tie.
+# docs/evaluations/2026-09-17-three-models.md.
 DEFAULT_MODEL = "anthropic/claude-opus-4.7"
 
 # Where notice is given, as a fraction of the stop. Integer arithmetic throughout,

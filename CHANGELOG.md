@@ -58,11 +58,12 @@ any release; `1.0.0` when it stabilizes.
   while the shape of the app was still moving; what is read now is answers. It
   costs five times as much per token in both directions, so a budget buys fewer
   questions — the per-question ceiling and the run budget are unchanged and still
-  bind. Override with `SCINUMBERS_MODEL`; the evaluation harness names the
-  model per run. The switch is not made on a measured gain in retrieval — a
-  one-repeat comparison of ten questions on 2026-09-17 had the two within a
-  point of each other, 67% against 68% of expected entries reaching the
-  entries table — but on the prose, which that figure does not measure.
+  bind. Override with `SCINUMBERS_MODEL`; the evaluation harness names the model
+  per run. What it buys, over three repeats of ten questions: 65% of expected
+  entries reach the entries table against Haiku's 53%, and all of that lead is in
+  the `compound` questions (62% against 31%) — on `basic` ones the two are a tie.
+  Haiku also answered two of the six unsupported questions with a quantity, where
+  Opus declined all six ([the run](docs/evaluations/2026-09-17-three-models.md)).
 
 
 - The side panel's spend is one line rather than two: the run budget, with what
