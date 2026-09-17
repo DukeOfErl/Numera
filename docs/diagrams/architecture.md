@@ -1,10 +1,9 @@
 # Architecture diagrams
 
-Five diagrams, one story each, following `DIAGRAMS.md`. The first three are the ask agent, the last
-two the ingester that builds its corpus. Colour, where it is used, encodes kind of thing: orange for
-an external input, blue for a deterministic component, grey for an output artefact.
-
-Three diagrams, one story each, following `DIAGRAMS.md`.
+Seven diagrams, one story each, following `DIAGRAMS.md`. Sections 1–3b are the ask agent, 4 and 5
+the ingester that builds its corpus, and 6 the evaluation harness that measures it. Colour, where it
+is used, encodes kind of thing: orange for an external input, blue for a deterministic component,
+grey for an output artefact.
 
 ## 1. The agent's graph
 

@@ -242,7 +242,7 @@ it binds — the number you set is the one that stops work
 ## Tests
 
 ```bash
-uv run pytest                                  # 1,183 tests on a six-entry fixture; no API key needed
+uv run pytest                                  # 1,559 tests on a six-entry fixture; no API key needed
 uv run pre-commit install                      # once per clone: ruff check and ruff format at each commit
 ```
 
@@ -340,6 +340,12 @@ reached through OpenRouter; and retrieval is agentic rather than a single simila
 showed in [`docs/evaluations/`](docs/evaluations/2026-09-11-baseline.md). Half of what the corpus
 holds for a question reaches the reader's table, and the gap is a failure of search rather than of
 selection. The honest remaining gap is that nothing yet judges whether a *sentence* is true.
+
+**That baseline ran on `anthropic/claude-haiku-4.5`, which is no longer the default.** It has not
+been re-run on `anthropic/claude-opus-4.7`; a one-repeat comparison of the same ten questions on
+2026-09-17 put the two within a point of each other on entries reaching the table, which is why the
+switch was made on the prose rather than on a measured gain in retrieval. Read the figures above as
+describing the harness and the corpus, not as a measurement of the model the app ships with.
 
 ## Where to read next
 
