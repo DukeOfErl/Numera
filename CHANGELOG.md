@@ -12,6 +12,13 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **The SciNumbers mark, beside the page's title** — on the conversation and on
+  the sign-in and refusal pages, so the app looks like itself before a reader is
+  admitted. Inlined rather than linked, so its strokes take the reader's own text
+  colour: nothing here pins a theme, and a near-black mark would be invisible to
+  anyone reading in a dark one. A missing asset costs the mark and nothing else.
+
+
 - **Sign-in, enrolment and a credential per tester, for hosted deployments.** With
   `[auth]` in secrets every visitor signs in with Google and must be enrolled — a
   row the operator inserts in an `accounts` table beside the trail, naming the
@@ -47,19 +54,44 @@ any release; `1.0.0` when it stabilizes.
 ### Changed
 
 - **The default model is `anthropic/claude-opus-4.7`**, where it was
-  `anthropic/claude-haiku-4.5`. Haiku remains a one-variable change away
-  (`SCINUMBERS_MODEL`), and the evaluation harness names the model per run. The
-  switch is not made on the reach figure: a one-repeat comparison of ten questions
-  on 2026-09-17 had the two within a point of each other (67% against 68% of
-  expected entries reaching the entries table) at six times the cost. It is made
-  for the prose a reader is actually handed, which that figure does not measure.
-  A deployment paying per question should know the per-question ceiling and the
-  run budget were set against the cheap model and have not moved.
+  `anthropic/claude-haiku-4.5`. Development ran on a cheap instruction-follower
+  while the shape of the app was still moving; what is read now is answers. It
+  costs five times as much per token in both directions, so a budget buys fewer
+  questions — the per-question ceiling and the run budget are unchanged and still
+  bind. Override with `SCINUMBERS_MODEL`; the evaluation harness names the
+  model per run. The switch is not made on a measured gain in retrieval — a
+  one-repeat comparison of ten questions on 2026-09-17 had the two within a
+  point of each other, 67% against 68% of expected entries reaching the
+  entries table — but on the prose, which that figure does not measure.
+
+
+- The side panel's spend is one line rather than two: the run budget, with what
+  the provider still honours on the reader's own key in the parenthesis behind it
+  — "$0 of $2.00 ($4.89 on key of weekly $5.00)". Two captions in two registers
+  left a reader working out which of the two would stop them first.
+- The sign-out button shares a row with the account it belongs to, which is set
+  over two lines — the email, and the role beneath it. The row is a horizontal
+  container rather than two columns, so the button stays beside the name however
+  wide the panel is, and it keeps its own width when the panel is narrow. The side
+  panel has a minimum width, because it could be dragged narrower than its
+  contents can survive.
+- The page says whose money the questions cost — "Model usage is paid for by the
+  developer" — wherever it runs, rather than only on the deployment branch. What a
+  reader sees does not depend on which branch built the page.
+- The data credit is behind a "Data: BioNumbers (Milo et al.)" popover rather than a standing
+  caption, and it is now shown wherever the app runs rather than only where it is
+  deployed. Attribution has to be present on every page view; it does not have to
+  be read on every page view.
+- Headings no longer offer a link to themselves. Streamlit gives every heading an
+  anchor and a chain icon on hover; this page is one screen with one reading order.
+- The entry count and the conversation's identifier are shown only to the roles
+  that hold the dev panel. They are diagnostics, and they sat above what a tester
+  came for.
 - The side panel names the signed-in account and role without the "Signed in as"
   preamble — the sign-out button beside it says that — and its spend figure is
   headed "Session budget", which is what it now scopes.
-- The side panel's statement of what is kept is one line — "All exchange in this
-  app is logged for product development" — rather than an enumeration of the
+- The side panel's statement of what is kept is one line — "All app exchange is
+  logged for product development" — rather than an enumeration of the
   fields, which was accurate and too long to read. The fuller statement, shown
   once before use, is deferred until there are users rather than invited testers.
   The prototype caveat no longer appears twice: it stays in the pinned banner.

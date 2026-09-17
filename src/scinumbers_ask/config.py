@@ -182,16 +182,21 @@ class Config:
         )
 
 
-# The capable model, for the reader in front of the deployed app. Development ran
-# on `anthropic/claude-haiku-4.5`, which is still a one-variable change away:
-# `SCINUMBERS_MODEL` is how a cheap run says otherwise, and the evaluation harness
-# sets it per run.
+# The capable target, now the default: development ran on a cheap, strong
+# instruction-follower while the shape of the thing was still moving, and what is
+# being read now is answers rather than plumbing. Slug confirmed against
+# OpenRouter's live model list on 2026-09-17, where its price is also the $5/$25
+# per million tokens `FALLBACK_PRICES` carries below.
 #
-# Not chosen on the reach figure. The three-model comparison of 2026-09-17 -- one
-# repeat of ten questions each -- had Haiku reach the entries table for 67% of the
-# expected entries and Opus 4.7 for 68%, at six times the cost. One repeat cannot
-# tell those apart, and the figure it does not measure is the prose: what a reader
-# is handed is the answer, not the table.
+# It is five times the price of the Haiku it replaces, in both directions. The
+# per-question ceiling and the run budget are unchanged and still bind, so what
+# changes is how few questions a budget buys, not whether it is enforced.
+#
+# Not chosen on a measured gain in retrieval. The three-model comparison of
+# 2026-09-17 -- one repeat of ten questions each -- had Haiku reach the entries
+# table for 67% of the expected entries and Opus 4.7 for 68%. One repeat cannot
+# tell those apart, and what it does not measure at all is the prose, which is
+# what a reader is handed.
 DEFAULT_MODEL = "anthropic/claude-opus-4.7"
 
 # Where notice is given, as a fraction of the stop. Integer arithmetic throughout,

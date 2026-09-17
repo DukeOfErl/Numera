@@ -93,7 +93,19 @@ ESCAPERS = {"as_text"}
 # The page's own HTML, drawn with unsafe_allow_html. Markdown escaping does not
 # apply to it and `as_text` would put a backslash into the markup. Listed by line
 # content rather than by number so it cannot silently start covering something else.
-RAW_HTML_MARKERS = ("bn-caveat", "PROTOTYPE_BANNER_CSS", "FEEDBACK_CSS")
+# `SIDEBAR_CSS` is one `white-space` rule built from the button's own key, which
+# is a literal in `web`; no corpus text and no reader's text goes near it.
+RAW_HTML_MARKERS = (
+    "bn-caveat",
+    "PROTOTYPE_BANNER_CSS",
+    "FEEDBACK_CSS",
+    "SIDEBAR_CSS",
+    # `TITLE_HTML` and `TITLE_CSS`: the project's own mark, inlined so its strokes
+    # can take the reader's text colour, with the only substituted text being the
+    # page's own title, escaped. No corpus text and no reader's text goes near it.
+    "TITLE_HTML",
+    "TITLE_CSS",
+)
 
 
 def rendering_calls(path: Path):

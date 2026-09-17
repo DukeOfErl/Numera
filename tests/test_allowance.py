@@ -109,7 +109,9 @@ def test_the_renewal_comes_off_the_payload_and_is_stated_as_the_provider_gave_it
         {"data": {"usage": 1.6, "limit": 5.0, "limit_remaining": 2.9, "limit_reset": "monthly"}}
     )
     assert left.resets == "monthly"
-    assert "renews monthly" in allowance.as_text(left)
+    # The period as the provider worded it. Not the sentence around it: how the
+    # line reads is tuning, and pinning it here would make the caption a contract.
+    assert "monthly" in allowance.as_text(left)
 
 
 @pytest.mark.parametrize(
@@ -138,7 +140,7 @@ def test_the_providers_own_remaining_is_what_is_shown_where_it_disagrees_with_th
     line = allowance.as_text(
         allowance.parse({"data": {"usage": 1.6, "limit": 5.0, "limit_remaining": 2.9}})
     )
-    assert "$2.90 left" in line
+    assert "$2.90" in line
     assert "3.40" not in line, "the worked-out figure, which the provider's own contradicts"
 
 
@@ -146,7 +148,7 @@ def test_with_no_remaining_from_the_provider_there_is_none_of_theirs_to_prefer()
     """The negative for the one above, varying the single field the preference
     reads on an otherwise identical payload."""
     line = allowance.as_text(allowance.parse({"data": {"usage": 1.6, "limit": 5.0}}))
-    assert "$3.40 left" in line
+    assert "$3.40" in line
     assert "2.90" not in line
 
 

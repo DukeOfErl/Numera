@@ -15,7 +15,6 @@ from scinumbers_ask import autobuild, web
 from scinumbers_ask.config import (
     NotConfigured,
     env_setting,
-    format_usd,
     refuse_retired_env,
 )
 from scinumbers_ask.corpus import CorpusUnavailable
@@ -24,7 +23,7 @@ from scinumbers_ask.corpus import CorpusUnavailable
 # rests on, side by side. The entries table is fixed-width and needs about
 # 640px before it grows a horizontal scrollbar that hides the ID column, which
 # the centred layout's ~700px main area cannot give half of. See READING_SPLIT.
-st.set_page_config(page_title="SciNumbers ask", page_icon=":material/biotech:", layout="wide")
+st.set_page_config(page_title=web.TITLE, page_icon=":material/biotech:", layout="wide")
 
 try:
     # Before the corpus is resolved. A reader who still exports the old variable
@@ -117,10 +116,22 @@ web.draw_prototype_banner()
 # everything that uses it, rather than once per turn from inside `draw_feedback`.
 web.draw_feedback_style()
 
-st.title("SciNumbers ask")
-st.caption(web.as_text(f"{len(repo)} entries · session {session}"))
-# The identifier is in the URL, so this page can be reloaded, bookmarked or
-# reopened after a restart and still be the same conversation.
+# `anchor=False`: Streamlit gives every heading a link target and shows a chain
+# icon beside it on hover. On a deep-linkable document that is useful; on a page
+# with one title it is a control that does nothing a reader wants.
+web.draw_title()
+# Under the title rather than in the side panel, which Streamlit collapses on a
+# phone: a reader who never opens the panel would otherwise never see this.
+st.caption(web.as_text(web.BUDGET_NOTE))
+if web.may_see_dev_panel(admission):
+    # The corpus size and the conversation's identifier: diagnostics, not things a
+    # tester came for, and behind the same grant as the dev panel rather than a
+    # second permission of their own -- one exists only where there is a code path
+    # to refuse (ADR-0800), and this is the population that panel already refuses.
+    #
+    # The identifier is in the URL regardless, so a reader who needs to reopen this
+    # conversation still can; what goes with the grant is putting it on the page.
+    st.caption(web.as_text(f"{len(repo)} entries · session {session}"))
 
 # Both pinned to the top of the panel, before anything whose length depends on an
 # answer. The entries below are unbounded -- one question can fill the panel -- and
@@ -145,15 +156,19 @@ with st.sidebar:
     )
     if spent_and_cap:
         spent, cap = spent_and_cap
-        st.header("Session budget")
+        st.header("Session budget", anchor=False)
         st.progress(min(1.0, spent / cap) if cap else 0.0)
         # Escaped: two dollar signs in one caption are read as opening and closing
         # inline mathematics, so "$1.20 of $1.20" typeset the middle as an equation
         # and ate both currency signs. Same fault as the ending line's, same fix.
-        st.caption(web.as_text(f"{format_usd(spent)} of {format_usd(cap)}"))
-    # What the provider still honours on this reader's own key, which is the
-    # figure they would act on when told their allowance is spent.
-    web.draw_allowance(admission)
+        # One line: the run budget, and in the parenthesis what the provider still
+        # honours on this reader's own key. Escaped, because two dollar signs in
+        # one caption are read as opening and closing inline mathematics -- "$1.20
+        # of $1.20" typeset the middle as an equation and ate both currency signs.
+        st.caption(web.as_text(web.spend_line(spent, cap, admission)))
+    # Whose numbers these are. One click rather than one line: it must be present
+    # on every page view and need not be read on every page view.
+    web.draw_data_credit()
     st.divider()
     # The sidebar's two views, below the run status: the entries a reader came
     # for, and -- only for roles the grant table allows -- this session's trail.
