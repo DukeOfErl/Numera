@@ -270,8 +270,9 @@ entries, takes the same refusal.
 
 ### What it measures, by example
 
-Ten questions, three repeats each, 2026-09-17 — the run that chose the default model. Questions are
-tiered: `basic` is one property of one organism, `compound` needs a comparison or a calculation.
+Ten questions, three repeats each, 2026-09-17 — the run that chose the default model
+([full findings](docs/evaluations/2026-09-17-three-models.md)). Questions are tiered: `basic` is one
+property of one organism, `compound` needs a comparison or a calculation.
 
 | | Haiku 4.5 | **Opus 4.7** | MiniMax M2.7 |
 |---|---:|---:|---:|
