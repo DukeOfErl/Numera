@@ -173,6 +173,17 @@ def as_text(allowance: Allowance) -> str:
     the integer micro-dollars this project counts spend in. The provider answers
     in dollars as a float, and converting between the two to print a caption is
     two chances to be out by a million.
+
+    Where the provider states a `remaining`, that figure is what goes on the page,
+    even when it disagrees with `limit - usage` -- a cap changed mid-period, or a
+    key spent elsewhere, and the provider's own figure is the one a tester acts
+    on. The subtraction is only for a response that states no remaining at all.
+
+    A `limit_remaining` arriving with no `limit` beside it is deliberately not
+    shown: with no cap there is nothing for a remaining figure to be remaining
+    of, so the uncapped line reports the usage the provider gave and says there is
+    no cap. An omission, decided, rather than a figure derived from something
+    else.
     """
     if not allowance.known:
         return ""
