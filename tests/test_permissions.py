@@ -6,6 +6,32 @@ produces nothing at all. So every test here that grants also refuses, and the
 refusal varies the dimension the rule reads -- the *role* -- not merely the
 outcome. A test that refused only `None` would pass with a table that granted
 everything to everyone.
+
+**Mutation testing cannot reach this module, so seeding stands in for it.**
+A run of `mutmut` 3.8 over `scinumbers_ask.permissions*` (2026-09-17) reported
+*"Filtered for specific mutants, but nothing matches"*: mutmut rewrites function
+bodies, and everything here is an enum body, a `@dataclass` body or a
+module-level dict. `GRANTS` -- the thing most worth mutating in the package --
+produces no mutants at all, and a run that reported "0 survivors" for this
+module would be a false all-clear rather than a result. The same holds for
+`accounts.Account.identity`, whose `@dataclass` body mutmut also left alone.
+
+So the table was checked by hand-seeded defects into a copy instead, against
+these two files and `test_web_driver_dev_panel.py`, from a green baseline of 31:
+
+- `Role.STUDENT` granted `DEV_PANEL` -- the expensive direction, a tester
+  silently let in -- caught by 5, among them
+  `test_each_tester_role_is_refused_the_dev_panel[student]`,
+  `test_the_two_populations_partition_the_roles` and, through the page,
+  `test_web_driver_dev_panel.py::test_a_tester_s_page_has_no_such_section[student]`.
+- `Role.DEV` stripped of `DEV_PANEL` -- caught by 10.
+- `SENIOR_SCIENTIST`'s stored value misspelt -- caught by
+  `test_the_role_values_are_the_words_the_spec_and_the_table_use` alone, which is
+  why that test is here: a renamed value enrols nobody and stamps a different
+  word, and nothing else in the suite would say so.
+- `DEV_PANEL`'s stored value changed -- caught by 3.
+
+Re-seed these when the table grows a row; the mutation run will not do it for you.
 """
 
 from __future__ import annotations
