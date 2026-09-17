@@ -12,6 +12,161 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **Sign-in, enrolment and a credential per tester, for hosted deployments.** With
+  `[auth]` in secrets every visitor signs in with Google and must be enrolled — a
+  row the operator inserts in an `accounts` table beside the trail, naming the
+  role and the tester's own capped OpenRouter key — before anything is drawn.
+  Signed in but not enrolled is refused with one sentence and recorded; an
+  unreadable accounts table admits nobody and says a different sentence, because
+  a check that failed open would let an outage open the door. Each session gets
+  an agent funded by its own credential; an enrolled account with no credential is
+  told so and no agent is built. Configure nothing and the app runs exactly as it
+  did ([ADR-0780], [ADR-0820]).
+- **Every record of a signed-in session carries the account and the role it held
+  at the time**, written when the row is and never looked up afterwards, so a
+  later change of role cannot rewrite what a rating weighed. `user_role` joins
+  `user_email` as a column; the first schema change since the table was created,
+  applied idempotently on every start. The role and the account are stamped onto
+  the trail at the sink by the web driver — the agent, the tracer and the feedback
+  module never hold them, and a test parses their source to keep it that way
+  ([ADR-0810]).
+- **Five roles and a default-deny grant table with one permission.** Student,
+  scientist, senior scientist, dev and admin; the table grants `dev panel` to dev
+  and admin and refuses it to the three tester roles, and lists nothing else,
+  because a permission exists only where some role is refused it. Reading and
+  rating are what enrolment grants ([ADR-0800]).
+- **A Dev tab in the side panel**, beside the entries, for dev and admin — and for a developer's
+  machine with no sign-in configured — showing this session's trail for its last
+  five questions. Absent, not disabled, for everyone else. Nothing in it reaches
+  the model.
+- **A cap on open sessions**, `SCINUMBERS_MAX_SESSIONS` (default 20), counted by
+  heartbeat and never by client address. The next visitor is told to try again
+  shortly; no open session is ended. It protects the host, not the budget, which
+  each tester's credential already bounds ([ADR-0790]).
+
+### Changed
+
+- The side panel names the signed-in account and role without the "Signed in as"
+  preamble — the sign-out button beside it says that — and its spend figure is
+  headed "Session budget", which is what it now scopes.
+- The side panel's statement of what is kept is one line — "All exchange in this
+  app is logged for product development" — rather than an enumeration of the
+  fields, which was accurate and too long to read. The fuller statement, shown
+  once before use, is deferred until there are users rather than invited testers.
+  The prototype caveat no longer appears twice: it stays in the pinned banner.
+- A signed-in tester whose allowance is spent, or who has no credential yet, is
+  told to ask whoever runs the deployment, and that the allowance renews monthly.
+  The funder-neutral wording stays for a developer on their own key.
+- **With sign-in configured, a session is keyed on the account rather than on the
+  `?session=` link.** The link is supplied by whoever holds it, and it had become
+  the key for the identity stamped on every record, the dev panel's rows and the
+  session cap — so two readers on one link overwrote each other's attribution, a
+  dev on a shared link could see another reader's trail, and the sign-in redirect,
+  which drops the query string, stranded the session it came from. One account is
+  now one conversation; a deployment without sign-in keeps the link as the session
+  ([ADR-0830]).
+- An enrolled account with no credential now meets a door of its own rather than a
+  page with its input removed, so the page has one gate and no code path can build
+  an agent that falls back on the deployment's own key.
+- Enrolment matches an address without regard to case, and the session cap counts
+  a reader once they are through the door rather than when they arrive — an
+  abandoned sign-in page no longer holds a place ([ADR-0790]).
+
+- **A credential the model provider refuses is caught at sign-in**, with a
+  sentence saying whose job it is to reissue. It used to surface only when a
+  reader asked something: the model call failed, nothing was retrieved, and the
+  answer reported finding nothing in the corpus — a broken key wearing the face
+  of a thin corpus. An unreachable provider is deliberately not treated the same
+  way, since that would lock every tester out over a blip.
+- **Each tester's run budget is their own**, keyed to the account that pays for
+  the questions rather than shared across the deployment, and the side panel
+  shows what the model provider says is left on that tester's key.
+
+### Fixed
+
+- A session pruned for idleness and returned to kept drawing "signed in as" while
+  recording no account at all; identity is re-established on every rerun.
+- Signing out cleared the identity but left the dev panel's rows, so the next
+  account on that tab could be shown the previous reader's questions. Ending a
+  session is now one operation over all three per-session stores.
+- A signed-in reader who filled a conversation could not start another: the
+  conversation key was a pure function of their address and is also the thread
+  the length limit applies to, so a full conversation refused every further
+  question with no way out. A fresh link starts a fresh conversation again.
+- One tester reaching the run budget refused every other tester's next question,
+  although each funds their own with a separate capped key.
+- A reader mid-conversation could be turned away at the cap after their heartbeat
+  was pruned, contradicting the promise that no open session is ended.
+- The enrolment-unavailable page offered nothing to click, so the retry it
+  promised needed a manual reload.
+- `authlib>=1.3.2` joins the `ask` extra, for `st.login`.
+
+- **The trail records the question as asked, the answer as given, and the entries
+  the answer stood on.** A rating collected before this said "answer
+  `c23c83c16324` was wrong" and there was no way to learn what it was answering.
+  Three records on the existing table, under the question's own identifier, with
+  no migration: the question written when the question *starts*, so a run that
+  hits a spend ceiling or a missing key still leaves a record of what was asked.
+  Cited and retrieved entries stay separable, and the retrieved set is the whole
+  one rather than the head the page displays. Both interfaces now say that
+  questions and answers are kept, and why ([ADR-0840]).
+- **The structured trail can outlive the container that wrote it.** The trail was
+  written to a file inside a hosted container whose disk does not survive a
+  reboot or redeploy, so every search, alias resolution and spend increment from
+  every real session was discarded — the requirement to log under a per-question
+  identifier satisfied, and its stated purpose, being investigable after the
+  fact, defeated. A Postgres destination can now be configured alongside the
+  file, and the table is created on first use. Configure nothing and the app
+  behaves exactly as before; refusing to start without a telemetry database would
+  make the absence of telemetry an outage ([ADR-0700]).
+- **A failed recording never fails a question**, which is the deliberate opposite
+  of the spend limits. A spend limit fails closed because proceeding costs
+  unbounded real money; recording fails open because proceeding costs one row of
+  a dataset read by eye. One attempt, no retry — an unreachable database hangs
+  rather than failing fast, and a question held open to record a row is worse for
+  the reader than the missing row. Failures are reported to the operator and
+  counted, never shown to the person asking ([ADR-0710]).
+- **Records name the session as well as the question**, so a sequence of
+  questions asked by one person can be reassembled. Without it, one person asking
+  ten questions is indistinguishable from ten people asking one. The session also
+  reaches the metadata a tracing tool reads, so one added later inherits it.
+- **What the page draws names the question that produced it.** Each rendered item
+  carries its question's identifier, which is what a rating on an answer will
+  have to name. Neither this nor the session above can be added to records
+  already written, which is why both precede the feature that needs them.
+- **An answer can be rated, and rating is optional.** A thumbs up or down sits at
+  the foot of each answer's prose, beside the entries it rests on rather than
+  below them. Recording one is never required: an answer nobody rates behaves
+  exactly as it does today, and the rating is committed on the click, because
+  most people who rate will do nothing else and a design that waits for a second
+  action collects nothing from them. A rating is final once given, and the
+  control shows it as settled ([ADR-0740]).
+- **Disapproval — and only disapproval — invites a comment.** The box asks what
+  was wrong, which is unanswerable about an answer somebody has just approved of,
+  so approval is recorded, acknowledged, and asks for nothing further. The hint
+  asks a reader to name the identifier of any entry they believe is wrong:
+  per-entry rating is deliberately not built, and what readers choose to write
+  about entries is the evidence for whether it should be.
+- **Comments are read by whoever operates the system, and are never sent to the
+  model.** Not to the conversation, not to a prompt, not to the state a later
+  question is answered from. A comment is the one input to this system authored to
+  be read by the people running it, so text asking the model to disregard its
+  instructions must not arrive by that route; an agent that reacted to disapproval
+  would also answer differently depending on who was watching, and its recorded
+  trail would stop describing what it does ([ADR-0750]).
+- **Ratings outlive the deployment that collected them**, in the same append-only
+  table as the trail and under the same question identifier — so a judgement can
+  be read beside what that question actually retrieved. Recording a rating fails
+  open like every other record: a failed write is never shown to the reader and
+  never interrupts the conversation. Space for who gave the rating is recorded and
+  left empty, because the system has no notion of who that is yet, and a record
+  written before identity exists can never be attributed afterwards.
+- **An answer is shown as two columns** — the prose and its rating on the left, the
+  entries it rests on to the right — so a reader checking a number against the row
+  it came from sees both at once instead of scrolling between them. Entries the
+  answer did not cite are folded away under their own heading; the cited ones
+  never are, because they are what the prose stands on ([ADR-0760]).
+
 - **A spent API key ends a question as a limit, and says whose limit it is.** Where
   the provider refuses a request for lack of credit, the question ends as
   `provider_limit` rather than as an indistinguishable `provider_failure`, and both
@@ -256,3 +411,16 @@ number rather than an error:
 [ADR-0520]: docs/decisions/0520-the-outlier-check-compares-an-interval.md
 [ADR-0530]: docs/decisions/0530-an-expected-entry-must-reach-the-table.md
 [ADR-0540]: docs/decisions/0540-peers-come-from-the-expected-entries.md
+[ADR-0700]: docs/decisions/0700-neon-for-the-durable-trail.md
+[ADR-0710]: docs/decisions/0710-recording-fails-open.md
+[ADR-0740]: docs/decisions/0740-native-st-feedback.md
+[ADR-0750]: docs/decisions/0750-feedback-is-recorded-here-not-at-the-tracer.md
+[ADR-0760]: docs/decisions/0760-an-answer-is-two-columns.md
+[ADR-0780]: docs/decisions/0780-accounts-live-in-the-trail-database.md
+[ADR-0790]: docs/decisions/0790-the-session-cap-is-a-heartbeat-registry.md
+[ADR-0800]: docs/decisions/0800-default-deny-and-the-pruning-rule.md
+[ADR-0810]: docs/decisions/0810-the-role-is-written-at-record-time.md
+[ADR-0830]: docs/decisions/0830-the-session-is-keyed-on-the-account-not-the-link.md
+[ADR-0820]: docs/decisions/0820-one-agent-per-session-handed-a-credential-not-an-identity.md
+[ADR-0840]: docs/decisions/0840-what-a-question-s-trail-keeps.md
+

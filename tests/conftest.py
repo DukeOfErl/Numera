@@ -42,6 +42,80 @@ def _trail_stays_in_the_tmp_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("SCINUMBERS_TRACE", str(tmp_path / "trace.jsonl"))
 
 
+@pytest.fixture(autouse=True)
+def _the_suite_does_not_call_the_model_provider(monkeypatch):
+    """No test asks OpenRouter what is left on a key.
+
+    `web.draw_allowance` fetches that figure while the page renders, so without
+    this every `AppTest` run reaches the network -- slow where it works, and in a
+    sandbox a refused connection that took the whole page down before the module
+    was hardened. The suite is offline by default here as everywhere else; a test
+    that wants a figure patches `web._allowance`, and the fetch itself is
+    exercised against a stub opener in `test_allowance.py`.
+
+    The cache is cleared on both sides: `_allowance` is `st.cache_data`, which
+    outlives a test, so one test's answer would otherwise become the next one's.
+    """
+    from scinumbers_ask import allowance, web
+
+    monkeypatch.setattr(allowance, "fetch", lambda api_key, **kwargs: allowance.Allowance())
+    # `probe` too: the page passes it to `admit` as the sign-in credential check,
+    # so every AppTest sign-in reached OpenRouter for real. The stub answers the
+    # way an unreachable provider does -- nothing known, nothing rejected -- which
+    # is the direction that admits the reader, so tests see the ordinary path.
+    monkeypatch.setattr(allowance, "probe", lambda api_key, **kwargs: allowance.Probe())
+    clear = getattr(web._allowance, "clear", None)
+    if clear:
+        clear()
+    yield
+    clear = getattr(web._allowance, "clear", None)
+    if clear:
+        clear()
+
+
+@pytest.fixture(autouse=True)
+def _the_suite_does_not_read_the_developer_s_secrets():
+    """Run every test against an empty secrets file, whatever is on this machine.
+
+    `web.identity_configured()` asks whether `[auth]` is in `st.secrets`, and
+    `st.secrets` reads the real, gitignored `.streamlit/secrets.toml`. So the
+    day a developer configures Google sign-in locally -- to try the deployment,
+    which is exactly when they would -- sixty-four tests start failing, because
+    every `AppTest` page meets the sign-in door and has no chat input. Nothing in
+    the repository changed; the suite simply stopped describing the code.
+
+    A test that wants sign-in configured says so: `AppTest.secrets` replaces this
+    for the length of that run (Streamlit only swaps it in when non-empty), and
+    the unit-level tests monkeypatch `identity_configured` directly. Imported
+    lazily so a test that never touches the web driver does not pay for
+    Streamlit.
+    """
+    import streamlit as st
+    from streamlit.runtime.secrets import Secrets
+
+    empty = Secrets()
+    empty._secrets = {}
+    original = st.secrets
+    st.secrets = empty
+    yield
+    st.secrets = original
+
+
+@pytest.fixture(autouse=True)
+def _each_test_starts_with_no_open_sessions():
+    """The session cap's registry is a cached resource: one per process, which
+    is what a cap on a server needs and exactly wrong for a test process that
+    opens a fresh `AppTest` session per test. Without this the twenty-first web
+    test in a run is turned away with "try again shortly" -- sixty failures
+    that pass one at a time. Imported lazily so tests that never touch the web
+    driver do not pay for Streamlit."""
+    from scinumbers_ask import web
+
+    web.session_registry.clear()
+    yield
+    web.session_registry.clear()
+
+
 @pytest.fixture
 def config() -> Config:
     return Config(model="fake/model", question_ceiling=usd("0.60"), run_budget=usd("1.20"))
@@ -54,6 +128,83 @@ def repo() -> CorpusRepository:
 
 def agent_with(repo, config, tmp_path, model, name="checkpoints.sqlite") -> AskAgent:
     return AskAgent(repo, config, str(tmp_path / name), model=model)
+
+
+class RecordingEngine:
+    """An engine double that keeps every statement and parameter set it was given.
+
+    One definition for the tests that read back *what was written* — the trail's
+    identifiers, the identity columns, a feedback row. There were four
+    hand-written copies of this, disagreeing on what they filtered on, so a
+    column added to `trail_store._INSERT` had to be chased through each: a copy
+    that happened to keep passing hid that the column it should have asserted on
+    never arrived.
+
+    Two doubles deliberately do **not** use this and say so where they are
+    defined: `test_trail_store.py` needs the `SET LOCAL` to succeed while only
+    the INSERT fails, and `test_accounts.py` needs a SELECT to return a row.
+    Simulating a specific failure point is the thing those tests are for, and a
+    shared double with a predicate for it would be harder to read than either.
+    """
+
+    def __init__(self, fail: Exception | None = None, fail_on_begin: Exception | None = None):
+        # Two failure points, kept apart because they are different code paths in
+        # the caller: opening the transaction, and executing the statement. A
+        # double that conflated them would leave one untested while looking
+        # thorough -- `test_trail_store.py` makes the same distinction and says so.
+        self.fail = fail
+        self.fail_on_begin = fail_on_begin
+        self.conns: list[_RecordingConn] = []
+
+    def begin(self):
+        if self.fail_on_begin is not None:
+            raise self.fail_on_begin
+        conn = _RecordingConn(self.fail)
+        self.conns.append(conn)
+
+        class _Ctx:
+            def __enter__(self_inner):
+                return conn
+
+            def __exit__(self_inner, *exc):
+                return False
+
+        return _Ctx()
+
+    @property
+    def params(self) -> list[dict]:
+        """Every parameter set handed to any statement, in order."""
+        return [p for c in self.conns for p in c.params]
+
+    @property
+    def written(self) -> list[dict]:
+        """Every parameter set that carried a record — the rows a reader would see."""
+        return [p for p in self.params if "event" in p]
+
+
+class _RecordingConn:
+    def __init__(self, fail: Exception | None = None):
+        self.fail = fail
+        self.statements: list[str] = []
+        self.params: list[dict] = []
+
+    def execute(self, statement, params=None):
+        self.statements.append(str(statement))
+        if self.fail is not None:
+            raise self.fail
+        if params is not None:
+            self.params.append(dict(params))
+        return None
+
+
+def ask_question(at, question: str):
+    """Drive one question through the real page and return the rerun.
+
+    One copy, because there were three byte-identical ones and the page now has
+    more than one thing that can stand where the input does -- a closed door, a
+    try-later notice -- so `at.chat_input[0]` is the assumption that breaks first.
+    """
+    return at.chat_input[0].set_value(question).run()
 
 
 def run(agent: AskAgent, session: str, question: str) -> list:

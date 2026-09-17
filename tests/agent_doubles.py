@@ -26,6 +26,14 @@ class ScriptedModel(BaseChatModel):
     failures: int = 0
     attempts: int = 0
     reports_cost: bool = True
+    #: Every message this model was handed, across every call.
+    #:
+    #: `answer-feedback` requires that a reader's rating and comment never reach
+    #: the model, and that is a statement about what it was *shown* -- which
+    #: nothing could assert without this. The alternative phrasing, "the next
+    #: answer is unchanged", is a counterfactual about a non-deterministic run
+    #: and is not checkable at all.
+    seen: list[BaseMessage] = []
 
     @property
     def _llm_type(self) -> str:
@@ -38,6 +46,9 @@ class ScriptedModel(BaseChatModel):
         self, messages: list[BaseMessage], stop: Any = None, run_manager: Any = None, **kwargs: Any
     ) -> ChatResult:
         self.attempts += 1
+        # Before the failure check, so a retried call still records what it was
+        # handed: the question is what reached the model, not what it answered.
+        self.seen.extend(messages)
         if self.attempts <= self.failures:
             raise RuntimeError(f"upstream unavailable (attempt {self.attempts})")
         message = self.responses[min(self.index, len(self.responses) - 1)]

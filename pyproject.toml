@@ -26,7 +26,23 @@ ask = [
     # is load-bearing here, so it is a direct dependency rather than an option.
     "langgraph-checkpoint-sqlite",
     "langchain-openai",
-    "streamlit",
+    # `st.login`, `st.user` and `st.logout` arrived in 1.42; the behaviour of
+    # `st.user` when `[auth]` is absent, which `identity_configured` relies on,
+    # was read from 1.61.1. Floored so a fresh resolve without the lock fails at
+    # install rather than at the sign-in button.
+    "streamlit>=1.42",
+    # The usage and feedback store. Streamlit's own `st.connection("sql")` is
+    # SQLAlchemy-backed, and it is preferred over a hand-rolled connection
+    # because it caches the engine at global scope across sessions -- without
+    # that, every rerun would pay TCP, TLS and Postgres auth before its INSERT.
+    "sqlalchemy>=2.0",
+    # `[binary]` for the prebuilt wheel: the host has no libpq to build against,
+    # and a source build would fail at deploy time rather than here.
+    "psycopg[binary]>=3.2",
+    # What `st.login` needs and Streamlit does not install: the OIDC client.
+    # Streamlit's own extra is `streamlit[auth]`; named directly so the floor is
+    # ours to read. Verified against the installed Streamlit 1.61.1 on 2026-09-16.
+    "authlib>=1.3.2",
 ]
 ingest = [
     "pydantic>=2.6",

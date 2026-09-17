@@ -43,6 +43,16 @@ bionumbers*.jsonl
 .env.*
 !.env.example
 *.key
+# Streamlit's secrets file: the OIDC client secret, the cookie signing key and
+# the database URL — which carries a password — all live here. The block above
+# covers `.env` and `*.key`, and Streamlit uses neither, so nothing ignored this
+# path until the change that first needed it.
+#
+# By path and by bare name. Streamlit reads the file beside the app, but a copy
+# left at the repo root is the same secret on a committable path, and that is the
+# form a person produces while getting the thing working.
+.streamlit/secrets.toml
+secrets.toml
 
 # Agent runtime state — regenerable, and session content should not be committed
 checkpoints/

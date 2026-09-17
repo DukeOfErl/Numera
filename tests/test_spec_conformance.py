@@ -223,6 +223,258 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_web_driver.py::test_an_ending_a_new_session_cannot_fix_replaces_that_advice",
         "test_web_driver.py::test_the_advice_names_the_remedy_without_addressing_anyone",
     ),
+    # add-durable-trail's, mapped with the change that adds it. The requirement
+    # inverts the spend gate deliberately (ADR-0710), so the tests to compare
+    # against its words hardest are the two failure ones: they vary *where* the
+    # write failed, which is the dimension the code branches on.
+    #
+    # There were three, and the third was withdrawn rather than kept. It passed a
+    # `TimeoutError` while leaving the double's delay at zero, so what it varied
+    # was the exception class and not the duration -- the `_is_out_of_credit`
+    # shape recorded in CLAUDE.md, found by a review pass and not by the suite.
+    #
+    # The "destination is slow" scenario is closed by the `network` tests at the
+    # end of this list rather than by a faked one, because `record` has no
+    # client-side deadline to exercise: a slow write is bounded by `SET LOCAL
+    # statement_timeout`, which the *server* enforces, so a sleep in a double
+    # would have measured the double. Those four are deselected by default
+    # (`pytest -m network`), so this requirement is the one place in this file
+    # where part of the evidence does not run in an ordinary green suite.
+    "Recording is best-effort and never fails a question": (
+        "test_trail_store.py::test_a_failure_to_open_the_transaction_is_swallowed_and_counted",
+        "test_trail_store.py::test_a_failure_to_execute_the_statement_is_swallowed_and_counted",
+        "test_trail_store.py::test_a_failed_write_is_attempted_exactly_once",
+        "test_trail_store.py::test_no_exception_type_escapes_record",
+        "test_trail_store.py::test_a_direct_caller_needs_no_error_handling",
+        "test_trail_store.py::test_the_failure_counter_answers_whether_anything_is_landing",
+        "test_trail_store.py::test_the_process_wide_counter_sees_failures_from_any_store",
+        "test_trail_store.py::test_a_dropped_record_is_reported_to_stderr",
+        "test_trail_store.py::test_the_report_carries_no_traceback",
+        "test_trail_store.py::test_a_schema_failure_is_reported_and_counted_apart_from_dropped_writes",
+        "test_trail_store.py::test_the_handler_never_raises_so_logging_never_reaches_handle_error",
+        "test_trail_store.py::test_install_attaches_a_handler_even_when_the_schema_cannot_be_created",
+        "test_trail_store.py::test_a_store_that_cannot_reach_its_destination_does_not_connect_per_call",
+        "test_trail_store.py::test_a_destination_that_was_asleep_at_startup_is_used_once_it_wakes",
+        "test_trail_store_live.py::test_a_statement_that_runs_too_long_is_cancelled_rather_than_waited_out",
+        "test_trail_store_live.py::test_the_timeout_does_not_leak_onto_the_next_pooled_transaction",
+        "test_trail_store_live.py::test_an_unreachable_host_does_not_raise_out_of_record",
+        "test_trail_store_live.py::test_the_schema_and_the_insert_are_valid_sql",
+    ),
+    # add-answer-feedback's, mapped with the change that adds them. Only the two
+    # that are genuinely asserted; the other three are in AWAITING_THE_WIDGET
+    # until the real script can be driven.
+    #
+    # The second is the one to compare against its words hardest. It is stated as
+    # what the model was *shown*, because the alternative phrasing -- "the next
+    # answer is unchanged" -- is a counterfactual about a non-deterministic run
+    # that nothing can assert. Its test carries a positive control for the same
+    # reason: every other assertion in it is a `not in`, which an empty haystack
+    # satisfies.
+    # Three of four scenarios. "A conversation is reopened and an answer rated"
+    # is **not** held: `test_one_session_s_ratings_do_not_suppress_another_s` is
+    # two session dictionaries sharing one identifier, which is state isolation
+    # and not the position-instability the scenario is about. Recorded here rather
+    # than left to read as covered, because that scenario needs the driver.
+    "A rating names the question it is about, and outlives the session": (
+        "test_feedback.py::test_a_verdict_is_recorded_against_its_question",
+        "test_feedback.py::test_two_answers_rated_in_one_session_name_different_questions",
+        "test_feedback.py::test_a_comment_is_a_second_record_naming_the_same_question",
+        "test_feedback.py::test_the_identifier_recorded_is_the_one_the_question_s_trail_uses",
+        "test_feedback.py::test_a_verdict_reaches_the_durable_store",
+        "test_trail_store_live.py::test_the_schema_and_the_insert_are_valid_sql",
+    ),
+    # "An answer is rated down -> no further retrieval or model call is made on
+    # account of the rating" is not separately asserted; it holds structurally,
+    # since `feedback` cannot reach the agent at all, which is what the
+    # independence test pins.
+    # The three that were AWAITING_THE_WIDGET. Each is mapped to the driver tests
+    # that answer the half a function cannot: what is *offered*, and where.
+    "A reader can rate an answer, and rating is never required": (
+        "test_web_driver_feedback.py::test_an_answered_question_offers_a_rating",
+        "test_web_driver_feedback.py::test_the_control_appears_on_the_run_that_answered",
+        "test_web_driver_feedback.py::test_each_answer_is_offered_exactly_one_control",
+        "test_web_driver_feedback.py::test_the_rating_sits_with_the_prose_and_not_with_the_evidence",
+        "test_web_driver_feedback.py::test_a_redrawn_turn_puts_the_rating_in_the_same_place",
+        "test_web_driver_feedback.py::test_an_unrated_answer_records_nothing_and_the_page_goes_on",
+        "test_feedback.py::test_a_verdict_is_recorded_against_its_question",
+    ),
+    "A rating may carry a comment, offered only once an answer has been disapproved of": (
+        "test_web_driver_feedback.py::test_a_comment_box_appears_only_after_a_rating",
+        "test_web_driver_feedback.py::test_approval_is_not_asked_what_went_wrong",
+        "test_web_driver_feedback.py::test_approval_is_still_recorded",
+        "test_web_driver_feedback.py::test_the_control_is_settled_once_a_rating_is_given",
+        "test_web_driver_feedback.py::test_the_comment_and_its_button_submit_together",
+        "test_web_driver_feedback.py::test_a_comment_is_recorded_against_the_same_answer",
+        "test_feedback.py::test_a_comment_without_a_rating_is_refused",
+    ),
+    "Recording a rating never disrupts the reader": (
+        "test_web_driver_feedback.py::"
+        "test_a_store_that_cannot_be_written_to_does_not_reach_the_reader",
+        "test_web_driver_feedback.py::test_the_page_survives_a_rating",
+        "test_feedback.py::test_a_rating_that_cannot_be_stored_does_not_raise",
+        "test_feedback.py::test_a_handler_that_raises_does_not_reach_the_reader",
+        "test_feedback.py::test_rating_the_same_answer_again_records_nothing",
+    ),
+    "The model is never shown a rating or a comment": (
+        "test_feedback.py::test_neither_a_verdict_nor_a_comment_reaches_the_model",
+        "test_feedback.py::test_a_comment_written_as_an_instruction_is_stored_as_given",
+        "test_driver_independence.py::test_the_agent_cannot_reach_a_reader_s_feedback",
+        "test_driver_independence.py::test_no_agent_module_reaches_for_presentation",
+    ),
+    # `add-question-and-answer-records`. Eleven scenarios. A scenario that merely
+    # executes is a gap, not a pass, so which is which is written out:
+    #
+    # **Passes (8).** "A question is answered", "Two questions ask different
+    # things", "An answer rests on retrieved entries", "A question ends without an
+    # answer", "The records cannot be written", "A further question follows a
+    # recorded one", "Two questions run in one session", "No durable destination is
+    # configured" (`test_trail_store.py::
+    # test_install_with_no_engine_returns_none_and_adds_no_handler`). The
+    # requirement's prose obligation -- that a reader can learn from the interface
+    # what is kept -- is held by the two interface tests named below.
+    #
+    # **Gaps (3)**, all pre-dating this change and none of them made worse by it:
+    # "A search was truncated" and "Two questions in one session are related
+    # afterwards" run inside `test_trace_tagging.py` but are asserted against the
+    # trail's shape rather than against these words; "The process that wrote the
+    # records is replaced" needs a real restart against a real database and lives
+    # behind the `network` marker, which the offline suite deselects.
+    # `add-user-identity`. Every requirement is claimed below; the scenarios that
+    # are *executed but not asserted* -- gaps, by this file's own rule -- are:
+    #   - "A reader signs out ... the next visit begins at sign-in": `st.logout`
+    #     is offered and its callback forgets the registry entry, but AppTest
+    #     cannot click through an OIDC logout; the next-visit half is unasserted.
+    #   - "An account is enrolled after being refused ... proceeds": the refusal
+    #     is held per session, so this needs a new session; not driven.
+    #   - "One tester's cap is exhausted ... another's is answered as usual": the
+    #     ending exists (ADR-0600) and keys are per agent, but the two are not
+    #     driven together against a 402 in one deployment.
+    #   - "A person's records can be found": `sql/feedback.sql` query 8, run by
+    #     hand against Neon, not a test.
+    #   - "The credential is never shown": asserted over the elements the tests
+    #     draw, not over every page state.
+    "A reader signs in before anything is shown, and identity comes from the provider": (
+        "test_web_driver_identity.py::"
+        "test_a_visitor_who_is_not_signed_in_is_offered_sign_in_and_nothing_else",
+        "test_web_driver_identity.py::"
+        "test_an_enrolled_account_is_admitted_and_its_records_carry_who_and_as_what",
+        "test_web_driver_identity.py::test_the_sidebar_says_who_is_signed_in_and_offers_sign_out",
+        "test_web_driver_identity.py::test_signing_out_forgets_the_session_s_identity",
+        "test_web_driver_identity.py::test_signed_in_email_is_none_without_is_logged_in",
+    ),
+    "An account must be enrolled, and enrolment happens outside the application": (
+        "test_web_driver_identity.py::"
+        "test_a_signed_in_account_that_is_not_enrolled_is_refused_and_recorded",
+        "test_web_driver_identity.py::test_a_refusal_is_recorded_once_per_session_not_once_per_rerun",
+        "test_web_driver_identity.py::"
+        "test_an_unreadable_accounts_table_admits_nobody_and_says_a_different_sentence",
+        "test_web_driver_identity.py::test_an_unavailable_check_is_retried_on_the_next_rerun",
+        "test_web_driver_identity.py::test_no_database_at_all_says_so_rather_than_asking_the_reader_to_wait",
+        "test_accounts.py::test_an_unreadable_table_raises_rather_than_answering_none",
+        "test_accounts.py::test_a_disabled_account_is_none_exactly_as_an_absent_one_is",
+    ),
+    "Every enrolled account holds one role, and permissions are granted by a default-deny table": (
+        "test_permissions.py::test_dev_and_admin_are_granted_the_dev_panel",
+        "test_permissions.py::test_each_tester_role_is_refused_the_dev_panel",
+        "test_permissions.py::test_no_identity_is_refused",
+        "test_permissions.py::test_the_two_populations_partition_the_roles",
+        "test_permissions.py::test_the_table_has_a_row_for_every_role_and_names_only_known_permissions",
+        "test_permissions.py::test_every_permission_is_refused_to_some_role",
+        "test_permissions.py::test_the_refusal_names_the_permission_and_nothing_about_the_account",
+        "test_identity_never_reaches_the_agent.py::"
+        "test_the_same_question_under_two_roles_hands_the_model_identical_inputs",
+        "test_driver_independence.py::test_identity_never_enters_the_agent_the_trail_or_the_feedback",
+        "test_web_driver_dev_panel.py::test_the_refusal_does_not_depend_on_the_caller",
+        "test_web_driver_dev_panel.py::test_a_tester_s_page_has_no_such_section",
+    ),
+    "Each tester's questions are funded by a credential of their own, capped, and never shown "
+    "to them": (
+        "test_identity_never_reaches_the_agent.py::test_two_agents_with_two_keys_send_two_keys",
+        "test_web_driver_identity.py::"
+        "test_an_enrolled_account_with_no_credential_meets_a_door_of_its_own",
+        "test_web_driver_identity.py::test_the_no_credential_door_is_its_own_state_not_an_open_one",
+        "test_web_driver_identity.py::"
+        "test_agent_for_refuses_rather_than_falling_back_to_the_environment",
+        "test_web_driver_identity.py::test_the_credential_is_never_on_the_page",
+        "test_web_driver_identity.py::test_two_sessions_get_two_agents_and_one_repository",
+    ),
+    "What is kept about a person, and that they are told": (
+        "test_identity_never_reaches_the_agent.py::"
+        "test_two_sessions_under_two_identities_each_carry_their_own",
+        "test_web_driver_identity.py::test_two_accounts_on_one_shared_link_get_two_sessions",
+        "test_web_driver_identity.py::"
+        "test_a_session_pruned_for_idleness_is_stamped_again_when_its_reader_returns",
+        "test_web_driver_identity.py::"
+        "test_ending_a_session_clears_the_identity_the_panel_and_the_place",
+        "test_identity_never_reaches_the_agent.py::test_the_role_is_written_as_it_was_at_record_time",
+        "test_identity_never_reaches_the_agent.py::"
+        "test_a_verdict_in_a_signed_in_session_carries_the_identity",
+        "test_trail_store.py::test_the_handler_carries_the_role_beside_the_email",
+        "test_web_driver_identity.py::test_the_sidebar_says_who_is_signed_in_and_offers_sign_out",
+        "test_web_driver_identity.py::test_the_note_is_one_short_sentence_whatever_is_configured",
+    ),
+    "An operator can see a session's own trail": (
+        "test_web_driver_dev_panel.py::test_an_operator_s_page_has_the_section",
+        "test_web_driver_dev_panel.py::test_a_tester_s_page_has_no_such_section",
+        "test_web_driver_dev_panel.py::test_a_fresh_operator_session_shows_the_section_empty",
+        "test_web_driver_dev_panel.py::test_the_table_names_the_question_just_asked",
+        "test_web_driver_dev_panel.py::test_the_entries_come_first_and_the_trail_second",
+        "test_web_driver_dev_panel.py::test_the_strip_is_below_the_run_status",
+        "test_web_driver_dev_panel.py::test_two_sessions_panels_show_only_their_own_records",
+        "test_web_driver_dev_panel.py::test_the_panel_s_contents_do_not_reach_the_model",
+    ),
+    "Concurrent sessions are capped for the whole deployment, not per client address": (
+        "test_web_driver_session_cap.py::test_the_session_past_the_cap_is_told_to_try_later",
+        "test_web_driver_session_cap.py::test_an_admitted_session_is_never_ended_to_make_room",
+        "test_web_driver_session_cap.py::test_a_session_that_goes_idle_frees_a_place",
+        "test_web_driver_session_cap.py::test_nothing_reads_the_client_s_address",
+        "test_web_driver_session_cap.py::test_a_refused_visitor_holds_no_place",
+        "test_web_driver_session_cap.py::"
+        "test_a_session_mid_conversation_is_not_turned_away_when_the_cap_fills",
+        "test_web_driver_session_cap.py::test_a_genuinely_new_session_is_still_refused_at_the_cap",
+        "test_web_driver_session_cap.py::test_a_visitor_who_has_not_passed_the_door_holds_no_place",
+    ),
+    "A deployment with no identity configured behaves as before": (
+        "test_web_driver_identity.py::"
+        "test_with_no_identity_configured_a_question_is_answered_without_signing_in",
+        "test_web_driver_identity.py::test_with_no_identity_configured_the_page_says_so",
+        "test_web_driver_dev_panel.py::test_the_developer_s_machine_sees_the_panel",
+        "test_identity_never_reaches_the_agent.py::test_no_key_reads_the_environment_exactly_as_before",
+        "test_identity_never_reaches_the_agent.py::"
+        "test_a_session_nobody_is_signed_in_to_writes_null_for_both",
+    ),
+    "The deterministic layer is logged under a per-question identifier": (
+        "test_question_and_answer_records.py::"
+        "test_two_different_questions_record_what_each_actually_asked",
+        "test_question_and_answer_records.py::"
+        "test_a_question_that_ends_without_an_answer_still_recorded_what_was_asked",
+        "test_question_and_answer_records.py::"
+        "test_the_question_is_recorded_before_the_work_that_might_fail",
+        "test_question_and_answer_records.py::"
+        "test_two_different_answers_are_recorded_under_the_questions_that_produced_them",
+        "test_question_and_answer_records.py::"
+        "test_the_answer_is_recorded_verbatim_rather_than_shortened",
+        "test_question_and_answer_records.py::test_every_ending_that_gives_an_answer_records_it",
+        "test_question_and_answer_records.py::"
+        "test_the_answer_is_recorded_even_when_the_driver_abandons_the_generator",
+        "test_question_and_answer_records.py::"
+        "test_the_cited_set_and_the_retrieved_set_stay_apart_in_the_record",
+        "test_question_and_answer_records.py::"
+        "test_the_whole_retrieved_set_is_recorded_not_the_head_the_driver_shows",
+        "test_question_and_answer_records.py::"
+        "test_a_question_that_retrieved_nothing_records_no_evidence_row",
+        "test_question_and_answer_records.py::test_nothing_recorded_here_reaches_the_model",
+        "test_question_and_answer_records.py::"
+        "test_a_destination_that_cannot_be_written_does_not_fail_a_question",
+        "test_question_and_answer_records.py::"
+        "test_the_records_reach_the_durable_store_under_the_question_s_own_identifier",
+        "test_question_and_answer_records.py::test_no_driver_records_the_question_as_well",
+        "test_question_and_answer_records.py::"
+        "test_the_page_says_that_questions_and_answers_are_kept",
+        "test_question_and_answer_records.py::"
+        "test_the_terminal_says_it_too_including_for_a_single_question",
+        "test_trace_tagging.py::test_every_record_carries_the_run_label",
+    ),
 }
 
 # Requirements with no test named yet. Listed rather than omitted: the point of this
@@ -231,7 +483,6 @@ COVERED: dict[str, tuple[str, ...]] = {
 TESTED_BUT_UNNAMED = (
     "Events carry enough detail to show progress and to explain an ending",
     "A transient failure does not end a question",
-    "The deterministic layer is logged under a per-question identifier",
     "Follow-up questions inherit the conversation",
     "Citations in a follow-up stand on their own",
     "Search returns compact rows, bounded in number",
@@ -480,6 +731,12 @@ AWAITING_THE_JUDGE = (
 # system prompt, not a harness, and the live-model check can only ever assert the
 # weak form of them -- that an opening is quantitative and attributed, not that it
 # carries the right conclusion. Kept apart so the list says which gap is which.
+# `add-answer-feedback`'s three widget requirements were listed here while the
+# widget did not exist -- the recording side was asserted, and what a reader is
+# *offered* needs the real script. Groups 3 and 4 built it, so they are mapped
+# above rather than recorded as gaps. The comment saying why they could not be is
+# gone with them; `git log` has it.
+
 AWAITING_THE_PROMPT = (
     "An answer leads with its quantitative conclusion",
     "Leading with a figure does not displace what qualifies it",

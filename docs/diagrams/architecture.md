@@ -94,18 +94,23 @@ flowchart TB
         harness[["the evaluation harness<br/>(see 6)"]]
         messages[messages.py]
         table[entries_table.py]
+        fb[feedback.py]
     end
     subgraph core["Agent core"]
         agent[agent.py]
         tools[tools.py]
         spend[spend.py]
         events[events.py]
+        trace[trace.py]
+        store[trail_store.py]
+        identity[identity: who may<br/>do what]
     end
     subgraph data["Corpus"]
         corpus[corpus.py]
         repo[repository.py]
         units[units.py]
     end
+    pg[("Postgres<br/>append-only trail")]
 
     cli --> messages
     web --> messages
@@ -119,10 +124,92 @@ flowchart TB
     agent --> tools
     agent --> spend
     agent --> events
+    agent --> trace
     tools --> repo
     repo --> corpus
     corpus --> units
+    trace -. "logging handler" .-> store
+    store -. "best-effort" .-> pg
+    web -- "supplies the engine" --> store
+    web --> fb
+    fb -- "a reader's judgement" --> trace
+    web --> identity
 ```
+
+*Caption: which modules exist, and what each may depend on.*
+
+`identity` is three modules — `permissions.py` (the roles and the grant table as
+data), `authorization.py` (`require`, called inside the operation it guards) and
+`accounts.py` (enrolment off one row, failing closed). They are one box because
+this diagram answers "what may depend on what", and to that question they are one
+thing: core, reached by the driver, reaching nothing but each other. The inventory
+belongs in `CLAUDE.md`'s module table, which is the right form for a list. What
+they *do*, in order, is the next diagram rather than more arrows on this one.
+
+## 3b. What happens when a reader opens the page
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Reader
+    participant Page as streamlit_app.py
+    participant Door as web.admit
+    participant Accounts as accounts.py
+    participant Trail as trace logger
+    Reader->>Page: opens the app
+    Page->>Door: which door?
+    Door->>Accounts: lookup(email)
+    Accounts-->>Door: account, or none
+    alt not signed in, not enrolled, no credential, check unavailable
+        Door-->>Page: a closed door
+        Page-->>Reader: one sentence, and nothing else
+    else enrolled, with a credential
+        Door-->>Page: open, with the account
+        Page->>Page: session keyed on the account; identity stamped; cap counted
+        Page-->>Reader: the page, and an agent on that account's key
+    end
+    Page->>Trail: every record of this session
+    Note over Page,Trail: the stamp adds the account and role;<br/>the agent is told neither
+```
+
+*Caption: what the page decides before it draws anything, and where identity
+joins the trail. The refusals are one branch because they differ only in the
+sentence shown; ADR-0830 says why the session is keyed on the account.*
+
+**The identity modules are core so that the refusal is reachable without a
+browser**, and `test_driver_independence.py` names them as such on purpose
+(ADR-0800). **The agent is built per session, handed a credential and nothing
+else about the person** (ADR-0820): the driver stamps `user_email` and
+`user_role` onto trail records with a `logging.Filter` on `trace`'s logger, so
+`agent.py`, `trace.py` and `feedback.py` never hold either, and a structural
+test parses all three for any identifier that would mean otherwise.
+`.claude/rules/identity.md` carries the rest, beside the code it describes.
+
+**The dotted arrows are the trail, and neither is a dependency.** `trace.py` does
+not import `trail_store`: the store attaches itself as a second handler on
+`trace`'s logger, which is why no call site changed when it was added. And the
+write to Postgres fails open — the question is answered whether or not the row
+lands (ADR-0710).
+
+`web.py` supplies the engine because only a driver may know about `st.connection`;
+`trail_store` itself imports no framework, which is what keeps it on the core side
+of the line rather than beside `autobuild` in presentation.
+
+**`feedback.py` is in presentation, and that side is the whole guarantee.** A
+rating is a reader's judgement and a comment is text a stranger wrote — the one
+input to this system authored to be read by the people running it. Put it in the
+core and nothing structural stops a prompt reaching the model by that route, in a
+tool whose wrong answers look exactly like its right ones (ADR-0750). So a
+rating's path is entirely left-to-right on this diagram: reader → `feedback.py` →
+`trace.py`'s logger → `trail_store` → Postgres, joining the question's own rows on
+the identifier they share. The agent has no arrow to it, and
+`test_driver_independence.py` asserts that no core module may acquire one — under
+`PRESENTATION`, which is wider than the driver set the older test checks.
+
+Those rows now include the question as asked, the answer as given and the entries
+behind it, written by `agent.ask` on the same logger (ADR-0840). The arrow is the
+same one; what travels along it grew. Nothing new points at the model — these are
+records of a question already answered, and the same test holds that line.
 
 **The one rule with a direction: no arrow runs from the core back into
 presentation.** Nothing in Python enforces it — an `import streamlit` in the tool

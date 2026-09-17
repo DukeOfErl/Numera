@@ -192,6 +192,18 @@ def main(argv: list[str] | None = None) -> None:
     session_id = args.session or uuid.uuid4().hex[:8]
     agent = AskAgent(repo, config, args.checkpoints)
 
+    # Above the `--ask` branch, not below it. A single question is recorded the
+    # same way a session's tenth is, and a reader who only ever runs `--ask` would
+    # otherwise never be told. To stderr, so it cannot land in a pipeline reading
+    # the answer off stdout.
+    #
+    # Only when something is kept. `--trace ""` discards the trail, and this
+    # driver installs no durable store, so the sentence would then be false -- and
+    # the requirement it implements is that a reader can learn what is kept, which
+    # is a claim about accuracy rather than a fixed banner.
+    if args.trace:
+        print(messages.RECORDS_NOTE, file=sys.stderr)
+
     if args.ask:
         raise SystemExit(run(agent, session_id, [args.ask], repo=repo))
 
