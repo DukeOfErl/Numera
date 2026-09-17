@@ -160,6 +160,9 @@ with st.sidebar:
         # one caption are read as opening and closing inline mathematics -- "$1.20
         # of $1.20" typeset the middle as an equation and ate both currency signs.
         st.caption(web.as_text(web.spend_line(spent, cap, admission)))
+    # Whose numbers these are. One click rather than one line: it must be present
+    # on every page view and need not be read on every page view.
+    web.draw_data_credit()
     st.divider()
     # The sidebar's two views, below the run status: the entries a reader came
     # for, and -- only for roles the grant table allows -- this session's trail.

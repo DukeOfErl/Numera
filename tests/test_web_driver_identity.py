@@ -219,11 +219,30 @@ def test_the_sign_out_button_shares_a_row_with_the_name_it_belongs_to(page):
     assert _identity_row(at) is not None, "the name and its button are in one row of two"
 
 
-def test_the_sign_out_button_is_the_quietest_kind(page):
-    """A way out rather than an action the page wants taken."""
+def test_the_sign_out_button_looks_like_a_button(page):
+    """Tertiary was tried for one release: no border, no fill, and a reader saw a
+    stray line of text where the way out should be."""
     at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
     out = next(b for b in at.sidebar.button if b.label == "Sign out")
-    assert out.proto.type == "tertiary"
+    assert out.proto.type != "tertiary"
+
+
+def test_the_role_sits_under_the_email_rather_than_beside_it(page):
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    named = next(c for c in at.sidebar.caption if TESTER.email in c.value)
+    assert named.value.endswith("\n(scientist)"), "a line break, not a parenthesis on the end"
+
+
+def test_the_data_credit_is_one_click_from_every_page_view(page):
+    """Present on every view and not spending a standing line on itself. Asserted
+    on the popover's own content, because a citation drawn where nobody can reach
+    it is the failure this guards."""
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    popovers = [b for b in _elements(at.sidebar) if getattr(b, "type", "") == "popover"]
+    inside = [str(getattr(e, "value", "")) for pop in popovers for e in _elements(pop)]
+    assert any("BioNumbers (Milo et al." in text for text in inside)
+    beside = [str(getattr(e, "value", "")) for e in _elements(at.sidebar)]
+    assert not any("BioNumbers (Milo" in text for text in beside), "behind it, not beside it"
 
 
 def test_the_spend_line_carries_what_is_left_on_the_reader_s_own_key(page, monkeypatch):

@@ -62,6 +62,17 @@ PROTOTYPE_NOTE = (
 )
 PROTOTYPE_SHORT = "Prototype — verify numbers against the original source."
 
+# Whose data this is, wherever the app runs. Not deployment wording -- every answer
+# rests on someone else's decades of curation, and the citation belongs beside the
+# numbers whether one person is reading them locally or a hundred are online. The
+# licensing of the underlying export is unresolved (ADR-0170), which is a reason to
+# be scrupulous about attribution rather than an excuse to omit it.
+DATA_CREDIT = (
+    "Data: BioNumbers (Milo et al., Nucl. Acids Res. 2010;38:D750–D753) — "
+    "verify each figure at its source."
+)
+DATA_CREDIT_LABEL = "Data source"
+
 # Re-exported rather than restated: the sentence is shared with the terminal
 # driver and lives in `messages` for the same reason every warning does. The page
 # reads it from here so that `streamlit_app.py` needs one import, as it does for
@@ -686,11 +697,7 @@ def draw_identity(admission: Admission, session_id: str, tab_id: str | None = No
     account = admission.account
     if account is None:
         st.button(
-            "Sign out",
-            on_click=_sign_out,
-            args=(session_id, tab_id),
-            type="tertiary",
-            icon=":material/logout:",
+            "Sign out", on_click=_sign_out, args=(session_id, tab_id), icon=":material/logout:"
         )
         return
     # One row, because the two belong to each other: the button is what you do
@@ -704,15 +711,14 @@ def draw_identity(admission: Admission, session_id: str, tab_id: str | None = No
             as_text(messages.SIGNED_IN_AS.format(email=account.email, role=account.role.value))
         )
     with action:
-        # Tertiary: no border and no fill, which is the smallest thing Streamlit
-        # offers that is still a button. This one is a way out, not an action the
-        # page wants taken, and it was drawing more of the eye than the identity
-        # it belongs to.
+        # An ordinary button. Tertiary was tried for one release and drew no
+        # border or fill at all, which reads as a stray line of text rather than
+        # something to click -- smaller, and no longer recognisable as the way
+        # out.
         st.button(
             "Sign out",
             on_click=_sign_out,
             args=(session_id, tab_id),
-            type="tertiary",
             icon=":material/logout:",
         )
 
@@ -1036,6 +1042,18 @@ def spend_line(spent: int, cap: int, admission: Admission) -> str:
         return line
     on_key = allowance.as_text(_allowance(account.openrouter_key))
     return f"{line} ({on_key})" if on_key else line
+
+
+def draw_data_credit() -> None:
+    """The attribution, behind a popover rather than under the spend figure.
+
+    Attribution has to be present and does not have to be read on every visit:
+    as a caption it was a third standing line in a panel whose job is the run's
+    own state. A popover keeps it one click from every page view -- which is what
+    the obligation asks -- without spending a line on it.
+    """
+    with st.popover(DATA_CREDIT_LABEL, icon=":material/database:", width="stretch"):
+        st.caption(as_text(DATA_CREDIT))
 
 
 def draw_try_later() -> None:

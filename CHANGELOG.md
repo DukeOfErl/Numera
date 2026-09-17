@@ -50,9 +50,12 @@ any release; `1.0.0` when it stabilizes.
   the provider still honours on the reader's own key in the parenthesis behind it
   — "$0 of $2.00 ($4.89 on key of weekly $5.00)". Two captions in two registers
   left a reader working out which of the two would stop them first.
-- The sign-out button shares a row with the account it belongs to, and is drawn in
-  Streamlit's quietest button style: it is a way out, not an action the page wants
-  taken.
+- The sign-out button shares a row with the account it belongs to, which is set
+  over two lines — the email, and the role beneath it.
+- The data credit is behind a "Data source" popover rather than a standing
+  caption, and it is now shown wherever the app runs rather than only where it is
+  deployed. Attribution has to be present on every page view; it does not have to
+  be read on every page view.
 - The entry count and the conversation's identifier are shown only to the roles
   that hold the dev panel. They are diagnostics, and they sat above what a tester
   came for.

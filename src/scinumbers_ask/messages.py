@@ -75,7 +75,7 @@ NO_SIGN_IN_CONFIGURED = (
 )
 # Just who, and as what. The sign-out button sits beside it, which is what says
 # this is your account rather than a fact about somebody.
-SIGNED_IN_AS = "{email} ({role})"
+SIGNED_IN_AS = "{email}  \n({role})"
 TRY_LATER = (
     "Too many sessions are open right now, so this one cannot start. "
     "Try again in a few minutes; nobody's session is ended to make room."
