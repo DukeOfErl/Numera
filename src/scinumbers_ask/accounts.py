@@ -131,6 +131,10 @@ def lookup(engine, email: str, *, table: str = DEFAULT_TABLE) -> Account | None:
 #: tester can act on -- so `insert` does not read the index name out of the error.
 #: Matching on the name would also go quietly false the day the index is renamed,
 #: and the failure would be a duplicate reported as an unknown database error.
+#: Postgres `unique_violation`. psycopg exposes it as `sqlstate` on the driver
+#: error under SQLAlchemy's wrapper.
+_UNIQUE_VIOLATION = "23505"
+
 _INSERT = """
 insert into {table} (email, role, openrouter_key)
 values (:email, :role, :key)
@@ -161,5 +165,14 @@ def insert(engine, email: str, role: Role, key: str, *, table: str = DEFAULT_TAB
                 {"email": email, "role": Role(role).value, "key": key},
             )
     except IntegrityError as exc:
+        # Narrowed to SQLSTATE 23505, unique_violation. Every `IntegrityError`
+        # reported as "already enrolled" is right against today's schema, where
+        # only the primary key and `accounts_email_lower` can fire -- and wrong
+        # the day a `check` on `role` or a `not null` column is added, when the
+        # operator would be sent looking for a row that is not there while the
+        # freshly minted key was silently withdrawn. The code is the database's
+        # own, not the index's name, so it survives the index being renamed.
+        if getattr(getattr(exc, "orig", None), "sqlstate", None) != _UNIQUE_VIOLATION:
+            raise
         raise AlreadyEnrolled(f"{email} is already enrolled") from exc
     return Account(email=email, role=Role(role), openrouter_key=key or None)

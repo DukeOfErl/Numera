@@ -197,6 +197,7 @@ sequenceDiagram
     Operator->>Cmd: email, role, cap, --branch
     Cmd->>Cmd: refuse a cap that is not positive, or an unknown role
     Cmd->>Neon: which branch is called this?
+    Note over Cmd,Neon: the cheap refusals run first, so a<br/>mistyped cap costs no live call
     Neon-->>Cmd: exactly one, or a refusal listing what was found
     Cmd->>OR: mint a key capped at the amount, renewing monthly
     OR-->>Cmd: the key, and the cap it actually set
@@ -210,9 +211,16 @@ sequenceDiagram
 ```
 
 *Caption: two systems with no transaction between them, and what a half-done
-enrolment leaves behind. Everything that can be refused is refused before the
-mint, which is the only step that costs something; the branch is resolved before
-it too, so a mistyped name is free. ADR-0900.*
+enrolment leaves behind. Everything that can be refused from the arguments alone
+is refused before any live call; the branch is resolved before the mint, so a
+mistyped name is free too. ADR-0900.*
+
+The cap and role checks belong to `enrol`, not to the command, and `enrol` runs
+them — the command runs the same expression of them first only so that
+`--limit-usd 0` does not spend two control-plane calls before anything says no.
+A review found this diagram drawn in the order the code *should* have run rather
+than the order it did; the code moved to match the drawing, which was the right
+way round here because the drawing was the better design.
 
 **The order is the decision.** Inserting first would leave a row with no key —
 a door of its own, where the tester is told no credential has been issued and the

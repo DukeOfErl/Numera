@@ -374,6 +374,9 @@ def transcript(state: MutableMapping[str, Any]) -> list[tuple[str, list[Item]]]:
 #: This browser session's own key, apart from the conversation it is in.
 TAB_KEY = "scinumbers_ask.tab"
 ADMISSION_KEY = "scinumbers_ask.admission"
+#: The address whose unverified refusal has already been recorded this session.
+#: Not the admission -- that is decided fresh; see `admit`.
+UNVERIFIED_KEY = "scinumbers_ask.unverified_recorded"
 AGENT_KEY = "scinumbers_ask.agent"
 
 
@@ -425,29 +428,68 @@ def identity_configured() -> bool:
         raise
 
 
+#: What makes a sub-table under `[auth]` a provider rather than one of the
+#: section's own settings.
+#:
+#: **Not "is it a mapping".** `client_kwargs` is a documented mapping under
+#: `[auth]` -- read from the installed Streamlit 1.61.1,
+#: `auth_util.generate_default_provider_section`, which lifts it into the default
+#: provider's own section -- so the shape test admits it and the door grows a
+#: "Sign in with client_kwargs" button that cannot work. A discriminator taken
+#: from the record beats one reasoned from the shape of the input.
+#:
+#: `client_id` is the key, because it is one of the three
+#: `validate_auth_credentials` requires of any provider section. A sub-table
+#: carrying it and nothing else still fails, loudly and in Streamlit's own words,
+#: which is the right place for that error.
+PROVIDER_KEY = "client_id"
+
+#: The unnamed provider: `st.login()` with no argument, whose credentials sit
+#: directly in `[auth]`. Deliberately not passed to `st.login` as a name --
+#: Streamlit resolves a name against a sub-table, and a sub-table called
+#: `default` is a different thing from the section's own credentials.
+DEFAULT_PROVIDER = "default"
+
+
 def providers() -> list[str]:
     """Every configured way in, in the order secrets lists them.
 
     `"default"` is the provider whose credentials sit directly in `[auth]` --
     which is where the Google client has always been -- and is present only when
-    `client_id` is there beside `redirect_uri` and `cookie_secret`. Every
-    sub-table is a named provider, which is what `st.login(name)` takes; the
-    shared settings are strings, so "is it a mapping" separates the two without
-    a list of key names to keep in step with Streamlit's.
+    `client_id` is there beside `redirect_uri` and `cookie_secret`. A sub-table
+    carrying `client_id` is a named provider, which is what `st.login(name)`
+    takes.
 
-    A deployment with no `[auth]` gets an empty list and never reaches a button.
+    Returns names without repeats: a sub-table literally called `default`
+    alongside the section's own credentials would otherwise be offered twice, and
+    two buttons sharing a key is a `StreamlitDuplicateElementKey` that takes the
+    whole door down rather than the one button.
+
+    A deployment with no `[auth]`, in a secrets file or out of it, gets an empty
+    list and never reaches a button.
     """
     try:
         section = st.secrets["auth"]
+    except KeyError:
+        # A secrets file that exists and has no `[auth]`. Streamlit raises a
+        # plain KeyError here, which `_is_not_configured` does not and should not
+        # match -- it is not one of Streamlit's own error types, and widening
+        # that predicate would make it answer "not configured" to any missing
+        # key anywhere.
+        return []
     except Exception as exc:  # noqa: BLE001 - narrowed by `_is_not_configured`
         if _is_not_configured(exc):
             return []
         raise
     if not isinstance(section, Mapping):
         return []
-    found = ["default"] if "client_id" in section else []
-    found += [name for name, value in section.items() if isinstance(value, Mapping)]
-    return found
+    found = [DEFAULT_PROVIDER] if PROVIDER_KEY in section else []
+    found += [
+        name
+        for name, value in section.items()
+        if isinstance(value, Mapping) and PROVIDER_KEY in value
+    ]
+    return list(dict.fromkeys(found))
 
 
 def signed_in_claims() -> Mapping[str, Any] | None:
@@ -536,18 +578,23 @@ def admit(
         state.pop(ADMISSION_KEY, None)
         return Admission(Door.SIGN_IN, configured=True)
     if not address_verified(claims):
-        # Decided fresh on every rerun and deliberately not held: `end_session`
-        # does not clear this key, so a cached refusal would outlive the reader
-        # signing out, verifying, and signing back in on the same tab -- which is
-        # exactly the sequence the sentence asks them to perform. Re-deciding is
-        # a dictionary lookup, and the page an unverified reader sees has one
-        # button, so the record this writes is bounded by their own clicks.
-        trace.QuestionTrace(
-            question_id="",
-            session_id=session_id,
-            run_label=Config.from_env().run_label,
-        ).record("signin.unverified", email=email)
+        # **Decided fresh on every rerun, recorded once.** The decision is not
+        # held because `end_session` does not clear this key, so a cached refusal
+        # would outlive the reader signing out, verifying and signing back in on
+        # the same tab -- exactly the sequence the sentence asks them to perform.
+        # The *record* is held, because every other refusal is written once per
+        # account per session and this one would otherwise be an insert per
+        # click: bounded, but the only door that charges the trail for a reader
+        # rereading it.
+        if state.get(UNVERIFIED_KEY) != email:
+            state[UNVERIFIED_KEY] = email
+            trace.QuestionTrace(
+                question_id="",
+                session_id=session_id,
+                run_label=Config.from_env().run_label,
+            ).record("signin.unverified", email=email)
         return Admission(Door.UNVERIFIED, configured=True)
+    state.pop(UNVERIFIED_KEY, None)
     held = state.get(ADMISSION_KEY)
     if held is not None and held[0] == email:
         return held[1]
@@ -739,11 +786,17 @@ def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None =
     draw_title()
     if admission.door is Door.SIGN_IN:
         st.info(as_text(messages.SIGN_IN_NEEDED), icon=":material/login:")
-        for provider in providers():
+        # `[auth]` present but carrying no credentials anywhere is a
+        # misconfiguration, and the default button is how the operator finds out:
+        # `st.login()` then raises Streamlit's own "credentials are missing"
+        # error, naming the keys. Drawing nothing would leave a sentence, no
+        # control and no diagnosis -- the visitor's dead end costs the same
+        # either way, and the operator's does not.
+        for provider in providers() or [DEFAULT_PROVIDER]:
             # `st.login()` and `st.login("name")` are different calls: the
             # no-argument form means the credentials in `[auth]` itself, and
             # passing "default" is not a synonym for it.
-            args = () if provider == "default" else (provider,)
+            args = () if provider == DEFAULT_PROVIDER else (provider,)
             st.button(
                 # Through `as_text` like every other string that reaches the
                 # page: an unlabelled provider's button carries its name out of

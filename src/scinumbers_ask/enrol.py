@@ -124,19 +124,41 @@ def mint(
     key = payload.get("key")
     echoed = payload.get("data") or {}
     key_hash = echoed.get("hash")
-    if not key or not key_hash:
-        raise MintFailed("OpenRouter returned no key or no hash; nothing usable was created")
+    if not key_hash:
+        # Nothing names what may have been created, so there is nothing to
+        # withdraw and the operator has to be told that plainly rather than
+        # reassured by this class's docstring.
+        raise MintFailed(
+            "OpenRouter returned no key hash, so if a credential was created "
+            "nothing here can name or withdraw it. Check the dashboard."
+        )
+    if not key:
+        # The handle came back and the secret did not. A capped key exists at the
+        # provider and this process is the only thing that knows its hash, so
+        # withdrawing it here is the difference between a bounded mistake and a
+        # live credential nobody can name.
+        _revoke_quietly(management_key, key_hash, opener)
+        raise MintFailed("OpenRouter returned a key hash but no key; the credential was withdrawn")
     if not _same_amount(echoed.get("limit"), limit_usd):
         _revoke_quietly(management_key, key_hash, opener)
         raise MintFailed(f"asked for a cap of {limit_usd} and got {echoed.get('limit')!r}")
     if echoed.get("limit_reset") != LIMIT_RESET:
-        patched = _post(
-            f"{KEYS_ENDPOINT}/{key_hash}",
-            management_key,
-            {"limit_reset": LIMIT_RESET},
-            opener,
-            method="PATCH",
-        )
+        try:
+            patched = _post(
+                f"{KEYS_ENDPOINT}/{key_hash}",
+                management_key,
+                {"limit_reset": LIMIT_RESET},
+                opener,
+                method="PATCH",
+            )
+        except Exception:
+            # The two *checked* failures below withdraw the key; a transport
+            # failure between them used to escape without doing so, leaving a
+            # live credential and no `Minted` for `enrol` to compensate from. The
+            # guarantee has to hold for the way this call fails, not only for the
+            # answers it gives.
+            _revoke_quietly(management_key, key_hash, opener)
+            raise
         if (patched.get("data") or patched).get("limit_reset") != LIMIT_RESET:
             _revoke_quietly(management_key, key_hash, opener)
             raise MintFailed(f"the credential would not take a {LIMIT_RESET} reset")
@@ -164,6 +186,26 @@ def _revoke_quietly(management_key: str, key_hash: str, opener) -> None:
         print(f"could not revoke {key_hash}: {exc}", file=sys.stderr)
 
 
+def checked(role: Role | str, limit_usd: float) -> Role:
+    """The two refusals that need nothing but the arguments. Returns the role.
+
+    Split out so the command can run them **before** it resolves a branch, and
+    `enrol` can run them again before it mints -- the same rule, one expression
+    of it. The guard belongs to the operation, which is why `enrol` still calls
+    it; the command calls it too because otherwise `--limit-usd 0` costs two live
+    control-plane calls before anything says no.
+    """
+    if limit_usd is None or not limit_usd > 0:
+        raise Uncapped(
+            f"a cap of {limit_usd!r} is not a cap. Every credential this issues is capped, "
+            "because that is what makes storing it in the clear defensible (ADR-0780)"
+        )
+    try:
+        return Role(role)
+    except ValueError as exc:
+        raise ValueError(f"{role!r} is not one of {[r.value for r in Role]}") from exc
+
+
 def enrol(
     engine,
     management_key: str,
@@ -179,15 +221,7 @@ def enrol(
     is not one of `Role`'s. Both are the operator's typo, and both are free to
     catch here -- `mint` is what costs something.
     """
-    if limit_usd is None or not limit_usd > 0:
-        raise Uncapped(
-            f"a cap of {limit_usd!r} is not a cap. Every credential this issues is capped, "
-            "because that is what makes storing it in the clear defensible (ADR-0780)"
-        )
-    try:
-        role = Role(role)
-    except ValueError as exc:
-        raise ValueError(f"{role!r} is not one of {[r.value for r in Role]}") from exc
+    role = checked(role, limit_usd)
     minted = mint(management_key, name=email, limit_usd=limit_usd, opener=opener)
     try:
         return accounts.insert(engine, email, role, minted.key)
@@ -258,6 +292,15 @@ def main(argv: list[str] | None = None) -> int:
     if missing:
         print(f"set {' and '.join(missing)} before enrolling anyone", file=sys.stderr)
         return 2
+
+    try:
+        # Before the branch is resolved, so a mistyped cap costs no live call.
+        # `enrol` checks again; this is the same rule read twice, not a second
+        # rule that could drift.
+        checked(args.role, args.limit_usd)
+    except (Uncapped, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
 
     api_key = os.environ[NEON_API_KEY_ENV]
     project = os.environ[NEON_PROJECT_ENV]

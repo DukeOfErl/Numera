@@ -309,17 +309,20 @@ class _WriteEngine:
         return _Ctx()
 
 
-def _integrity_error(message: str):
-    """A real `IntegrityError`, not a stand-in.
+def _integrity_error(message: str, sqlstate: str | None = "23505"):
+    """A real `IntegrityError` carrying a driver error with a SQLSTATE.
 
-    The rule reads the exception's *type*, so a double raising something else
-    would exercise the "any other failure" branch while the test's name claimed
-    the duplicate one -- the negative case has to vary the dimension the rule
-    actually reads.
+    The rule reads the *type* and then the SQLSTATE, so both have to be real
+    here. A double whose `orig` has no `sqlstate` exercises the "raise as itself"
+    branch while a test's name claims the duplicate one -- which is exactly what
+    happened when the rule was narrowed and these tests went on asserting the
+    old, wider behaviour.
     """
     from sqlalchemy.exc import IntegrityError
 
-    return IntegrityError(message, {}, Exception(message))
+    driver_error = Exception(message)
+    driver_error.sqlstate = sqlstate
+    return IntegrityError(message, {}, driver_error)
 
 
 def test_insert_writes_the_row_and_returns_the_account():
@@ -347,6 +350,20 @@ def test_insert_refuses_an_exact_repeat_too():
     engine = _WriteEngine(fail_on_insert=_integrity_error('duplicate key value "accounts_pkey"'))
     with pytest.raises(AlreadyEnrolled):
         insert(engine, "tester@example.org", Role.STUDENT, "sk-dup")
+
+
+def test_an_integrity_error_that_is_not_a_duplicate_raises_as_itself():
+    """Against today's schema only the primary key and `accounts_email_lower` can
+    fire, so "every IntegrityError means already enrolled" is right -- and wrong
+    the day a `check` on `role` arrives, when the operator is sent looking for a
+    row that is not there while the freshly minted key is silently withdrawn.
+    The negative case varies the SQLSTATE, which is what the rule reads."""
+    engine = _WriteEngine(
+        fail_on_insert=_integrity_error("new row violates check constraint", sqlstate="23514")
+    )
+    with pytest.raises(Exception) as failed:
+        insert(engine, "new@example.org", Role.STUDENT, "sk-new")
+    assert not isinstance(failed.value, AlreadyEnrolled)
 
 
 def test_insert_lets_any_other_failure_raise_as_itself():

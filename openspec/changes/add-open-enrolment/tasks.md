@@ -281,6 +281,63 @@ repository, and the implementer's job is to leave the instructions right.
       files a change touched.*
 - [ ] 4.2 Suggest `/code-review` on the branch, then merge to `dev` on the
       user's approval; archive the change so the delta is promoted.
+
+      *Review run at `high`. Seven findings, all acted on; each fix seeded into
+      a copy against a green baseline of 134, and each killed exactly the test
+      claiming it.*
+
+      *• **`providers()` called any mapping a provider.** `client_kwargs` is a
+      documented mapping under `[auth]` — the installed Streamlit lifts it into
+      the default provider's own section — so the door grew a third button that
+      could not work. The discriminator is now `client_id`, which is one of the
+      three keys `validate_auth_credentials` requires. Taken from the record,
+      not reasoned from the shape. Two cases shared that root: a sub-table
+      literally called `default` produced two buttons with one key, which is a
+      `StreamlitDuplicateElementKey` and takes the whole door down; and `[auth]`
+      with no credentials anywhere drew a sentence and **no button**, where the
+      old code at least reached Streamlit's own "credentials are missing" error.
+      The button is drawn again in that case, deliberately: the visitor is stuck
+      either way and the operator is not.*
+
+      *• **`MintFailed` promised revocation it did not perform.** With a hash
+      returned and no key, a capped credential existed at OpenRouter and this
+      process was the only thing that knew its handle. It is withdrawn now; with
+      no hash the operator is told to look at the dashboard rather than
+      reassured.*
+
+      *• **A `PATCH` that could not be sent escaped `mint` un-revoked.** The two
+      *checked* failures withdrew the key; the transport failure between them did
+      not, and `enrol` could not compensate because no `Minted` was returned.*
+
+      *• **A false claim in `test_spec_conformance.py`**: the note said the
+      provider honouring `limit_reset` on create was covered by a
+      `network`-marked live check. There is no such test. That is the worst kind
+      of note in this project — it retires the suspicion that would find the
+      surprise — and it is corrected to say the thing is unverified.*
+
+      *• **`providers()` raised on a secrets file with no `[auth]`**, where its
+      own docstring promised an empty list. `_is_not_configured` matches
+      Streamlit's error types by design and a plain `KeyError` is not one, so
+      the `KeyError` is caught where it happens rather than by widening that
+      predicate.*
+
+      *• **Every `IntegrityError` was reported as "already enrolled."** Right
+      against today's schema and wrong the day a `check` constraint is added,
+      when the operator is sent looking for a row that is not there while the
+      minted key is silently withdrawn. Narrowed to SQLSTATE `23505`, which is
+      the database's own code and survives the index being renamed.*
+
+      *• **Diagram 3c drew the cap and role checks before the Neon lookup; the
+      code ran them after**, so `--limit-usd 0` cost two live control-plane calls
+      before refusing. Here the drawing was the better design, so the code moved
+      to match it: `checked()` is one expression of the rule, run by `enrol`
+      because the guard belongs to the operation and by the command first so a
+      typo is free.*
+
+      *• A non-finding worth acting on: the unverified refusal was recorded on
+      **every rerun**, the only door charging the trail an insert per click. The
+      decision still runs fresh — it must, because `end_session` does not clear
+      it — and the record is now held.*
 - [ ] 4.3 (operator) Auth0: create the tenant and application, set the callback
       and logout URLs to the deployed app, open sign-up, require verification.
       Put `[auth.auth0]` in the deployed app's secrets box.

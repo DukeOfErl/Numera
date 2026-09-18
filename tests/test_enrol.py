@@ -217,11 +217,38 @@ def test_a_cleanup_that_fails_does_not_replace_the_reason_it_was_cleaning_up(cap
     assert HASH in capsys.readouterr().err, "the loose key was not named anywhere"
 
 
-def test_a_response_with_no_key_is_refused():
+def test_a_hash_with_no_key_is_withdrawn_rather_than_left_live():
+    """`MintFailed` promises that anything created has been revoked, and this
+    path used to break that promise while holding the handle to keep it: a capped
+    credential existed at the provider and this process was the only thing that
+    knew its hash."""
     opener = _Opener({"POST https://openrouter.ai/api/v1/keys": {"data": {"hash": HASH}}})
     with pytest.raises(MintFailed):
         mint("mgmt", name="new@example.org", limit_usd=5, opener=opener)
-    assert "DELETE" not in opener.methods(), "there is no usable key to withdraw"
+    assert ("DELETE", f"https://openrouter.ai/api/v1/keys/{HASH}") in opener.calls
+
+
+def test_a_response_with_no_hash_says_nothing_can_be_withdrawn():
+    """The other half: with no handle there is nothing to revoke, so the operator
+    is told to look rather than reassured by the exception's docstring."""
+    opener = _Opener({"POST https://openrouter.ai/api/v1/keys": {"key": KEY}})
+    with pytest.raises(MintFailed) as refused:
+        mint("mgmt", name="new@example.org", limit_usd=5, opener=opener)
+    assert "dashboard" in str(refused.value).lower()
+    assert "DELETE" not in opener.methods(), "nothing names what to withdraw"
+
+
+def test_a_patch_that_cannot_be_sent_still_withdraws_the_key():
+    """The two checked failures revoke; the transport failure between them used
+    to escape without doing so, leaving a live credential and no `Minted` for
+    `enrol` to compensate from."""
+    opener = _Opener(
+        {"POST https://openrouter.ai/api/v1/keys": _minted(reset=None)},
+        fail={"PATCH": RuntimeError("connection reset")},
+    )
+    with pytest.raises(RuntimeError):
+        mint("mgmt", name="new@example.org", limit_usd=5, opener=opener)
+    assert ("DELETE", f"https://openrouter.ai/api/v1/keys/{HASH}") in opener.calls
 
 
 # --- when the row cannot be written ------------------------------------------------
@@ -376,6 +403,21 @@ def test_the_command_names_the_variable_that_is_missing(monkeypatch, capsys, mis
     assert main(argv) == 2
     assert missing in capsys.readouterr().err
     assert called == []
+
+
+@pytest.mark.parametrize("cap", ["0", "-1"])
+def test_a_bad_cap_costs_no_live_call(monkeypatch, capsys, cap):
+    """The guard belongs to the operation and `enrol` still runs it -- but if the
+    command only met it there, `--limit-usd 0` would spend two live control-plane
+    calls before anything said no."""
+    _env(monkeypatch)
+    reached: list = []
+    monkeypatch.setattr(neon, "branch_id", lambda *a, **k: reached.append(a))
+    monkeypatch.setattr(neon, "connection_url", lambda *a, **k: reached.append(a))
+    argv = ["new@example.org", "scientist", "--limit-usd", cap, "--branch", "alpha"]
+    assert main(argv) == 1
+    assert "not a cap" in capsys.readouterr().err
+    assert reached == [], "a live call was made for a cap that was never going to pass"
 
 
 def test_an_unknown_branch_costs_nothing(monkeypatch, capsys):

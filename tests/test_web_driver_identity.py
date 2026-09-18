@@ -199,6 +199,33 @@ def test_providers_reads_the_default_and_every_sub_table(monkeypatch):
             {**shared, "client_id": "g", "zeta": {"client_id": "z"}, "auth0": {"client_id": "a"}},
             ["default", "zeta", "auth0"],
         ),
+        # `client_kwargs` is a documented mapping under `[auth]`, not a
+        # provider: the installed Streamlit lifts it into the default provider's
+        # own section (`auth_util.generate_default_provider_section`). A "is it
+        # a mapping" rule offered it as a third way in, and clicking that button
+        # calls `st.login("client_kwargs")`, which cannot resolve. The
+        # discriminator is `client_id`, which is one of the three keys Streamlit
+        # itself requires of a provider section.
+        "client_kwargs is not a way in": (
+            {
+                **shared,
+                "client_id": "g",
+                "client_kwargs": {"prompt": "login"},
+                "auth0": {"client_id": "a"},
+            },
+            ["default", "auth0"],
+        ),
+        "a mapping with no client_id is not a provider": (
+            {**shared, "client_id": "g", "expose_tokens": {"id": True}},
+            ["default"],
+        ),
+        # Offered twice, the two buttons share the key `sign-in-default` and
+        # Streamlit raises `StreamlitDuplicateElementKey` -- which takes the
+        # whole door down rather than the one button.
+        "a sub-table called default is not a second default": (
+            {**shared, "client_id": "g", "default": {"client_id": "d"}},
+            ["default"],
+        ),
         "and the other way round": (
             {**shared, "client_id": "g", "auth0": {"client_id": "a"}, "zeta": {"client_id": "z"}},
             ["default", "auth0", "zeta"],
@@ -229,6 +256,17 @@ def test_providers_is_empty_with_no_auth_section(monkeypatch):
     monkeypatch.setattr(web.st, "secrets", Broken())
     with pytest.raises(RuntimeError):
         web.providers()
+
+    # A secrets file that exists and simply has no `[auth]`. Streamlit raises a
+    # plain `KeyError` here, which is not one of its own error types, so
+    # `_is_not_configured` does not match it -- and must not, since widening that
+    # predicate would make it answer "not configured" to any missing key.
+    class NoAuthSection(dict):
+        def __getitem__(self, key):
+            raise KeyError(key)
+
+    monkeypatch.setattr(web.st, "secrets", NoAuthSection())
+    assert web.providers() == []
 
     # `[auth] = "something"` rather than a section. Streamlit would not usually
     # produce it, but the rule is "a mapping or nothing" and an unexecuted branch
@@ -264,6 +302,16 @@ def test_the_default_provider_is_signed_in_to_with_no_argument(page, monkeypatch
     assert asked == [()], "the default provider was named, and it must not be"
     at.button[1].click().run()
     assert asked == [(), ("auth0",)], "a named provider was not named"
+
+
+def test_auth_with_no_credentials_still_offers_the_default_button(page):
+    """A misconfigured `[auth]` has to be diagnosable. The button calls
+    `st.login()`, which raises Streamlit's own "credentials are missing" error
+    naming the keys; drawing nothing would leave the operator a sentence, no
+    control and no clue. The visitor is stuck either way, so the tie goes to the
+    person who can fix it."""
+    at = page(auth=True, email=None, auth_section={"redirect_uri": "x", "cookie_secret": "y"}).run()
+    assert [b.label for b in at.button] == ["Sign in with Google"]
 
 
 def test_a_provider_with_no_label_still_gets_a_button(page):
@@ -317,6 +365,23 @@ def test_an_unverified_address_is_never_looked_up(monkeypatch):
     monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: looked_up.append(who) or TESTER)
     assert web.admit({}, object(), "s1").door is web.Door.UNVERIFIED
     assert looked_up == []
+
+
+def test_the_unverified_refusal_is_recorded_once_and_not_once_per_rerun(monkeypatch, caught):
+    """The decision is re-made on every rerun; the record is not. Every other
+    refusal is written once per account per session because its admission is
+    cached, and this one would otherwise charge the trail an insert per click --
+    the only door that does."""
+    state: dict = {}
+    _configured(monkeypatch, TESTER.email, email_verified=False)
+    monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: TESTER)
+    for _ in range(4):
+        assert web.admit(state, object(), "s1").door is web.Door.UNVERIFIED
+    assert [r.getMessage() for r in caught.records].count("signin.unverified") == 1
+    # A different unverified account on the same tab is its own refusal.
+    _configured(monkeypatch, DEV.email, email_verified=False)
+    assert web.admit(state, object(), "s1").door is web.Door.UNVERIFIED
+    assert [r.getMessage() for r in caught.records].count("signin.unverified") == 2
 
 
 def test_the_unverified_door_is_not_held_across_reruns(monkeypatch):
