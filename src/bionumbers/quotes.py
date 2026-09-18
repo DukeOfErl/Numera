@@ -129,6 +129,55 @@ def contains(haystack: str, needle: str) -> bool:
     return wanted in fold(haystack)
 
 
+# How `jats.render_for_model` shows a table cell to the model: its headers, then the cell. A model
+# that quotes the line it was shown is being more literal, not less, and the headers are the
+# reader's rendering rather than the paper's words -- so the cell part is what gets checked, and it
+# is checked as strictly as any other quote. Found on the first live run (2026-09-18), where every
+# cell candidate for a second text failed for carrying its own headers.
+_RENDERED_CELL = re.compile(
+    r"\A\s*(?:row:\s*[^|]*\|\s*)?(?:column:\s*[^|]*\|\s*)?cell:\s*(?P<cell>.*)\Z", re.DOTALL
+)
+
+_NUMBER = re.compile(r"(?<![\d.])\d+(?:\.\d+)?(?![\d.])")
+_UNCERTAINTY = re.compile(r"\s*(?:\+/-|\+-|\u00b1)\s*")
+
+
+def cell_text(quote: str) -> str:
+    """A quote of a rendered table line reduced to its cell; any other quote unchanged."""
+    match = _RENDERED_CELL.match(quote)
+    return match.group("cell") if match else quote
+
+
+def numbers_in(text: str) -> tuple[str, ...]:
+    """Every standalone number in the folded text, as written."""
+    return tuple(match.group(0) for match in _NUMBER.finditer(fold(text)))
+
+
+def states_value(text: str, value: str) -> bool:
+    """Does the text state every number the value asserts?
+
+    The numbers of a value are its central figure or both ends of a range; what follows a plus-minus
+    sign is an uncertainty and is not required. Equality is numeric on standalone numbers, so a
+    value written "346.0" is stated by a cell reading "346", and "39" is not stated by "139" or by
+    "39.4" -- the paper's digits, not a prefix of them. A value with no number in it is stated by
+    nothing: a claim has to carry a figure.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    asserted = numbers_in(_UNCERTAINTY.split(fold(value), maxsplit=1)[0])
+    if not asserted:
+        return False
+    present = numbers_in(text)
+
+    def same(a: str, b: str) -> bool:
+        try:
+            return Decimal(a) == Decimal(b)
+        except InvalidOperation:
+            return a == b
+
+    return all(any(same(number, found) for found in present) for number in asserted)
+
+
 def verify(quote: str, document: HasPassages, passage_id: str | None = None) -> Verified | Failed:
     """Check one quote against the paper, and say where it was found or where it diverged.
 
@@ -137,7 +186,7 @@ def verify(quote: str, document: HasPassages, passage_id: str | None = None) -> 
     refused. A quote spanning two passages fails: the claim's location has to name one container,
     and a span that fits none has no location to record.
     """
-    wanted = fold(quote)
+    wanted = fold(cell_text(quote))
     if not wanted:
         return Failed(reason="empty quote", longest_prefix=0)
 

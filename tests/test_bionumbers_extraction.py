@@ -729,10 +729,10 @@ def test_a_response_the_adapter_could_not_read_is_still_paid_for(article):
 def test_a_range_may_span_more_than_two_conditions(article):
     """A pair type made a paper with a range over five antibiotic concentrations FAILED on the
     first live run; the record takes however many the paper has."""
-    good = passage_holding(article, MEASURED_SENTENCE)
+    spanning = "followed in 50 cells every 5 min for 60 min"
     draft = ClaimDraft(
         **{
-            **a_claim(MEASURED_SENTENCE, good, value="10-65").model_dump(),
+            **a_claim(spanning, passage_holding(article, spanning), value="5–60").model_dump(),
             "kind": ClaimKind.RANGE_OVER_CONDITIONS,
             "endpoint_conditions": ("0.25 ng/mL", "5 ng/mL", "50 ng/mL", "500 ng/mL", "control"),
         }
@@ -741,6 +741,21 @@ def test_a_range_may_span_more_than_two_conditions(article):
     (claim,) = run(ScriptedModel(found(draft)), article).claims
 
     assert len(claim.endpoint_conditions) == 5
+
+
+def test_a_verbatim_quote_that_does_not_state_the_value_is_a_failure_too(article):
+    """The first live run: two claims of 346 h and 693 h quoting a sentence that says
+    'nearly 200-fold'. Verbatim, and not the value. Named back once; dropped the second time."""
+    good = passage_holding(article, MEASURED_SENTENCE)
+    arithmetic = a_claim(MEASURED_SENTENCE, good, value="346.0", unit="h")
+    model = ScriptedModel(found(arithmetic), found(arithmetic))
+
+    result = run(model, article)
+
+    assert len(model.calls) == 2
+    assert "does not state the value" in model.calls[1]["messages"][-1]["content"]
+    assert result.claims == ()
+    assert result.unverifiable == ("PMC2288635-1",)
 
 
 def test_every_state_but_unreadable_is_reachable_from_here(article, essay):

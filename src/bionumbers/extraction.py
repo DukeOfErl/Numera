@@ -356,6 +356,22 @@ def verify_drafts(output: ExtractionOutput, doc: Document) -> Checked:
 
     for index, claim in enumerate(output.claims):
         check("claim", index, "quote", claim.quote.text, claim.quote.passage_id)
+        if not quotes.states_value(claim.quote.text, claim.value):
+            # Verbatim is not enough: the first live run produced two claims of 346 h and
+            # 693 h whose quote said "nearly 200-fold". Both figures were the model's
+            # arithmetic over a table it did not quote. The spec's quote *contains the
+            # value*, and a quote that does not is named back like any other failure.
+            failures.append(
+                QuoteFailure(
+                    claim=index,
+                    field="quote",
+                    reason=(
+                        f"the quote does not state the value {claim.value!r}: quote the "
+                        "passage that carries this number, as written there"
+                    ),
+                )
+            )
+            failed_claims.add(index)
         for position, occurrence in enumerate(claim.occurrences, start=1):
             check(
                 "claim",

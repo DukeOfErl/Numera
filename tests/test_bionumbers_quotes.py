@@ -21,7 +21,16 @@ from pathlib import Path
 
 import pytest
 
-from bionumbers.quotes import FOLD, Failed, Verified, contains, fold, verify
+from bionumbers.quotes import (
+    FOLD,
+    Failed,
+    Verified,
+    cell_text,
+    contains,
+    fold,
+    states_value,
+    verify,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "europepmc"
 
@@ -302,3 +311,42 @@ def test_the_checker_is_written_in_ascii():
     from bionumbers import quotes
 
     assert Path(quotes.__file__).read_text(encoding="utf-8").isascii()
+
+
+class TestARenderedCell:
+    """The model is shown a cell as 'row: … | column: … | cell: X'. Quoting that line is quoting
+    our rendering plus the paper's cell; only the cell is the paper's."""
+
+    def test_a_quote_carrying_its_headers_is_checked_on_its_cell(self):
+        doc = _Document(passages=(_Passage(id="t3r2c8", text="693.0"),))
+        outcome = verify("row: Dt (h) | column: NLC-CIP (ng/mL) / 500 | cell: 693.0", doc, "t3r2c8")
+        assert isinstance(outcome, Verified) and outcome.in_named_passage
+
+    def test_the_cell_part_is_still_held_to_the_digit(self):
+        doc = _Document(passages=(_Passage(id="t3r2c8", text="693.0"),))
+        assert isinstance(verify("row: Dt (h) | cell: 693.5", doc, "t3r2c8"), Failed)
+
+    def test_a_sentence_that_merely_mentions_a_cell_is_not_reduced(self):
+        assert cell_text("the cell: count was 693") == "the cell: count was 693"
+
+
+class TestStatesValue:
+    def test_a_written_decimal_matches_the_paper_s_integer(self):
+        assert states_value("Dt of 346 h under CIP", "346.0")
+
+    def test_both_ends_of_a_range_are_required(self):
+        assert states_value("doubling times (10–50 min)", "10–50")
+        assert not states_value("doubling times of 10 min", "10–50")
+
+    def test_the_uncertainty_is_not_required(self):
+        assert states_value("39 min", "39 ± 1")
+
+    def test_a_longer_number_is_a_different_number(self):
+        assert not states_value("139 min and 39.4 min", "39")
+
+    def test_the_first_live_run_s_arithmetic_is_refused(self):
+        quote = "NLC-CIP increasing doubling time by nearly 200-fold at the highest concentration"
+        assert not states_value(quote, "346.0")
+
+    def test_a_value_with_no_number_is_stated_by_nothing(self):
+        assert not states_value("some text", "n.d.")
