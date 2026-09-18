@@ -188,6 +188,21 @@ def test_providers_reads_the_default_and_every_sub_table(monkeypatch):
         ),
         "auth0 only": ({**shared, "auth0": {"client_id": "a"}}, ["auth0"]),
         "shared settings alone": (shared, []),
+        # Two sub-tables, because with one the docstring's "in the order secrets
+        # lists them" has no negative case at all. **Both orderings, and that is
+        # the point**: with only the first of these, reverse-sorting the names
+        # still passed -- `zeta` before `auth0` is what sorting backwards
+        # produces anyway, so the case varied the outcome without varying what
+        # the rule reads. A pair no sort can satisfy is what pins the claim. The
+        # order is what the buttons appear in.
+        "three providers keep their order": (
+            {**shared, "client_id": "g", "zeta": {"client_id": "z"}, "auth0": {"client_id": "a"}},
+            ["default", "zeta", "auth0"],
+        ),
+        "and the other way round": (
+            {**shared, "client_id": "g", "auth0": {"client_id": "a"}, "zeta": {"client_id": "z"}},
+            ["default", "auth0", "zeta"],
+        ),
     }
     for name, (section, expected) in cases.items():
         monkeypatch.setattr(web.st, "secrets", {"auth": section})
@@ -215,6 +230,12 @@ def test_providers_is_empty_with_no_auth_section(monkeypatch):
     with pytest.raises(RuntimeError):
         web.providers()
 
+    # `[auth] = "something"` rather than a section. Streamlit would not usually
+    # produce it, but the rule is "a mapping or nothing" and an unexecuted branch
+    # is a branch nobody has read.
+    monkeypatch.setattr(web.st, "secrets", {"auth": "not a section"})
+    assert web.providers() == []
+
 
 def test_each_configured_provider_gets_its_own_button(page):
     at = page(
@@ -223,6 +244,26 @@ def test_each_configured_provider_gets_its_own_button(page):
         auth_section={"client_id": "g", "auth0": {"client_id": "a"}},
     ).run()
     assert [b.label for b in at.button] == ["Sign in with Google", "Sign in with email"]
+
+
+def test_the_default_provider_is_signed_in_to_with_no_argument(page, monkeypatch):
+    """`st.login()` and `st.login("default")` are different calls: the
+    no-argument form means the credentials in `[auth]` itself, and Streamlit
+    resolves the name "default" against a section that need not exist. Forcing
+    either form for both providers passed every test until this one, so the
+    comment in `draw_closed_door` asserting the distinction had nothing behind
+    it."""
+    asked: list = []
+    monkeypatch.setattr(web.st, "login", lambda *args: asked.append(args))
+    at = page(
+        auth=True,
+        email=None,
+        auth_section={"client_id": "g", "auth0": {"client_id": "a"}},
+    ).run()
+    at.button[0].click().run()
+    assert asked == [()], "the default provider was named, and it must not be"
+    at.button[1].click().run()
+    assert asked == [(), ("auth0",)], "a named provider was not named"
 
 
 def test_a_provider_with_no_label_still_gets_a_button(page):
@@ -260,6 +301,11 @@ def test_an_unverified_address_is_refused_with_its_own_sentence(page, caught):
     (refused,) = [r for r in caught.records if r.getMessage() == "signin.unverified"]
     assert refused.fields["email"] == "unverified@example.org"
     assert web.IDENTITIES == {}, "a refused account must not enter the registry"
+    # This door's sentence tells the reader to sign in again, which they cannot
+    # do while signed in as an unverified account. The `NO_CREDENTIAL` door has
+    # carried this assertion since it existed; this one did not until a verifier
+    # deleted the button and nothing failed.
+    assert "Sign out" in [b.label for b in at.button], "no way out of the closed door"
 
 
 def test_an_unverified_address_is_never_looked_up(monkeypatch):
@@ -297,6 +343,27 @@ def test_the_same_address_through_a_second_provider_is_the_same_reader(monkeypat
         assert admission.door is web.Door.OPEN
         seen.append((admission.account, web.effective_session(admission, "s1")))
     assert seen[0] == seen[1], "a second provider must not be a second account"
+
+
+def test_which_provider_was_used_is_not_recorded_anywhere(page, caught):
+    """The claim task 1.6 made and did not check. It passes vacuously today --
+    nothing in `web.py` reads the `provider` claim at all -- and that is the
+    point of writing it down: the day someone stamps it to "help with debugging",
+    this is what says the address is the identity and the route to it is not
+    (ADR-0880). A guard, declared as a guard."""
+    at = page(
+        auth=True,
+        email=TESTER.email,
+        enrolled={TESTER.email: TESTER},
+        claims={"provider": "auth0", "sub": "auth0|abc123"},
+    ).run()
+    at = _ask(at, "how many?")
+    assert not at.exception
+    assert caught.records, "nothing was recorded, so this asserts nothing"
+    for record in caught.records:
+        for field in ("provider", "sub"):
+            assert not getattr(record, field, None), field
+            assert field not in getattr(record, "fields", {}), field
 
 
 def test_a_signed_in_account_that_is_not_enrolled_is_refused_and_recorded(page, caught):

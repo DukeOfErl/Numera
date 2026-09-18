@@ -63,15 +63,64 @@ repository, and the implementer's job is to leave the instructions right.
       first baseline was one-red and no verdict could be read from it. Green
       baseline 106 passed. **Seed A** `claims.get("email_verified", True)` →
       killed `test_address_verified_reads_the_claim_and_refuses_its_absence`,
-      alone, which is the one test claiming absence. **Seed B** the check moved
-      below the enrolment lookup → killed
+      alone, which is the one test claiming absence. **Seed B** → killed
       `test_an_unverified_address_is_refused_with_its_own_sentence` and
       `test_an_unverified_address_is_never_looked_up`. **Seed C** (added,
       unplanned) `providers()` always offering `"default"` → killed
       `test_providers_reads_the_default_and_every_sub_table` and
       `test_a_provider_with_no_label_still_gets_a_button`.*
-- [ ] 1.8 `verifier` on group 1: would any test still pass if `admit` admitted
+
+      ***Correction, from the verifier (1.8).** Seed B was described above as
+      "the check moved below the enrolment lookup", and that description is
+      wrong: what was actually seeded replaced the whole block — check, record
+      and all — with a bare check lower down, so the second kill was the missing
+      `signin.unverified` record rather than the moved check. Moving the block
+      intact, at either natural placement, kills only
+      `test_an_unverified_address_is_never_looked_up`. The verifier tried to
+      reproduce the note and could not, which is the whole reason a kill list is
+      written down. **A seed has to be recorded as the diff it was, not as the
+      defect it was meant to represent.***
+- [x] 1.8 `verifier` on group 1: would any test still pass if `admit` admitted
       an unverified address? Measure by making it so in a copy.
+
+      *PASS WITH FINDINGS. It confirmed its canary, then answered the question
+      directly: deleting the check kills three tests, and four loosened
+      predicates (`bool(value)`, `value is not None`, `value != False`,
+      `str(value).lower() == "true"`) all die. **No survivor on the claim
+      itself.** It also measured both populations rather than reading them,
+      which is more than was asked: an identical probe on `admit` in trees built
+      from this commit and its parent gives 38 tests reaching an open door
+      before and 40 after, with the "admitted before, not after" set **empty**.
+      The refused population grew by exactly the new door, 0 → 3.*
+
+      *Six gaps, all now closed and each re-seeded to prove the fix:*
+
+      *• **`st.login`'s argument was unpinned in both directions** — forcing
+      `(provider,)` for everything and forcing `()` for everything each passed
+      every test, while a comment two lines above asserted the two calls are not
+      synonyms. Now pinned by clicking both buttons and reading what `st.login`
+      was handed.*
+
+      *• **The unverified door's "Sign out" could be deleted with nothing
+      failing**, although its sentence tells the reader to sign in again. The
+      `NO_CREDENTIAL` door has carried that assertion since it existed. Added.*
+
+      *• **Order among named providers was unpinned**, so the docstring's "in
+      the order secrets lists them" was decoration. The first fix did not work:
+      one case with `zeta` before `auth0` is satisfied by reverse-sorting
+      anyway — the case varied the outcome without varying what the rule reads.
+      **Both orderings** are now fixtures, which no sort can satisfy; forward-
+      and reverse-sorted both die.*
+
+      *• **`providers()`'s non-mapping branch was executed by no test** in the
+      whole 1603-test suite. Covered.*
+
+      *• **Task 1.6's second clause had no artifact.** "The `provider` claim is
+      not stamped on any trail record" was marked done with nothing asserting
+      it. Now a test, and honestly labelled: it passes vacuously today because
+      nothing reads that claim, and it exists for the day someone stamps it.*
+
+      *• **The Seed B note was not reproducible**, corrected above.*
 
 ## 2. The command
 

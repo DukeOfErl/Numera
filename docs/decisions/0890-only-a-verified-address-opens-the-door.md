@@ -85,6 +85,27 @@ Three defects seeded into a copy of the source against a green baseline of 106:
 | the check moved below the enrolment lookup | `test_an_unverified_address_is_refused_with_its_own_sentence`, `test_an_unverified_address_is_never_looked_up` |
 | `providers()` always offering `"default"` | `test_providers_reads_the_default_and_every_sub_table`, `test_a_provider_with_no_label_still_gets_a_button` |
 
+A read-only verifier then measured the same claim from the other side, and the
+claim held with no survivor: deleting the check kills three tests, and four
+loosened predicates — `bool(value)`, `value is not None`, `value != False`,
+`str(value).lower() == "true"` — all die. It also measured **both populations**
+rather than reasoning about them, with an identical probe on `admit` in trees
+built from this commit and its parent:
+
+| | before | after |
+|---|---|---|
+| tests reaching an open door | 38 | 40 |
+| admitted before and not after | — | none |
+| refused as unverified | 0 | 3 |
+
+That is the measurement this kind of change needs. Loosening or tightening a
+rule moves records in both directions, and only one of them gets looked at.
+
+Six gaps around the claim were found and closed, listed in the change's
+`tasks.md` task 1.8. The one worth repeating here: **`st.login`'s argument was
+unpinned in both directions**, while a comment beside it asserted that
+`st.login()` and `st.login("default")` are different calls.
+
 The baseline was one-red on the first attempt — `LOGO` resolves through
 `Path(__file__).parents[2]`, which misses in a copied tree — and no verdict could
 be read until `assets/` was linked in. Recorded because the next person seeding

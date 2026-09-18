@@ -94,7 +94,24 @@ Five defects seeded into a copy against a green baseline of 119:
 | nothing minted at all | four, including the happy path |
 | `import streamlit` in `enrol.py` | `test_only_the_web_driver_knows_the_web_framework` |
 
-**The first harness could not have found any of them, and said so only because a
+A read-only verifier then seeded against the same module and found four things
+the list above missed. All are closed, and each fix was re-seeded:
+
+| Mutant | Was | Now |
+|---|---|---|
+| `_same_amount` with strict `==` | **survived the whole suite** | killed by an echo of `"5"` |
+| an echo that is not a number at all | never executed | killed |
+| `_revoke_quietly`'s failure path | never executed, behind a docstring claiming the original failure is not hidden | killed |
+| every `enrol`-level refusal through `main` | never executed | killed |
+
+The survivor is the one worth remembering: `5 == 5.0` in Python, so a fixture
+built from ints and floats cannot tell `float(a) == float(b)` from `a == b`, and
+a function whose whole stated purpose is comparing across JSON's number types had
+no test that varied the type. The same pass also caught a test whose doubles were
+narrower than its own assertion — deleting the `--branch` guard let an unmarked
+test out to the real Neon control plane.
+
+**The first harness could not have found any of this, and said so only because a
 canary died.** It copied `tests/` but set no `PYTHONPATH`, so the static
 dependency guard — which reads `parents[1]/src` by path — saw the seeded copy
 while every runtime test imported the real package. Four mutants "survived" and
