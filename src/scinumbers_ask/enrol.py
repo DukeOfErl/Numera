@@ -231,7 +231,14 @@ def _parser() -> argparse.ArgumentParser:
     # "the following arguments are required" says nothing about why, and this is
     # the one mistake whose symptom appears somewhere else entirely -- the tester
     # is told they are not enrolled while the operator is looking at their row.
-    parser.add_argument("--branch", help="Neon branch to enrol into, e.g. alpha")
+    parser.add_argument(
+        "--branch",
+        # Not `required=True`, so that the refusal is this module's sentence
+        # rather than argparse's -- but the help has to say so, or `--help` shows
+        # `[--branch BRANCH]` and reads as optional, which is the opposite of the
+        # point.
+        help="REQUIRED, no default: the Neon branch to enrol into, e.g. alpha",
+    )
     parser.add_argument("--database", default=neon.DEFAULT_DATABASE)
     parser.add_argument("--role-name", default=neon.DEFAULT_ROLE, help="Neon database role")
     return parser
