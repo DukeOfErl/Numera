@@ -147,8 +147,43 @@ repository, and the implementer's job is to leave the instructions right.
       $0.01 cap into a throwaway name, read the echo, then revoke — recording
       in the ADR whether `limit_reset` is honoured on create or needed the
       `PATCH`. The one live run this change needs.
-- [ ] 2.10 `verifier` on group 2: measure that no test passes if `enrol()` mints
+- [x] 2.10 `verifier` on group 2: measure that no test passes if `enrol()` mints
       before checking the cap, and that `KeyLeftBehind` carries the hash.
+
+      *PASS WITH FINDINGS, and the findings were worth the run. It confirmed its
+      own canary first, then measured what holds: mint-before-insert is pinned
+      (the reversed order killed four tests — **this is the seed 2.8 asked for
+      and did not record**, so it is recorded here), `KeyLeftBehind` carrying
+      the hash is pinned, and `neon.branch_id`'s exact match is the best-defended
+      thing in the change (three tests die on "take the first").*
+
+      *Four real gaps, all now closed and each re-seeded to prove the fix:*
+
+      *• **A measured survivor.** `_same_amount` with strict `==` passed the
+      whole suite. `5 == 5.0` in Python, so an int/float fixture cannot tell the
+      two implementations apart and the function's stated reason for existing
+      was untested. Now pinned by an echo of `"5"` (dies) and by echoes that are
+      not numbers at all (dies).*
+
+      *• **Three regions no test executed**, each behind a docstring claiming
+      behaviour: `_same_amount`'s unreadable-echo branch, `_revoke_quietly`'s
+      except (whose sentence about not hiding the original failure had no
+      artifact), and `main`'s except around `enrol` — so no `enrol`-level
+      refusal was ever driven through the command. All three now covered; the
+      three modules are at 100% line coverage, which here means the branches
+      exist rather than that they are asserted.*
+
+      *• **A test that reached the real Neon control plane.** Deleting the
+      `--branch` guard let `test_the_command_refuses_without_a_branch_and_says_why`
+      out to `console.neon.tech` — its doubles covered `branch_id` and `enrol`
+      but not `connection_url`, while its assertion read as "nothing was
+      called". The double is now as wide as the claim. An unmarked test making a
+      live call is the more serious half of this.*
+
+      *• **Half an assertion that could not fail.** `HASH not in said` on the
+      success path is unfalsifiable — `main` holds an `Account`, which carries no
+      hash. Made real by driving `KeyLeftBehind` through `main` and asserting the
+      hash **is** there and the key is not.*
 
 ## 3. Documentation and the record
 

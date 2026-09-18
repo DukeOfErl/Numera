@@ -182,6 +182,41 @@ def test_a_reset_the_patch_cannot_fix_is_revoked_and_refused():
     assert opener.methods() == ["POST", "PATCH", "DELETE"]
 
 
+def test_a_cap_echoed_as_a_string_is_the_same_cap():
+    """`_same_amount` exists to compare across JSON's number types, and strict
+    equality survived the whole suite until this test: `5 == 5.0` is True in
+    Python, so an int/float fixture cannot tell the two implementations apart.
+    A provider echoing `"5"` can."""
+    opener = _Opener({"POST https://openrouter.ai/api/v1/keys": _minted(limit="5")})
+    assert mint("mgmt", name="new@example.org", limit_usd=5, opener=opener).key == KEY
+    assert "DELETE" not in opener.methods()
+
+
+def test_a_cap_echoed_as_something_that_is_not_a_number_is_refused():
+    """The other half of the same rule: unreadable is not "close enough". An
+    echo that cannot be compared is an uncapped key as far as this command can
+    tell, and ADR-0780's reasoning does not survive one of those."""
+    for echoed in ("unlimited", None, {}):
+        opener = _Opener({"POST https://openrouter.ai/api/v1/keys": _minted(limit=echoed)})
+        with pytest.raises(MintFailed):
+            mint("mgmt", name="new@example.org", limit_usd=5, opener=opener)
+        assert "DELETE" in opener.methods(), echoed
+
+
+def test_a_cleanup_that_fails_does_not_replace_the_reason_it_was_cleaning_up(capsys):
+    """`_revoke_quietly`'s docstring claims the original failure is the one the
+    operator reads and the hash still reaches stderr. Nothing executed that
+    branch until this test, so the sentence had no artifact behind it."""
+    opener = _Opener(
+        {"POST https://openrouter.ai/api/v1/keys": _minted(limit=1000)},
+        fail={"DELETE": RuntimeError("openrouter is down")},
+    )
+    with pytest.raises(MintFailed) as refused:
+        mint("mgmt", name="new@example.org", limit_usd=5, opener=opener)
+    assert "1000" in str(refused.value), "the cleanup's failure replaced the real one"
+    assert HASH in capsys.readouterr().err, "the loose key was not named anywhere"
+
+
 def test_a_response_with_no_key_is_refused():
     opener = _Opener({"POST https://openrouter.ai/api/v1/keys": {"data": {"hash": HASH}}})
     with pytest.raises(MintFailed):
@@ -311,8 +346,19 @@ def test_the_command_refuses_without_a_branch_and_says_why(monkeypatch, capsys):
     enrolled while the operator is looking at their row."""
     _env(monkeypatch)
     called: list = []
-    monkeypatch.setattr(neon, "branch_id", lambda *a, **k: called.append(a))
-    monkeypatch.setattr(enrol_mod, "enrol", lambda *a, **k: called.append(a))
+    # Every outbound path, not only the two the guard is expected to reach
+    # first. A verifier deleted the guard and this test's own doubles let the
+    # run out to the real `console.neon.tech` -- an unmarked test making a live
+    # call, and an assertion that read as "nothing happened" while not covering
+    # the call that did. The double has to be as wide as the claim.
+    monkeypatch.setattr(neon, "branch_id", lambda *a, **k: called.append(("branch_id", a)))
+    monkeypatch.setattr(
+        neon, "connection_url", lambda *a, **k: called.append(("connection_url", a))
+    )
+    monkeypatch.setattr(
+        enrol_mod.trail_store, "engine_from_url", lambda *a, **k: called.append(("engine", a))
+    )
+    monkeypatch.setattr(enrol_mod, "enrol", lambda *a, **k: called.append(("enrol", a)))
     assert main(["new@example.org", "scientist", "--limit-usd", "5"]) == 2
     said = capsys.readouterr().err
     assert "none is assumed" in said and "--branch" in said
@@ -343,6 +389,59 @@ def test_an_unknown_branch_costs_nothing(monkeypatch, capsys):
     assert main(argv) == 1
     assert "no such" in capsys.readouterr().err
     assert minted == [], "a key was minted for a branch that does not exist"
+
+
+def _main_with_doubles(monkeypatch, outcome):
+    """`main` with both external services replaced, so only its own handling runs."""
+    _env(monkeypatch)
+    monkeypatch.setattr(neon, "branch_id", lambda *a, **k: "br-alpha")
+    monkeypatch.setattr(neon, "connection_url", lambda *a, **k: "postgresql+psycopg://u:p@h/db")
+    monkeypatch.setattr(
+        enrol_mod.trail_store,
+        "engine_from_url",
+        lambda url, **k: type("E", (), {"dispose": lambda self: None})(),
+    )
+
+    def enrolling(*a, **k):
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(enrol_mod, "enrol", enrolling)
+    return main(["new@example.org", "scientist", "--limit-usd", "5", "--branch", "alpha"])
+
+
+@pytest.mark.parametrize(
+    "refusal",
+    [
+        Uncapped("a cap of 0 is not a cap"),
+        AlreadyEnrolled("new@example.org is already enrolled"),
+        NothingEnrolled("new@example.org was not enrolled"),
+    ],
+)
+def test_an_enrol_level_refusal_comes_back_as_one_sentence_and_a_non_zero_exit(
+    monkeypatch, capsys, refusal
+):
+    """`main`'s docstring promises this for *every* refusal, and until this test
+    nothing drove one of `enrol`'s own through the command -- only `main`'s two
+    guards. The refusals are the operation's; the command only has to report
+    them, and "only has to" is exactly the kind of claim that goes untested."""
+    assert _main_with_doubles(monkeypatch, refusal) == 1
+    out = capsys.readouterr()
+    assert str(refusal) in out.err
+    assert out.out == "", "a refusal printed something on the success channel"
+
+
+def test_a_credential_left_behind_is_named_to_the_operator_by_the_command(monkeypatch, capsys):
+    """The one outcome that leaves work for a person. The hash has to survive the
+    trip out through `main`, and the key must not -- which is also what makes the
+    "no credential is printed" assertion elsewhere falsifiable in both halves
+    rather than only in one."""
+    left = KeyLeftBehind(f"new@example.org was not enrolled and its credential {HASH} could not")
+    assert _main_with_doubles(monkeypatch, left) == 1
+    out = capsys.readouterr()
+    assert HASH in out.err, "the operator cannot revoke a key they were not told about"
+    assert KEY not in out.err
 
 
 def test_what_the_command_prints_carries_no_credential(monkeypatch, capsys):
