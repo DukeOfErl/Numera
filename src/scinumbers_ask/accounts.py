@@ -1,9 +1,15 @@
 """Who is enrolled: one row per account, read once at sign-in, refused loudly.
 
-`lookup` is the whole module. It is on the agent's side of the dependency line
-for the same reason `authorization` is -- a test or a second caller has to be
-able to ask "is this person enrolled" without a browser -- and it imports no
-framework; the driver hands it the engine `st.connection` built.
+`lookup` reads a row and `insert` writes one, and they are together because the
+table's shape is the thing worth keeping in one place: the case-folding rule
+below governs both, and a second module writing this table would be a second
+copy of that rule to keep in step. `insert` has one caller -- the enrolment
+command -- and is here rather than beside it for that reason.
+
+Both are on the agent's side of the dependency line for the same reason
+`authorization` is -- a test or a second caller has to be able to ask "is this
+person enrolled" without a browser -- and neither imports a framework; the driver
+hands `lookup` the engine `st.connection` built, and the command builds its own.
 
 **This fails closed, and that is the opposite of the trail store beside it.**
 `trail_store.record` swallows every failure because the cost of a dropped row is
@@ -45,6 +51,16 @@ select email, role, openrouter_key, disabled
 from {table}
 where lower(email) = lower(:email)
 """
+
+
+class AlreadyEnrolled(RuntimeError):
+    """This address already has a row. Nothing was written.
+
+    Raised from the database's own refusal rather than from a select this module
+    ran first: two operators enrolling the same address at the same moment would
+    both pass a select and the second would still have to be refused here. The
+    unique index is the thing that actually decides, so it is the thing asked.
+    """
 
 
 class EnrolmentUnavailable(RuntimeError):
@@ -107,3 +123,43 @@ def lookup(engine, email: str, *, table: str = DEFAULT_TABLE) -> Account | None:
         complain(f"account {email!r} has a role that is not one of {[r.value for r in Role]}", exc)
         return None
     return Account(email=row.email, role=role, openrouter_key=row.openrouter_key or None)
+
+
+#: Both constraints on the address mean the same thing to an operator. The
+#: primary key catches an exact repeat, `accounts_email_lower` catches one that
+#: differs only in case, and which fires is not a distinction anybody enrolling a
+#: tester can act on -- so `insert` does not read the index name out of the error.
+#: Matching on the name would also go quietly false the day the index is renamed,
+#: and the failure would be a duplicate reported as an unknown database error.
+_INSERT = """
+insert into {table} (email, role, openrouter_key)
+values (:email, :role, :key)
+"""
+
+
+def insert(engine, email: str, role: Role, key: str, *, table: str = DEFAULT_TABLE) -> Account:
+    """Enrol one account. Raises `AlreadyEnrolled` if the address already has a row.
+
+    The row's own spelling of the address is what goes in, unfolded: `lookup`
+    folds when it matches, so the operator's capitalisation is preserved for
+    display without affecting who is found. Any failure that is not a duplicate
+    raises as itself -- an unreachable database, a missing table and a refused
+    password are all things the operator has to see, and this is a command they
+    are watching rather than a page they are reading.
+
+    Under the trail store's statement timeout, so a hung database refuses in two
+    seconds rather than never.
+    """
+    from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(f"set local statement_timeout = {STATEMENT_TIMEOUT_MS}"))
+            conn.execute(
+                text(_INSERT.format(table=table)),
+                {"email": email, "role": Role(role).value, "key": key},
+            )
+    except IntegrityError as exc:
+        raise AlreadyEnrolled(f"{email} is already enrolled") from exc
+    return Account(email=email, role=Role(role), openrouter_key=key or None)

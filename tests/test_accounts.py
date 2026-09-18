@@ -15,7 +15,13 @@ from types import SimpleNamespace
 import pytest
 
 from scinumbers_ask import trail_store
-from scinumbers_ask.accounts import Account, EnrolmentUnavailable, lookup
+from scinumbers_ask.accounts import (
+    Account,
+    AlreadyEnrolled,
+    EnrolmentUnavailable,
+    insert,
+    lookup,
+)
 from scinumbers_ask.permissions import Role
 
 
@@ -259,3 +265,95 @@ def test_the_account_hands_over_its_identity_and_not_its_credential():
     assert account.identity.email == account.email
     assert account.identity.role is account.role
     assert "openrouter" not in repr(account.identity).lower()
+
+
+# --- writing a row -------------------------------------------------------------
+
+
+class _WriteConn:
+    """Records what was executed, and fails on the insert where told to.
+
+    Fails on the *insert* rather than on any statement, so a test cannot pass by
+    tripping the `set local statement_timeout` that precedes it -- which would
+    prove the timeout is sent and nothing about the insert at all.
+    """
+
+    def __init__(self, fail_on_insert=None):
+        self.fail_on_insert = fail_on_insert
+        self.statements: list[str] = []
+        self.params: list[dict] = []
+
+    def execute(self, statement, params=None):
+        self.statements.append(str(statement))
+        if params is not None:
+            self.params.append(dict(params))
+        if self.fail_on_insert is not None and "insert" in str(statement).lower():
+            raise self.fail_on_insert
+        return None
+
+
+class _WriteEngine:
+    def __init__(self, fail_on_insert=None):
+        self.conn = _WriteConn(fail_on_insert)
+
+    def begin(self):
+        engine = self
+
+        class _Ctx:
+            def __enter__(self):
+                return engine.conn
+
+            def __exit__(self, *exc):
+                return False
+
+        return _Ctx()
+
+
+def _integrity_error(message: str):
+    """A real `IntegrityError`, not a stand-in.
+
+    The rule reads the exception's *type*, so a double raising something else
+    would exercise the "any other failure" branch while the test's name claimed
+    the duplicate one -- the negative case has to vary the dimension the rule
+    actually reads.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    return IntegrityError(message, {}, Exception(message))
+
+
+def test_insert_writes_the_row_and_returns_the_account():
+    engine = _WriteEngine()
+    account = insert(engine, "New@example.org", Role.SCIENTIST, "sk-new")
+    assert account == Account(email="New@example.org", role=Role.SCIENTIST, openrouter_key="sk-new")
+    (params,) = engine.conn.params
+    assert params == {"email": "New@example.org", "role": "scientist", "key": "sk-new"}
+    assert any("statement_timeout" in s for s in engine.conn.statements)
+    assert "New@example.org" in account.email, "the operator's own spelling is kept"
+
+
+def test_insert_refuses_an_address_that_already_has_a_row():
+    engine = _WriteEngine(fail_on_insert=_integrity_error("duplicate key accounts_email_lower"))
+    with pytest.raises(AlreadyEnrolled) as refused:
+        insert(engine, "tester@example.org", Role.STUDENT, "sk-dup")
+    assert "tester@example.org" in str(refused.value)
+
+
+def test_insert_refuses_an_exact_repeat_too():
+    """The primary key catches the exact repeat and the index catches the
+    case-only one. Both mean "already enrolled", and `insert` does not read the
+    constraint's name to tell them apart -- a rule that would go quietly false
+    the day the index is renamed."""
+    engine = _WriteEngine(fail_on_insert=_integrity_error('duplicate key value "accounts_pkey"'))
+    with pytest.raises(AlreadyEnrolled):
+        insert(engine, "tester@example.org", Role.STUDENT, "sk-dup")
+
+
+def test_insert_lets_any_other_failure_raise_as_itself():
+    """Not `AlreadyEnrolled`: an unreachable database and a missing table are
+    things the operator has to see, and reporting them as a duplicate would send
+    them to look at a row that is not there."""
+    engine = _WriteEngine(fail_on_insert=RuntimeError('relation "accounts" does not exist'))
+    with pytest.raises(RuntimeError) as failed:
+        insert(engine, "new@example.org", Role.STUDENT, "sk-new")
+    assert not isinstance(failed.value, AlreadyEnrolled)

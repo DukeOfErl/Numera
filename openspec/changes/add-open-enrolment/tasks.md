@@ -75,20 +75,20 @@ repository, and the implementer's job is to leave the instructions right.
 
 ## 2. The command
 
-- [ ] 2.1 `accounts.insert(engine, email, role, key) -> Account`: one insert
+- [x] 2.1 `accounts.insert(engine, email, role, key) -> Account`: one insert
       under the statement timeout; an integrity error on `accounts_email_lower`
       becomes `AlreadyEnrolled`; any other failure raises as itself. Module
       docstring: "`lookup` is the whole module" is no longer true — say what the
       second function is and why it lives here. Tests with an engine double:
       inserted; duplicate → `AlreadyEnrolled`; other error → not
       `AlreadyEnrolled`.
-- [ ] 2.2 `enrol.py`: `mint`, `revoke`, the exceptions (`Uncapped`,
+- [x] 2.2 `enrol.py`: `mint`, `revoke`, the exceptions (`Uncapped`,
       `AlreadyEnrolled` re-exported, `NothingEnrolled`, `KeyLeftBehind`), and
       `enrol()`. `mint` checks the echo (`limit`, `limit_reset`), tries one
       `PATCH` if `limit_reset` came back wrong, and revokes and raises if the
       echo still disagrees. `urllib` with an injectable `opener`, as
       `allowance.py`.
-- [ ] 2.3 Tests for `enrol()` with an opener double and an engine double, each
+- [x] 2.3 Tests for `enrol()` with an opener double and an engine double, each
       refusal in its own test: `limit_usd` of `0`, `-1` and `None` → `Uncapped`
       **and the opener was never called**; bad role → refused before minting;
       duplicate → `AlreadyEnrolled` **and the minted key was revoked** (assert
@@ -96,7 +96,7 @@ repository, and the implementer's job is to leave the instructions right.
       `DELETE`; insert raises and `DELETE` fails → `KeyLeftBehind` naming the
       hash; echo with wrong `limit` → revoked and refused; echo with wrong
       `limit_reset` → one `PATCH`, then accepted if it agrees.
-- [ ] 2.4 `neon.py` (or a section of `enrol.py` if it stays under ~80
+- [x] 2.4 `neon.py` (or a section of `enrol.py` if it stays under ~80
       lines): `branch_id(api_key, project, name, *, opener)` — `search=name`,
       then exactly one exact `name` match or `BranchNotFound` listing what was
       found; `connection_url(api_key, project, branch_id, *, database, role,
@@ -105,7 +105,7 @@ repository, and the implementer's job is to leave the instructions right.
       exact one; no match → refused listing the partials; two exact matches
       (cannot happen at Neon, but the rule must hold) → refused; the URL comes
       back with the rewritten scheme and the `-pooler` host untouched.
-- [ ] 2.5 `main()`: `EMAIL ROLE --limit-usd N --branch NAME`, `--database`
+- [x] 2.5 `main()`: `EMAIL ROLE --limit-usd N --branch NAME`, `--database`
       and `--role` with Neon's defaults. **`--branch` is required with no
       default**; argparse's own error is replaced by a sentence saying the row
       has to land in the branch the deployed app reads and that no branch is
@@ -117,12 +117,32 @@ repository, and the implementer's job is to leave the instructions right.
       unknown branch → refused and the OpenRouter opener never called; a
       success whose stdout does not contain the key, the hash or the URL
       (assert on the doubles' values, not on a fixed string).
-- [ ] 2.6 `pyproject.toml`: `scinumbers-enrol = "scinumbers_ask.enrol:main"`.
-- [ ] 2.7 `test_driver_independence.py`: `enrol` joins `HARNESS`. Seed
+- [x] 2.6 `pyproject.toml`: `scinumbers-enrol = "scinumbers_ask.enrol:main"`.
+- [x] 2.7 `test_driver_independence.py`: `enrol` joins `HARNESS`. Seed
       `import streamlit` into a copy and name the tests that fail.
-- [ ] 2.8 Fault seeding, in a copy, over `enrol()`: `limit_usd >= 0` in place
+
+      *Seeded: killed `test_only_the_web_driver_knows_the_web_framework`.
+      `neon` deliberately stays in the core — stdlib only, and the core side is
+      the stricter placement.*
+- [x] 2.8 Fault seeding, in a copy, over `enrol()`: `limit_usd >= 0` in place
       of `> 0`; insert before mint; revoke skipped on insert failure. Each must
       kill exactly the test that claims it. Write ADR-0900's claims after.
+
+      *Copy at `$TMPDIR/seed-g2`, and **the harness had to be fixed before any
+      verdict could be read from it**: the first arrangement copied `tests/` but
+      set no `PYTHONPATH`, so the static guard read the copy while every runtime
+      test imported the real package — four seeds "survived" and the table was
+      clean. It survived only because the streamlit seed *did* die, which is the
+      canary that said the other four could not have. The harness now aborts
+      rather than print a table it did not earn, and needs both the copied tests
+      and the path. Green baseline 119 passed.*
+
+      *Against that: **E** `>= 0` for `> 0` → killed
+      `test_a_credential_is_never_issued_without_a_cap[0]` and `[0.0]`, and
+      rightly not `[-1]` or `[None]`. **F** the revoke removed → killed all
+      three of the could-not-be-written tests. **G** the cap echo unchecked →
+      killed `test_a_cap_that_comes_back_wrong_is_revoked_and_refused`. **H**
+      (added) nothing minted at all → killed four, including the happy path.*
 - [ ] 2.9 (operator, `network` marker) One live mint against OpenRouter with a
       $0.01 cap into a throwaway name, read the echo, then revoke — recording
       in the ADR whether `limit_reset` is honoured on create or needed the
