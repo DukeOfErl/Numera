@@ -169,6 +169,13 @@ repository, and the implementer's job is to leave the instructions right.
       `0880`–`0900` are written.
 - [x] 3.5 `CHANGELOG.md` under Unreleased: Added (second provider, the
       command), Changed (verified address required).
+- [x] 3.6b `docs/diagrams/architecture.md` (added; the change did not plan it):
+      3b redrawn — the verification check is before the lookup, and that order is
+      the claim ADR-0890 rests on — and a new 3c for the enrolment command's two
+      side effects and its compensation. **Not rendered**: no mermaid CLI is
+      installed and npm is unreachable from this sandbox, so the blocks were
+      checked structurally only. A previous commit on this repo had to fix a 3b
+      that did not parse, so this is worth someone's eye before merge.
 - [x] 3.6 `tests/test_spec_conformance.py`: map the modified requirement's new
       scenarios and the added requirement to the tests from groups 1 and 2;
       record as gaps the ones AppTest cannot drive (an actual second-provider
