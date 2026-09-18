@@ -140,7 +140,7 @@ time of writing `spend.py`, and record the date in its docstring.
 
 ## 8. The command
 
-- [ ] 8.1 `cli.py`: `bionumbers discover "<question>" --since 2005 --limit 50`, `bionumbers extract
+- [x] 8.1 `cli.py`: `bionumbers discover "<question>" --since 2005 --limit 50`, `bionumbers extract
       <run-id> --ceiling 2 --budget 40`, `bionumbers load <run-id>` into the store, and
       `bionumbers status <run-id>` printing states, spend and the cached-token fraction
 - [ ] 8.2 Run end to end on one question against real papers, for ten to twenty papers, and record

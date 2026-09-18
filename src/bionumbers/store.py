@@ -170,7 +170,11 @@ def engine_from_url(url: str, **kwargs: Any) -> Engine:
     unreachable host is where a write actually hangs, and the statement timeout does nothing for
     it.
     """
-    connect_args = {"connect_timeout": CONNECT_TIMEOUT_S} | kwargs.pop("connect_args", {})
+    connect_args = dict(kwargs.pop("connect_args", {}))
+    if not url.startswith("sqlite"):
+        # libpq's keyword; sqlite3 rejects it as unknown. SQLite is the local and test backend, and
+        # a file on disk has no host to time out on.
+        connect_args = {"connect_timeout": CONNECT_TIMEOUT_S} | connect_args
     return create_engine(url, pool_pre_ping=True, connect_args=connect_args, **kwargs)
 
 
