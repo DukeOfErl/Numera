@@ -173,7 +173,7 @@ repository, and the implementer's job is to leave the instructions right.
       scenarios and the added requirement to the tests from groups 1 and 2;
       record as gaps the ones AppTest cannot drive (an actual second-provider
       round trip; the live mint).
-- [ ] 3.7 ADRs `0880`, `0890`, `0900` filled in — each with the alternatives it
+- [x] 3.7 ADRs `0880`, `0890`, `0900` filled in — each with the alternatives it
       rejected and, for `0890` and `0900`, the mutant that died. Status
       accepted, this branch as the pull request.
 
