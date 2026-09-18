@@ -82,7 +82,7 @@ Three defects seeded into a copy of the source against a green baseline of 106:
 | Mutant | Killed |
 |---|---|
 | `claims.get("email_verified", True)` — absence admits | `test_address_verified_reads_the_claim_and_refuses_its_absence`, alone |
-| the check moved below the enrolment lookup | `test_an_unverified_address_is_refused_with_its_own_sentence`, `test_an_unverified_address_is_never_looked_up` |
+| the check's whole block replaced by a bare check below the enrolment lookup | `test_an_unverified_address_is_refused_with_its_own_sentence`, `test_an_unverified_address_is_never_looked_up` |
 | `providers()` always offering `"default"` | `test_providers_reads_the_default_and_every_sub_table`, `test_a_provider_with_no_label_still_gets_a_button` |
 
 A read-only verifier then measured the same claim from the other side, and the
@@ -106,7 +106,15 @@ Six gaps around the claim were found and closed, listed in the change's
 unpinned in both directions**, while a comment beside it asserted that
 `st.login()` and `st.login("default")` are different calls.
 
-The baseline was one-red on the first attempt — `LOGO` resolves through
-`Path(__file__).parents[2]`, which misses in a copied tree — and no verdict could
-be read until `assets/` was linked in. Recorded because the next person seeding
-over `web.py` will meet it.
+That second row was first written as "the check moved below the enrolment
+lookup", and the verifier could not reproduce it: moving the block intact kills
+one test, not two. The seed had also removed the record. **A seed is recorded as
+the diff it was, not as the defect it was meant to stand for** — the kill list is
+written down precisely so someone can re-run it, and a label that does not match
+the diff makes the record worse than nothing.
+
+Two things the next person seeding over `web.py` will meet, both of which produce
+a red baseline and therefore no readable verdict: `LOGO` resolves through
+`Path(__file__).parents[2]`, so `assets/` has to be linked into the copy; and
+every page test loads `streamlit_app.py` through `parents[1]`, so it has to be
+copied too when the tests are.
