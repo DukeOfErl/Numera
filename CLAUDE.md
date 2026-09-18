@@ -71,7 +71,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-answer-feedback` | `0740`–`0770` — `0740`, `0750`, `0760` written |
 | `add-user-identity` | `0780`–`0830` — all written |
 | `add-question-and-answer-records` | `0840`–`0870` |
-| `add-open-enrolment` | `0880`–`0920` |
+| `add-open-enrolment` | `0880`–`0920` — `0880`, `0890`, `0900` written |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets
@@ -171,7 +171,9 @@ core, and a test there refuses a name with no file behind it.
 | `feedback.py` | A reader's judgement of an answer, recorded to the trail. **Presentation, not core** — see below |
 | `permissions.py` | `Role`, `Permission`, `Identity`, and `GRANTS` — the default-deny table as data, with the pruning rule above it (ADR-0800) |
 | `authorization.py` | `allowed` / `require` / `Refused`: the one refusal, called inside the operation it guards, never by the page |
-| `accounts.py` | `lookup(engine, email)`: enrolment off one row, **fails closed** — the deliberate inverse of `trail_store` (ADR-0780) |
+| `accounts.py` | `lookup(engine, email)` and `insert(...)`: enrolment off one row, **fails closed** — the deliberate inverse of `trail_store` (ADR-0780). Both here so the case-folding rule has one home |
+| `enrol.py` | The enrolment command (`scinumbers-enrol`): mint a capped key, insert the row, withdraw the key if the row cannot be written (ADR-0900). A harness module |
+| `neon.py` | Neon's control plane: a branch's *name* to its connection URL, so no database url is kept on disk |
 
 **`ask` wraps `_ask`, and the wrapper is where the records are written.** The
 question, the answer and the evidence behind it are recorded as their events pass

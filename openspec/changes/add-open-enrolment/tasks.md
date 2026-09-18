@@ -152,24 +152,24 @@ repository, and the implementer's job is to leave the instructions right.
 
 ## 3. Documentation and the record
 
-- [ ] 3.1 README §"Sign-in and enrolment": the operator's steps rewritten —
+- [x] 3.1 README §"Sign-in and enrolment": the operator's steps rewritten —
       Auth0 application (Regular Web App, callback `<app>/oauth2callback`,
       database connection with sign-up open and email verification required,
       the optional Action refusing unverified login), `[auth.auth0]` in the
       secrets box, `scinumbers-enrol` replacing step 3, and the Google consent
       screen to Production with the try-one-address note. Say that only a
       verified address is admitted, and why.
-- [ ] 3.2 `.streamlit/secrets.toml.example` (where it lives — check `dev` and
+- [x] 3.2 `.streamlit/secrets.toml.example` (where it lives — check `dev` and
       `deploy/streamlit-cloud`): the `[auth.auth0]` shape with the Auth0
       discovery URL, commented like `[auth]`.
-- [ ] 3.3 `docs/roadmap.md` §WP3: the helper script is done; "any email" is
+- [x] 3.3 `docs/roadmap.md` §WP3: the helper script is done; "any email" is
       done; note the Google step and what remains deferred.
-- [ ] 3.4 CLAUDE.md: `enrol.py` row in the module table; the `accounts.py`
+- [x] 3.4 CLAUDE.md: `enrol.py` row in the module table; the `accounts.py`
       row says lookup *and* insert; the ADR table row shows which of
       `0880`–`0900` are written.
-- [ ] 3.5 `CHANGELOG.md` under Unreleased: Added (second provider, the
+- [x] 3.5 `CHANGELOG.md` under Unreleased: Added (second provider, the
       command), Changed (verified address required).
-- [ ] 3.6 `tests/test_spec_conformance.py`: map the modified requirement's new
+- [x] 3.6 `tests/test_spec_conformance.py`: map the modified requirement's new
       scenarios and the added requirement to the tests from groups 1 and 2;
       record as gaps the ones AppTest cannot drive (an actual second-provider
       round trip; the live mint).

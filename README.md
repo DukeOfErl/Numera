@@ -179,23 +179,63 @@ are deferred until there are users rather than invited testers
 With no `[auth]` section in secrets the app runs exactly as described above: no
 sign-in, one `OPENROUTER_API_KEY` from the environment, records carrying no
 account, and the side panel saying so. **Add `[auth]` and every visitor must sign
-in with Google and be enrolled before anything is drawn.** Signed in but not
-enrolled is refused with one sentence and recorded, so the operator can enrol
-someone who tried.
+in and be enrolled before anything is drawn.** Signed in but not enrolled is
+refused with one sentence and recorded, so the operator can enrol someone who
+tried.
+
+**Any address can sign in, and only a verified one is admitted.** Each configured
+provider gets its own button. The provider must say it has verified the address —
+a provider that says nothing counts as unverified — because where sign-up is open
+anyone could otherwise register an enrolled tester's address and be signed in as
+them. That refusal has a sentence of its own, separate from "not enrolled",
+because the reader's next step is different
+([ADR-0890](docs/decisions/0890-only-a-verified-address-opens-the-door.md)).
+The address is the identity: a tester who used one provider yesterday and another
+today keeps their role and their conversation
+([ADR-0880](docs/decisions/0880-a-second-provider-beside-the-first.md)).
 
 Enrolment happens outside the app — there is no page for it, and so no permission
 gates it. The operator's steps, in order:
 
-1. Create a Google OAuth client and put its values under `[auth]` in the hosting
-   platform's secrets box; `.streamlit/secrets.toml.example` has the shape, and
-   `redirect_uri` must end in `/oauth2callback`.
-2. Create the `accounts` table in the same database as the trail, from
+1. **Identity providers.** Keep the Google OAuth client under `[auth]`, and add
+   any OpenID Connect provider as a sub-table. For email sign-in this deployment
+   uses Auth0: create a *Regular Web Application*, set the allowed callback URL
+   to `<your app>/oauth2callback` and the logout URL to the app's own address,
+   enable the database connection with sign-up open and **email verification
+   required**, and put `client_id`, `client_secret` and the tenant's
+   `.well-known/openid-configuration` under `[auth.auth0]`.
+   `.streamlit/secrets.toml.example` has the shape. Auth0's default mail sender
+   is for testing; a real sender is a tenant setting before wider use, and an
+   Auth0 Action refusing login until verified is worth setting too — the app
+   refuses anyway, but Auth0's own page says it better.
+2. **The Google consent screen → Publish app**, so a tester need not be added as
+   a test user by hand. In "Testing" the cap is 100 listed addresses and each
+   tester's consent expires after seven days. Google's own guidance is ambiguous
+   about whether an unverified app in production shows a click-through warning
+   for `openid email profile`, so sign in once from an address that is not on the
+   test-user list and see what a tester would see before inviting anyone.
+3. **The `accounts` table** in the same database as the trail, from
    `sql/accounts.sql`.
-3. For each tester, mint a runtime key at OpenRouter with a monthly limit
-   (Management API, `limit_reset: monthly`) and insert a row: email, one of the
-   five roles, the key. Each tester's questions are then charged to their own
-   key and capped by it; an enrolled account with no key can sign in but is told
-   no credential has been issued. Nobody but the operator ever sees a key
+4. **One command per tester.** `scinumbers-enrol` mints a capped runtime key at
+   OpenRouter and inserts the row in one step:
+
+   ```bash
+   OPENROUTER_MANAGEMENT_KEY=... NEON_API_KEY=... NEON_PROJECT_ID=... \
+     scinumbers-enrol maria@example.org scientist --limit-usd 5 --branch alpha
+   ```
+
+   `--branch` names the database branch to enrol into and **has no default**: the
+   row has to land where the deployed app reads, and a default would be wrong
+   exactly when the operator is unsure which environment is which. The name is
+   resolved through Neon's API, so no database URL is kept on disk. Nothing is
+   issued without a positive cap, an address already enrolled is refused with its
+   row untouched, and a key minted for a row that could not be written is
+   withdrawn again
+   ([ADR-0900](docs/decisions/0900-enrolment-mints-then-inserts-and-compensates.md)).
+   Each tester's questions are then charged to their own key and capped by it; an
+   enrolled account with no key can sign in but is told no credential has been
+   issued. Nobody but the operator ever sees a key — not even in what the command
+   prints
    ([ADR-0780](docs/decisions/0780-accounts-live-in-the-trail-database.md),
    [ADR-0820](docs/decisions/0820-one-agent-per-session-handed-a-credential-not-an-identity.md)).
 
@@ -318,7 +358,7 @@ per-user attribution, and ratings pushed as scores — is planned and deliberate
 tool results and corpus text to a third-party service. That is a decision to take deliberately
 rather than by setting an environment variable.
 
-**Enrolment is not managed from the app.** Adding a tester, assigning a role and issuing a
+**Enrolment is not managed from the app.** It is one command an operator runs (`scinumbers-enrol`). Adding a tester, assigning a role and issuing a
 credential are rows and keys the operator writes by hand (`sql/accounts.sql`); there is no page for
 it, and deliberately no permission that would pretend to gate one.
 
@@ -329,7 +369,7 @@ documentation. Those are covered above. Where the project went past the brief:
 
 | Beyond the brief | Where |
 |---|---|
-| Deployed and multi-user, not a local demo: Streamlit Cloud with Google sign-in, an enrolled account per tester funded by its own capped API key, and a Neon Postgres database behind it — the platform alone has an ephemeral disk and no notion of a user | ADR-0700, ADR-0780, ADR-0820, `hosted.py`, `accounts.py` |
+| Deployed and multi-user, not a local demo: Streamlit Cloud with sign-in through any OpenID Connect provider and only verified addresses admitted, an enrolled account per tester funded by its own capped API key, and a Neon Postgres database behind it — the platform alone has an ephemeral disk and no notion of a user | ADR-0700, ADR-0780, ADR-0820, `hosted.py`, `accounts.py` |
 | Provenance as a hard requirement, not a prompt instruction — citations are checked against what was actually retrieved, and unsupported ones flagged | `citations.py`, `entries_table.py` |
 | The source's own notation restated only where the model reads it, never in the corpus — so the stored entry stays quotable | ADR-0420, `bionumbers.py` |
 | Agentic retrieval over a 14,294-entry corpus: capped summaries with an honest total, then full entries on demand | ADR-0150, `tools.py` |

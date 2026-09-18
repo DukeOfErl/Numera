@@ -12,6 +12,22 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **Sign-in with any address, not only a Google one.** Any OpenID Connect
+  provider is a sub-table in secrets and gets its own button on the door; the
+  Google client stays exactly where it was, and a tester who signs in through a
+  second provider keeps the role and the conversation they had, because the
+  address is the identity
+  ([ADR-0880](docs/decisions/0880-a-second-provider-beside-the-first.md)).
+
+- **`scinumbers-enrol`, one command to enrol a tester.** It mints a capped
+  OpenRouter key and inserts the accounts row in one step, naming the database
+  branch every time and resolving it through Neon's API so no database URL is
+  kept on disk. Nothing is issued without a positive cap, an address already
+  enrolled keeps its row, and a key minted for a row that could not be written is
+  withdrawn again
+  ([ADR-0900](docs/decisions/0900-enrolment-mints-then-inserts-and-compensates.md)).
+
+
 - **The SciNumbers mark, beside the page's title** — on the conversation and on
   the sign-in and refusal pages, so the app looks like itself before a reader is
   admitted. Inlined rather than linked, so its strokes take the reader's own text
@@ -52,6 +68,13 @@ any release; `1.0.0` when it stabilizes.
   each tester's credential already bounds ([ADR-0790]).
 
 ### Changed
+
+- **Only an address the identity provider says it has verified is admitted**, and
+  a provider that says nothing counts as unverified. Where sign-up is open this is
+  the one thing standing between an enrolled tester and anyone who registers their
+  address. The refusal has its own sentence, separate from "not enrolled", because
+  the reader's next step is different
+  ([ADR-0890](docs/decisions/0890-only-a-verified-address-opens-the-door.md)).
 
 - **The default model is `anthropic/claude-opus-4.7`**, where it was
   `anthropic/claude-haiku-4.5`. Development ran on a cheap instruction-follower
