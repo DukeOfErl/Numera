@@ -1,9 +1,9 @@
 # Tasks
 
-ADR block for this change: **`0900`–`0940`**, allocated in the table in `CLAUDE.md`, which is the
+ADR block for this change: **`0900`–`0990`**, allocated in the table in `CLAUDE.md`, which is the
 authority. Four decisions are already made in `design.md` and get their files in group 1, as stubs,
 so the numbers are claimed before the code exists: 0900 (pipeline, not loop), 0910 (named states),
-0920 (the second text), 0930 (the store fails closed). 0940 is spare.
+0920 (the second text), 0930 (the store fails closed). 0940–0990 are spare.
 
 **Read this before picking up a task.** Group 2 is a **port of code nobody here has reviewed**. It ran
 on another branch against a service that has since changed its behaviour; its tests pass because
@@ -20,7 +20,7 @@ time of writing `spend.py`, and record the date in its docstring.
 
 ## 1. Branch, allocation, scaffolding
 
-- [ ] 1.1 Add the row `add-validator-prototype` → `0900`–`0940` to the ADR table in `CLAUDE.md`
+- [x] 1.1 Add the row `add-validator-prototype` → `0900`–`0990` to the ADR table in `CLAUDE.md` (done at proposal time)
 - [ ] 1.2 Create ADR stubs `0900`, `0910`, `0920`, `0930` from the template, each with status
       *proposed* and the one-paragraph decision from `design.md`, and commit them
 - [ ] 1.3 Widen the `validator` extra with `streamlit`, `sqlalchemy` and `psycopg[binary]`, matching
