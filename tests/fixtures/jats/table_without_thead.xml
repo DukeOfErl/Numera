@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article article-type="research-article">
+  <front><article-meta>
+    <article-id pub-id-type="pmcid">PMC1</article-id>
+    <title-group><article-title>A table with no header row</article-title></title-group>
+  </article-meta></front>
+  <body>
+    <sec><title>Results</title>
+      <p>Growth rates are collected in Table 1.</p>
+      <table-wrap id="T1"><label>Table 1</label>
+        <caption><p>Growth in two media.</p></caption>
+        <table>
+          <tbody>
+            <tr><td>Glucose</td><td>39 ± 1</td></tr>
+            <tr><td>Acetate</td><td>55 ± 2</td></tr>
+          </tbody>
+        </table>
+      </table-wrap>
+    </sec>
+  </body>
+</article>

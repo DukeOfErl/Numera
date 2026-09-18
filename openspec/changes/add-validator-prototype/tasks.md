@@ -68,11 +68,11 @@ time of writing `spend.py`, and record the date in its docstring.
 
 ## 4. The JATS reader and the quote checker
 
-- [ ] 4.1 `jats.py`: `read_jats(xml) -> Document` with `Passage(text, kind, section_path,
+- [x] 4.1 `jats.py`: `read_jats(xml) -> Document` with `Passage(text, kind, section_path,
       element_id, row_headers, column_headers)`, citation markers kept as `[ref N]` tokens,
       `back` optional, supplementary-material references listed, `article-type` and the
       presence of a methods-titled section reported
-- [ ] 4.2 Fixture tests: a table cell resolves to headers plus cell; a paragraph resolves to its
+- [x] 4.2 Fixture tests: a table cell resolves to headers plus cell; a paragraph resolves to its
       section path; the `back`-less paper reads; a `<sup>` inside a table header flattens to text;
       a paper with no methods section is reported so
 - [x] 4.3 `quotes.py`: port the fold table from `probes/2026-09-09-retrieval/check_quote.py` as
@@ -80,7 +80,7 @@ time of writing `spend.py`, and record the date in its docstring.
       Failed(reason)` checking the named passage first and the whole document second
 - [x] 4.4 Turn the README canary into tests: a one-digit change to a real quote fails, in plain
       prose and across inline markup; a paraphrase fails; a whitespace-only difference passes
-- [ ] 4.5 Seed one defect into a copy of `quotes.py` (widen the fold to accept a changed digit) and
+- [x] 4.5 Seed one defect into a copy of `quotes.py` (widen the fold to accept a changed digit) and
       confirm exactly the canary test fails; name the mutant in the commit message
 
 ## 5. Extraction
@@ -89,34 +89,34 @@ time of writing `spend.py`, and record the date in its docstring.
       via the provider's token-count endpoint with output at `max_tokens`, actual cost from the
       usage block including cache reads; `Ceiling(per_paper=2.00, per_run=...)` checked before
       every call; a test that a projected crossing refuses the call
-- [ ] 5.2 `extraction.py`: the instruction (property and organism only, no unit, no expected value,
+- [x] 5.2 `extraction.py`: the instruction (property and organism only, no unit, no expected value,
       `NOTHING_TO_EXTRACT` is correct when true, quote and name the passage id), the paper's
       passages in the system block with `cache_control`, one structured-output call returning
       claims, rejected candidates with category, condition fields with provenance states, and a
       paper state
-- [ ] 5.3 Verification pass: every quote through `quotes.verify`; failures returned to the model once
+- [x] 5.3 Verification pass: every quote through `quotes.verify`; failures returned to the model once
       with the failure named; a second failure drops the claim as unverifiable; nothing unverified
       reaches the output. A test that a fabricated quote never survives two rounds
-- [ ] 5.4 Terminal states per paper exactly as `design.md` D2, with `UNREADABLE` taken from
+- [x] 5.4 Terminal states per paper exactly as `design.md` D2, with `UNREADABLE` taken from
       discovery and `NOT_A_RESEARCH_ARTICLE` from the reader; a test per state
-- [ ] 5.5 Prior-knowledge test on the probe's case: the fixture paper stating 65 min yields no claim
+- [x] 5.5 Prior-knowledge test on the probe's case: the fixture paper stating 65 min yields no claim
       carrying 40 min, because no passage contains it
-- [ ] 5.6 Fingerprint: model id, instruction hash, article id, run id on every claim and state
-- [ ] 5.7 Write claims, rejected candidates, states and spend as JSONL under `data/runs/<run-id>/`,
+- [x] 5.6 Fingerprint: model id, instruction hash, article id, run id on every claim and state
+- [x] 5.7 Write claims, rejected candidates, states and spend as JSONL under `data/runs/<run-id>/`,
       through `bionumbers_ingest.guard`; a test that a git-tracked path is refused
-- [ ] 5.8 Seed one defect into a copy of `extraction.py` (a quote that fails verification is kept)
+- [x] 5.8 Seed one defect into a copy of `extraction.py` (a quote that fails verification is kept)
       and confirm exactly the right test fails
 
 ## 6. The second text
 
-- [ ] 6.1 `distractor.py`: the second call on the cached paper asking for candidates of each type;
+- [x] 6.1 `distractor.py`: the second call on the cached paper asking for candidates of each type;
       the mechanical exclusion (value, its roundings, its unit conversions via `pint`, and every
       recorded occurrence of the claim) applied to folded text; the type preference order;
       second-occurrence fallback; `NOT_REVIEWABLE` with reason when nothing survives
-- [ ] 6.2 Tests from the scientist report's examples: the adjacent-row distractor is admitted; a
+- [x] 6.2 Tests from the scientist report's examples: the adjacent-row distractor is admitted; a
       Discussion restatement "30–40 min" of a "39 ± 1 min" claim is rejected; a converted "0.76 h⁻¹"
       is rejected for a "55 min" claim; a second occurrence is used when no distractor survives
-- [ ] 6.3 A test that the kind and type are on the item and absent from anything the page renders
+- [x] 6.3 A test that the kind and type are on the item and absent from anything the page renders
 
 ## 7. The store and the review page
 
@@ -126,16 +126,16 @@ time of writing `spend.py`, and record the date in its docstring.
       returning an undecided item in a paper-interleaved order; `record_decision(...)` that raises
       on failure. Tests against SQLite for the queries; one `network`-marked test against the Neon
       `test` branch for the DDL
-- [ ] 7.3 `review.py` (presentation): the item as the page shows it — value highlighted in each
+- [x] 7.3 `review.py` (presentation): the item as the page shows it — value highlighted in each
       text, citation markers visible, a table cell as headers plus cell, the condition block with
       provenance states, both texts in an order derived from the item id so it is stable but
       uninformative; tested without a browser
-- [ ] 7.4 `review_app.py`: the door via `web.admit` with `check_key=None`, one item per screen, the
+- [x] 7.4 `review_app.py`: the door via `web.admit` with `check_key=None`, one item per screen, the
       two-way choice and the verdict both required, the comment box, remaining count, the "nothing
       left" state, and the not-saved message when the store raises
-- [ ] 7.5 `AppTest` cases: open door, closed door, unconfigured deployment; verdict without a choice
+- [x] 7.5 `AppTest` cases: open door, closed door, unconfigured deployment; verdict without a choice
       does not complete the item; a store failure leaves the item open and says so
-- [ ] 7.6 A source-parsing test that no core `bionumbers` module imports `streamlit` or
+- [x] 7.6 A source-parsing test that no core `bionumbers` module imports `streamlit` or
       `scinumbers_ask`, and that `review_app.py` and `bionumbers.review` are the only ones that do
 
 ## 8. The command
@@ -149,9 +149,9 @@ time of writing `spend.py`, and record the date in its docstring.
 
 ## 9. Conformance, documentation, changelog
 
-- [ ] 9.1 Add every requirement of the three specs to `tests/test_spec_conformance.py`'s `COVERED`
+- [x] 9.1 Add every requirement of the three specs to `tests/test_spec_conformance.py`'s `COVERED`
       map, naming the tests above; record any gap in `UNMAPPED` with its reason
-- [ ] 9.2 Fill in ADR-0900, 0910, 0920, 0930 from their stubs with the options rejected, not only the
+- [x] 9.2 Fill in ADR-0900, 0910, 0920, 0930 from their stubs with the options rejected, not only the
       one taken; move status to *accepted* as each lands
 - [ ] 9.3 `README.md`: what the prototype does, how to run the three commands and the review page,
       and the two-extra install
