@@ -745,7 +745,12 @@ def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None =
             # passing "default" is not a synonym for it.
             args = () if provider == "default" else (provider,)
             st.button(
-                messages.sign_in_label(provider),
+                # Through `as_text` like every other string that reaches the
+                # page: an unlabelled provider's button carries its name out of
+                # secrets, and a `$` there would open inline mathematics and eat
+                # the rest of the label. The literal labels do not need it; the
+                # rule is on the call, not on today's values.
+                as_text(messages.sign_in_label(provider)),
                 key=f"sign-in-{provider}",
                 on_click=st.login,
                 args=args,

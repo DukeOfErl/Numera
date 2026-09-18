@@ -179,7 +179,15 @@ repository, and the implementer's job is to leave the instructions right.
 
 ## 4. Landing
 
-- [ ] 4.1 Full suite once, at the end (`.venv/bin/python -m pytest`); ruff.
+- [x] 4.1 Full suite once, at the end (`.venv/bin/python -m pytest`); ruff.
+
+      *1603 passed, 3 skipped, 46 deselected. The first full run failed one test
+      the three-file runs could never reach:
+      `test_no_text_reaches_the_page_unescaped[web.py:747]`, because an
+      unlabelled provider's button carries a name out of secrets to the page and
+      a `$` there opens inline mathematics. Now through `as_text`. Worth
+      recording as the case for running the whole suite once rather than the
+      files a change touched.*
 - [ ] 4.2 Suggest `/code-review` on the branch, then merge to `dev` on the
       user's approval; archive the change so the delta is promoted.
 - [ ] 4.3 (operator) Auth0: create the tenant and application, set the callback
