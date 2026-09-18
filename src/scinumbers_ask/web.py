@@ -31,7 +31,7 @@ import threading
 import time
 import uuid
 from collections import OrderedDict
-from collections.abc import Callable, Iterable, Iterator, MutableMapping
+from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
@@ -382,6 +382,7 @@ class Door(StrEnum):
 
     OPEN = "open"
     SIGN_IN = "sign in"
+    UNVERIFIED = "address not verified"
     NOT_ENROLLED = "not enrolled"
     NO_CREDENTIAL = "no credential"
     CREDENTIAL_REJECTED = "credential rejected"
@@ -424,13 +425,63 @@ def identity_configured() -> bool:
         raise
 
 
-def signed_in_email() -> str | None:
-    """The account the identity provider asserts, or None. Never a name the
-    reader typed: the system accepts no credential of its own."""
+def providers() -> list[str]:
+    """Every configured way in, in the order secrets lists them.
+
+    `"default"` is the provider whose credentials sit directly in `[auth]` --
+    which is where the Google client has always been -- and is present only when
+    `client_id` is there beside `redirect_uri` and `cookie_secret`. Every
+    sub-table is a named provider, which is what `st.login(name)` takes; the
+    shared settings are strings, so "is it a mapping" separates the two without
+    a list of key names to keep in step with Streamlit's.
+
+    A deployment with no `[auth]` gets an empty list and never reaches a button.
+    """
+    try:
+        section = st.secrets["auth"]
+    except Exception as exc:  # noqa: BLE001 - narrowed by `_is_not_configured`
+        if _is_not_configured(exc):
+            return []
+        raise
+    if not isinstance(section, Mapping):
+        return []
+    found = ["default"] if "client_id" in section else []
+    found += [name for name, value in section.items() if isinstance(value, Mapping)]
+    return found
+
+
+def signed_in_claims() -> Mapping[str, Any] | None:
+    """What the identity provider asserts about this reader, or None.
+
+    The whole claim set rather than the address alone, because whether the
+    provider has *verified* that address is one of the claims and the door has to
+    read it. Streamlit stores the ID token's claims whole and adds `is_logged_in`
+    and `provider` (read from the installed 1.61.1, `starlette_auth_routes.py`);
+    nothing here is a name the reader typed, and the system accepts no credential
+    of its own.
+    """
     user = st.user.to_dict()
     if not user.get("is_logged_in"):
         return None
-    return user.get("email") or None
+    return user
+
+
+def address_verified(claims: Mapping[str, Any]) -> bool:
+    """Whether the provider says it has verified this address.
+
+    **Absence refuses.** A provider that says nothing is one whose accounts this
+    app cannot tell apart from an impersonation: where sign-up is open, anyone
+    can register an enrolled tester's address, and the claim is the only thing
+    separating them. The two directions cost differently -- a wrongly refused
+    reader reads one sentence and clicks a link, a wrongly admitted one reads
+    somebody else's answers under their name -- so the missing case goes to the
+    cheap side (ADR-0890).
+
+    Exactly `True` or the string `"true"`. Not `1`, which `== True` in Python and
+    would let a truthy check through anything a provider happened to send.
+    """
+    value = claims.get("email_verified")
+    return value is True or value == "true"
 
 
 def admit(
@@ -479,10 +530,24 @@ def admit(
     """
     if not identity_configured():
         return Admission(Door.OPEN, configured=False)
-    email = signed_in_email()
-    if email is None:
+    claims = signed_in_claims()
+    email = (claims or {}).get("email") or None
+    if claims is None or email is None:
         state.pop(ADMISSION_KEY, None)
         return Admission(Door.SIGN_IN, configured=True)
+    if not address_verified(claims):
+        # Decided fresh on every rerun and deliberately not held: `end_session`
+        # does not clear this key, so a cached refusal would outlive the reader
+        # signing out, verifying, and signing back in on the same tab -- which is
+        # exactly the sequence the sentence asks them to perform. Re-deciding is
+        # a dictionary lookup, and the page an unverified reader sees has one
+        # button, so the record this writes is bounded by their own clicks.
+        trace.QuestionTrace(
+            question_id="",
+            session_id=session_id,
+            run_label=Config.from_env().run_label,
+        ).record("signin.unverified", email=email)
+        return Admission(Door.UNVERIFIED, configured=True)
     held = state.get(ADMISSION_KEY)
     if held is not None and held[0] == email:
         return held[1]
@@ -674,7 +739,21 @@ def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None =
     draw_title()
     if admission.door is Door.SIGN_IN:
         st.info(as_text(messages.SIGN_IN_NEEDED), icon=":material/login:")
-        st.button("Sign in with Google", on_click=st.login, icon=":material/login:")
+        for provider in providers():
+            # `st.login()` and `st.login("name")` are different calls: the
+            # no-argument form means the credentials in `[auth]` itself, and
+            # passing "default" is not a synonym for it.
+            args = () if provider == "default" else (provider,)
+            st.button(
+                messages.sign_in_label(provider),
+                key=f"sign-in-{provider}",
+                on_click=st.login,
+                args=args,
+                icon=":material/login:",
+            )
+    elif admission.door is Door.UNVERIFIED:
+        st.error(as_text(messages.UNVERIFIED), icon=":material/mark_email_unread:")
+        st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id))
     elif admission.door is Door.NOT_ENROLLED:
         st.error(as_text(messages.NOT_ENROLLED), icon=":material/person_off:")
         st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id))

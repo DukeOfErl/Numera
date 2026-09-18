@@ -25,24 +25,24 @@ repository, and the implementer's job is to leave the instructions right.
 
 ## 1. The door
 
-- [ ] 1.1 `messages.py`: `SIGN_IN_LABELS` — `"default"` → "Sign in with Google",
+- [x] 1.1 `messages.py`: `SIGN_IN_LABELS` — `"default"` → "Sign in with Google",
       `"auth0"` → "Sign in with email" — and `UNVERIFIED`, the sentence for an
       address the provider has not verified, distinct in wording from
       `NOT_ENROLLED` and naming the reader's next step.
-- [ ] 1.2 `web.providers() -> list[str]`: `"default"` when `[auth]` itself
+- [x] 1.2 `web.providers() -> list[str]`: `"default"` when `[auth]` itself
       carries `client_id`, then each sub-table name that is a mapping, in
       secrets order. Tests with a secrets double: Google only; Google and
       auth0; auth0 only; `[auth]` absent → empty.
-- [ ] 1.3 `draw_closed_door`: one button per provider, `st.login` for the
+- [x] 1.3 `draw_closed_door`: one button per provider, `st.login` for the
       default and `st.login(name)` otherwise. Update the AppTest that asserts
       `["Sign in with Google"]` and add the two-button case. The label for an
       unknown name is "Sign in with <name>".
-- [ ] 1.4 `web.address_verified(claims: Mapping) -> bool`: `True` for the
+- [x] 1.4 `web.address_verified(claims: Mapping) -> bool`: `True` for the
       boolean `True` and the string `"true"` under `email_verified`; `False`
       for `"false"`, `False`, `1`, `None` and a missing key. Pure, no
       Streamlit. Tests enumerate every one of those — the negatives vary the
       value and its presence.
-- [ ] 1.5 `Door.UNVERIFIED` and the check in `admit`, before the lookup, so an
+- [x] 1.5 `Door.UNVERIFIED` and the check in `admit`, before the lookup, so an
       unverified address never reaches the accounts table. Recorded through the
       same path as a refused sign-in. AppTest: unverified → the `UNVERIFIED`
       sentence and no question input; verified and unenrolled → `NOT_ENROLLED`
@@ -50,13 +50,26 @@ repository, and the implementer's job is to leave the instructions right.
       every existing identity AppTest that signs in must now carry
       `email_verified: True` in its `st.user` double — grep for `is_logged_in`
       doubles and count them before and after.
-- [ ] 1.6 Test: the same address asserted with `provider: "auth0"` and with
+- [x] 1.6 Test: the same address asserted with `provider: "auth0"` and with
       `provider: "default"` yields the same `effective_session` key and the
       same account; the `provider` claim is not stamped on any trail record
       (extend `test_identity_never_reaches_the_agent.py` or the stamp test).
-- [ ] 1.7 Fault seeding, in a copy: `address_verified` returning `True` for a
+- [x] 1.7 Fault seeding, in a copy: `address_verified` returning `True` for a
       missing key; `admit` checking after the lookup instead of before. Name
       the tests that fail in the task note; write ADR-0890's claim after.
+
+      *Copy at `$TMPDIR/seed-g1`, `assets/` symlinked in — without it
+      `LOGO = Path(__file__).parents[2]` misses and the mark test fails, so the
+      first baseline was one-red and no verdict could be read from it. Green
+      baseline 106 passed. **Seed A** `claims.get("email_verified", True)` →
+      killed `test_address_verified_reads_the_claim_and_refuses_its_absence`,
+      alone, which is the one test claiming absence. **Seed B** the check moved
+      below the enrolment lookup → killed
+      `test_an_unverified_address_is_refused_with_its_own_sentence` and
+      `test_an_unverified_address_is_never_looked_up`. **Seed C** (added,
+      unplanned) `providers()` always offering `"default"` → killed
+      `test_providers_reads_the_default_and_every_sub_table` and
+      `test_a_provider_with_no_label_still_gets_a_button`.*
 - [ ] 1.8 `verifier` on group 1: would any test still pass if `admit` admitted
       an unverified address? Measure by making it so in a copy.
 

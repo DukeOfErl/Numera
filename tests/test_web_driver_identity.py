@@ -7,8 +7,10 @@ else" is a claim about what the page did not draw, and no unit below the script
 can see that. The unconfigured test runs first and is the regression guard for
 every other web test in this suite -- they all run with no `[auth]` in secrets.
 
-What is stubbed, and why it is honest to: `web.signed_in_email` stands in for
-`st.user`, which `AppTest` fixes to a test address with no `is_logged_in`;
+What is stubbed, and why it is honest to: `web.signed_in_claims` stands in for
+`st.user`, which `AppTest` fixes to a test address with no `is_logged_in`. The
+fixture asserts a verified address unless a test says otherwise, which is what
+keeps the admitted population admitted while the refused one grows;
 `web.accounts.lookup` stands in for the database; `web.AskAgent` is wrapped to
 record the credential each agent was built with. `web.admit` and `web.agent_for`
 themselves run for real, which is the point.
@@ -86,6 +88,8 @@ def page(monkeypatch, repo, config, tmp_path):
         enrolled: dict[str, Account] | None = None,
         unavailable: bool = False,
         answers=("an answer",),
+        claims: dict | None = None,
+        auth_section: dict | None = None,
     ) -> AppTest:
         agent = agent_with(repo, config, tmp_path, scripted(*(says(a) for a in answers)))
 
@@ -98,7 +102,12 @@ def page(monkeypatch, repo, config, tmp_path):
             return agent
 
         monkeypatch.setattr(web, "AskAgent", building)
-        monkeypatch.setattr(web, "signed_in_email", lambda: email)
+        asserted = (
+            None
+            if email is None and claims is None
+            else {"email": email, "email_verified": True, **(claims or {})}
+        )
+        monkeypatch.setattr(web, "signed_in_claims", lambda: asserted)
 
         def lookup(engine, who, **kwargs):
             if unavailable:
@@ -108,7 +117,7 @@ def page(monkeypatch, repo, config, tmp_path):
         monkeypatch.setattr(web.accounts, "lookup", lookup)
         at = AppTest.from_file(APP, default_timeout=TIMEOUT)
         if auth:
-            at.secrets["auth"] = {"client_id": "test-client"}
+            at.secrets["auth"] = auth_section or {"client_id": "test-client"}
         return at
 
     make.built = built  # type: ignore[attr-defined]
@@ -161,6 +170,133 @@ def test_a_visitor_who_is_not_signed_in_is_offered_sign_in_and_nothing_else(page
     assert all("bn-title" in text or "<style>" in text for text in drawn), drawn
     assert [b.label for b in at.button] == ["Sign in with Google"]
     assert caught.events() == [], "a record was written for a visitor who asked nothing"
+
+
+# --- more than one way in ---------------------------------------------------------
+
+
+def test_providers_reads_the_default_and_every_sub_table(monkeypatch):
+    """`[auth]` holds the shared settings, the default provider's credentials, and
+    a sub-table per named provider. Only the sub-tables are mappings, which is
+    what separates them without naming Streamlit's own keys here."""
+    shared = {"redirect_uri": "http://localhost:8501/oauth2callback", "cookie_secret": "s"}
+    cases = {
+        "google only": ({**shared, "client_id": "g"}, ["default"]),
+        "google and auth0": (
+            {**shared, "client_id": "g", "auth0": {"client_id": "a"}},
+            ["default", "auth0"],
+        ),
+        "auth0 only": ({**shared, "auth0": {"client_id": "a"}}, ["auth0"]),
+        "shared settings alone": (shared, []),
+    }
+    for name, (section, expected) in cases.items():
+        monkeypatch.setattr(web.st, "secrets", {"auth": section})
+        assert web.providers() == expected, name
+
+
+def test_providers_is_empty_with_no_auth_section(monkeypatch):
+    """The type Streamlit actually raises for a missing secrets file, because
+    `_is_not_configured` matches by type and a double raising something else
+    would pass while proving nothing about the real path."""
+    from streamlit.errors import StreamlitSecretNotFoundError
+
+    class NoSecrets(dict):
+        def __getitem__(self, key):
+            raise StreamlitSecretNotFoundError("No secrets files found")
+
+    monkeypatch.setattr(web.st, "secrets", NoSecrets())
+    assert web.providers() == []
+
+    class Broken(dict):
+        def __getitem__(self, key):
+            raise RuntimeError("a broken secrets file is not an absent one")
+
+    monkeypatch.setattr(web.st, "secrets", Broken())
+    with pytest.raises(RuntimeError):
+        web.providers()
+
+
+def test_each_configured_provider_gets_its_own_button(page):
+    at = page(
+        auth=True,
+        email=None,
+        auth_section={"client_id": "g", "auth0": {"client_id": "a"}},
+    ).run()
+    assert [b.label for b in at.button] == ["Sign in with Google", "Sign in with email"]
+
+
+def test_a_provider_with_no_label_still_gets_a_button(page):
+    """An operator adding `[auth.okta]` meets a plain button, not a KeyError."""
+    at = page(auth=True, email=None, auth_section={"okta": {"client_id": "o"}}).run()
+    assert [b.label for b in at.button] == ["Sign in with okta"]
+
+
+# --- a verified address, or none ---------------------------------------------------
+
+
+def test_address_verified_reads_the_claim_and_refuses_its_absence():
+    """The negatives vary what the rule actually reads -- the claim's value and
+    whether it is there at all -- not merely the outcome. `1` is here because it
+    equals `True` in Python: a truthy check would admit anything a provider sent.
+    """
+    assert web.address_verified({"email_verified": True})
+    assert web.address_verified({"email_verified": "true"})
+    for value in (False, "false", 1, 0, None, "", "True", "yes"):
+        assert not web.address_verified({"email_verified": value}), value
+    assert not web.address_verified({}), "a provider that says nothing is refused"
+
+
+def test_an_unverified_address_is_refused_with_its_own_sentence(page, caught):
+    at = page(
+        auth=True,
+        email="unverified@example.org",
+        enrolled={"unverified@example.org": TESTER},
+        claims={"email_verified": False},
+    ).run()
+    assert not at.chat_input, "a question could be asked"
+    shown = [e.value for e in at.error]
+    assert messages.UNVERIFIED in shown
+    assert messages.NOT_ENROLLED not in shown, "the two sentences send readers to different places"
+    (refused,) = [r for r in caught.records if r.getMessage() == "signin.unverified"]
+    assert refused.fields["email"] == "unverified@example.org"
+    assert web.IDENTITIES == {}, "a refused account must not enter the registry"
+
+
+def test_an_unverified_address_is_never_looked_up(monkeypatch):
+    """The check is before the lookup, so an unverified address never reaches the
+    accounts table -- and an enrolled tester cannot be impersonated by registering
+    their address at a provider with open sign-up."""
+    looked_up: list[str] = []
+    _configured(monkeypatch, TESTER.email, email_verified=False)
+    monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: looked_up.append(who) or TESTER)
+    assert web.admit({}, object(), "s1").door is web.Door.UNVERIFIED
+    assert looked_up == []
+
+
+def test_the_unverified_door_is_not_held_across_reruns(monkeypatch):
+    """`end_session` does not clear the held admission, so a cached refusal would
+    outlive the reader signing out, verifying and signing back in on the same tab
+    -- which is the sequence the sentence asks them to perform."""
+    state: dict = {}
+    _configured(monkeypatch, TESTER.email, email_verified=False)
+    monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: TESTER)
+    assert web.admit(state, object(), "s1").door is web.Door.UNVERIFIED
+    _configured(monkeypatch, TESTER.email)
+    assert web.admit(state, object(), "s1").door is web.Door.OPEN
+
+
+def test_the_same_address_through_a_second_provider_is_the_same_reader(monkeypatch):
+    """The address is the identity. A tester who used Google yesterday and email
+    today keeps their role and their conversation: the provider is not part of
+    the key and is not stamped on anything."""
+    monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: TESTER)
+    seen = []
+    for provider in ("google-oauth2", "auth0"):
+        _configured(monkeypatch, TESTER.email, provider=provider)
+        admission = web.admit({}, object(), "s1")
+        assert admission.door is web.Door.OPEN
+        seen.append((admission.account, web.effective_session(admission, "s1")))
+    assert seen[0] == seen[1], "a second provider must not be a second account"
 
 
 def test_a_signed_in_account_that_is_not_enrolled_is_refused_and_recorded(page, caught):
@@ -507,9 +643,10 @@ def test_two_sessions_get_two_agents_and_one_repository(monkeypatch, tmp_path):
 # --- `admit` and `agent_for` below the page ----------------------------------------------
 
 
-def _configured(monkeypatch, email):
+def _configured(monkeypatch, email, **claims):
     monkeypatch.setattr(web, "identity_configured", lambda: True)
-    monkeypatch.setattr(web, "signed_in_email", lambda: email)
+    asserted = None if email is None else {"email": email, "email_verified": True, **claims}
+    monkeypatch.setattr(web, "signed_in_claims", lambda: asserted)
 
 
 def test_enrolment_is_read_once_per_account_per_session(monkeypatch):
@@ -522,7 +659,9 @@ def test_enrolment_is_read_once_per_account_per_session(monkeypatch):
             assert web.admit(state, object(), "s1").door is web.Door.OPEN
         assert calls == [TESTER.email]
         # A different account on the same tab is looked up afresh.
-        monkeypatch.setattr(web, "signed_in_email", lambda: DEV.email)
+        monkeypatch.setattr(
+            web, "signed_in_claims", lambda: {"email": DEV.email, "email_verified": True}
+        )
         monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: calls.append(who) or DEV)
         admission = web.admit(state, object(), "s1")
         assert admission.account == DEV
@@ -576,7 +715,7 @@ def test_signing_out_forgets_the_session_s_identity(monkeypatch):
         session = web.effective_session(admission, "s1")
         web.establish_identity(admission, session)
         assert session in web.IDENTITIES
-        monkeypatch.setattr(web, "signed_in_email", lambda: None)
+        monkeypatch.setattr(web, "signed_in_claims", lambda: None)
         after = web.admit(state, object(), "s1")
         assert after.door is web.Door.SIGN_IN
         web.establish_identity(after, web.effective_session(after, "s1"))
@@ -597,7 +736,11 @@ def test_a_refusal_after_another_account_was_admitted_carries_no_stamp(monkeypat
     state: dict = {}
     admitted = web.admit(state, object(), "s1")
     web.establish_identity(admitted, web.effective_session(admitted, "s1"))
-    monkeypatch.setattr(web, "signed_in_email", lambda: "stranger@example.org")
+    monkeypatch.setattr(
+        web,
+        "signed_in_claims",
+        lambda: {"email": "stranger@example.org", "email_verified": True},
+    )
     monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: None)
     assert web.admit(state, object(), "s1").door is web.Door.NOT_ENROLLED
     (refused,) = [r for r in caught.records if r.getMessage() == "signin.refused"]
@@ -661,17 +804,17 @@ def test_agent_for_holds_one_agent_per_state_and_rebuilds_on_a_new_credential(
     assert built[-1] is None, "unconfigured: the environment's key"
 
 
-def test_signed_in_email_is_none_without_is_logged_in(monkeypatch):
+def test_signed_in_claims_are_none_without_is_logged_in(monkeypatch):
     """`AppTest` fixes `st.user` to an address with no `is_logged_in`; a real
     unconfigured deployment has no such key either. Neither is signed in."""
     monkeypatch.setattr(web.st, "user", type("U", (), {"to_dict": lambda self: {"email": "x@y"}})())
-    assert web.signed_in_email() is None
+    assert web.signed_in_claims() is None
     monkeypatch.setattr(
         web.st,
         "user",
         type("U", (), {"to_dict": lambda self: {"email": "x@y", "is_logged_in": True}})(),
     )
-    assert web.signed_in_email() == "x@y"
+    assert web.signed_in_claims() == {"email": "x@y", "is_logged_in": True}
 
 
 # --- 4.5: the note, both variants -----------------------------------------------------------

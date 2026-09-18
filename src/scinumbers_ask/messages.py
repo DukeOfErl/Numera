@@ -61,6 +61,32 @@ BUDGET_NOTE = (
 # each asks the reader to do a different thing -- and "not enrolled" during an
 # outage would send a person to the operator, who finds them already enrolled.
 SIGN_IN_NEEDED = "Sign in to ask a question. Nothing is shown, and nothing is kept, until you do."
+#: What each configured provider's button says. Keyed by the name the provider
+#: has in secrets -- `"default"` for the section's own credentials, a sub-table's
+#: name otherwise -- so adding a third provider is a secrets edit and, at most, a
+#: row here. A name with no row gets "Sign in with <name>" rather than a
+#: KeyError: an operator who adds `[auth.okta]` should meet a plain button, not a
+#: blank page.
+SIGN_IN_LABELS = {
+    "default": "Sign in with Google",
+    "auth0": "Sign in with email",
+}
+
+
+def sign_in_label(provider: str) -> str:
+    """The button's words for one provider."""
+    return SIGN_IN_LABELS.get(provider, f"Sign in with {provider}")
+
+
+# Distinct from NOT_ENROLLED on purpose: the reader's next step differs. Here it
+# is theirs to take and it will work; there it is the operator's and nothing on
+# this page helps. A single sentence for both would send half of each group to
+# the wrong place.
+UNVERIFIED = (
+    "This address has not been verified yet. Open the link your sign-in provider "
+    "emailed you, then sign in again. Until then nothing can be asked, because an "
+    "unverified address is not evidence of who you are."
+)
 NOT_ENROLLED = (
     "This account is not enrolled. Ask whoever runs this to enrol it; there is nothing to do here."
 )
