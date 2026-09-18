@@ -58,7 +58,7 @@ what let the blocks drift: no branch can see another's copy.
 
 | Change | Block |
 |---|---|
-| `add-grounding-validator` | `0040`–`0090` |
+| `add-grounding-validator` | `0040`–`0090` — `0040`, `0050` written |
 | `add-ask-agent` | `0100`–`0190`, `0260`–`0290` |
 | `add-corpus-ingestion` | `0200`–`0250` — all written |
 | `add-corpus-autobuild` | `0300`–`0340` |
