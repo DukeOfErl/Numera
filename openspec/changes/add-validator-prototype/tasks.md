@@ -10,6 +10,10 @@ on another branch against a service that has since changed its behaviour; its te
 they encode the same assumption the code does. Task 2.3 carries the known correction. Budget review
 for the port as for new code.
 
+**Reporting, for this change only** (`.claude/rules/validator-prototype.md`): do the tests, seeding
+and mutation runs, but report them in one clause unless something fails. Yoav is deciding shape
+and reviewer experience here, not verification depth.
+
 Per-paper spend ceiling is **$2**, per the user's decision of 2026-09-18. Model is Opus 4.7 through
 the Anthropic SDK; verify the model identifier and prices against the `claude-api` reference at the
 time of writing `spend.py`, and record the date in its docstring.
