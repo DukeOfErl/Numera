@@ -229,6 +229,14 @@ and a committed 100 kB of someone else's article is a mistake we have already sp
   describes: `dev` for development, `test` for live tests, a fresh branch when there are real
   reviewers.
 
+- **[Provider lock-in]** → Yoav's standing position (2026-09-18): the project should not be tied
+  to one provider or one model family. The prototype calls Anthropic directly anyway, accepted for
+  three reasons in falling order of weight: prompt caching whose hit rate is reported per response
+  (the cost model of D1 and D6 rests on it); schema-constrained output for the extraction record;
+  exact spend projection through the provider's token count. The rebuild should put the model
+  behind a port (`extraction.Model` is already a Protocol) with an OpenRouter adapter beside the
+  Anthropic one, and measure what caching and schema enforcement cost to lose.
+
 ## Migration Plan
 
 No existing behaviour changes. Deployment is additive: install `--extra ask --extra validator`,

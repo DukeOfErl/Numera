@@ -12,6 +12,17 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **A validator prototype: from a property question to reviewed numbers** (`bionumbers`,
+  the `validator` extra). `bionumbers discover` searches Europe PMC for open-access research
+  articles and fetches their XML; `bionumbers extract` makes one structured extraction call per
+  paper under a $2 ceiling, checks every quote mechanically against the paper, and chooses a second
+  text for each claim; `bionumbers load` puts the items in Postgres; `review_app.py` shows a reviewer
+  one claim at a time with two texts and records which fits and whether the value is approved,
+  failing closed on the write ([ADR-0900], [ADR-0910], [ADR-0920], [ADR-0930]).
+- **The Europe PMC client from the feasibility branch, ported and corrected**: an article without
+  XML is now recognised from the response body rather than a 404 status, because the service
+  answers 500 today; and the article check reads the root element rather than searching for
+  `<article`, which an HTML error page also contains.
 - **The SciNumbers mark, beside the page's title** — on the conversation and on
   the sign-in and refusal pages, so the app looks like itself before a reader is
   admitted. Inlined rather than linked, so its strokes take the reader's own text
@@ -466,3 +477,7 @@ number rather than an error:
 [ADR-0820]: docs/decisions/0820-one-agent-per-session-handed-a-credential-not-an-identity.md
 [ADR-0840]: docs/decisions/0840-what-a-question-s-trail-keeps.md
 
+[ADR-0900]: docs/decisions/0900-a-fixed-pipeline-not-an-agent-loop.md
+[ADR-0910]: docs/decisions/0910-named-terminal-states-not-confidence.md
+[ADR-0920]: docs/decisions/0920-the-second-text-always-two-kind-recorded.md
+[ADR-0930]: docs/decisions/0930-the-review-store-fails-closed.md

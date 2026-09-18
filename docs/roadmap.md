@@ -183,6 +183,7 @@ Not part of the multi-user push; listed so the board is complete.
 | `add-answer-evaluation` | 23/43 — the evaluation harness and its judged layer |
 | `add-provider-limit-ending` | 29/31 |
 | `add-answer-shape` | 0/10 — an answer leads with its quantitative conclusion |
+| `add-validator-prototype` | in progress — question → Europe PMC → one extraction call per paper → two-text review; `feat/validator-prototype` |
 
 ---
 

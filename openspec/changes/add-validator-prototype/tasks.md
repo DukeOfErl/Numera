@@ -153,14 +153,14 @@ time of writing `spend.py`, and record the date in its docstring.
       map, naming the tests above; record any gap in `UNMAPPED` with its reason
 - [x] 9.2 Fill in ADR-0900, 0910, 0920, 0930 from their stubs with the options rejected, not only the
       one taken; move status to *accepted* as each lands
-- [ ] 9.3 `README.md`: what the prototype does, how to run the three commands and the review page,
+- [x] 9.3 `README.md`: what the prototype does, how to run the three commands and the review page,
       and the two-extra install
-- [ ] 9.4 `docs/diagrams/architecture.md`: one sequence diagram for question → items and one for a
+- [x] 9.4 `docs/diagrams/architecture.md`: one sequence diagram for question → items and one for a
       review decision, following `DIAGRAMS.md`; no agent graph, because there is no agent
-- [ ] 9.5 `CLAUDE.md` Architecture: the `bionumbers` package's module table and the dependency
+- [x] 9.5 `CLAUDE.md` Architecture: the `bionumbers` package's module table and the dependency
       direction rule for it; mark the ADR block row with what was written
-- [ ] 9.6 `CHANGELOG.md` under Unreleased: Added entries for discovery, extraction, the review page
+- [x] 9.6 `CHANGELOG.md` under Unreleased: Added entries for discovery, extraction, the review page
       and the store
-- [ ] 9.7 `docs/roadmap.md`: a line under separate lines of work pointing at this change
-- [ ] 9.8 Run the full suite once, at the end (`pytest -m "not network and not corpus"`), then
+- [x] 9.7 `docs/roadmap.md`: a line under separate lines of work pointing at this change
+- [x] 9.8 Run the full suite once, at the end (`pytest -m "not network and not corpus"`), then
       `pytest -m network` for the live cases; record both outputs

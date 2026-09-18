@@ -330,3 +330,77 @@ to write if it would (ADR-0170, ADR-0250).
 
 **What is not here:** the judged layer, which reads a results file and writes
 judgements to a file of its own. It is deferred to `add-judged-faithfulness`.
+
+## 7. The validator prototype: from a question to review items
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operator
+    participant CLI as bionumbers discover / extract
+    participant EPMC as Europe PMC
+    participant Reader as jats.py
+    participant Model as one extraction call
+    participant Check as quotes.verify
+    participant Second as one second-text call
+    Operator->>CLI: a property question, an organism
+    CLI-->>EPMC: search: open access, research articles, PMCID
+    CLI-->>EPMC: full text per paper (cached on disk)
+    CLI->>Reader: XML → passages with ids
+    alt no methods section
+        Reader-->>CLI: NOT_A_RESEARCH_ARTICLE, no call
+    else
+        CLI-->>Model: instruction + the paper (cached prefix)
+        Model-->>Check: claims, each quoting a passage id
+        Check-->>Model: failures, once
+        Check-->>CLI: verified claims; the rest dropped as unverifiable
+        CLI-->>Second: for each claim, on the cached paper
+        Second-->>CLI: a distractor or a second occurrence, or no item
+    end
+    CLI->>CLI: results.jsonl, items.jsonl under data/runs/<run-id>/
+```
+
+*Caption: one paper's path through a fixed pipeline with at most three model
+calls and no tools (ADR-0900). Every quote a reviewer will see has passed the
+checker; a paper ends in exactly one named state (ADR-0910), and a call that would
+cross the $2 ceiling is not made.*
+
+There is no agent graph here because there is no agent: the extractor is one
+structured-output call with the whole paper in its system block, retried once
+with the checker's failures named. Grey boxes are model calls; the second one
+reads the paper at the cached rate because the paper block precedes the
+instruction in both. Which second text an item got — distractor, and of which
+type, or a second legitimate occurrence — is stored on the item and never shown
+(ADR-0920).
+
+## 7b. A review decision
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Reviewer
+    participant Page as review_app.py
+    participant Door as web.admit
+    participant Store as store.py
+    participant DB as Neon Postgres
+    Reviewer->>Page: opens the review page
+    Page->>Door: which door? (no credential needed)
+    Door-->>Page: open, with the account, or closed
+    Page->>Store: next_item(reviewer)
+    Store-->>DB: an undecided item, papers interleaved
+    Page-->>Reviewer: value, conditions, citation, texts A and B
+    Reviewer->>Page: which text fits, approve or disapprove, comment
+    Page->>Store: record_decision(...)
+    alt the write fails
+        Store-->>Page: DecisionNotSaved
+        Page-->>Reviewer: not saved; the same item stays
+    else
+        Store-->>DB: one row, with the reviewer and the time
+        Page-->>Reviewer: the next item, and how many remain
+    end
+```
+
+*Caption: the door is the ask app's, imported; the store is not the trail's. A
+decision is written the moment it is given and the write fails closed
+(ADR-0930), which is the opposite of the trail's choice (ADR-0710) for the
+reason the ADR gives: here the row is the product.*
