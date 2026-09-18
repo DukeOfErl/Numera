@@ -32,21 +32,21 @@ time of writing `spend.py`, and record the date in its docstring.
 
 ## 2. Port the Europe PMC client (unreviewed code)
 
-- [ ] 2.1 Copy `europepmc.py`, `cache.py`, `retrieval.py`, `tests/europepmc_double.py`,
+- [x] 2.1 Copy `europepmc.py`, `cache.py`, `retrieval.py`, `tests/europepmc_double.py`,
       `tests/test_europepmc.py`, `tests/test_europepmc_live.py`, `tests/test_cache.py` and
       `tests/fixtures/europepmc/` from `feat/grounding-validator-cytoskeleton` with
       `git checkout <branch> -- <paths>`. Do **not** take `corpus.py`, `cli.py`, `__main__.py`,
       `tests/test_retrieval.py` or `tests/fixtures/capture_europepmc.py` as they are
-- [ ] 2.2 Remove `resolve_identifier` and the `CorpusEntry` import from `retrieval.py`; keep the
+- [x] 2.2 Remove `resolve_identifier` and the `CorpusEntry` import from `retrieval.py`; keep the
       types. Confirm the offline tests import
-- [ ] 2.3 **Correct `_fetch_full_text` in the same commit that ports it**: "no XML" is any error
+- [x] 2.3 **Correct `_fetch_full_text` in the same commit that ports it**: "no XML" is any error
       status whose body does not start with `<article`, not `status == 404`. Re-record the
       no-XML fixture as a 500 and add the negative case the old suite lacked — a 500 with a
       non-article body yields `None`, a 500 with an article body is still an error. The negative
       must vary the *body*, which is the dimension the predicate now reads
-- [ ] 2.4 Read the ported module end to end as a reviewer would, and record findings in the commit
+- [x] 2.4 Read the ported module end to end as a reviewer would, and record findings in the commit
       message; fix what is found
-- [ ] 2.5 Bring `capture_europepmc.py` across, extended to record the two papers the research used
+- [x] 2.5 Bring `capture_europepmc.py` across, extended to record the two papers the research used
       (PMC13340094 with no `<back>`; PMC13248727 with XHTML tables and both micro signs)
 
 ## 3. Discovery

@@ -1,0 +1,197 @@
+{
+ "version": "6.9",
+ "hitCount": 1,
+ "request": {
+  "queryString": "SRC:PPR AND EXT_ID:PPR1090496",
+  "internalQuery": "SRC:PPR AND EXT_ID:PPR1090496",
+  "resultType": "CORE",
+  "cursorMark": "*",
+  "pageSize": 25,
+  "sort": "",
+  "synonym": false
+ },
+ "resultList": {
+  "result": [
+   {
+    "id": "PPR1090496",
+    "source": "PPR",
+    "fullTextIdList": {
+     "fullTextId": [
+      "PPR1090496"
+     ]
+    },
+    "doi": "10.1101/2025.09.19.677342",
+    "title": "Cytoskeleton Regulates Cytoophidium Dynamics in  <i>Drosophila</i>  Ovaries",
+    "authorString": "Liu X, Li Y, Pang S, Liu J, Dou K.",
+    "authorList": {
+     "author": [
+      {
+       "fullName": "Liu X",
+       "firstName": "Xiao-Jing",
+       "lastName": "Liu",
+       "initials": "X",
+       "authorAffiliationDetailsList": {
+        "authorAffiliation": [
+         {
+          "affiliation": "School of Life Science and Technology, , , ,"
+         }
+        ]
+       }
+      },
+      {
+       "fullName": "Li Y",
+       "firstName": "Yi-Lan",
+       "lastName": "Li",
+       "initials": "Y",
+       "authorId": {
+        "type": "ORCID",
+        "value": "0000-0002-4355-6522"
+       },
+       "authorAffiliationDetailsList": {
+        "authorAffiliation": [
+         {
+          "affiliation": "School of Life Science and Technology, , , ,"
+         }
+        ]
+       }
+      },
+      {
+       "fullName": "Pang S",
+       "firstName": "Shu-Yu",
+       "lastName": "Pang",
+       "initials": "S",
+       "authorId": {
+        "type": "ORCID",
+        "value": "0009-0008-3076-709X"
+       },
+       "authorAffiliationDetailsList": {
+        "authorAffiliation": [
+         {
+          "affiliation": "School of Life Science and Technology, , , ,"
+         }
+        ]
+       }
+      },
+      {
+       "fullName": "Liu J",
+       "firstName": "Ji-Long",
+       "lastName": "Liu",
+       "initials": "J",
+       "authorAffiliationDetailsList": {
+        "authorAffiliation": [
+         {
+          "affiliation": "School of Life Science and Technology, , , ,"
+         },
+         {
+          "affiliation": "Department of Physiology, Anatomy and Genetics, , , ,"
+         }
+        ]
+       }
+      },
+      {
+       "fullName": "Dou K",
+       "firstName": "Kun",
+       "lastName": "Dou",
+       "initials": "K",
+       "authorAffiliationDetailsList": {
+        "authorAffiliation": [
+         {
+          "affiliation": "School of Life Science and Technology, , , ,"
+         }
+        ]
+       }
+      }
+     ]
+    },
+    "authorIdList": {
+     "authorId": [
+      {
+       "type": "ORCID",
+       "value": "0000-0002-4355-6522"
+      },
+      {
+       "type": "ORCID",
+       "value": "0009-0008-3076-709X"
+      }
+     ]
+    },
+    "dataLinksTagsList": {
+     "dataLinkstag": [
+      "altmetrics"
+     ]
+    },
+    "pubYear": "2025",
+    "abstractText": "<h4>ABSTRACT</h4>  Cytoophidia are filamentous structures composed of CTP synthase (CTPS) and were initially discovered in ovarian cells of  Drosophila . As a highly conserved membraneless organelle present across all three domains of life, cytoophidia display dynamic behaviors that are crucial for cellular homeostasis and function. Previous research has shown that cytoophidia are actively transported from nurse cells to oocytes, implicating their potential role in  Drosophila oogenesis. Nevertheless, the molecular and cellular mechanisms governing cytoophidium dynamics remain largely unclear. In this study, we employ live-cell imaging to systematically characterize the spatiotemporal dynamics of cytoophidia and to explore the underlying regulatory mechanisms. Our findings demonstrate that cytoophidium dynamics are dependent on the cytoskeletal components— microtubules, microfilaments (actin filaments), and myosin II. Notably, disruption of either microtubules or microfilaments resulted in the disassembly or depolymerization of large cytoophidia (macro-cytoophidia), highlighting an essential role of the cytoskeleton in maintaining cytoophidium integrity and assembly. Together, these results indicate that microtubules, microfilaments, and myosin II play pivotal roles in regulating cytoophidium dynamics. This study provides new insights into the mechanisms underlying cytoophidium transport and assembly, and lays a foundation for further investigation of their functional significance in  Drosophila oogenesis.",
+    "pubTypeList": {
+     "pubType": [
+      "Preprint"
+     ]
+    },
+    "bookOrReportDetails": {
+     "publisher": "bioRxiv",
+     "yearOfPublication": 2025
+    },
+    "fullTextUrlList": {
+     "fullTextUrl": [
+      {
+       "availability": "Free",
+       "availabilityCode": "F",
+       "documentStyle": "doi",
+       "site": "DOI",
+       "url": "https://doi.org/10.1101/2025.09.19.677342"
+      },
+      {
+       "availability": "Open access",
+       "availabilityCode": "OA",
+       "documentStyle": "html",
+       "site": "Europe_PMC",
+       "url": "https://europepmc.org/article/PPR/PPR1090496"
+      },
+      {
+       "availability": "Open access",
+       "availabilityCode": "OA",
+       "documentStyle": "pdf",
+       "site": "Europe_PMC",
+       "url": "https://europepmc.org/api/fulltextRepo?pprId=PPR1090496&type=FILE&fileName=EMS209153-pdf.pdf&mimeType=application/pdf"
+      }
+     ]
+    },
+    "commentCorrectionList": {
+     "commentCorrection": [
+      {
+       "id": "41680946",
+       "source": "MED",
+       "reference": "Cell & bioscience. 2026 Feb;16(1):31",
+       "type": "Preprint of",
+       "note": "CrossRef Pre-print loader",
+       "orderIn": 10001
+      }
+     ]
+    },
+    "isOpenAccess": "Y",
+    "inEPMC": "Y",
+    "inPMC": "N",
+    "hasPDF": "Y",
+    "hasBook": "N",
+    "hasSuppl": "Y",
+    "citedByCount": 0,
+    "hasData": "Y",
+    "hasReferences": "Y",
+    "hasTextMinedTerms": "Y",
+    "hasDbCrossReferences": "N",
+    "hasLabsLinks": "Y",
+    "license": "cc by-nc-nd",
+    "hasEvaluations": "N",
+    "authMan": "N",
+    "epmcAuthMan": "Y",
+    "nihAuthMan": "N",
+    "manuscriptId": "EMS209153",
+    "hasTMAccessionNumbers": "N",
+    "dateOfCreation": "2025-09-26",
+    "firstIndexDate": "2025-09-26",
+    "fullTextReceivedDate": "2025-10-04",
+    "firstPublicationDate": "2025-09-21"
+   }
+  ]
+ }
+}
