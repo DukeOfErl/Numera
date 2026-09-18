@@ -763,10 +763,36 @@ AWAITING_THE_PROMPT = (
     "Leading with a figure does not displace what qualifies it",
 )
 
+# `add-validator-prototype`'s eighteen, read from its open delta. A fourth kind of
+# gap: a package that does not exist yet. Each moves to COVERED as its group in
+# that change's `tasks.md` lands (task 9.1 is the reconciliation), so this tuple
+# should be empty by the time that change archives.
+AWAITING_THE_PROTOTYPE = (
+    "A question is answered from open-access research articles only",
+    "Full text is fetched or its absence is typed",
+    "An article that is not a research article is set aside after reading its structure",
+    "The licence travels with the paper",
+    "Discovery is polite to a free service",
+    "A claim is a value the paper measured, quoted verbatim, with a location",
+    "Conditions and method are quoted, and each says where it came from",
+    "Every quote is verified against the article before anything is kept",
+    "Each article ends in exactly one named state",
+    "Spend is bounded per article and per run, and reported",
+    "The model answers from the article, not from what it knows",
+    "What produced a claim is recorded with it",
+    "One claim, one item, one screen",
+    "The reviewer always chooses between two texts, and separately gives a verdict",
+    "The second text is a distractor or a second occurrence, and its kind is recorded",
+    "What is recorded about an item and a decision",
+    "Items are served so that every item is reviewed and none twice by the same reviewer",
+    "The model is never shown a decision",
+)
+
 UNMAPPED: dict[str, str] = {
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),
+    **dict.fromkeys(AWAITING_THE_PROTOTYPE, "add-validator-prototype is unbuilt; see its tasks.md"),
 }
 
 
