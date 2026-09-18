@@ -21,13 +21,13 @@ time of writing `spend.py`, and record the date in its docstring.
 ## 1. Branch, allocation, scaffolding
 
 - [x] 1.1 Add the row `add-validator-prototype` → `0900`–`0990` to the ADR table in `CLAUDE.md` (done at proposal time)
-- [ ] 1.2 Create ADR stubs `0900`, `0910`, `0920`, `0930` from the template, each with status
+- [x] 1.2 Create ADR stubs `0900`, `0910`, `0920`, `0930` from the template, each with status
       *proposed* and the one-paragraph decision from `design.md`, and commit them
-- [ ] 1.3 Widen the `validator` extra with `streamlit`, `sqlalchemy` and `psycopg[binary]`, matching
+- [x] 1.3 Widen the `validator` extra with `streamlit`, `sqlalchemy` and `psycopg[binary]`, matching
       the floors the `ask` extra uses and saying in the comment why the review page needs both extras
-- [ ] 1.4 Create `src/bionumbers/__init__.py` and confirm `uv sync --extra ask --extra validator`
+- [x] 1.4 Create `src/bionumbers/__init__.py` and confirm `uv sync --extra ask --extra validator`
       resolves and `python -c "import bionumbers"` works
-- [ ] 1.5 Add `data/europepmc/` and `data/runs/` as the output locations in the code, and a test that
+- [x] 1.5 Add `data/europepmc/` and `data/runs/` as the output locations in the code, and a test that
       both are ignored by git (`git check-ignore`), the way the probe README did by hand
 
 ## 2. Port the Europe PMC client (unreviewed code)

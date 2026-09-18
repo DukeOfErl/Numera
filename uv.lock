@@ -128,6 +128,9 @@ validator = [
     { name = "httpx" },
     { name = "lxml" },
     { name = "pint" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "sqlalchemy" },
+    { name = "streamlit" },
 ]
 
 [package.dev-dependencies]
@@ -150,9 +153,12 @@ requires-dist = [
     { name = "lxml", marker = "extra == 'validator'", specifier = ">=5.2" },
     { name = "pint", marker = "extra == 'validator'", specifier = ">=0.24" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'ask'", specifier = ">=3.2" },
+    { name = "psycopg", extras = ["binary"], marker = "extra == 'validator'", specifier = ">=3.2" },
     { name = "pydantic", marker = "extra == 'ingest'", specifier = ">=2.6" },
     { name = "sqlalchemy", marker = "extra == 'ask'", specifier = ">=2.0" },
+    { name = "sqlalchemy", marker = "extra == 'validator'", specifier = ">=2.0" },
     { name = "streamlit", marker = "extra == 'ask'", specifier = ">=1.42" },
+    { name = "streamlit", marker = "extra == 'validator'", specifier = ">=1.42" },
     { name = "weasyprint", marker = "extra == 'sheet'", specifier = ">=60" },
 ]
 provides-extras = ["validator", "ask", "ingest", "eval", "sheet"]
