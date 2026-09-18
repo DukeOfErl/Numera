@@ -15,20 +15,13 @@ and is then averaged into the figure this whole task exists to produce. So the e
 deliberately wide: every rounding, every conversion into a common unit of the same dimension, at
 two precisions.
 
-**The system block's order is load-bearing, and it disagrees with `extraction.py` as both modules
-stand.** Prompt caching is a prefix match from the first token, so two calls share the article only
-if the article is the *first* block in both and each caller's own instruction comes after it. That
-is the order here. `extraction.py:system_blocks` (read 2026-09-18) returns the opposite --
-instruction first, article second carrying the breakpoint -- on an argument that is right about its
-own retry and wrong across steps: its order caches instruction *and* article for its own second
-call, at the price that no other step can ever hit that cache, because the first token already
-differs. So today this call shares nothing and pays full input rate for the whole article on every
-claim.
-
-Nothing reports that, and it is worth saying which way round: `spend.cost` prices cache reads, so a
-run with no cache reads is *checkable* after the fact -- but no code in this package computes,
-asserts or prints that figure, so the disagreement above is silent until someone reads a bill. The
-orchestrator reconciles the two orders; whichever wins, both modules have to carry it.
+**The system block's order is load-bearing, and both model-facing modules carry the same one.**
+Prompt caching is a prefix match from the first token, so two calls share the article only if the
+article is the *first* block in both and each caller's own instruction comes after it. That is the
+order here and in `extraction.system_blocks`, and a test in `test_bionumbers_extraction.py`
+holds the two first blocks byte-identical. Whether the cache was actually hit is a fact the run
+reports rather than assumes: `Ledger.cached_fraction` reads it off the provider's usage blocks, and
+a run whose fraction is zero has been paying full rate.
 
 Nothing about a decision, a choice or a comment is ever built into these messages (the spec's last
 requirement): decisions measure the extractor and this selector, so they cannot also be their

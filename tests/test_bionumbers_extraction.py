@@ -363,6 +363,67 @@ def test_a_claim_whose_value_verifies_is_still_dropped_when_another_of_its_quote
     assert "condition medium" in correction
 
 
+def test_a_derived_claim_s_input_quotes_are_verified_too(article):
+    """No test set `inputs` until a verifier seeded their verification away and nothing failed.
+    A derived value's inputs are quotes like any other: invented, they drop the claim."""
+    good = passage_holding(article, MEASURED_SENTENCE)
+    derived = a_claim(
+        MEASURED_SENTENCE,
+        good,
+        value="65",
+        candidate_kind=CandidateKind.DERIVED,
+        inputs=(QuoteDraft(text=INVENTED_SENTENCE, passage_id=good),),
+    )
+    model = ScriptedModel(found(derived), found(derived))
+
+    result = run(model, article)
+
+    assert len(model.calls) == 2, "the invented input is named back once"
+    assert result.claims == ()
+    assert result.unverifiable == ("PMC2288635-1",)
+
+
+def test_a_derived_claim_with_real_inputs_keeps_them(article):
+    good = passage_holding(article, MEASURED_SENTENCE)
+    derived = a_claim(
+        MEASURED_SENTENCE,
+        good,
+        value="65",
+        candidate_kind=CandidateKind.DERIVED,
+        inputs=(QuoteDraft(text=MEASURED_SENTENCE, passage_id=good),),
+    )
+
+    result = run(ScriptedModel(found(derived)), article)
+
+    (claim,) = result.claims
+    assert claim.candidate_kind is CandidateKind.DERIVED
+    assert [quote.text for quote in claim.inputs] == [MEASURED_SENTENCE]
+
+
+def test_a_ceiling_met_on_the_retry_discards_what_the_first_call_established(article):
+    """The first call verified one claim and named one failure; the retry would cross the ceiling.
+    The spec's "discarded rather than half-kept" is about exactly this moment, and the only other
+    ceiling test stops before the first call, where there is nothing to keep."""
+    good = passage_holding(article, MEASURED_SENTENCE)
+    model = ScriptedModel(
+        found(
+            a_claim(MEASURED_SENTENCE, good, value="65"),
+            a_claim(INVENTED_SENTENCE, good, value="9"),
+        ),
+        found(a_claim(MEASURED_SENTENCE, good, value="65")),
+    )
+    # One call fits (projected 61,000 x 5e-6 + 8,000 x 25e-6 = 0.505, spent 0.335); a second
+    # would not.
+    ledger = a_ledger(per_paper=0.60)
+
+    result = run(model, article, ledger=ledger)
+
+    assert len(model.calls) == 1, "the retry was refused before it was made"
+    assert result.state is PaperState.CEILING_REACHED
+    assert result.claims == () and result.unverifiable == ()
+    assert result.spend.calls == 1, "what the first call cost is still on the record"
+
+
 def test_every_quote_that_does_reach_the_record_verifies_against_the_article(article):
     """The positive half of the rule, over a mixed answer: what survives two rounds is verbatim,
     including the quotes of the rejected candidates the review draws its second texts from."""
