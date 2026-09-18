@@ -20,7 +20,7 @@ repository, and the implementer's job is to leave the instructions right.
 
 ## 0. Allocation
 
-- [ ] 0.1 CLAUDE.md: add `add-open-enrolment` | `0880`–`0920` to the ADR table;
+- [x] 0.1 CLAUDE.md: add `add-open-enrolment` | `0880`–`0920` to the ADR table;
       ADR stubs `0880`, `0890`, `0900` from the template, committed first.
 
 ## 1. The door
