@@ -51,20 +51,20 @@ time of writing `spend.py`, and record the date in its docstring.
 
 ## 3. Discovery
 
-- [ ] 3.1 Add `search_open_access(terms, *, since_year, limit, sections)` building
+- [x] 3.1 Add `search_open_access(terms, *, since_year, limit, sections)` building
       `(<terms>) AND OPEN_ACCESS:Y AND (SRC:MED OR SRC:PMC) AND NOT PUB_TYPE:review AND NOT
       PUB_TYPE:"meta-analysis" AND NOT PUB_TYPE:editorial AND NOT PUB_TYPE:comment AND
       PUB_YEAR:[since TO now]`, `resultType=lite`, `cursorMark` paging, a project `User-Agent`,
       keeping only records with a `pmcid`; record the exact query with the run
-- [ ] 3.2 Fixture tests for the query string (punctuation escaping, every exclusion present), cursor
+- [x] 3.2 Fixture tests for the query string (punctuation escaping, every exclusion present), cursor
       iteration over two pages, the limit, and the exclusion reasons recorded per dropped record
-- [ ] 3.3 Fetch each kept candidate through the corrected client, into the disk cache; a
+- [x] 3.3 Fetch each kept candidate through the corrected client, into the disk cache; a
       `network`-marked test asserts that a known non-open-access PMCID yields "no XML" without
       raising, and that one fresh `OPEN_ACCESS:Y` record yields an `<article` body
-- [ ] 3.4 Licence: read `license` from a `core` lookup or the XML `permissions/license`
+- [x] 3.4 Licence: read `license` from a `core` lookup or the XML `permissions/license`
       (`ali:license_ref` and `license/@xlink:href`, both layouts in fixtures); a document with
       neither is `UNLICENSED` and its text is never written past the cache
-- [ ] 3.5 Add the two research fixtures to the double and test licence extraction from both layouts
+- [x] 3.5 Add the two research fixtures to the double and test licence extraction from both layouts
 
 ## 4. The JATS reader and the quote checker
 
@@ -75,17 +75,17 @@ time of writing `spend.py`, and record the date in its docstring.
 - [ ] 4.2 Fixture tests: a table cell resolves to headers plus cell; a paragraph resolves to its
       section path; the `back`-less paper reads; a `<sup>` inside a table header flattens to text;
       a paper with no methods section is reported so
-- [ ] 4.3 `quotes.py`: port the fold table from `probes/2026-09-09-retrieval/check_quote.py` as
+- [x] 4.3 `quotes.py`: port the fold table from `probes/2026-09-09-retrieval/check_quote.py` as
       `\u` escapes, add the micro-sign fold, and implement `verify(quote, passage) -> Verified |
       Failed(reason)` checking the named passage first and the whole document second
-- [ ] 4.4 Turn the README canary into tests: a one-digit change to a real quote fails, in plain
+- [x] 4.4 Turn the README canary into tests: a one-digit change to a real quote fails, in plain
       prose and across inline markup; a paraphrase fails; a whitespace-only difference passes
 - [ ] 4.5 Seed one defect into a copy of `quotes.py` (widen the fold to accept a changed digit) and
       confirm exactly the canary test fails; name the mutant in the commit message
 
 ## 5. Extraction
 
-- [ ] 5.1 `spend.py`: price table for the configured model (input, cached input, output), projection
+- [x] 5.1 `spend.py`: price table for the configured model (input, cached input, output), projection
       via the provider's token-count endpoint with output at `max_tokens`, actual cost from the
       usage block including cache reads; `Ceiling(per_paper=2.00, per_run=...)` checked before
       every call; a test that a projected crossing refuses the call
@@ -120,9 +120,9 @@ time of writing `spend.py`, and record the date in its docstring.
 
 ## 7. The store and the review page
 
-- [ ] 7.1 `sql/review.sql`: `review_paper`, `review_item`, `review_decision` with the columns in
+- [x] 7.1 `sql/review.sql`: `review_paper`, `review_item`, `review_decision` with the columns in
       `design.md` D8; a `time_to_decide` column if it costs nothing more
-- [ ] 7.2 `store.py`: load a run's JSONL into `review_paper` and `review_item`; `next_item(reviewer)`
+- [x] 7.2 `store.py`: load a run's JSONL into `review_paper` and `review_item`; `next_item(reviewer)`
       returning an undecided item in a paper-interleaved order; `record_decision(...)` that raises
       on failure. Tests against SQLite for the queries; one `network`-marked test against the Neon
       `test` branch for the DDL
