@@ -74,9 +74,16 @@ whose questions are being recorded against the wrong name.
 
 Enrolling an account — issuing its credential, recording its address and role —
 SHALL be one operator action outside the application, given the address, the
-role and the credential's cap. It SHALL issue a credential of the account's own,
-capped at the amount given and renewing monthly, and SHALL record the account
-with that credential so that the account's next sign-in proceeds.
+role, the credential's cap and the environment the account is enrolled into.
+It SHALL issue a credential of the account's own, capped at the amount given and
+renewing monthly, and SHALL record the account with that credential in the named
+environment so that the account's next sign-in there proceeds.
+
+The environment SHALL be named every time; there is no default. An enrolment
+that names none SHALL be refused before anything is issued or recorded, and the
+refusal SHALL say that the account has to be recorded where the deployment reads
+and that no environment is assumed. An enrolment that names an environment that
+does not exist SHALL be refused the same way, saying which do.
 
 It SHALL refuse to issue a credential with no cap or a cap that is not positive:
 the case for keeping credentials where they are kept rests on every one of them
@@ -94,6 +101,16 @@ credential: the credential is looked up by the system and seen by nobody.
 - **THEN** a credential capped at that amount, renewing monthly, is issued to that account
 - **AND** the account is recorded with it
 - **AND** the account's next sign-in proceeds with that role
+
+#### Scenario: No environment is named
+- **WHEN** the operator enrols an address without naming the environment
+- **THEN** no credential is issued and nothing is recorded
+- **AND** the refusal says no environment is assumed and one has to be named
+
+#### Scenario: The named environment does not exist
+- **WHEN** the operator names an environment the deployment does not have
+- **THEN** no credential is issued and nothing is recorded
+- **AND** the refusal names the environments that do exist
 
 #### Scenario: The cap is missing or not positive
 - **WHEN** the operator enrols an address with no cap, a zero cap or a negative cap
@@ -116,5 +133,5 @@ credential: the credential is looked up by the system and seen by nobody.
 
 #### Scenario: The report shows no credential
 - **WHEN** an enrolment succeeds
-- **THEN** what is reported names the account and role
+- **THEN** what is reported names the account, the role and the environment
 - **AND** the credential does not appear in it

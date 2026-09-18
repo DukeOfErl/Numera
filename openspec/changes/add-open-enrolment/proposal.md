@@ -22,11 +22,14 @@ changing anyway, this is when to collapse the three steps into one.
   address the provider has not verified is refused with its own sentence,
   distinct from "not enrolled", and a missing claim counts as unverified.
 - **Enrolment becomes one command**, `scinumbers-enrol`: mint a runtime key at
-  OpenRouter with a monthly cap, insert the `accounts` row, print the row
-  without the key. It refuses an address already enrolled and refuses to issue
-  an uncapped credential — ADR-0780's argument rests on the cap. If the row
-  cannot be written, the key it minted is revoked, so a failure leaves nothing
-  behind.
+  OpenRouter with a monthly cap, insert the `accounts` row into the Neon branch
+  the operator names, print the row without the key. The branch is required
+  and has no default — the operator will forget which environment is which
+  exactly when adding a tester, and a default would be wrong then — so the
+  command resolves the name through Neon's API rather than reading any file.
+  It refuses an address already enrolled and refuses to issue an uncapped
+  credential — ADR-0780's argument rests on the cap. If the row cannot be
+  written, the key it minted is revoked, so a failure leaves nothing behind.
 - **The Google consent screen moves to Production**, so a tester need not be
   listed by hand before signing in. An operator step, documented, not code.
 - **Operator documentation**: the Auth0 tenant (database connection with
@@ -55,16 +58,17 @@ None.
 the second button's label and the refusal's sentence. `accounts.py`: an insert
 beside the lookup, the one module that knows the table. New `enrol.py`, core
 side, no Streamlit: the OpenRouter Management API calls (mint, verify, revoke),
-the orchestration, and the command's `main`; joins `HARNESS` in
+the Neon API calls (branch by name, connection URL), the orchestration, and the command's `main`; joins `HARNESS` in
 `test_driver_independence.py` so the thing meant to run from a terminal can
 never reach for the web driver. `pyproject.toml`: the `scinumbers-enrol` entry
 point. No new dependency — `urllib` as `allowance.py` already uses.
 
 **Configuration and secrets.** `[auth.auth0]` in the secrets box: `client_id`,
-`client_secret`, `server_metadata_url`. For the command, two environment
-variables for the one invocation: `OPENROUTER_MANAGEMENT_KEY` and the accounts
-database URL. Neither enters the repository, and the URL is never kept in a
-file — `secrets.toml.example`'s one-URL rule stands.
+`client_secret`, `server_metadata_url`. For the command, three environment
+variables in the operator's shell: `OPENROUTER_MANAGEMENT_KEY`, `NEON_API_KEY`
+and `NEON_PROJECT_ID`. None enters the repository, and no database URL is
+kept in a file — `secrets.toml.example`'s one-URL rule stands; the command
+fetches the named branch's URL and holds it in memory for one insert.
 
 **Storage.** None. The `accounts` table is unchanged.
 

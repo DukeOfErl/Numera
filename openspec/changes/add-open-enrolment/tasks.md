@@ -83,23 +83,38 @@ repository, and the implementer's job is to leave the instructions right.
       `DELETE`; insert raises and `DELETE` fails → `KeyLeftBehind` naming the
       hash; echo with wrong `limit` → revoked and refused; echo with wrong
       `limit_reset` → one `PATCH`, then accepted if it agrees.
-- [ ] 2.4 `main()`: `EMAIL ROLE --limit-usd N`; refuses without
-      `OPENROUTER_MANAGEMENT_KEY` or `SCINUMBERS_ACCOUNTS_URL`, naming the
-      missing one; prints address, role, cap on success and the refusal's
-      sentence otherwise; exit codes. Tests: each missing variable; a success
-      whose stdout does not contain the key or the hash (assert on the doubles'
-      values, not on a fixed string).
-- [ ] 2.5 `pyproject.toml`: `scinumbers-enrol = "scinumbers_ask.enrol:main"`.
-- [ ] 2.6 `test_driver_independence.py`: `enrol` joins `HARNESS`. Seed
+- [ ] 2.4 `neon.py` (or a section of `enrol.py` if it stays under ~80
+      lines): `branch_id(api_key, project, name, *, opener)` — `search=name`,
+      then exactly one exact `name` match or `BranchNotFound` listing what was
+      found; `connection_url(api_key, project, branch_id, *, database, role,
+      opener)` — `pooled=true`, scheme rewritten to `postgresql+psycopg://`.
+      Tests with an opener double: exact match among partial matches picks the
+      exact one; no match → refused listing the partials; two exact matches
+      (cannot happen at Neon, but the rule must hold) → refused; the URL comes
+      back with the rewritten scheme and the `-pooler` host untouched.
+- [ ] 2.5 `main()`: `EMAIL ROLE --limit-usd N --branch NAME`, `--database`
+      and `--role` with Neon's defaults. **`--branch` is required with no
+      default**; argparse's own error is replaced by a sentence saying the row
+      has to land in the branch the deployed app reads and that no branch is
+      assumed. Refuses without `OPENROUTER_MANAGEMENT_KEY`, `NEON_API_KEY` or
+      `NEON_PROJECT_ID`, naming the missing one. Resolves the branch before
+      minting. Prints address, role, cap and branch on success and the
+      refusal's sentence otherwise; exit codes. Tests: no `--branch` → the
+      notice and nothing called on either opener; each missing variable; an
+      unknown branch → refused and the OpenRouter opener never called; a
+      success whose stdout does not contain the key, the hash or the URL
+      (assert on the doubles' values, not on a fixed string).
+- [ ] 2.6 `pyproject.toml`: `scinumbers-enrol = "scinumbers_ask.enrol:main"`.
+- [ ] 2.7 `test_driver_independence.py`: `enrol` joins `HARNESS`. Seed
       `import streamlit` into a copy and name the tests that fail.
-- [ ] 2.7 Fault seeding, in a copy, over `enrol()`: `limit_usd >= 0` in place
+- [ ] 2.8 Fault seeding, in a copy, over `enrol()`: `limit_usd >= 0` in place
       of `> 0`; insert before mint; revoke skipped on insert failure. Each must
       kill exactly the test that claims it. Write ADR-0900's claims after.
-- [ ] 2.8 (operator, `network` marker) One live mint against OpenRouter with a
+- [ ] 2.9 (operator, `network` marker) One live mint against OpenRouter with a
       $0.01 cap into a throwaway name, read the echo, then revoke — recording
       in the ADR whether `limit_reset` is honoured on create or needed the
       `PATCH`. The one live run this change needs.
-- [ ] 2.9 `verifier` on group 2: measure that no test passes if `enrol()` mints
+- [ ] 2.10 `verifier` on group 2: measure that no test passes if `enrol()` mints
       before checking the cap, and that `KeyLeftBehind` carries the hash.
 
 ## 3. Documentation and the record
@@ -142,5 +157,6 @@ repository, and the implementer's job is to leave the instructions right.
 - [ ] 4.5 (operator) Merge `dev` into `deploy/streamlit-cloud` and push it —
       the deploy branch is already 51 commits ahead of origin from last night's
       unpushed merge, so the deployed app is behind on more than this.
-- [ ] 4.6 (operator) Enrol the first non-Google tester with `scinumbers-enrol`
-      and have them sign in.
+- [ ] 4.6 (operator) Create a Neon API key for the operator's shell; note
+      `NEON_PROJECT_ID`. Enrol the first non-Google tester with
+      `scinumbers-enrol ... --branch alpha` and have them sign in.

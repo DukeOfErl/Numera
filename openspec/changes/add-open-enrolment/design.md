@@ -44,6 +44,10 @@ code or the providers' current documentation on 2026-09-18, not remembered:
   writes to.** An operator's laptop points at `dev`; the row has to land in the
   branch the deployed app reads. The command cannot read its URL from that file
   without either the wrong branch or a spare URL on disk.
+- **Neon's API resolves a branch to a URL in two calls**, but takes the branch
+  by id: `GET /projects/{id}/branches?search=` filters by partial name or id,
+  and `GET /projects/{id}/connection_uri` needs `branch_id`, `database_name`
+  and `role_name`, with `pooled=true` for the `-pooler` host.
 - **Guards belong to the operation.** The command's `main` keeps the wording;
   `enrol()` keeps every refusal, so a test or a second caller meets them too.
 
@@ -51,7 +55,8 @@ code or the providers' current documentation on 2026-09-18, not remembered:
 
 **Goals.** Any address can sign in, and only a verified one gets through. A
 tester is enrolled by one command that cannot leave an uncapped key or an
-orphaned one behind. Nothing a Google tester does today changes.
+orphaned one behind, and cannot write into a branch the operator did not name.
+Nothing a Google tester does today changes.
 
 **Non-Goals, at the design level:**
 
@@ -134,10 +139,12 @@ the same role. Nothing to build; a test to write.
   insert failure revokes and re-raises as `NothingEnrolled`; if the revoke
   fails too, raises `KeyLeftBehind` naming the hash. Returns the `Account`
   without the key in its report form.
-- `main()` is the `scinumbers-enrol` entry point: `EMAIL ROLE --limit-usd N`.
-  Reads `OPENROUTER_MANAGEMENT_KEY` and `SCINUMBERS_ACCOUNTS_URL` from the
-  environment and refuses without either, saying which. Prints the address,
-  the role and the cap; never the key, never the hash on success.
+- `main()` is the `scinumbers-enrol` entry point: `EMAIL ROLE --limit-usd N
+  --branch NAME`. Reads `OPENROUTER_MANAGEMENT_KEY`, `NEON_API_KEY` and
+  `NEON_PROJECT_ID` from the environment and refuses without any of them,
+  saying which. Resolves the branch (next decision) before minting, so a
+  wrong branch name costs nothing. Prints the address, the role, the cap and
+  the branch; never the key, never the hash on success.
 
 *Alternatives considered.* Insert first, then mint and update the row with the
 key: a row with a NULL key admits the tester to a "no credential issued" door
@@ -146,17 +153,43 @@ Select-then-insert for the duplicate check: racy, and the index is already
 there. A `--dry-run`: nothing to rehearse that the refusals do not already
 cover before any side effect.
 
-### The database URL is an environment variable for the one invocation, never a file
+### The operator names the branch, every time, and the command resolves it through Neon's API
 
-`SCINUMBERS_ACCOUNTS_URL`, pasted from Neon's console into the shell for the
-command and gone with it. The command refuses to read `.streamlit/secrets.toml`:
-that file's one URL is the branch the *checkout* writes to, which on a laptop is
-`dev`, and enrolling into `dev` is the silent wrong write this project's
-one-URL rule exists to prevent. Same scheme rule as the app: `postgresql+psycopg://`,
-built through `trail_store.engine_from_url` so the connect timeout is set.
+`--branch NAME` is required and has no default. Without it the command refuses
+before doing anything, and the refusal says why: the row has to land in the
+branch the deployed app reads, and a default would be the wrong one exactly
+when the operator has forgotten which that is. `dev` is a legitimate name for
+a local rehearsal; it is never assumed.
 
-*Alternative considered.* A `--branch alpha` flag resolving the URL from
-Neon's API with a Neon API key. Right shape eventually, one more secret today.
+Resolution, verified against api-docs.neon.tech on 2026-09-18:
+
+1. `GET https://console.neon.tech/api/v2/projects/{project}/branches?search=NAME`
+   with `Authorization: Bearer $NEON_API_KEY`. `search` matches partially, so
+   the command requires **exactly one branch whose `name` equals `NAME`**; none
+   or several is a refusal that lists the names it did find.
+2. `GET .../projects/{project}/connection_uri?branch_id=...&database_name=...
+   &role_name=...&pooled=true`. The response's `uri` is a standard Postgres
+   URL; the scheme is rewritten to `postgresql+psycopg://` — the same rule the
+   secrets example states for a URL copied from the console — and the engine is
+   built through `trail_store.engine_from_url` so the connect timeout is set.
+   The URL is held in memory for the one insert and printed nowhere.
+
+The project id comes from `NEON_PROJECT_ID`, the API key from `NEON_API_KEY`;
+`--database` and `--role` default to Neon's own defaults (`neondb`,
+`neondb_owner`) and are flags because a project can rename either. The command
+refuses without either variable, naming the missing one.
+
+The command **does not read `.streamlit/secrets.toml`.** That file's one URL is
+the branch the *checkout* writes to, which on a laptop is `dev`, and enrolling
+into `dev` is the silent wrong write this project's one-URL rule exists to
+prevent: the deployed app looks the tester up in `alpha`, says "not enrolled",
+and the operator finds the row in the table they can see.
+
+*Alternatives considered.* `SCINUMBERS_ACCOUNTS_URL` pasted for the one
+invocation: no second secret, but a paste the operator has to get right each
+time, and nothing stops the `dev` URL being pasted. A default branch: the
+failure this decision exists to make impossible. Reading the deployed app's
+secrets box: not reachable from a laptop.
 
 ### `enrol` joins `HARNESS`
 
@@ -179,12 +212,14 @@ the file lands (CLAUDE.md, Architecture).
 - **Google to Production may show a click-through warning** → the doc says to
   try one address first; if the warning is unacceptable, Google testers stay
   listed and only email testers gain — the change still holds.
-- **The management key can mint unlimited keys** → it lives in the operator's
-  shell for one command, is never stored beside the app, and `mint` refuses to
-  create a key without a cap.
+- **The management key can mint unlimited keys, and the Neon API key can read
+  every branch's password** → both live in the operator's shell, are never
+  stored beside the app, and `mint` refuses to create a key without a cap.
+- **A partial `search` match resolves the wrong branch** → exact-name equality
+  on the returned list, exactly one, or a refusal that shows what was found.
 - **`limit_reset` may not be accepted on create** → `mint` reads the echo and
   falls back to a `PATCH` once; if the echo still disagrees it revokes and
-  refuses. The live check (task 2.8, `network` marker) is what proves this.
+  refuses. The live check (task 2.9, `network` marker) is what proves this.
 - **`email_verified` arrives as a string from some providers** → the check
   accepts exactly the boolean `True` and the string `"true"`, nothing else;
   a test pins both and pins that `"false"`, `1` and absence refuse.
