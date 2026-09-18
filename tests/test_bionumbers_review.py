@@ -399,3 +399,34 @@ def test_the_shown_text_carries_no_field_that_could_leak_the_kind():
     fields = {field.name for field in dataclasses.fields(review.Shown)}
 
     assert fields == {"label", "text", "location_line", "is_supporting"}
+
+
+class TestStoreEngine:
+    """Where the page finds its database: secrets first, a plain URL from the environment second."""
+
+    def test_a_plain_url_serves_a_machine_with_no_secrets(self, monkeypatch, tmp_path):
+        from bionumbers import review
+
+        monkeypatch.setattr(review.web, "trail_destination", lambda: None)
+        monkeypatch.setenv(review.DB_URL_ENV, f"sqlite:///{tmp_path}/review.sqlite")
+
+        engine = review.store_engine()
+
+        assert engine is not None and engine.url.get_backend_name() == "sqlite"
+
+    def test_secrets_win_over_the_environment(self, monkeypatch, tmp_path):
+        from bionumbers import review
+
+        configured = object()
+        monkeypatch.setattr(review.web, "trail_destination", lambda: configured)
+        monkeypatch.setenv(review.DB_URL_ENV, f"sqlite:///{tmp_path}/other.sqlite")
+
+        assert review.store_engine() is configured
+
+    def test_neither_means_none(self, monkeypatch):
+        from bionumbers import review
+
+        monkeypatch.setattr(review.web, "trail_destination", lambda: None)
+        monkeypatch.delenv(review.DB_URL_ENV, raising=False)
+
+        assert review.store_engine() is None

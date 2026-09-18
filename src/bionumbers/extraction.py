@@ -160,7 +160,7 @@ class ClaimDraft(Frozen):
     occurrences: list[QuoteDraft] = []
     conditions: list[ConditionDraft] = []
     inputs: list[QuoteDraft] = []
-    endpoint_conditions: tuple[str, str] | None = None
+    endpoint_conditions: tuple[str, ...] | None = None
 
 
 class RejectedDraft(Frozen):
@@ -459,12 +459,21 @@ def _one_call(
     ).input_tokens
     projected = projected_cost(model_id, input_tokens=counted, max_tokens=MAX_TOKENS)
     ledger.check(article_id, projected)
-    response = model.parse(
-        system=system,
-        messages=messages,
-        output_format=ExtractionOutput,
-        max_tokens=MAX_TOKENS,
-    )
+    try:
+        response = model.parse(
+            system=system,
+            messages=messages,
+            output_format=ExtractionOutput,
+            max_tokens=MAX_TOKENS,
+        )
+    except Exception as failure:
+        # A response the adapter could not read into the schema was still billed. The first
+        # live run had one such paper showing $0.00 and no call, which is the one figure a
+        # ceiling must never under-count. Adapters that know the usage attach it to the error.
+        usage = getattr(failure, "usage", None)
+        if usage is not None:
+            ledger.record(article_id, cost(model_id, usage))
+        raise
     ledger.record(article_id, cost(model_id, response.usage))
     return response.parsed_output
 

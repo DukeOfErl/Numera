@@ -154,8 +154,10 @@ class Claim(Frozen):
     conditions: tuple[ConditionField, ...] = ()
     inputs: tuple[Quote, ...] = ()
     """For a derived value: the quoted measurements it was computed from."""
-    endpoint_conditions: tuple[str, str] | None = None
-    """For a range over conditions: the condition at each end."""
+    endpoint_conditions: tuple[str, ...] | None = None
+    """For a range over conditions: the conditions the range spans, in the paper's order. A tuple
+    of any length, not a pair: the first live run met a range over five antibiotic
+    concentrations, and a pair type made that paper FAILED rather than a claim."""
     fingerprint: Fingerprint
 
 

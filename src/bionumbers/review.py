@@ -21,11 +21,13 @@ both are material for a judgement, not decoration.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from dataclasses import dataclass
 
 from sqlalchemy import Engine
 
+from bionumbers import store
 from bionumbers.records import (
     CONDITION_FIELDS,
     Claim,
@@ -35,6 +37,8 @@ from bionumbers.records import (
     ReviewItem,
 )
 from scinumbers_ask import web
+
+DB_URL_ENV = "BIONUMBERS_REVIEW_DB_URL"
 
 TITLE = "SciNumbers review"
 
@@ -301,8 +305,17 @@ def store_engine() -> Engine | None:
 
     Named here rather than called from the page so the page's own tests can hand it a database with
     no connection string, and so "which database" is one decision in one place.
+
+    Where no `[connections.usage]` is configured, `BIONUMBERS_REVIEW_DB_URL` -- the variable
+    `bionumbers load` reads -- names the store instead, so a run loaded into a local SQLite file can
+    be reviewed on the machine that produced it. Secrets win when both are present: the deployed
+    page must not be redirected by an environment variable.
     """
-    return web.trail_destination()
+    configured = web.trail_destination()
+    if configured is not None:
+        return configured
+    url = os.environ.get(DB_URL_ENV, "").strip()
+    return store.engine_from_url(url) if url else None
 
 
 def _field_label(name: str) -> str:

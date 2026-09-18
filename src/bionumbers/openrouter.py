@@ -63,7 +63,15 @@ class NoCredential(Exception):
 
 class ModelRefused(Exception):
     """The provider answered without a parseable structured output: an empty message, a
-    refusal, or content that is not the schema. The paper ends `FAILED`, never half-read."""
+    refusal, or content that is not the schema. The paper ends `FAILED`, never half-read.
+
+    Carries the usage block when there is one: the call was billed whatever came back, and a
+    ledger that only hears about successes under-counts exactly the calls that went wrong.
+    """
+
+    def __init__(self, message: str, usage: Usage | None = None) -> None:
+        super().__init__(message)
+        self.usage = usage
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,18 +196,19 @@ class OpenRouterModel:
         response = self._client.post(self._url, headers=self._headers, json=body)
         response.raise_for_status()
         raw = response.json()
+        usage = _usage_of(raw.get("usage") or {})
         choices = raw.get("choices") or []
         content = _text_of(choices[0].get("message", {}).get("content")) if choices else ""
         if not content.strip():
             reason = choices[0].get("finish_reason") if choices else "no choices"
-            raise ModelRefused(f"empty structured output (finish_reason={reason!r})")
+            raise ModelRefused(f"empty structured output (finish_reason={reason!r})", usage)
         try:
             parsed = output_format.model_validate_json(content)
         except ValueError as invalid:
             raise ModelRefused(
-                f"output does not match {output_format.__name__}: {invalid}"
+                f"output does not match {output_format.__name__}: {invalid}", usage
             ) from None
-        return Parsed(parsed_output=parsed, usage=_usage_of(raw.get("usage") or {}), raw=raw)
+        return Parsed(parsed_output=parsed, usage=usage, raw=raw)
 
     def count_tokens(
         self, *, system: list[dict], messages: list[dict], output_format: type | None = None

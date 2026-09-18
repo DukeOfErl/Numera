@@ -708,6 +708,41 @@ def test_an_unexpected_error_ends_the_paper_the_same_way(article):
     assert result.reason == "RuntimeError: the schema could not be parsed"
 
 
+def test_a_response_the_adapter_could_not_read_is_still_paid_for(article):
+    """The first live run had a paper end FAILED at $0.00 and no call: the adapter raised before
+    the ledger heard about the usage. What the provider reported travels on the error."""
+
+    class Refused(Exception):
+        def __init__(self):
+            super().__init__("output does not match the schema")
+            self.usage = USAGE
+
+    ledger = a_ledger()
+    result = run(ScriptedModel(raises=Refused()), article, ledger=ledger)
+
+    assert result.state is PaperState.FAILED
+    assert result.spend.calls == 1
+    assert result.spend.input_tokens == USAGE.input_tokens
+    assert ledger.run.calls == 1
+
+
+def test_a_range_may_span_more_than_two_conditions(article):
+    """A pair type made a paper with a range over five antibiotic concentrations FAILED on the
+    first live run; the record takes however many the paper has."""
+    good = passage_holding(article, MEASURED_SENTENCE)
+    draft = ClaimDraft(
+        **{
+            **a_claim(MEASURED_SENTENCE, good, value="10-65").model_dump(),
+            "kind": ClaimKind.RANGE_OVER_CONDITIONS,
+            "endpoint_conditions": ("0.25 ng/mL", "5 ng/mL", "50 ng/mL", "500 ng/mL", "control"),
+        }
+    )
+
+    (claim,) = run(ScriptedModel(found(draft)), article).claims
+
+    assert len(claim.endpoint_conditions) == 5
+
+
 def test_every_state_but_unreadable_is_reachable_from_here(article, essay):
     """UNREADABLE is a fact about access, established by discovery before extraction is attempted,
     so this step must never produce it -- and must produce every other one."""

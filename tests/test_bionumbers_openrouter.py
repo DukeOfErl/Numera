@@ -218,3 +218,15 @@ class Plain(BaseModel):
 
 def test_a_non_frozen_pydantic_model_gets_additional_properties_false_too():
     assert strict_schema(Plain)["additionalProperties"] is False
+
+
+def test_a_refused_output_still_carries_what_the_call_cost():
+    """The call was billed whatever came back; a ledger told only about successes under-counts
+    exactly the calls that went wrong."""
+    _, client = _server(_reply(json.dumps({"wrong": 1})))
+    with pytest.raises(ModelRefused) as refused:
+        OpenRouterModel("k", client=client).parse(
+            system=SYSTEM, messages=MESSAGES, output_format=Answer, max_tokens=9
+        )
+    assert refused.value.usage is not None
+    assert refused.value.usage.cache_read_input_tokens == 700
