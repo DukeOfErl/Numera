@@ -111,6 +111,27 @@ no test that varied the type. The same pass also caught a test whose doubles wer
 narrower than its own assertion — deleting the `--branch` guard let an unmarked
 test out to the real Neon control plane.
 
+A high-effort code review then found two holes in the compensation guarantee
+itself, both now closed and seeded:
+
+- **A hash returned with no key** raised `MintFailed` without revoking, although
+  the handle needed to revoke was in hand. A capped credential existed at the
+  provider and this process was the only thing that knew its name.
+- **A `PATCH` that could not be sent** escaped `mint` with the key still live.
+  The two *checked* failures revoked; the transport failure between them did
+  not, and `enrol` could not compensate because no `Minted` was ever returned.
+
+The pattern is worth naming: both paths were written as answers to *what the
+provider said*, and neither covered *the call failing to complete*. A guarantee
+about undoing side effects has to hold for how the call fails, not only for what
+it answers.
+
+The same review moved the cap and role checks ahead of the branch resolution.
+They belong to `enrol` and `enrol` still runs them; the command runs the same
+expression first so that `--limit-usd 0` does not spend two live control-plane
+calls before anything says no. Diagram 3c had drawn that order before the code
+did.
+
 **The first harness could not have found any of this, and said so only because a
 canary died.** It copied `tests/` but set no `PYTHONPATH`, so the static
 dependency guard — which reads `parents[1]/src` by path — saw the seeded copy
