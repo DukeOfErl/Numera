@@ -143,7 +143,7 @@ time of writing `spend.py`, and record the date in its docstring.
 - [x] 8.1 `cli.py`: `bionumbers discover "<question>" --since 2005 --limit 50`, `bionumbers extract
       <run-id> --ceiling 2 --budget 40`, `bionumbers load <run-id>` into the store, and
       `bionumbers status <run-id>` printing states, spend and the cached-token fraction
-- [ ] 8.2 Run end to end on one question against real papers, for ten to twenty papers, and record
+- [x] 8.2 Run end to end on one question against real papers, for ten to twenty papers, and record
       the state distribution, the spend per paper and the fraction of claims that got an item, in
       the commit message and in ADR-0900's status
 

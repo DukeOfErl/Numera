@@ -518,7 +518,11 @@ def _location(doc: Document, passage_id: str) -> Location:
 
 
 def _quote(doc: Document, checked: Checked, slot: tuple[str, int, str], text: str) -> Quote:
-    return Quote(text=text, location=_location(doc, checked.passage_of[slot]))
+    # The record holds the paper's words. A model that quoted a cell as the rendered line it was
+    # shown ("row: ... | column: ... | cell: 346.0") gets the cell kept and the headers dropped:
+    # they are already on the Location, and a "verbatim quote" that carries our rendering is not
+    # one. The first live run stored eleven such lines before this.
+    return Quote(text=quotes.cell_text(text), location=_location(doc, checked.passage_of[slot]))
 
 
 def _quotes(

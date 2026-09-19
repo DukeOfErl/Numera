@@ -79,6 +79,11 @@ def article():
 
 
 @pytest.fixture(scope="module")
+def tables():
+    return read_jats((FIXTURES / "fulltext_PMC13248727.xml").read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
 def essay():
     """The fixture with no methods section: a brief report under research-article metadata."""
     return read_jats((FIXTURES / "fulltext_PMC13340094.xml").read_text(encoding="utf-8"))
@@ -585,6 +590,26 @@ def test_a_right_quote_with_a_wrong_passage_id_is_located_where_it_was_found(art
 
     assert result.claims[0].quote.location.passage_id == actual
     assert len(model.calls) == 1
+
+
+def test_a_cell_quoted_as_its_rendered_line_is_recorded_as_the_cell(tables):
+    """The model is shown 'row: ... | column: ... | cell: X' and quotes it back; the record keeps
+    X, and the headers stay where they already are, on the Location."""
+    cell = next(p for p in tables.passages if p.kind == "td" and p.text.strip())
+    rendered = (
+        f"row: {' / '.join(cell.row_headers)} | column: {' / '.join(cell.column_headers)} "
+        f"| cell: {cell.text}"
+    )
+    number = quotes.numbers_in(cell.text)
+    if not number:
+        pytest.skip("first non-empty cell carries no number; the rule is about the text anyway")
+    draft = a_claim(rendered, cell.id, value=number[0], unit="")
+
+    (claim,) = run(ScriptedModel(found(draft)), tables, paper=Paper(pmcid=tables.pmcid)).claims
+
+    assert claim.quote.text == cell.text
+    assert claim.quote.location.row_headers == cell.row_headers
+    assert claim.quote.location.kind == "td"
 
 
 def test_a_right_quote_with_the_right_passage_id_keeps_it(article):

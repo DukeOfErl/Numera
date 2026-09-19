@@ -37,7 +37,7 @@ from typing import Any, Protocol
 import pint
 
 from bionumbers.jats import Document, render_for_model
-from bionumbers.quotes import Verified, fold, verify
+from bionumbers.quotes import Verified, cell_text, fold, verify
 from bionumbers.records import (
     DISTRACTOR_PREFERENCE,
     Claim,
@@ -486,7 +486,7 @@ def choose_second_text(
             claim,
             paper,
             question,
-            second=Quote(text=candidate.text, location=_location_of(doc, passage_id)),
+            second=Quote(text=cell_text(candidate.text), location=_location_of(doc, passage_id)),
             kind=SecondTextKind.DISTRACTOR,
             distractor_type=candidate.type,
         )
