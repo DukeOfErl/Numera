@@ -202,9 +202,20 @@ class OpenRouterModel:
         if not content.strip():
             reason = choices[0].get("finish_reason") if choices else "no choices"
             raise ModelRefused(f"empty structured output (finish_reason={reason!r})", usage)
+        finish = choices[0].get("finish_reason")
         try:
             parsed = output_format.model_validate_json(content)
         except ValueError as invalid:
+            if finish == "length":
+                # The JSON is not wrong, it is unfinished: the provider stopped at max_tokens.
+                # Said in the reason, because "Invalid JSON: EOF while parsing" reads as a
+                # model fault and sends whoever triages it to the wrong place (the first live
+                # run, 2026-09-18, on a correction call at 8,000 output tokens).
+                raise ModelRefused(
+                    f"output cut off at max_tokens (finish_reason 'length', "
+                    f"{usage.output_tokens} output tokens); {output_format.__name__} unparsed",
+                    usage,
+                ) from None
             raise ModelRefused(
                 f"output does not match {output_format.__name__}: {invalid}", usage
             ) from None

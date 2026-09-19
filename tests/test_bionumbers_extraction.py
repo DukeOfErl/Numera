@@ -51,7 +51,7 @@ from bionumbers.records import (
     Provenance,
     Spend,
 )
-from bionumbers.spend import MODEL, Ceiling, Ledger
+from bionumbers.spend import MODEL, Ceiling, Ledger, cost, projected_cost
 
 FIXTURES = Path(__file__).parent / "fixtures" / "europepmc"
 
@@ -412,9 +412,13 @@ def test_a_ceiling_met_on_the_retry_discards_what_the_first_call_established(art
         ),
         found(a_claim(MEASURED_SENTENCE, good, value="65")),
     )
-    # One call fits (projected 61,000 x 5e-6 + 8,000 x 25e-6 = 0.505, spent 0.335); a second
-    # would not.
-    ledger = a_ledger(per_paper=0.60)
+    # One call fits and a second does not: the bound sits between one projection and one
+    # projection plus what the first call actually cost. Derived from the constants rather than
+    # written as a number, so a change to MAX_TOKENS moves it rather than silently retiring the
+    # test (which is what happened when the cap went from 8,000 to 16,000).
+    projected = projected_cost(MODEL, input_tokens=USAGE.input_tokens, max_tokens=MAX_TOKENS)
+    spent = cost(MODEL, USAGE).usd
+    ledger = a_ledger(per_paper=projected + spent / 2)
 
     result = run(model, article, ledger=ledger)
 

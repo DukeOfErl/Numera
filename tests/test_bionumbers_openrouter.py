@@ -230,3 +230,24 @@ def test_a_refused_output_still_carries_what_the_call_cost():
         )
     assert refused.value.usage is not None
     assert refused.value.usage.cache_read_input_tokens == 700
+
+
+def test_an_answer_cut_off_at_max_tokens_says_so_rather_than_blaming_the_json():
+    """finish_reason 'length' with unparseable content is an unfinished answer, not a wrong one;
+    the reason has to send the reader to max_tokens."""
+    cut = {
+        "choices": [
+            {
+                "message": {"role": "assistant", "content": '{"state": "found", "items": [{"na'},
+                "finish_reason": "length",
+            }
+        ],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 8000},
+    }
+    _, client = _server(cut)
+    with pytest.raises(ModelRefused) as refused:
+        OpenRouterModel("k", client=client).parse(
+            system=SYSTEM, messages=MESSAGES, output_format=Answer, max_tokens=8000
+        )
+    assert "max_tokens" in str(refused.value) and "8000" in str(refused.value)
+    assert refused.value.usage.output_tokens == 8000

@@ -61,11 +61,15 @@ from bionumbers.spend import (
     projected_cost,
 )
 
-MAX_TOKENS = 8000
+MAX_TOKENS = 16000
 """The output bound, and the figure every projection prices output at.
 
 Generous on purpose: a paper with a dozen values, each carrying eight condition quotes, is
 a long answer, and an answer truncated mid-JSON is a `FAILED` paper rather than a cheap one.
+It was 8,000 until the first live run (2026-09-18) cut off a correction call on a paper with
+three claims at exactly that figure -- the correction replays the first answer, so it is the
+longer of the two. At $25 per million output tokens this is $0.40 of worst case per call,
+priced into the projection, against a $2 ceiling.
 """
 
 #: What a claim may be. Anything else the model hands back as a claim is a candidate rather
