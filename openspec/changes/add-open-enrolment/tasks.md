@@ -268,6 +268,58 @@ repository, and the implementer's job is to leave the instructions right.
       rejected and, for `0890` and `0900`, the mutant that died. Status
       accepted, this branch as the pull request.
 
+## 3b. Mutation testing (added; the change did not plan it)
+
+- [x] 3b.1 `mutmut` over `enrol.py`, via the `mutation-test-module` skill. Three
+      runs, survivors diffed **by name** rather than by count.
+
+      *109 survivors → 94, fifteen killed, none newly surviving. Two real
+      findings and one class:*
+
+      *• **`limit_usd > 0` could be widened to `> 1`** with nothing failing, so
+      a fifty-cent cap would have been refused for no stated reason. The spec
+      says "no cap or a cap that is not positive", which puts the boundary at
+      zero — so the assertion comes from the requirement, not from running the
+      code. Killed.*
+
+      *• **The class only this tool finds here: the double checked a request's
+      shape and never its credential.** `management_key` could be replaced by
+      `None` at six call sites — including all four compensating revokes, where
+      `_revoke_quietly` swallows the failure by design — and the whole suite
+      stayed green. Against the real provider every one of those is a 401: the
+      key is minted and then neither recorded nor withdrawn, which is precisely
+      the outcome ADR-0900 is arranged to avoid. Fixed in the **double**, which
+      now refuses an unauthenticated call the way OpenRouter does, rather than by
+      repeating an assertion in eight tests. Also pinned: that the compensating
+      revoke *succeeded* rather than merely was attempted, since a swallowed
+      failure satisfies "a DELETE was sent".*
+
+      *• The timeout was unasserted — `timeout=None`, and the argument dropped
+      entirely, both survived. An operator waiting at a prompt has to meet a
+      failure rather than a hang. Pinned.*
+
+      *What is left is the noise the skill names: 32 argparse help strings, 32
+      print strings in `main`, and the rest string-literal case and `XX`
+      sentinel flips in error messages. That is a clean stopping point for this
+      module.*
+
+      *Worth recording: several mutants made **real outbound calls** to
+      `openrouter.ai` and `console.neon.tech`, which the sandbox refused. That is
+      a mutant-only condition rather than a defect in shipped code, but it is the
+      same shape as the review's finding about a double narrower than its
+      assertion — an unmarked test can reach the network when the code around it
+      moves.*
+
+- [ ] 3b.2 `mutmut` over `neon.py` and `accounts.py` — **not run.** `enrol.py`
+      took three runs at about ten minutes each and the run was stopped before
+      these two. Both are small (30 and 43 statements) and both are at 100% line
+      coverage under their own tests, which says the lines execute and not that
+      they are asserted. `neon.branch_id`'s exact-name match is the guard against
+      the silent wrong write and was seeded by hand and by a verifier, so it is
+      the best-defended thing in the change; `accounts.insert`'s SQLSTATE rule
+      was seeded after the review. Neither is unexamined, but neither has had
+      this instrument.
+
 ## 4. Landing
 
 - [x] 4.1 Full suite once, at the end (`.venv/bin/python -m pytest`); ruff.

@@ -15,6 +15,7 @@ revoke's, and those are two different outcomes for the operator.
 from __future__ import annotations
 
 import json
+import urllib.error
 
 import pytest
 
@@ -29,6 +30,7 @@ from scinumbers_ask.enrol import (
     enrol,
     main,
     mint,
+    revoke,
 )
 from scinumbers_ask.permissions import Role
 
@@ -51,21 +53,47 @@ class _Response:
 
 
 class _Opener:
-    """Answers by (method, url-fragment), and records what it was asked."""
+    """Answers by (method, url-fragment), and records what it was asked.
+
+    **Headers and the timeout are recorded, not only the method and the URL.**
+    Mutation testing replaced `management_key` with `None` in every call in this
+    module -- and deleted the `Authorization` header outright -- and the whole
+    suite stayed green, because this double checked the shape of a request and
+    never its credential. In reality each of those calls would be refused with a
+    401. A double that does not look at what a test claims cannot fail for the
+    reason the test is named after.
+    """
 
     def __init__(self, routes=None, fail=None):
         self.routes = routes or {}
         self.fail = fail or {}
         self.calls: list[tuple[str, str]] = []
         self.bodies: list[dict] = []
+        self.headers: list[dict] = []
+        self.timeouts: list = []
 
     def __call__(self, request, timeout=None):
         # `get_method()`, not `.method`: urllib only sets the attribute when the
         # caller passed one, so a GET built without it has no such attribute.
         method, url = request.get_method(), request.full_url
         self.calls.append((method, url))
+        presented = {k.lower(): v for k, v in request.header_items()}.get("authorization")
+        if presented in (None, "Bearer None", "Bearer "):
+            # What OpenRouter does, rather than what is convenient. Mutation
+            # testing put `None` in place of the management key at six call
+            # sites -- including all four compensating revokes, where
+            # `_revoke_quietly` swallows the failure -- and every one survived,
+            # because this double answered any request that had the right shape.
+            # Refusing here kills them all at once and keeps the assertion where
+            # it belongs: in the double's behaviour, not repeated in eight tests.
+            raise urllib.error.HTTPError(url, 401, "No auth credentials found", {}, None)
+        # urllib title-cases header names it is given, so read them back the way
+        # it stores them rather than the way the source spells them.
+        self.headers.append(dict(request.header_items()))
+        self.timeouts.append(timeout)
         if request.data:
             self.bodies.append(json.loads(request.data.decode("utf-8")))
+
         for fragment, error in self.fail.items():
             if fragment in f"{method} {url}":
                 raise error
@@ -73,6 +101,13 @@ class _Opener:
             if fragment in f"{method} {url}":
                 return _Response(payload)
         return _Response({})
+
+    def authorisations(self):
+        """What each call presented as its credential, in order."""
+        return [
+            {k.lower(): v for k, v in headers.items()}.get("authorization")
+            for headers in self.headers
+        ]
 
     def methods(self):
         return [method for method, _ in self.calls]
@@ -134,6 +169,57 @@ def test_a_role_that_is_not_a_role_is_refused_before_minting(engine):
 # --- the happy path ----------------------------------------------------------------
 
 
+def test_every_call_to_the_provider_presents_the_management_key(engine):
+    """Mutation testing put `None` in place of the management key in all four
+    call sites -- the mint, the patch, the revoke and the cleanup revoke -- and
+    nothing failed. Each of those would be a 401 against the real provider: the
+    key is minted, and then neither withdrawn nor recorded, which is the one
+    outcome this module is arranged to avoid."""
+    opener = _Opener(
+        {
+            "POST https://openrouter.ai/api/v1/keys": _minted(reset=None),
+            "PATCH": {"data": {"hash": HASH, "limit": 5.0, "limit_reset": "monthly"}},
+        }
+    )
+    mint("mgmt-secret", name="new@example.org", limit_usd=5, opener=opener)
+    assert opener.authorisations() == ["Bearer mgmt-secret", "Bearer mgmt-secret"]
+    assert all(t is not None for t in opener.timeouts), (
+        "an operator waiting at a prompt has to meet a failure, not a hang"
+    )
+
+    withdrawing = _Opener()
+    revoke("mgmt-secret", HASH, opener=withdrawing)
+    assert withdrawing.authorisations() == ["Bearer mgmt-secret"]
+
+
+def test_the_cleanup_revoke_presents_the_key_and_names_the_credential():
+    """The compensating call is the one nobody watches, and an unauthenticated
+    one fails silently by design -- `_revoke_quietly` swallows it."""
+    opener = _Opener(
+        {"POST https://openrouter.ai/api/v1/keys": _minted(limit=1000)},
+    )
+    with pytest.raises(MintFailed):
+        mint("mgmt-secret", name="new@example.org", limit_usd=5, opener=opener)
+    deletes = [
+        (url, auth)
+        for (method, url), auth in zip(opener.calls, opener.authorisations(), strict=True)
+        if method == "DELETE"
+    ]
+    assert deletes == [(f"https://openrouter.ai/api/v1/keys/{HASH}", "Bearer mgmt-secret")]
+
+
+def test_a_cap_below_a_dollar_is_still_a_cap(engine):
+    """The spec refuses "no cap or a cap that is not positive", so the boundary
+    is zero and not one. `limit_usd > 0` could be widened to `> 1` with nothing
+    failing, which would have refused a 50-cent tester for no stated reason --
+    and the assertion here comes from that requirement, not from running the
+    code."""
+    opener = _Opener({"POST https://openrouter.ai/api/v1/keys": _minted(limit=0.5)})
+    account = enrol(engine, "mgmt", "new@example.org", Role.STUDENT, 0.5, opener=opener)
+    assert account.openrouter_key == KEY
+    assert opener.bodies[0]["limit"] == 0.5
+
+
 def test_enrolling_mints_a_capped_key_and_records_the_account(engine):
     opener = _Opener({"POST https://openrouter.ai/api/v1/keys": _minted()})
     account = enrol(engine, "mgmt", "new@example.org", Role.SCIENTIST, 5, opener=opener)
@@ -170,7 +256,7 @@ def test_a_reset_that_comes_back_wrong_is_patched_once_and_then_accepted():
     assert "DELETE" not in opener.methods()
 
 
-def test_a_reset_the_patch_cannot_fix_is_revoked_and_refused():
+def test_a_reset_the_patch_cannot_fix_is_revoked_and_refused(capsys):
     opener = _Opener(
         {
             "POST https://openrouter.ai/api/v1/keys": _minted(reset=None),
@@ -180,6 +266,7 @@ def test_a_reset_the_patch_cannot_fix_is_revoked_and_refused():
     with pytest.raises(MintFailed):
         mint("mgmt", name="new@example.org", limit_usd=5, opener=opener)
     assert opener.methods() == ["POST", "PATCH", "DELETE"]
+    _withdrew_cleanly(capsys)
 
 
 def test_a_cap_echoed_as_a_string_is_the_same_cap():
@@ -217,7 +304,20 @@ def test_a_cleanup_that_fails_does_not_replace_the_reason_it_was_cleaning_up(cap
     assert HASH in capsys.readouterr().err, "the loose key was not named anywhere"
 
 
-def test_a_hash_with_no_key_is_withdrawn_rather_than_left_live():
+def _withdrew_cleanly(capsys):
+    """That the compensating revoke actually succeeded, not merely that it was attempted.
+
+    `_revoke_quietly` swallows a failing revoke by design, so "a DELETE was sent"
+    is satisfied by one the provider refused -- and the key is then live, which
+    is the outcome the spec's "the credential SHALL be withdrawn" forbids.
+    Mutation testing found four call sites where the credential could be dropped
+    from the cleanup call with nothing failing; this is what says they went out
+    authenticated.
+    """
+    assert "could not revoke" not in capsys.readouterr().err
+
+
+def test_a_hash_with_no_key_is_withdrawn_rather_than_left_live(capsys):
     """`MintFailed` promises that anything created has been revoked, and this
     path used to break that promise while holding the handle to keep it: a capped
     credential existed at the provider and this process was the only thing that
@@ -226,6 +326,7 @@ def test_a_hash_with_no_key_is_withdrawn_rather_than_left_live():
     with pytest.raises(MintFailed):
         mint("mgmt", name="new@example.org", limit_usd=5, opener=opener)
     assert ("DELETE", f"https://openrouter.ai/api/v1/keys/{HASH}") in opener.calls
+    _withdrew_cleanly(capsys)
 
 
 def test_a_response_with_no_hash_says_nothing_can_be_withdrawn():
@@ -238,7 +339,7 @@ def test_a_response_with_no_hash_says_nothing_can_be_withdrawn():
     assert "DELETE" not in opener.methods(), "nothing names what to withdraw"
 
 
-def test_a_patch_that_cannot_be_sent_still_withdraws_the_key():
+def test_a_patch_that_cannot_be_sent_still_withdraws_the_key(capsys):
     """The two checked failures revoke; the transport failure between them used
     to escape without doing so, leaving a live credential and no `Minted` for
     `enrol` to compensate from."""
@@ -249,6 +350,7 @@ def test_a_patch_that_cannot_be_sent_still_withdraws_the_key():
     with pytest.raises(RuntimeError):
         mint("mgmt", name="new@example.org", limit_usd=5, opener=opener)
     assert ("DELETE", f"https://openrouter.ai/api/v1/keys/{HASH}") in opener.calls
+    _withdrew_cleanly(capsys)
 
 
 # --- when the row cannot be written ------------------------------------------------
