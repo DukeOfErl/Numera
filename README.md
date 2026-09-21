@@ -112,6 +112,40 @@ Then ask something. `What is the minimal inhibitory concentration of kanamycin f
 good first question: the source says `<8`, and the answer says so rather than reporting 8 as a
 measurement.
 
+### The commands, and where they live
+
+`uv sync` installs the console scripts into the project's virtualenv, not onto
+your `PATH`:
+
+| Command | What it does |
+| --- | --- |
+| `scinumbers-ask` | the terminal driver: ask a question, see the entries behind the answer |
+| `scinumbers-enrol` | enrol one tester: mint a capped credential and record the account |
+| `scinumbers-eval` | the evaluation harness: `check`, `run`, `report` |
+| `bionumbers-ingest` | build a corpus from the published export |
+| `bionumbers` | **declared, not yet built.** The grounding validator's entry point, for a package this repository does not contain — running it raises `ModuleNotFoundError`. Left in place because the name belongs to that work package; see `docs/roadmap.md` |
+
+A bare `scinumbers-enrol` is `command not found` until the virtualenv is on your
+path. Three ways, in increasing permanence:
+
+```bash
+.venv/bin/scinumbers-enrol --help        # no setup; works from the repository root
+
+source .venv/bin/activate                # this shell only, then bare names work
+scinumbers-enrol --help
+
+ln -sf "$PWD/.venv/bin/scinumbers-enrol" ~/.local/bin/   # permanent, one command
+```
+
+The symlink is the one to prefer for `scinumbers-enrol`, because enrolling a
+tester is something you do from wherever you happen to be rather than from this
+directory. `~/.local/bin` is on the default path on most systems; `echo $PATH`
+will say. **Do not put `.venv/bin` itself on your `PATH`** — it would shadow
+`python` and `pip` everywhere, for every project.
+
+Every example below uses the bare name. Prefix `.venv/bin/` if you have not done
+one of the above.
+
 ## Configuration
 
 | Variable | Default | What it does |
@@ -217,12 +251,28 @@ gates it. The operator's steps, in order:
 3. **The `accounts` table** in the same database as the trail, from
    `sql/accounts.sql`.
 4. **One command per tester.** `scinumbers-enrol` mints a capped runtime key at
-   OpenRouter and inserts the row in one step:
+   OpenRouter and inserts the row in one step (§"The commands, and where they live" says how to
+   get it on your path; `.venv/bin/scinumbers-enrol` always works):
 
    ```bash
    OPENROUTER_MANAGEMENT_KEY=... NEON_API_KEY=... NEON_PROJECT_ID=... \
      scinumbers-enrol maria@example.org scientist --limit-usd 5 --branch alpha
    ```
+
+   The three variables are read for that one invocation and nothing keeps them:
+   the management key is created at `openrouter.ai/settings/management-keys` and
+   cannot itself ask questions, and the Neon API key and project id are how the
+   branch's connection URL is fetched rather than written down. Every refusal
+   happens before anything is minted, so a rehearsal costs nothing:
+
+   ```bash
+   scinumbers-enrol maria@example.org scientist --limit-usd 5
+   # -> no branch named. The row has to land in the branch the deployed app reads...
+   ```
+
+   To rehearse against a real database without touching the deployment, enrol a
+   throwaway address into `dev` with a one-cent cap, then delete the row and
+   revoke the key.
 
    `--branch` names the database branch to enrol into and **has no default**: the
    row has to land where the deployed app reads, and a default would be wrong

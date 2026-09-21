@@ -19,6 +19,12 @@ any release; `1.0.0` when it stabilizes.
   address is the identity
   ([ADR-0880](docs/decisions/0880-a-second-provider-beside-the-first.md)).
 
+- **README says where the console scripts are and how to reach them.** `uv sync`
+  installs them into the project's virtualenv rather than onto `PATH`, so a bare
+  `scinumbers-enrol` is `command not found` until you say otherwise — the three
+  ways are listed, and the table notes that `bionumbers` is a declared entry
+  point for a package this repository does not yet contain.
+
 - **`scinumbers-enrol`, one command to enrol a tester.** It mints a capped
   OpenRouter key and inserts the accounts row in one step, naming the database
   branch every time and resolving it through Neon's API so no database URL is
