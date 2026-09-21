@@ -259,11 +259,12 @@ gates it. The operator's steps, in order:
      scinumbers-enrol maria@example.org scientist --limit-usd 5 --branch alpha
    ```
 
-   The three variables are read for that one invocation and nothing keeps them:
-   the management key is created at `openrouter.ai/settings/management-keys` and
-   cannot itself ask questions, and the Neon API key and project id are how the
-   branch's connection URL is fetched rather than written down. Every refusal
-   happens before anything is minted, so a rehearsal costs nothing:
+   The three variables are read for that one invocation and the command keeps
+   none of them: the management key is created at
+   `openrouter.ai/settings/management-keys` and cannot itself ask questions, and
+   the Neon API key and project id are how the branch's connection URL is fetched
+   rather than written down. Every refusal happens before anything is minted, so
+   a rehearsal costs nothing:
 
    ```bash
    scinumbers-enrol maria@example.org scientist --limit-usd 5
@@ -273,6 +274,55 @@ gates it. The operator's steps, in order:
    To rehearse against a real database without touching the deployment, enrol a
    throwaway address into `dev` with a one-cent cap, then delete the row and
    revoke the key.
+
+   **If either credential is refused, the command says which and what to do**,
+   rather than passing on `HTTP Error 401`. An expiring key is a reasonable thing
+   to have and an unreadable failure is not, so a 401 or 403 from OpenRouter
+   names the management key and where to make a new one, and one from Neon names
+   `NEON_API_KEY` and `NEON_PROJECT_ID`. Any other status is reported as itself:
+   a 502 read as an expired key would send you to replace a key that is fine.
+   While the management key is refused, **withdrawing** a tester's credential
+   stops working too — it is the same key — so do that from the OpenRouter
+   dashboard.
+
+#### Where to keep the operator's credentials
+
+Not on the command line, once you are doing this more than once: every
+invocation lands in your shell history, which is the one place a secret is
+easiest to forget about.
+
+Not exported from `~/.bashrc` either. The management key can mint unlimited
+runtime keys, and putting it in every shell's environment means every process
+you ever run — other projects, other tools, anything that dumps its environment
+on a crash — is holding it.
+
+**A file outside the repository, loaded when you want it.** Present in the one
+shell that asked for it, and nowhere else:
+
+```bash
+mkdir -p ~/.config/scinumbers && chmod 700 ~/.config/scinumbers
+cat > ~/.config/scinumbers/enrol.env <<'EOF'
+OPENROUTER_MANAGEMENT_KEY=...
+NEON_API_KEY=...
+NEON_PROJECT_ID=...
+EOF
+chmod 600 ~/.config/scinumbers/enrol.env
+
+# then, in the shell where you are enrolling someone:
+set -a; source ~/.config/scinumbers/enrol.env; set +a
+scinumbers-enrol maria@example.org scientist --limit-usd 5 --branch alpha
+```
+
+Outside the repository rather than gitignored inside it: three checkouts of this
+project share one origin, git history is permanent, and a `.gitignore` is one
+`git add -f` or one careless `git clean` away from not helping.
+
+**The command itself reads nothing but the environment**, deliberately, and that
+is not an oversight to fix by teaching it about this file. How the environment
+gets populated is yours to choose — a file, a password manager, `pass`, a
+one-off paste — and the command has one input either way. It is the same
+reasoning that keeps it from reading `.streamlit/secrets.toml`, whose single URL
+is the branch *this checkout* writes to.
 
    `--branch` names the database branch to enrol into and **has no default**: the
    row has to land where the deployed app reads, and a default would be wrong

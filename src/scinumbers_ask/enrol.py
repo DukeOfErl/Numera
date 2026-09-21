@@ -30,6 +30,7 @@ import argparse
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
@@ -46,6 +47,32 @@ TIMEOUT_S = 30
 #: on their own instead of the operator servicing an unlock, and a spent key
 #: already surfaces as its own ending (ADR-0600).
 LIMIT_RESET = "monthly"
+
+
+#: The statuses that mean "this credential is not acceptable", as
+#: `allowance.REJECTING_STATUSES` names the same thing for a runtime key. Every
+#: other status is a provider problem rather than a credential one and is
+#: reported as itself -- a 429 or a 502 read as an expired key would send the
+#: operator to mint a replacement for a key that is fine.
+REFUSING_STATUSES = (401, 403)
+
+MANAGEMENT_KEY_REFUSED = (
+    "OpenRouter refused the management key, so nothing was enrolled. If you created it "
+    "with an expiry it has most likely reached it: make a new one at "
+    "openrouter.ai/settings/management-keys and set OPENROUTER_MANAGEMENT_KEY to it. "
+    "Note that while it is refused, withdrawing a tester's credential does not work "
+    "either -- do that from the OpenRouter dashboard."
+)
+
+
+class CredentialRefused(RuntimeError):
+    """The *operator's* management key was refused, not anything about the tester.
+
+    Its own class and its own sentence because the two are indistinguishable from
+    a bare `HTTP Error 401` -- and the operator's next move differs completely.
+    An expiring key is a failure mode chosen deliberately, so it gets the message
+    an expiring key needs rather than the one urllib supplies.
+    """
 
 
 class Uncapped(ValueError):
@@ -86,8 +113,15 @@ def _post(url: str, management_key: str, body: dict | None, opener, method: str 
         },
         method=method,
     )
-    with opener(request, timeout=TIMEOUT_S) as response:
-        raw = response.read().decode("utf-8")
+    try:
+        with opener(request, timeout=TIMEOUT_S) as response:
+            raw = response.read().decode("utf-8")
+    except urllib.error.HTTPError as refused:
+        # In `_post` rather than in each caller: mint, patch and revoke all pass
+        # through here, and the compensating revoke is the one nobody watches.
+        if refused.code in REFUSING_STATUSES:
+            raise CredentialRefused(MANAGEMENT_KEY_REFUSED) from refused
+        raise
     return json.loads(raw) if raw.strip() else {}
 
 

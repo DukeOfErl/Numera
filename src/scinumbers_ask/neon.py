@@ -23,6 +23,7 @@ and `pooled`.
 from __future__ import annotations
 
 import json
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -36,6 +37,26 @@ TIMEOUT_S = 30
 #: constants inside it, because a project can rename either.
 DEFAULT_DATABASE = "neondb"
 DEFAULT_ROLE = "neondb_owner"
+
+
+#: As `enrol.REFUSING_STATUSES`, and for the same reason.
+REFUSING_STATUSES = (401, 403)
+
+API_KEY_REFUSED = (
+    "Neon refused the API key, so nothing was enrolled and no branch was read. If you "
+    "created it with an expiry it has most likely reached it: make a new one under "
+    "Account settings, API keys, and set NEON_API_KEY to it. Check NEON_PROJECT_ID too "
+    "-- a key that cannot see the project is refused the same way."
+)
+
+
+class ApiKeyRefused(RuntimeError):
+    """The operator's Neon API key was refused. Not a wrong branch name.
+
+    Distinct from `BranchNotFound` on purpose: that one lists the branches it
+    found, which is the wrong help entirely when the answer is that none could be
+    read.
+    """
 
 
 class BranchNotFound(RuntimeError):
@@ -52,8 +73,13 @@ def _get(path: str, api_key: str, params: dict[str, str], opener) -> dict:
     request = urllib.request.Request(
         url, headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
     )
-    with opener(request, timeout=TIMEOUT_S) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with opener(request, timeout=TIMEOUT_S) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as refused:
+        if refused.code in REFUSING_STATUSES:
+            raise ApiKeyRefused(API_KEY_REFUSED) from refused
+        raise
 
 
 def branch_id(api_key: str, project: str, name: str, *, opener=urllib.request.urlopen) -> str:

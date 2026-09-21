@@ -19,6 +19,15 @@ any release; `1.0.0` when it stabilizes.
   address is the identity
   ([ADR-0880](docs/decisions/0880-a-second-provider-beside-the-first.md)).
 
+- **A refused operator credential says which one and what to do.** A 401 or 403
+  from OpenRouter names the management key and where to make a new one, and adds
+  the consequence nobody guesses: the same key withdraws a tester's credential,
+  so that stops working too while it is refused. One from Neon names
+  `NEON_API_KEY` and `NEON_PROJECT_ID` rather than blaming the branch name. Any
+  other status is still reported as itself, because a 502 read as an expired key
+  sends the operator to replace a key that is fine. The README also says where
+  to keep those three values, and why not on the command line or in `~/.bashrc`.
+
 - **README says where the console scripts are and how to reach them.** `uv sync`
   installs them into the project's virtualenv rather than onto `PATH`, so a bare
   `scinumbers-enrol` is `command not found` until you say otherwise — the three

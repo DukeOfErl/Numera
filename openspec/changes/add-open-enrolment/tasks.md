@@ -320,6 +320,34 @@ repository, and the implementer's job is to leave the instructions right.
       was seeded after the review. Neither is unexamined, but neither has had
       this instrument.
 
+## 3c. The operator's own credentials (added; from a question, not the plan)
+
+- [x] 3c.1 A refused management key or Neon API key says which credential and
+      what to do, in `_post` and `_get` so mint, patch, revoke and both branch
+      calls are covered by one guard. Any status other than 401/403 is reported
+      as itself.
+
+      *Asked because the operator put an expiry on the management key and wanted
+      to know whether a reader would ever meet it. **They cannot** — the
+      management key is read by `enrol.py` alone, readers are handed their own
+      runtime key, and `mint` sets no expiry on those. But the operator met a
+      bare `HTTP Error 401: No auth credentials found`, naming nothing.*
+
+      *Four seeds against a green baseline of 50, each direction: widening
+      `REFUSING_STATUSES` to include 429/500/502/503 killed all four
+      status-code negatives; removing the translation killed the message tests
+      in both modules. **The negatives vary the status code**, which is the
+      dimension the rule reads — the same shape as `_is_out_of_credit` in
+      `.claude/rules/testing.md`, where negatives carrying no status at all let
+      a fatal mutant through.*
+
+      *Also documented: where to keep the three values. Not the command line
+      (shell history), not `~/.bashrc` (a key that mints unlimited keys, in
+      every process), but a mode-600 file outside the repository loaded on
+      demand. **The command still reads nothing but the environment**, and that
+      is deliberate rather than an omission to fix later — the same reasoning
+      that keeps it away from `.streamlit/secrets.toml`.*
+
 ## 4. Landing
 
 - [x] 4.1 Full suite once, at the end (`.venv/bin/python -m pytest`); ruff.

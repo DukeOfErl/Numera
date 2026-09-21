@@ -391,6 +391,84 @@ def test_a_credential_that_cannot_be_withdrawn_is_named(monkeypatch):
     assert KEY not in str(left.value), "the hash names the key; the key itself is not printed"
 
 
+# --- the operator's own credentials ------------------------------------------------
+
+
+def _http(code: int):
+    return urllib.error.HTTPError("https://x", code, "refused", {}, None)
+
+
+def test_a_refused_management_key_says_so_and_says_what_to_do():
+    """An expiring management key is a failure mode chosen deliberately, so it
+    gets a sentence rather than `HTTP Error 401`. The distinction matters because
+    the operator's next move -- mint a new management key -- is nothing like
+    their next move for any other failure here."""
+    opener = _Opener(fail={"POST": _http(401)})
+    with pytest.raises(enrol_mod.CredentialRefused) as refused:
+        mint("expired", name="new@example.org", limit_usd=5, opener=opener)
+    said = str(refused.value)
+    assert "management key" in said
+    assert "openrouter.ai/settings/management-keys" in said
+    assert "nothing was enrolled" in said
+    # The one consequence an operator will not guess: the same key withdraws
+    # credentials, so that stops working too while it is refused.
+    assert "withdrawing" in said and "dashboard" in said
+
+
+@pytest.mark.parametrize("code", [429, 500, 502, 503])
+def test_a_provider_problem_is_not_reported_as_an_expired_key(code):
+    """The negative case varies **the status code**, which is what the rule
+    reads -- not merely the outcome. A 502 reported as an expired key sends the
+    operator to mint a replacement for a key that is fine, and the same shape of
+    mistake has been made in this repository before (see `.claude/rules/
+    testing.md` on `_is_out_of_credit`)."""
+    opener = _Opener(fail={"POST": _http(code)})
+    with pytest.raises(urllib.error.HTTPError):
+        mint("fine", name="new@example.org", limit_usd=5, opener=opener)
+
+
+def test_a_refused_key_is_reported_from_the_revoke_too():
+    """The compensating revoke is the call nobody watches, and it uses the same
+    credential. The guard is in `_post`, which all three calls pass through, so
+    this holds without a second rule."""
+    opener = _Opener(fail={"DELETE": _http(401)})
+    with pytest.raises(enrol_mod.CredentialRefused):
+        revoke("expired", HASH, opener=opener)
+
+
+def test_a_refused_neon_key_says_so_and_does_not_blame_the_branch():
+    """`BranchNotFound` lists the branches it found, which is the wrong help
+    entirely when the answer is that none could be read."""
+    opener = _Opener(fail={"branches": _http(401)})
+    with pytest.raises(neon.ApiKeyRefused) as refused:
+        neon.branch_id("expired", "proj", "alpha", opener=opener)
+    said = str(refused.value)
+    assert "NEON_API_KEY" in said and "NEON_PROJECT_ID" in said
+    assert "alpha" not in said, "a refused key is not a wrong branch name"
+
+
+@pytest.mark.parametrize("code", [429, 500, 503])
+def test_a_neon_outage_is_not_reported_as_an_expired_key(code):
+    opener = _Opener(fail={"branches": _http(code)})
+    with pytest.raises(urllib.error.HTTPError):
+        neon.branch_id("fine", "proj", "alpha", opener=opener)
+
+
+def test_the_command_reports_a_refused_credential_as_one_sentence(monkeypatch, capsys):
+    """Through `main`, because that is where the operator meets it."""
+    _env(monkeypatch)
+
+    def refusing(*a, **k):
+        raise neon.ApiKeyRefused(neon.API_KEY_REFUSED)
+
+    monkeypatch.setattr(neon, "branch_id", refusing)
+    argv = ["new@example.org", "scientist", "--limit-usd", "5", "--branch", "alpha"]
+    assert main(argv) == 1
+    out = capsys.readouterr()
+    assert "NEON_API_KEY" in out.err
+    assert out.out == "", "a refusal printed on the success channel"
+
+
 # --- resolving the branch ----------------------------------------------------------
 
 
