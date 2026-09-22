@@ -252,5 +252,17 @@ branch, run `bionumbers discover` and `bionumbers extract` for one question, the
 - ~~**Whether the review page shows the whole table a cell comes from.**~~ Decided 2026-09-22
   (ADR-0940): the whole table, with caption and footnotes, beneath the two texts, both texts' cells
   marked alike; and no emphasis on the value in a text. The `review-task` spec says so.
+- **Three things the first live items showed (Yoav, 2026-09-22), to revisit after more questions
+  have run — observations, not yet strategies.** (a) *Discovery precision*: 2 of 12 papers for
+  "doubling time / E. coli" answered the question; the rest mentioned the organism in passing. The
+  query is a full-text fielded search over RESULTS and TABLE, so title-only is not the cause;
+  ranking and the organism's name (bacterial vs *E. coli*, planarian vs *S. mediterranea*) are
+  suspects. (b) *A generic question vs a paper's own setup*: the same paper yields 3.0 h (control)
+  and 2.5 h (after drug treatment) as separate items for one unqualified question. A question that
+  names no treatment should get the paper's baseline, with commonly varied conditions (growth
+  phase, temperature) admissible and a treatment particular to the work not. (c) *The CITED
+  distractor is too confusing when it is the same property for the same organism from another
+  source* (PMC13447829): a reviewer may reasonably take it as legitimate. That type should be
+  restricted to a different property, organism or condition, or dropped.
 - **Whether `review_decision` should hold a per-item time-to-decide.** Cheap to add, useful for the
   rebuild's attention analysis, not required by any scenario. Add if it costs one column.
