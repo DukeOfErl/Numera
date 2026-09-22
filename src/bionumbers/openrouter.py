@@ -40,6 +40,8 @@ from typing import Any
 
 import httpx
 
+from bionumbers.extraction import ProviderRefused
+
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 #: The validator's own key, distinct from the ask app's `OPENROUTER_API_KEY` by decision
 #: (2026-09-22): the prototype's spend is to be readable on its own key. There is no fallback to
@@ -58,6 +60,19 @@ APP_HEADERS = {
     "HTTP-Referer": "https://github.com/DukeOfErl/BioNumbers",
     "X-Title": "SciNumbers validator prototype",
 }
+
+
+#: Statuses that are about the account rather than the request: the next paper meets the same
+#: answer, so the run stops instead of ending every paper FAILED (seen 2026-09-22 with a 402
+#: when the OpenRouter balance ran out under a key whose own limit was not reached).
+_ACCOUNT_REFUSALS = frozenset({401, 402, 403, 429})
+
+
+def _error_of(response: httpx.Response) -> str:
+    try:
+        return str(response.json()["error"]["message"])
+    except (ValueError, KeyError, TypeError):
+        return response.text[:200]
 
 
 class NoCredential(Exception):
@@ -200,6 +215,10 @@ class OpenRouterModel:
             "usage": {"include": True},
         }
         response = self._client.post(self._url, headers=self._headers, json=body)
+        if response.status_code in _ACCOUNT_REFUSALS:
+            raise ProviderRefused(
+                f"HTTP {response.status_code} from OpenRouter: {_error_of(response)}"
+            )
         response.raise_for_status()
         raw = response.json()
         usage = _usage_of(raw.get("usage") or {})

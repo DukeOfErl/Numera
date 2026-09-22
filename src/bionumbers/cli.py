@@ -40,6 +40,7 @@ from bionumbers.europepmc import (
 )
 from bionumbers.extraction import (
     RESULTS_FILE,
+    ProviderRefused,
     RunFileWouldBeCommitted,
     extract,
     instruction_sha256,
@@ -331,6 +332,8 @@ def _one_paper(
             chosen = choose_second_text(
                 model, doc, claim, paper, question=question, ledger=ledger, model_id=model_id
             )
+        except ProviderRefused:
+            raise
         except Exception as failure:
             # `extract` takes the same decision for the same reason: a run is tens of papers, and
             # one timeout on a second-text call must cost one claim its item, not the run its
@@ -375,20 +378,42 @@ def extract_run(args: argparse.Namespace) -> int:
     not_reviewable: list[NotReviewable] = []
     unlicensed = 0
     papers_left_unread = 0
+    stopped = ""
     for index, paper in enumerate(papers):
         if ledger.run_exhausted:
             papers_left_unread = len(papers) - index
             break
-        result, paper_items, paper_not_reviewable = _one_paper(
-            paper,
-            provider=provider,
-            model=model,
-            model_id=args.model,
-            question=request["question"],
-            organism=request["organism"],
-            run_id=args.run_id,
-            ledger=ledger,
-        )
+        try:
+            result, paper_items, paper_not_reviewable = _one_paper(
+                paper,
+                provider=provider,
+                model=model,
+                model_id=args.model,
+                question=request["question"],
+                organism=request["organism"],
+                run_id=args.run_id,
+                ledger=ledger,
+            )
+        except ProviderRefused as refused:
+            # The account, not the paper: this paper ends FAILED with the provider's words, the
+            # rest are left unread rather than failed one by one, and the command says so.
+            stopped = str(refused)
+            results.append(
+                PaperResult(
+                    paper=paper,
+                    state=PaperState.FAILED,
+                    reason=stopped,
+                    spend=ledger.paper(paper.pmcid),
+                    fingerprint=Fingerprint(
+                        model=args.model,
+                        instruction_sha256=instruction_sha256(),
+                        article_id=paper.pmcid,
+                        run_id=args.run_id,
+                    ),
+                )
+            )
+            papers_left_unread = len(papers) - index - 1
+            break
         results.append(result)
         items.extend(paper_items)
         not_reviewable.extend(paper_not_reviewable)
@@ -409,9 +434,13 @@ def extract_run(args: argparse.Namespace) -> int:
         "items": len(items),
         "not_reviewable": len(not_reviewable),
         "unlicensed": unlicensed,
+        "stopped": stopped,
     }
     _write_json(run_dir / SUMMARY_FILE, summary)
     print(json.dumps(summary, indent=2))
+    if stopped:
+        print(f"Stopped: {stopped}. Re-run extract once the account is in order.", file=sys.stderr)
+        return 3
     return 0
 
 

@@ -12,6 +12,7 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
+from bionumbers.extraction import ProviderRefused
 from bionumbers.openrouter import (
     API_KEY_ENV,
     CHARS_PER_TOKEN,
@@ -92,6 +93,28 @@ class TestRequest:
         assert fmt["json_schema"]["strict"] is True
         assert fmt["json_schema"]["name"] == "Answer"
         assert seen[0]["body"]["provider"] == {"require_parameters": True}
+
+    @pytest.mark.parametrize("status", [401, 402, 403, 429])
+    def test_a_refusal_of_the_account_is_named_so_the_run_can_stop(self, status):
+        """A 402 on 2026-09-22 (the OpenRouter balance ran out) ended ten papers FAILED at $0 one
+        after another. These statuses are about the account, and the next paper meets the same."""
+        seen, client = _server(
+            {"error": {"message": "Insufficient credits", "code": status}}, status=status
+        )
+
+        with pytest.raises(ProviderRefused, match=f"{status}.*Insufficient credits"):
+            OpenRouterModel("k", client=client).parse(
+                system=SYSTEM, messages=MESSAGES, output_format=Answer, max_tokens=9
+            )
+
+    def test_a_server_error_is_still_the_paper_s_failure(self):
+        """The negative, varying the status: a 500 is one paper's bad luck, not the account's."""
+        seen, client = _server({"error": {"message": "overloaded"}}, status=500)
+
+        with pytest.raises(httpx.HTTPStatusError):
+            OpenRouterModel("k", client=client).parse(
+                system=SYSTEM, messages=MESSAGES, output_format=Answer, max_tokens=9
+            )
 
     def test_the_cost_is_asked_for_so_the_usage_block_carries_it(self):
         seen, client = _server(_reply(json.dumps({"state": "ok"})))
@@ -199,7 +222,7 @@ class TestResponse:
             )
 
     def test_an_http_error_raises_rather_than_returning(self):
-        _, client = _server({"error": {"message": "over quota"}}, status=402)
+        _, client = _server({"error": {"message": "bad gateway"}}, status=502)
         with pytest.raises(httpx.HTTPStatusError):
             OpenRouterModel("k", client=client).parse(
                 system=SYSTEM, messages=MESSAGES, output_format=Answer, max_tokens=9

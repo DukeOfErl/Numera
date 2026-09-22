@@ -21,7 +21,13 @@ from bionumbers import cli, store
 from bionumbers.cache import DocumentCache
 from bionumbers.distractor import Candidate, SecondTextOutput
 from bionumbers.europepmc import VERSION_OF_RECORD, EuropePMC
-from bionumbers.extraction import ClaimDraft, ExtractionOutput, QuoteDraft, read_results
+from bionumbers.extraction import (
+    ClaimDraft,
+    ExtractionOutput,
+    ProviderRefused,
+    QuoteDraft,
+    read_results,
+)
 from bionumbers.jats import read_jats
 from bionumbers.openrouter import API_KEY_ENV
 from bionumbers.records import (
@@ -278,6 +284,38 @@ def test_extract_without_a_key_says_which_variable_and_touches_nothing(
     assert API_KEY_ENV in capsys.readouterr().err
     assert provider.requests == []
     assert not (dirs.runs / RUN / "results.jsonl").exists()
+
+
+def test_a_refusal_of_the_account_stops_the_run_and_leaves_the_rest_unread(
+    monkeypatch, provider, dirs, capsys
+):
+    """The 402 of 2026-09-22: the first paper is read, the second meets the refusal and ends
+    FAILED with the provider's words, the third is left unread rather than failed too, and the
+    command's exit code says the run did not finish."""
+
+    class RefusingOnTheSecond(ScriptedModel):
+        def parse(self, **kwargs):
+            if len(self.calls) == 1:
+                self.calls.append({"refused": True})
+                raise ProviderRefused("HTTP 402 from OpenRouter: Insufficient credits")
+            return super().parse(**kwargs)
+
+    model = RefusingOnTheSecond(ExtractionOutput(state="NOTHING_TO_EXTRACT", reason="unused"))
+    monkeypatch.setattr(cli, "_model", lambda model_id: model)
+    trio = [LICENSED.model_copy(update={"pmcid": f"PMC{n}"}) for n in (1, 2, 3)]
+    seed_run(dirs, trio, cached={p.pmcid: ARTICLE_XML for p in trio})
+
+    code = cli.main(["extract", RUN, *common(dirs)])
+
+    assert code == 3
+    assert "402" in capsys.readouterr().err
+    results = read_results(dirs.runs / RUN / "results.jsonl")
+    assert [r.state for r in results] == [PaperState.NOTHING_TO_EXTRACT, PaperState.FAILED]
+    assert "Insufficient credits" in results[1].reason
+    summary = json.loads((dirs.runs / RUN / cli.SUMMARY_FILE).read_text())
+    assert summary["papers_left_unread"] == 1
+    assert "402" in summary["stopped"]
+    assert len(model.calls) == 2, "no call was made for the third paper"
 
 
 def test_extract_with_an_unpriced_model_refuses_before_any_paper(

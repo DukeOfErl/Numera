@@ -190,6 +190,15 @@ class ExtractionOutput(Frozen):
     rejected: list[RejectedDraft] = []
 
 
+class ProviderRefused(Exception):
+    """The provider refused the *account*, not the paper: no credit, a bad key, a rate limit.
+
+    Raised by an adapter in place of a generic HTTP error so the run can stop. Left to the
+    per-paper `FAILED` handling, a 402 marked ten papers FAILED at $0 in a row on 2026-09-22 and
+    the run looked complete; every one of them had to be extracted again.
+    """
+
+
 class Model(Protocol):
     """The provider, narrowed to the two calls this module makes.
 
@@ -738,6 +747,10 @@ def extract(
         # no second texts and nothing in the record saying they are half, would enter the
         # review looking like the paper. The spec's "rather than half-kept".
         return ending(PaperState.CEILING_REACHED, reason=str(reached))
+    except ProviderRefused:
+        # Not this paper's failure: the next paper would meet the same answer. The caller
+        # stops the run and says so.
+        raise
     except Exception as failure:
         # Broad by decision. A run is tens of papers, and any one may meet a timeout, a
         # response the SDK could not parse, or an overloaded service; each is one FAILED
