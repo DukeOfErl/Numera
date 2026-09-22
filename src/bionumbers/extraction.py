@@ -588,7 +588,10 @@ def _assemble(
     unverifiable: list[str] = []
 
     for index, draft in enumerate(output.claims):
-        claim_id = f"{paper.pmcid}-{index + 1}"
+        # The run first: a claim id, and the item id built on it, are the store's keys, and a
+        # second question asked of the same paper must not collide with the first
+        # (code review of 2026-09-21, finding 4).
+        claim_id = f"{fingerprint.run_id}-{paper.pmcid}-{index + 1}"
         if index in checked.failed_claims:
             unverifiable.append(claim_id)
             continue

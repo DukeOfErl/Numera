@@ -334,7 +334,7 @@ def test_a_quote_that_fails_twice_drops_its_claim_and_leaves_the_others(article)
     result = run(model, article)
 
     assert [claim.value for claim in result.claims] == ["65"]
-    assert result.unverifiable == ("PMC2288635-2",)
+    assert result.unverifiable == (f"{RUN_ID}-PMC2288635-2",)
     assert result.state is PaperState.CLAIMS_FOUND
 
 
@@ -362,7 +362,7 @@ def test_a_claim_whose_value_verifies_is_still_dropped_when_another_of_its_quote
     result = run(model, article)
 
     assert result.claims == ()
-    assert result.unverifiable == ("PMC2288635-1",)
+    assert result.unverifiable == (f"{RUN_ID}-PMC2288635-1",)
     correction = model.calls[1]["messages"][-1]["content"]
     assert "occurrence 1" in correction
     assert "condition medium" in correction
@@ -385,7 +385,7 @@ def test_a_derived_claim_s_input_quotes_are_verified_too(article):
 
     assert len(model.calls) == 2, "the invented input is named back once"
     assert result.claims == ()
-    assert result.unverifiable == ("PMC2288635-1",)
+    assert result.unverifiable == (f"{RUN_ID}-PMC2288635-1",)
 
 
 def test_a_derived_claim_with_real_inputs_keeps_them(article):
@@ -692,7 +692,7 @@ def test_a_paper_whose_every_claim_was_dropped_says_so_rather_than_saying_the_pa
     result = run(model, article)
 
     assert result.state is PaperState.NOTHING_TO_EXTRACT
-    assert result.unverifiable == ("PMC2288635-1",)
+    assert result.unverifiable == (f"{RUN_ID}-PMC2288635-1",)
     assert "dropped" in result.reason
 
 
@@ -784,7 +784,7 @@ def test_a_verbatim_quote_that_does_not_state_the_value_is_a_failure_too(article
     assert len(model.calls) == 2
     assert "does not state the value" in model.calls[1]["messages"][-1]["content"]
     assert result.claims == ()
-    assert result.unverifiable == ("PMC2288635-1",)
+    assert result.unverifiable == (f"{RUN_ID}-PMC2288635-1",)
 
 
 def test_a_value_present_only_in_a_cell_s_header_does_not_count_as_stated(tables):
@@ -867,7 +867,7 @@ def test_the_textbook_value_cannot_become_a_claim_because_the_article_never_stat
     for claim in result.claims:
         assert "40 min" not in claim.value
         assert "40 min" not in claim.quote.text
-    assert result.unverifiable == ("PMC2288635-2",)
+    assert result.unverifiable == (f"{RUN_ID}-PMC2288635-2",)
 
 
 # --- 5.6 What produced a claim --------------------------------------------------------------------

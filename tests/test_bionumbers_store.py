@@ -148,6 +148,42 @@ def test_a_second_load_still_inserts_an_item_that_is_new(engine):
     assert {row.item_id for row in rows(engine, store.review_item)} == {"i1", "i2"}
 
 
+def test_a_second_run_on_the_same_paper_loads_its_own_row_and_items(engine):
+    """A second question asked of a paper already loaded (the 2026-09-21 review's finding 4).
+    Keyed by article alone, its paper row was skipped as "already present" and its items were
+    refused for naming a paper with no row -- silently, in a run that looked loaded."""
+    store.load_run(
+        engine, [a_result()], [an_item("run-1-PMC1-1-item")], question=QUESTION, run_id="run-1"
+    )
+
+    inserted = store.load_run(
+        engine,
+        [a_result(state=PaperState.NOTHING_TO_EXTRACT)],
+        [an_item("run-2-PMC1-1-item", claim_id="run-2-PMC1-1")],
+        question="lag time of Escherichia coli",
+        run_id="run-2",
+    )
+
+    assert inserted == 1
+    papers = rows(engine, store.review_paper)
+    assert {(row.run_id, row.pmcid, row.state) for row in papers} == {
+        ("run-1", "PMC1", "CLAIMS_FOUND"),
+        ("run-2", "PMC1", "NOTHING_TO_EXTRACT"),
+    }
+    assert {row.run_id for row in rows(engine, store.review_item)} == {"run-1", "run-2"}
+
+
+def test_an_item_of_one_run_cannot_lean_on_another_run_s_paper_row(engine):
+    """The negative of the case above, varying the run: the paper row an item needs is its own
+    run's, so a run that loaded no papers is refused even where another run loaded that paper."""
+    store.load_run(engine, [a_result()], [], question=QUESTION, run_id="run-1")
+
+    with pytest.raises(ValueError, match="run-2"):
+        store.load_run(engine, [], [an_item("i1")], question=QUESTION, run_id="run-2")
+
+    assert rows(engine, store.review_item) == []
+
+
 def test_no_item_is_loaded_for_an_unlicensed_paper(engine):
     """Its text is never written past the disk cache, and an item carries the paper's own
     sentences. The refusal names the paper, because an operator has to find it."""
@@ -377,6 +413,8 @@ def sql_columns() -> dict[str, set[str]]:
             line = line.strip()
             if not line or line.startswith("--"):
                 continue
+            if line.startswith(("primary key", "foreign key", "unique", "constraint")):
+                continue  # a table constraint, on its own line by the file's convention
             columns.add(line.split()[0])
         declared[name] = columns
     return declared

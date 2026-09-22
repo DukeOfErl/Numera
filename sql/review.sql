@@ -20,18 +20,21 @@
 --
 -- Nothing in this file is destructive: every statement is `if not exists`, so it is safe to run
 -- against a database that already holds decisions. Additive changes go at the end as
--- `alter table ... add column if not exists`, the way `trail` gained `user_role`.
+-- `alter table ... add column if not exists`, the way `trail` gained `user_role`. Keep one column per
+-- line, and table constraints on lines of their own after the columns.
 
--- One row per article the run touched, whatever its ending — `NOTHING_TO_EXTRACT` and `UNREADABLE`
--- are findings about the literature and are kept, not dropped.
+-- One row per article per run, whatever its ending — `NOTHING_TO_EXTRACT` and `UNREADABLE` are
+-- findings about the literature and are kept, not dropped. Keyed by run *and* article: two
+-- questions asked of the same paper are two extractions with two states, and keyed by article
+-- alone the second was silently skipped on load.
 --
 -- `licence` is here so a reader can see on what terms the paper's text was allowed in at all. A
 -- paper whose licence is `UNLICENSED` may still have this row: it is bibliography and a state.
 -- `bionumbers.store.load_run` refuses to write any *item* for it, because an item carries the
 -- paper's own sentences and those are never written past the disk cache.
 create table if not exists review_paper (
-    pmcid            text primary key,
     run_id           text not null,
+    pmcid            text not null,
     question         text not null,
     pmid             text not null default '',
     doi              text not null default '',
@@ -43,7 +46,8 @@ create table if not exists review_paper (
     spend_usd        double precision not null default 0,
     spend_json       text not null default '{}',
     fingerprint_json text not null default '{}',
-    loaded_at        timestamptz not null default now()
+    loaded_at        timestamptz not null default now(),
+    primary key (run_id, pmcid)
 );
 
 -- One row per screen. `item_json` is the whole `ReviewItem` and is what the page renders from; the
@@ -58,7 +62,7 @@ create table if not exists review_item (
     item_id         text primary key,
     run_id          text not null,
     question        text not null,
-    pmcid           text not null references review_paper (pmcid),
+    pmcid           text not null,
     claim_id        text not null,
     value           text not null,
     unit            text not null default '',
@@ -66,7 +70,8 @@ create table if not exists review_item (
     second_kind     text not null,
     distractor_type text,
     item_json       text not null,
-    created_at      timestamptz not null default now()
+    created_at      timestamptz not null default now(),
+    foreign key (run_id, pmcid) references review_paper (run_id, pmcid)
 );
 
 -- What one reviewer decided about one item. `reviewer` is the signed-in account's address, and
@@ -100,7 +105,7 @@ create index if not exists review_decision_item_reviewer on review_decision (ite
 --
 -- select p.state, count(distinct i.item_id) as items, count(d.id) as decisions
 -- from review_paper p
---   left join review_item i on i.pmcid = p.pmcid
+--   left join review_item i on i.run_id = p.run_id and i.pmcid = p.pmcid
 --   left join review_decision d on d.item_id = i.item_id
 -- group by p.state order by items desc;
 

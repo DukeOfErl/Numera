@@ -36,6 +36,7 @@ from sqlalchemy import (
     Engine,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     MetaData,
     Table,
@@ -69,15 +70,17 @@ STATEMENT_TIMEOUT_MS = 5000
 
 METADATA = MetaData()
 
-#: One row per article the run touched, whatever its ending -- `NOTHING_TO_EXTRACT` and
-#: `UNREADABLE` are findings and are kept. `licence` is carried so a reader of the table can see
-#: on what terms the paper's text was allowed here at all; `load_run` refuses to write any item
-#: for a paper whose licence is `UNLICENSED`.
+#: One row per article *per run*, whatever its ending -- `NOTHING_TO_EXTRACT` and `UNREADABLE`
+#: are findings and are kept. Keyed by the run as well as the article: two questions asked of
+#: the same paper are two extractions with two states, and keyed by article alone the second
+#: was silently skipped on load (code review of 2026-09-21, finding 4). `licence` is carried so
+#: a reader of the table can see on what terms the paper's text was allowed here at all;
+#: `load_run` refuses to write any item for a paper whose licence is `UNLICENSED`.
 review_paper = Table(
     "review_paper",
     METADATA,
+    Column("run_id", Text, primary_key=True),
     Column("pmcid", Text, primary_key=True),
-    Column("run_id", Text, nullable=False),
     Column("question", Text, nullable=False),
     Column("pmid", Text, nullable=False, default=""),
     Column("doi", Text, nullable=False, default=""),
@@ -102,7 +105,7 @@ review_item = Table(
     Column("item_id", Text, primary_key=True),
     Column("run_id", Text, nullable=False),
     Column("question", Text, nullable=False),
-    Column("pmcid", Text, ForeignKey("review_paper.pmcid"), nullable=False),
+    Column("pmcid", Text, nullable=False),
     Column("claim_id", Text, nullable=False),
     Column("value", Text, nullable=False),
     Column("unit", Text, nullable=False, default=""),
@@ -111,6 +114,7 @@ review_item = Table(
     Column("distractor_type", Text),
     Column("item_json", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    ForeignKeyConstraint(["run_id", "pmcid"], ["review_paper.run_id", "review_paper.pmcid"]),
 )
 
 #: What a reviewer decided, once per item per reviewer. `reviewer` is null where no identity is
@@ -216,7 +220,11 @@ def load_run(
 
     now = datetime.now(UTC)
     with engine.begin() as conn:
-        present_papers = set(conn.scalars(select(review_paper.c.pmcid)))
+        present_papers = set(
+            conn.execute(
+                select(review_paper.c.pmcid).where(review_paper.c.run_id == run_id)
+            ).scalars()
+        )
         new_papers = [
             _paper_row(result, question=question, run_id=run_id, now=now)
             for result in results
@@ -228,12 +236,13 @@ def load_run(
         # SQLite does not enforce foreign keys unless asked to, so an item pointing at no paper
         # would load there and be refused only in production. The guard is here so both backends
         # answer the same way, and it is checked after the papers so a run loading both at once
-        # passes.
+        # passes. Within this run: a paper another run loaded is not this run's paper.
         known = present_papers | {row["pmcid"] for row in new_papers}
         for item in items:
             if item.paper.pmcid not in known:
                 raise ValueError(
-                    f"item {item.item_id} names paper {item.paper.pmcid}, which has no row"
+                    f"item {item.item_id} names paper {item.paper.pmcid}, which has no row "
+                    f"in run {run_id}"
                 )
 
         present_items = set(conn.scalars(select(review_item.c.item_id)))
@@ -262,18 +271,19 @@ def next_item(engine: Any, reviewer: str | None) -> ReviewItem | None:
     through.
     """
     position = func.row_number().over(
-        partition_by=review_item.c.pmcid, order_by=review_item.c.item_id
+        partition_by=(review_item.c.run_id, review_item.c.pmcid), order_by=review_item.c.item_id
     )
     ordered = select(
         review_item.c.item_id,
         review_item.c.item_json,
+        review_item.c.run_id,
         review_item.c.pmcid,
         position.label("position"),
     ).subquery()
     statement = (
         select(ordered.c.item_json)
         .where(_undecided(ordered.c.item_id, reviewer))
-        .order_by(ordered.c.position, ordered.c.pmcid)
+        .order_by(ordered.c.position, ordered.c.pmcid, ordered.c.run_id)
         .limit(1)
     )
     with engine.begin() as conn:
