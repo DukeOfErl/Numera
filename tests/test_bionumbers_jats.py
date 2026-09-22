@@ -154,15 +154,39 @@ def test_a_cell_resolves_to_its_headers_plus_its_text(coxiella):
     # TABLE 1, first body row: CCV 1 has 4 SCVs, 19 LCVs, 2 intermediates, 25 cells, 8.2 µm³.
     cell = holding(coxiella, "8.2", kind="td")
     assert cell.text == "8.2"
-    assert cell.column_headers == ("Volume (µm3)",)
+    assert cell.column_headers == ("Volume (µm³)",)
     assert cell.row_headers == ("1",)
     assert cell.section_path[-1] == "TABLE 1"
     assert cell.section_path[0] == "RESULTS"
 
 
-def test_a_superscript_in_a_header_flattens_to_its_digit(coxiella):
+def test_a_superscript_in_a_header_stays_a_superscript(coxiella):
+    # `Volume (µm<sup>3</sup>)` in the fixture. Flattened to `m3)` it read as a different unit;
+    # the reader now keeps the exponent as the character the paper printed.
     cell = holding(coxiella, "8.2", kind="td")
-    assert cell.column_headers[0].endswith("m3)")
+    assert cell.column_headers[0].endswith("m" + chr(0x00B3) + ")")
+
+
+def test_an_exponent_in_a_value_keeps_its_meaning():
+    """The 2026-09-21 review's finding 3, on a value rather than a header: `2.5 x 10<sup>8</sup>`
+    must not become `2.5 x 108`, which is a different number that a wrong quote could match."""
+    doc = _read(HAND_WRITTEN, "superscript_value.xml")
+    cell = holding(doc, "2.5", kind="td")
+    eight = chr(0x2078)
+    assert cell.text == f"2.5 × 10{eight}"
+    assert "108" not in doc.text()
+    paragraph = holding(doc, "Cultures reached", kind="p")
+    assert f"2.5 × 10{eight} cells mL{chr(0x207B)}{chr(0x00B9)}" in paragraph.text
+
+
+def test_a_superscript_that_is_not_a_number_is_marked_with_a_caret():
+    """A footnote letter has no superscript character; a caret says it was raised rather than
+    letting `elsewherea` read as a word."""
+    doc = _read(HAND_WRITTEN, "superscript_value.xml")
+    paragraph = holding(doc, "Cultures reached", kind="p")
+    assert paragraph.text.endswith("as compiled elsewhere^a.")
+    cell = holding(doc, "2.5", kind="td")
+    assert cell.column_headers[0].endswith(")^a")
 
 
 def test_the_row_label_cell_is_a_passage_with_no_row_header(coxiella):
@@ -289,7 +313,7 @@ def test_render_shows_a_cell_with_its_headers_first(coxiella):
     line = next(
         line for line in render_for_model(coxiella).split("\n") if line.startswith(f"[{cell.id}]")
     )
-    assert line.endswith(" :: row: 1 | column: Volume (µm3) | cell: 8.2")
+    assert line.endswith(" :: row: 1 | column: Volume (µm³) | cell: 8.2")
     assert " > TABLE 1 :: " in line
 
 
@@ -313,7 +337,7 @@ def test_location_carries_the_passage_fields(coxiella):
         section_path=cell.section_path,
         kind="td",
         row_headers=("1",),
-        column_headers=("Volume (µm3)",),
+        column_headers=("Volume (µm³)",),
     )
 
 

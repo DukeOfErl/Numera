@@ -192,6 +192,36 @@ def test_every_folded_character_folds_in_both_directions(typographic: str, plain
     assert isinstance(verify(f"a{typographic}b", plain_paper), Verified)
 
 
+class TestSuperscripts:
+    """An exponent is part of the number. Folded flat, `10` followed by a superscript `8` is `108`,
+    and a quote of the wrong number matches (the 2026-09-21 review's finding 3)."""
+
+    TEN_TO_THE_EIGHTH = "2.5 " + chr(0x00D7) + " 10" + chr(0x2078)
+    PER_ML = "mL" + chr(0x207B) + chr(0x00B9)
+
+    def test_a_superscript_run_folds_to_a_caret_and_the_plain_characters(self):
+        assert fold(self.TEN_TO_THE_EIGHTH) == "2.5 x 10^8"
+        assert fold(self.PER_ML) == "mL^-1"
+
+    def test_the_caret_form_is_its_own_fold(self):
+        assert fold("2.5 x 10^8") == "2.5 x 10^8"
+
+    def test_a_quote_in_either_form_is_verified(self):
+        paper = _Document((_Passage(id="p0", text=f"a density of {self.TEN_TO_THE_EIGHTH} cells"),))
+        assert isinstance(verify("a density of 2.5 x 10^8 cells", paper), Verified)
+        assert isinstance(verify(f"a density of {self.TEN_TO_THE_EIGHTH} cells", paper), Verified)
+
+    def test_the_flattened_number_is_refused(self):
+        """The canary: the defect made this quote pass."""
+        paper = _Document((_Passage(id="p0", text=f"a density of {self.TEN_TO_THE_EIGHTH} cells"),))
+        assert isinstance(verify("a density of 2.5 x 108 cells", paper), Failed)
+
+    def test_the_value_check_sees_the_exponent(self):
+        assert states_value(self.TEN_TO_THE_EIGHTH, "2.5 x 10^8")
+        assert not states_value(self.TEN_TO_THE_EIGHTH, "2.5 x 108")
+        assert not states_value(self.TEN_TO_THE_EIGHTH, "2.5 x 10^7")
+
+
 def test_a_character_outside_the_fold_table_is_not_folded():
     # The negative the parametrised case above cannot give: what separates a tolerated character
     # from an intolerable one is membership of FOLD, so the negative has to vary membership.

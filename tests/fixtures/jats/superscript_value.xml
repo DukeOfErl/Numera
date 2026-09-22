@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article article-type="research-article">
+  <front><article-meta>
+    <title-group><article-title>A value with an exponent</article-title></title-group>
+  </article-meta></front>
+  <body>
+    <sec><title>Results</title>
+      <p>Cultures reached a density of 2.5 × 10<sup>8</sup> cells mL<sup>−1</sup> before the shift, as compiled elsewhere<sup>a</sup>.</p>
+      <table-wrap id="T1"><label>Table 1</label>
+        <table>
+          <thead>
+            <tr><th>Medium</th><th>Density (cells mL<sup>−1</sup>)<sup>a</sup></th></tr>
+          </thead>
+          <tbody>
+            <tr><th>Glucose</th><td>2.5 × 10<sup>8</sup></td></tr>
+            <tr><th>Acetate</th><td>2.5 × 10<sup>7</sup></td></tr>
+          </tbody>
+        </table>
+      </table-wrap>
+    </sec>
+  </body>
+</article>

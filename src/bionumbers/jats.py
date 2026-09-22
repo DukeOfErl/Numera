@@ -30,6 +30,41 @@ from bionumbers.records import Location
 _XLINK_HREF = "{http://www.w3.org/1999/xlink}href"
 _WHITESPACE = re.compile(r"\s+")
 
+#: How a `<sup>` reaches the text. Flattened with no marker, `2.5 x 10<sup>8</sup>` read
+#: `2.5 x 108`: a correct quote failed the checker and a wrong one could pass it (code review
+#: of 2026-09-21, finding 3). Digits and signs become the Unicode superscript characters, so
+#: the page shows what the paper printed; anything else -- a footnote letter, a word -- is
+#: marked with a caret, `^a`, which is our notation but an honest one. `quotes.fold` reduces
+#: both forms to the caret form before comparing. A `<sub>` still flattens: `CO<sub>2</sub>`
+#: as `CO2` changes no number's magnitude, and it is what every model writes.
+#: Code points rather than the characters, so no editor's normalisation can touch the table.
+_SUPERSCRIPT = str.maketrans(
+    "0123456789+-=()ni",
+    "".join(
+        chr(code)
+        for code in (
+            0x2070,
+            0x00B9,
+            0x00B2,
+            0x00B3,
+            0x2074,
+            0x2075,
+            0x2076,
+            0x2077,
+            0x2078,
+            0x2079,
+            0x207A,
+            0x207B,
+            0x207C,
+            0x207D,
+            0x207E,
+            0x207F,
+            0x2071,
+        )
+    ),
+)
+_SUPERSCRIPTABLE = re.compile(r"\A[0-9+\-=()ni]+\Z")
+
 #: A section counts as methods when its title, casefolded, holds one of these. "materials" is a
 #: word on its own because two of the sample papers title the section "MATERIALS AND METHODS"
 #: and a third "Experimental Procedures" -- and no `sec-type` is reliable enough to use alone.
@@ -378,10 +413,10 @@ def _text(element: etree._Element | None, skip: frozenset[str] = frozenset()) ->
     """The element's text with inline markup flattened and whitespace collapsed.
 
     Not `itertext()`, because two things must happen on the way: a bibliographic `<xref>` is
-    replaced by its token, and an element in `skip` contributes nothing but its tail. Nothing is
-    folded here -- both micro signs, en-dashes and superscript digits pass through as written,
-    since folding is the comparison's business (`quotes.fold`) and a reviewer should see the
-    paper's own characters.
+    replaced by its token, a `<sup>` keeps its meaning (`_SUPERSCRIPT`), and an element in
+    `skip` contributes nothing but its tail. Nothing is folded here -- both micro signs and
+    en-dashes pass through as written, since folding is the comparison's business
+    (`quotes.fold`) and a reviewer should see the paper's own characters.
     """
     if element is None:
         return ""
@@ -396,10 +431,25 @@ def _pieces(element: etree._Element, skip: frozenset[str]):
             if child.tag == "xref" and child.get("ref-type") == "bibr":
                 inner = _WHITESPACE.sub(" ", "".join(child.itertext())).strip()
                 yield f"[ref {inner or child.get('rid', '')}]"
+            elif child.tag == "sup":
+                yield _superscript("".join(_pieces(child, skip)))
             elif child.tag not in skip:
                 yield from _pieces(child, skip)
         if child.tail:
             yield child.tail
+
+
+def _superscript(text: str) -> str:
+    """The text of a `<sup>` as it reaches the passage: see `_SUPERSCRIPT`."""
+    inner = _WHITESPACE.sub(" ", text).strip()
+    if not inner:
+        return ""
+    # A minus sign or a hyphen inside an exponent both mean minus; the superscript minus is
+    # the one character, and `quotes.fold` maps it to `^-`.
+    plain = inner.replace(chr(0x2212), "-")
+    if _SUPERSCRIPTABLE.match(plain):
+        return plain.translate(_SUPERSCRIPT)
+    return "^" + inner
 
 
 def _is_methods_title(title: str) -> bool:

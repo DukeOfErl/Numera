@@ -66,6 +66,39 @@ FOLD = {
 _CITATION_TOKEN = re.compile(r"\[ref [^\]]+\]")
 _WHITESPACE = re.compile(r"\s+")
 
+# A run of Unicode superscript characters -- the JATS reader's rendering of `<sup>`, and what
+# some papers write directly -- becomes a caret and the plain characters: ten to the eighth,
+# written with a superscript eight, folds to `10^8`.
+# Before NFKC, which would flatten the superscript to a plain `8` and make `10^8` and `108` the
+# same quote; that is
+# the defect of the 2026-09-21 review's finding 3, and the caret is what keeps an exponent an
+# exponent. A model that quotes `10^8` off the rendered text lands on the same form. Code points,
+# as in FOLD, for the same reason.
+_SUPERSCRIPT_CHARS = "".join(
+    chr(code)
+    for code in (
+        0x2070,
+        0x00B9,
+        0x00B2,
+        0x00B3,
+        0x2074,
+        0x2075,
+        0x2076,
+        0x2077,
+        0x2078,
+        0x2079,
+        0x207A,
+        0x207B,
+        0x207C,
+        0x207D,
+        0x207E,
+        0x207F,
+        0x2071,
+    )
+)
+_SUPERSCRIPT_PLAIN = str.maketrans(_SUPERSCRIPT_CHARS, "0123456789+-=()ni")
+_SUPERSCRIPT_RUN = re.compile(f"[{_SUPERSCRIPT_CHARS}]+")
+
 
 class PassageLike(Protocol):
     """One container of the paper: the unit a location names, and the unit a quote must fit in."""
@@ -106,10 +139,12 @@ class Failed:
 
 
 def fold(text: str) -> str:
-    """The comparison form both sides are reduced to. Order matters: NFKC first (it settles
-    superscripts, ligatures and the compatibility spaces), then the explicit table, then the
-    citation tokens, then whitespace -- folding a NO-BREAK SPACE to a space before the collapse is
-    what makes the collapse see it."""
+    """The comparison form both sides are reduced to. Order matters: superscripts to the caret
+    form first (NFKC would flatten them into the digits beside them), then NFKC (ligatures and
+    the compatibility spaces), then the explicit table, then the citation tokens, then
+    whitespace -- folding a NO-BREAK SPACE to a space before the collapse is what makes the
+    collapse see it."""
+    text = _SUPERSCRIPT_RUN.sub(lambda run: "^" + run.group(0).translate(_SUPERSCRIPT_PLAIN), text)
     text = unicodedata.normalize("NFKC", text)
     text = "".join(FOLD.get(character, character) for character in text)
     text = _CITATION_TOKEN.sub("", text)
