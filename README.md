@@ -309,7 +309,7 @@ Three commands and a page:
 
 ```bash
 uv sync --extra ask --extra validator          # the review page imports the ask app's sign-in door
-export ANTHROPIC_API_KEY=...                   # extraction calls Anthropic directly, at Opus 4.7 rates
+export BIONUMBERS_OPENROUTER_API_KEY=...       # its own OpenRouter key, so its spend is readable apart from the ask app's
 
 bionumbers discover "doubling time" --organism "Escherichia coli" --since 2015 --limit 20
 bionumbers extract <run-id> --ceiling 2 --budget 40

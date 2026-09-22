@@ -18,7 +18,9 @@ any release; `1.0.0` when it stabilizes.
   paper under a $2 ceiling, checks every quote mechanically against the paper, and chooses a second
   text for each claim; `bionumbers load` puts the items in Postgres; `review_app.py` shows a reviewer
   one claim at a time with two texts and records which fits and whether the value is approved,
-  failing closed on the write ([ADR-0900], [ADR-0910], [ADR-0920], [ADR-0930]).
+  failing closed on the write ([ADR-0900], [ADR-0910], [ADR-0920], [ADR-0930]). Extraction
+  reaches the model through OpenRouter on its own key, `BIONUMBERS_OPENROUTER_API_KEY`, so the
+  prototype's spend is readable apart from the ask app's.
 - **The Europe PMC client from the feasibility branch, ported and corrected**: an article without
   XML is now recognised from the response body rather than a 404 status, because the service
   answers 500 today; and the article check reads the root element rather than searching for

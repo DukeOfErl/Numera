@@ -107,6 +107,14 @@ class TestRequest:
         with pytest.raises(NoCredential):
             OpenRouterModel()
 
+    def test_the_ask_apps_key_is_not_a_fallback(self, monkeypatch):
+        # The validator's spend must land on its own key, so the ask app's variable alone is
+        # a missing credential, not a credential.
+        monkeypatch.delenv(API_KEY_ENV, raising=False)
+        monkeypatch.setenv("OPENROUTER_API_KEY", "the-ask-apps-key")
+        with pytest.raises(NoCredential):
+            OpenRouterModel()
+
     def test_the_key_is_read_from_the_environment(self, monkeypatch):
         monkeypatch.setenv(API_KEY_ENV, "from-env")
         seen, client = _server(_reply(json.dumps({"state": "ok"})))

@@ -41,7 +41,10 @@ from typing import Any
 import httpx
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-API_KEY_ENV = "OPENROUTER_API_KEY"
+#: The validator's own key, distinct from the ask app's `OPENROUTER_API_KEY` by decision
+#: (2026-09-22): the prototype's spend is to be readable on its own key. There is no fallback to
+#: the ask app's variable -- one would bill the wrong key silently, which is the thing to prevent.
+API_KEY_ENV = "BIONUMBERS_OPENROUTER_API_KEY"
 DEFAULT_MODEL = "anthropic/claude-opus-4.7"
 
 #: Characters per token assumed when projecting spend. Opus 4.7's tokenizer yields roughly 3.2 to
