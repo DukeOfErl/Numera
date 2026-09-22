@@ -588,6 +588,10 @@ COVERED.update(
         ),
         "One claim, one item, one screen": (
             "test_bionumbers_review.py::test_a_table_cell_is_located_by_its_row_and_column_headers",
+            "test_bionumbers_review.py::test_the_value_is_never_emphasised_in_a_text",
+            "test_bionumbers_review.py::test_the_whole_table_is_shown_with_its_label_caption_and_footnotes",
+            "test_bionumbers_review.py::test_both_texts_cells_are_marked_alike_with_their_labels",
+            "test_review_app.py::test_a_cell_s_table_is_drawn_whole_with_its_caption_and_its_cell_marked",
             "test_bionumbers_review.py::test_a_citation_marker_stays_visible",
             "test_bionumbers_review.py::test_every_condition_field_is_listed_even_where_the_paper_states_none",
             "test_bionumbers_review.py::test_the_supporting_text_is_not_always_the_first_one",

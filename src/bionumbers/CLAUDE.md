@@ -18,7 +18,7 @@ tool; if the extractor seems to need to search the paper, give it the whole pape
 | `extraction.py` | The instruction (no unit, no expected value), the one call, the verification pass, the states, the fingerprint, the JSONL writer behind the ingester's guard |
 | `distractor.py` | The second text: candidates of five types, mechanical exclusion of the value in every form, preference order, second-occurrence fallback (ADR-0920) |
 | `store.py` | `review_paper`, `review_item`, `review_decision` in SQLAlchemy Core; `record_decision` **fails closed** (ADR-0930). DDL in `sql/review.sql` |
-| `review.py` | Presentation: the two texts in an uninformative order, highlighting, the condition rows, the decision's completeness rule |
+| `review.py` | Presentation: the two texts in an uninformative order and as the paper wrote them, the whole table a cell sits in (ADR-0940), the condition rows, the decision's completeness rule |
 | `cli.py` | `bionumbers discover \| extract \| load \| status` |
 | `paths.py` | `data/europepmc/`, `data/runs/`; a test asks git that both stay ignored |
 

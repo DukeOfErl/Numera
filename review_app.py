@@ -29,8 +29,12 @@ NO_STORE = (
     "secrets and create the tables from sql/review.sql. There is nothing to review until then."
 )
 
-#: The widget keys, cleared together once a decision is saved so the next item starts blank. A
-#: choice carried over from the last item is a decision nobody made.
+#: The widget key prefixes. Each widget's key is the prefix and the item id, so a new item is a
+#: new set of widgets and starts blank -- a choice or a comment carried over from the last item
+#: is a decision nobody made. Popping the keys from `session_state` after a save, the first
+#: version of this, left the buttons clicked and the comment typed in the browser (seen by Yoav
+#: on 2026-09-22): the widget's own state outlived the key. A fresh key is the mechanism
+#: Streamlit documents for a fresh widget.
 CHOICE_KEY = "bionumbers.review.choice"
 VERDICT_KEY = "bionumbers.review.verdict"
 COMMENT_KEY = "bionumbers.review.comment"
@@ -99,24 +103,32 @@ st.table(
 )
 
 # Both texts, in the order `texts_in_order` gives and never sorted, filtered or labelled further
-# here: which is which is the question being asked.
+# here: which is which is the question being asked. Each text as the paper wrote it, nothing in
+# it emphasised (ADR-0940).
 for shown in review.texts_in_order(item):
     with st.container(border=True):
         st.markdown(f"**{shown.label}**")
         st.caption(web.as_text(shown.location_line))
-        st.markdown(review.highlight(shown.text, item.claim.value))
+        st.markdown(review.as_markdown(shown.text))
+
+# The table a cell came from, whole and with its caption, both cells marked alike. Our own HTML,
+# because `st.table` cannot draw a spanning header and the paper's layout is the point.
+for table in review.tables_html(item):
+    st.markdown(table, unsafe_allow_html=True)
 
 # `index=None`, so neither radio carries an answer the reviewer did not give. A default would be
 # recorded verbatim by anyone who clicked straight past it, and it would be the same default every
 # time -- a bias in the dataset with no trace of itself.
-choice = st.radio("Which text better fits the value?", ["A", "B"], index=None, key=CHOICE_KEY)
+choice = st.radio(
+    "Which text better fits the value?", ["A", "B"], index=None, key=f"{CHOICE_KEY}:{item.item_id}"
+)
 verdict = st.radio(
     "Did this value come from this paper under these conditions?",
     [review.APPROVE, review.DISAPPROVE],
     index=None,
-    key=VERDICT_KEY,
+    key=f"{VERDICT_KEY}:{item.item_id}",
 )
-comment = st.text_area("Comment (optional)", key=COMMENT_KEY)
+comment = st.text_area("Comment (optional)", key=f"{COMMENT_KEY}:{item.item_id}")
 
 if st.button("Save and next", type="primary"):
     try:
@@ -141,6 +153,7 @@ if st.button("Save and next", type="primary"):
             # cleared, so the next click retries this decision rather than starting another.
             st.error(web.as_text(review.NOT_SAVED))
         else:
-            for key in (CHOICE_KEY, VERDICT_KEY, COMMENT_KEY, STARTED_KEY):
-                st.session_state.pop(key, None)
+            # The next item brings its own widgets (see the key prefixes above); only the clock
+            # is ours to reset.
+            st.session_state.pop(STARTED_KEY, None)
             st.rerun()

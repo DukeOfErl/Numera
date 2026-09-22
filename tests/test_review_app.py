@@ -57,15 +57,15 @@ def _constant(name: str) -> str:
 
 CHOICE_KEY = _constant("CHOICE_KEY")
 VERDICT_KEY = _constant("VERDICT_KEY")
+COMMENT_KEY = _constant("COMMENT_KEY")
 NO_STORE = _constant("NO_STORE")
 
 QUESTION = "doubling time of Escherichia coli"
 RUN = "run-1"
 FP = Fingerprint(model="opus", instruction_sha256="abc123", article_id="PMC1", run_id=RUN)
 
-#: The two items' texts. Each is searched for on the page by a phrase with no digit in it, because
-#: the page bolds the value's numbers -- `39` is shown as `**39**` -- and a search for the whole
-#: sentence would miss the very text it is looking for.
+#: The two items' texts, and the phrase each is searched for on the page. A phrase rather than
+#: the sentence, so the search does not depend on how the renderer escapes the rest of it.
 FIRST_SUPPORTING = "in rich medium the doubling time was 39 min"
 FIRST_SECOND = "in minimal medium it was 21 min"
 SECOND_SUPPORTING = "cells divided every 47 min at thirty degrees"
@@ -115,8 +115,27 @@ def an_item(item_id: str, claim_id: str, value: str, supporting: str, second: st
     )
 
 
+#: The first item's supporting text is a cell of this table, so the page has a table to draw.
+TABLE_CAPTION = "Growth parameters by medium"
+TABLE = records.TableView(
+    label="Table 1",
+    caption=TABLE_CAPTION,
+    rows=(
+        (
+            records.TableCell(text="Medium", header=True),
+            records.TableCell(text="Doubling time (min)", header=True),
+        ),
+        (
+            records.TableCell(text="Rich", header=True),
+            records.TableCell(text=FIRST_SUPPORTING, passage_id="p1"),
+        ),
+    ),
+)
+
 ITEMS = (
-    an_item("i1", "c1", "39", FIRST_SUPPORTING, FIRST_SECOND),
+    an_item("i1", "c1", "39", FIRST_SUPPORTING, FIRST_SECOND).model_copy(
+        update={"tables": (TABLE,)}
+    ),
     an_item("i2", "c2", "47", SECOND_SUPPORTING, SECOND_SECOND),
 )
 
@@ -172,11 +191,22 @@ def _on_screen(at: AppTest, *texts: str) -> bool:
     return all(PHRASES[text] in page for text in texts)
 
 
-def _decide(at: AppTest, *, choice: str | None, verdict: str | None) -> AppTest:
+def _widget(widgets, prefix: str):
+    """The one widget whose key starts with the prefix: the keys carry the item id, so a test
+    that does not know which item is on screen finds the widget by its prefix."""
+    (found,) = [w for w in widgets if (w.key or "").startswith(prefix + ":")]
+    return found
+
+
+def _decide(
+    at: AppTest, *, choice: str | None, verdict: str | None, comment: str | None = None
+) -> AppTest:
     if choice is not None:
-        at.radio(key=CHOICE_KEY).set_value(choice)
+        _widget(at.radio, CHOICE_KEY).set_value(choice)
     if verdict is not None:
-        at.radio(key=VERDICT_KEY).set_value(verdict)
+        _widget(at.radio, VERDICT_KEY).set_value(verdict)
+    if comment is not None:
+        _widget(at.text_area, COMMENT_KEY).set_value(comment)
     return at.button[0].click().run()
 
 
@@ -212,14 +242,14 @@ def test_a_verdict_without_a_choice_is_refused_and_the_item_stays(page):
     assert any(review.CHOICE_REQUIRED in w.value for w in at.warning)
     assert _on_screen(at, *shown), "the same item, not the next"
     assert _remaining(at) == 2
-    assert at.radio(key=VERDICT_KEY).value == review.APPROVE, "the half given is kept"
+    assert _widget(at.radio, VERDICT_KEY).value == review.APPROVE, "the half given is kept"
 
 
 def test_a_choice_and_a_verdict_move_to_the_next_item(page):
     at = page.run()
     first = _the_first_item(at)
 
-    at = _decide(at, choice="A", verdict=review.APPROVE)
+    at = _decide(at, choice="A", verdict=review.APPROVE, comment="clear enough")
 
     assert not at.exception
     assert not at.warning and not at.error
@@ -234,7 +264,13 @@ def test_a_choice_and_a_verdict_move_to_the_next_item(page):
         )
     )
     assert _on_screen(at, *other)
+    # The next item starts blank: nothing chosen, nothing typed. Seen otherwise in the browser
+    # on 2026-09-22, when the widgets kept one key across items.
     assert all(radio.value is None for radio in at.radio), "the next item starts blank"
+    assert _widget(at.text_area, COMMENT_KEY).value == "", "the comment box is empty again"
+    assert {radio.key for radio in at.radio}.isdisjoint(
+        {f"{CHOICE_KEY}:i1", f"{VERDICT_KEY}:i1"} if first[0] == FIRST_SUPPORTING else set()
+    ), "the decided item's widgets are gone"
 
 
 def test_a_decision_the_store_refuses_is_reported_and_the_item_stays(page, monkeypatch):
@@ -264,6 +300,23 @@ def test_when_every_item_is_decided_the_page_says_so(page):
     assert not at.radio and not at.button, "nothing to decide, nothing to click"
     for text in (FIRST_SUPPORTING, FIRST_SECOND, SECOND_SUPPORTING, SECOND_SECOND):
         assert not _on_screen(at, text)
+
+
+def test_a_cell_s_table_is_drawn_whole_with_its_caption_and_its_cell_marked(page):
+    """The first item's supporting text is a table cell; the second item's texts are prose."""
+    at = page.run()
+    if _the_first_item(at)[0] != FIRST_SUPPORTING:
+        at = _decide(at, choice="A", verdict=review.APPROVE)
+    assert _on_screen(at, FIRST_SUPPORTING)
+
+    everything = _texts(at)
+    assert TABLE_CAPTION in everything
+    assert "Doubling time (min)" in everything
+    # The proto's text escapes the quote; the style rule (`.bn-badge{`) carries none.
+    assert everything.count('bn-badge\\"') == 1, "one of the two texts is in this table"
+
+    at = _decide(at, choice="A", verdict=review.APPROVE)
+    assert TABLE_CAPTION not in _texts(at), "the prose item brings no table"
 
 
 # --- the closed door, and no store --------------------------------------------------------------

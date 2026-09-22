@@ -49,6 +49,7 @@ from bionumbers.records import (
     Quote,
     ReviewItem,
     SecondTextKind,
+    TableView,
 )
 from bionumbers.spend import MODEL, CeilingReached, Ledger, cost, projected_cost
 
@@ -383,6 +384,7 @@ def _item(
     paper: Paper,
     question: str,
     *,
+    doc: Document,
     second: Quote,
     kind: SecondTextKind,
     distractor_type: DistractorType | None,
@@ -396,6 +398,22 @@ def _item(
         second=second,
         second_kind=kind,
         distractor_type=distractor_type,
+        tables=_tables_of(doc, claim.quote, second),
+    )
+
+
+def _tables_of(doc: Document, *texts: Quote) -> tuple[TableView, ...]:
+    """The tables the texts are cells of, each once, in document order (ADR-0940).
+
+    Carried on the item rather than looked up by the page, so the page needs no access to the
+    paper and what a reviewer was shown is in the record. Document order, not supporting-first:
+    an order derived from which text supports the value would tell the reviewer which that is.
+    """
+    wanted = {text.location.passage_id for text in texts if text.location.kind == "td"}
+    return tuple(
+        table
+        for table in getattr(doc, "tables", ())
+        if any(table.holds(passage_id) for passage_id in wanted)
     )
 
 
@@ -495,6 +513,7 @@ def choose_second_text(
             claim,
             paper,
             question,
+            doc=doc,
             second=Quote(text=cell_text(candidate.text), location=_location_of(doc, passage_id)),
             kind=SecondTextKind.DISTRACTOR,
             distractor_type=candidate.type,
@@ -506,6 +525,7 @@ def choose_second_text(
                 claim,
                 paper,
                 question,
+                doc=doc,
                 second=occurrence,
                 kind=SecondTextKind.SECOND_OCCURRENCE,
                 distractor_type=None,

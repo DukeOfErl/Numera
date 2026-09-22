@@ -25,7 +25,7 @@ from dataclasses import dataclass
 
 from lxml import etree
 
-from bionumbers.records import Location
+from bionumbers.records import Location, TableCell, TableView
 
 _XLINK_HREF = "{http://www.w3.org/1999/xlink}href"
 _WHITESPACE = re.compile(r"\s+")
@@ -119,9 +119,15 @@ class Document:
     passages: tuple[Passage, ...]
     has_methods_section: bool
     supplementary: tuple[str, ...]
+    tables: tuple[TableView, ...] = ()
+    """Every table whole, in document order, each cell naming the passage it became. The
+    cells are the passages; this is the layout around them, for the review page (ADR-0940)."""
 
     def passage(self, passage_id: str) -> Passage | None:
         return next((p for p in self.passages if p.id == passage_id), None)
+
+    def table_holding(self, passage_id: str) -> TableView | None:
+        return next((table for table in self.tables if table.holds(passage_id)), None)
 
     def text(self) -> str:
         """Every passage, one per line, for a search over the whole paper."""
@@ -174,6 +180,7 @@ def read_jats(xml: str) -> Document:
         passages=tuple(reader.passages),
         has_methods_section=any(_is_methods_title(title) for title in reader.section_titles),
         supplementary=_supplementary(root),
+        tables=tuple(reader.tables),
     )
 
 
@@ -204,6 +211,7 @@ class _Reader:
 
     def __init__(self) -> None:
         self.passages: list[Passage] = []
+        self.tables: list[TableView] = []
         self.section_titles: list[str] = []
         self._paragraphs = 0
         self._sections = 0
@@ -275,6 +283,10 @@ class _Reader:
         table_path = path + (label,) if label else path
         self._caption(wrap, f"t{table_index}cap", table_path)
 
+        # Which passage each cell element became, so the whole-table view below can name them.
+        # The elements are held here for the duration, which is what keeps lxml handing back
+        # the same proxy objects when the rows are walked a second time.
+        became: dict[etree._Element, str] = {}
         row_number = 0
         for table in wrap.iter("table"):
             for row in _Grid(table).body_rows():
@@ -286,12 +298,21 @@ class _Reader:
                     # read as "<label>, <column header>". The label cell itself is still a
                     # passage, headed by nothing, so a value that was put there can be quoted.
                     label_cell, *cells = cells
-                    self._cell(label_cell, table_index, row_number, (), table_path, row.columns)
+                    self._cell(
+                        label_cell, table_index, row_number, (), table_path, row.columns, became
+                    )
                     headers = (_text(label_cell[1]),)
                 for column, cell in cells:
                     self._cell(
-                        (column, cell), table_index, row_number, headers, table_path, row.columns
+                        (column, cell),
+                        table_index,
+                        row_number,
+                        headers,
+                        table_path,
+                        row.columns,
+                        became,
                     )
+        self.tables.append(_table_view(wrap, label, became))
 
     def _cell(
         self,
@@ -300,15 +321,18 @@ class _Reader:
         row_number: int,
         row_headers: tuple[str, ...],
         table_path: tuple[str, ...],
-        columns: tuple[tuple[str, ...], ...] = (),
+        columns: tuple[tuple[str, ...], ...],
+        became: dict[etree._Element, str],
     ) -> None:
         column, cell = placed
         text = _text(cell)
         if not text:
             return  # an empty cell has nothing to quote, and skipping it leaves the ids positional
+        passage_id = f"t{table_index}r{row_number}c{column + 1}"
+        became[cell] = passage_id
         self.passages.append(
             Passage(
-                id=f"t{table_index}r{row_number}c{column + 1}",
+                id=passage_id,
                 text=text,
                 kind="td",
                 section_path=table_path,
@@ -318,15 +342,44 @@ class _Reader:
         )
 
     def _caption(self, owner: etree._Element, passage_id: str, path: tuple[str, ...]) -> None:
-        caption = owner.find("caption")
-        if caption is None:
-            return
-        parts = [_text(child) for child in caption if isinstance(child.tag, str)]
-        text = " ".join(part for part in parts if part)
+        text = _caption_text(owner)
         if text:
             self.passages.append(
                 Passage(id=passage_id, text=text, kind="caption", section_path=path)
             )
+
+
+def _caption_text(owner: etree._Element) -> str:
+    caption = owner.find("caption")
+    if caption is None:
+        return ""
+    parts = [_text(child) for child in caption if isinstance(child.tag, str)]
+    return " ".join(part for part in parts if part)
+
+
+def _table_view(wrap: etree._Element, label: str, became: dict[etree._Element, str]) -> TableView:
+    """The table as printed: every `<tr>` with its cells and their spans, header rows first
+    because that is where the archive puts them, and the footnotes the markers point at."""
+    rows = []
+    for tr in wrap.iter("tr"):
+        cells = tuple(
+            TableCell(
+                text=_text(cell),
+                header=cell.tag == "th" or _in_head(tr),
+                colspan=_span(cell.get("colspan")),
+                rowspan=_span(cell.get("rowspan")),
+                passage_id=became.get(cell, ""),
+            )
+            for cell in tr
+            if cell.tag in ("td", "th")
+        )
+        rows.append(cells)
+    return TableView(
+        label=label,
+        caption=_caption_text(wrap),
+        foot=_text(wrap.find("table-wrap-foot")),
+        rows=tuple(rows),
+    )
 
 
 @dataclass(frozen=True, slots=True)

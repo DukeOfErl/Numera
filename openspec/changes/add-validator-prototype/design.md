@@ -249,9 +249,8 @@ branch, run `bionumbers discover` and `bionumbers extract` for one question, the
 - **Which property questions seed the first run.** Deferrable: it changes no code. The scientist
   report's six papers give three obvious ones (doubling time, cell volume, protein copy number, all
   *E. coli* or yeast) with known answers to sanity-check against.
-- **Whether the review page shows the whole table a cell comes from.** Asked for by Yoav on
-  2026-09-22 after seeing Table 3 of PMC13118904 (two header levels, a control column): yes in
-  principle, as a table beneath the two texts with its caption and the claimed cell highlighted.
-  Shape and cost in `review-findings.md`; it changes one sentence of the `review-task` spec.
+- ~~**Whether the review page shows the whole table a cell comes from.**~~ Decided 2026-09-22
+  (ADR-0940): the whole table, with caption and footnotes, beneath the two texts, both texts' cells
+  marked alike; and no emphasis on the value in a text. The `review-task` spec says so.
 - **Whether `review_decision` should hold a per-item time-to-decide.** Cheap to add, useful for the
   rebuild's attention analysis, not required by any scenario. Add if it costs one column.

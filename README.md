@@ -330,7 +330,9 @@ streamlit run review_app.py
   paper** and the call that would cross it is not made.
 - **The review page** shows one claim at a time: the question, the value as the paper states it,
   the citation, the conditions and method each quoted with where it came from (beside the value,
-  from Methods, by reference, supplementary only, not stated), and **two texts** from the paper. The
+  from Methods, by reference, supplementary only, not stated), and **two texts** from the paper,
+  each as the paper wrote it with nothing in it emphasised. When a text is a table cell, the whole
+  table is drawn beneath the two texts with its caption, both texts' cells marked alike. The
   reviewer must choose which text fits the value and, separately, approve or disapprove. The second
   text is a distractor or a second legitimate occurrence; which it was is stored and never shown.
   Decisions are written the moment they are given and the write fails closed: a reviewer whose

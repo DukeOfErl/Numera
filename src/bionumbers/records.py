@@ -117,6 +117,32 @@ class Quote(Frozen):
     location: Location
 
 
+class TableCell(Frozen):
+    """One cell of a table as the paper laid it out: its text, whether it is a header, the
+    columns and rows it spans, and the passage it became -- empty for a header cell, an empty
+    cell, or a cell that is the same passage as none."""
+
+    text: str
+    header: bool = False
+    colspan: int = 1
+    rowspan: int = 1
+    passage_id: str = ""
+
+
+class TableView(Frozen):
+    """A whole table as the paper printed it, for the review page to draw beneath the two texts
+    when one of them is a cell (ADR-0940). `rows` are the `<tr>` rows in order, header rows
+    first, each cell with its spans, so the page can lay the grid out as the paper did."""
+
+    label: str
+    caption: str = ""
+    foot: str = ""
+    rows: tuple[tuple[TableCell, ...], ...] = ()
+
+    def holds(self, passage_id: str) -> bool:
+        return any(cell.passage_id == passage_id for row in self.rows for cell in row)
+
+
 class ConditionField(Frozen):
     name: str
     """One of `CONDITION_FIELDS`."""
@@ -235,6 +261,9 @@ class ReviewItem(Frozen):
     second: Quote
     second_kind: SecondTextKind
     distractor_type: DistractorType | None = None
+    tables: tuple[TableView, ...] = ()
+    """The tables the two texts sit in, when either is a cell: shown whole beneath them, in
+    document order, with both texts' cells marked alike. Empty for two prose texts."""
 
 
 class NotReviewable(Frozen):

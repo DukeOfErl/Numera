@@ -17,10 +17,13 @@ identifiers); a condition block listing each condition and method field with its
 provenance state; and two texts from the paper, each with its section path and container, in an
 order that carries no information about which is which.
 
-Within each text the value under review SHALL be highlighted where it occurs, and bibliographic
-citation markers SHALL be kept as visible tokens rather than stripped. A table cell SHALL be shown
-as its row and column headers with the cell, not as the whole table. Each text SHALL be at most a
-few sentences.
+Each text SHALL be shown as the paper wrote it: the value under review SHALL NOT be highlighted or
+otherwise distinguished within a text, so that nothing on the screen points at the number the
+reviewer is asked to find, and bibliographic citation markers SHALL be kept as visible tokens rather
+than stripped. A table cell SHALL be shown as its row and column headers with the cell; the table it
+sits in SHALL also be shown once, whole and as the paper laid it out, beneath the two texts, with its
+label, caption and footnotes, and with the cells of both texts marked alike where they lie in it.
+Each text SHALL be at most a few sentences.
 
 #### Scenario: An item is shown
 - **WHEN** a reviewer opens the next item
@@ -30,9 +33,13 @@ few sentences.
 - **WHEN** one of the two texts contains a bibliographic citation marker in the paper
 - **THEN** the marker is visible in the text as shown
 
+#### Scenario: A text states the value
+- **WHEN** one of the two texts contains the value under review
+- **THEN** it is shown as the paper wrote it, with no emphasis on the value or on anything else
+
 #### Scenario: A table cell is the supporting text
 - **WHEN** the claim's quote is a table cell
-- **THEN** the text shows the cell with its row and column headers, and not the full table
+- **THEN** the text shows the cell with its row and column headers, and the whole table appears once beneath the two texts with its caption, that cell marked and the other text's cell marked the same way if it is in the same table
 
 ### Requirement: The reviewer always chooses between two texts, and separately gives a verdict
 
@@ -93,8 +100,9 @@ that reason.
 
 For every item, the record SHALL hold: the property question; the value, unit and kind; the paper's
 identifiers, title, year and licence; the supporting text with its location; the second text with
-its location, kind and type; every condition and method field with its quote and provenance state;
-and the fingerprint of what produced the claim (model, instruction fingerprint, article, run). For
+its location, kind and type; the tables the texts sit in, as shown; every condition and method field
+with its quote and provenance state; and the fingerprint of what produced the claim (model,
+instruction fingerprint, article, run). For
 every decision, the record SHALL hold: which text was chosen; whether it was the supporting text;
 the approval or disapproval; the comment; the reviewer's account where one is signed in, and the
 absence of one otherwise; and the time.

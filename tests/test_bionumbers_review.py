@@ -31,6 +31,8 @@ from bionumbers.records import (
     Quote,
     ReviewItem,
     SecondTextKind,
+    TableCell,
+    TableView,
 )
 
 QUESTION = "doubling time of Escherichia coli"
@@ -153,43 +155,124 @@ def test_each_text_carries_its_own_words_and_its_own_location():
     assert shown["63 min in minimal medium"] == "Discussion"
 
 
-# --- highlighting ---------------------------------------------------------------------------
+# --- the texts as the paper wrote them ------------------------------------------------------
 
 
-def test_the_value_is_bold_wherever_the_text_states_it():
-    assert review.highlight("a doubling time of 39 min was measured", "39") == (
-        "a doubling time of **39** min was measured"
+def test_the_value_is_never_emphasised_in_a_text():
+    """ADR-0940: a text is shown as the paper wrote it. Emphasis on the value would point the
+    reviewer at the number they are asked to find, and would make a text that states it look
+    different from one that merely mentions a number."""
+    item = an_item(
+        supporting=Quote(text="a doubling time of 39 ± 1 min", location=Location(passage_id="p1"))
     )
-
-
-def test_every_number_of_a_value_is_highlighted():
-    """`39 ± 1` is one value and the reviewer is judging all of it; bolding the first number alone
-    would point at half of what they are being asked about."""
-    assert review.highlight("39 ± 1 min", "39 ± 1") == "**39** ± **1** min"
-
-
-def test_a_number_that_merely_contains_the_value_is_left_alone():
-    """The negative case, varying the dimension the rule reads: the text states a *different*
-    number that has the value's digits inside it. Bolding there tells the reviewer the paper said
-    something it did not."""
-    highlighted = review.highlight("139 min, and 39.5 min in the other strain", "39")
-
-    assert "**" not in highlighted
+    for shown in review.texts_in_order(item):
+        rendered = review.as_markdown(shown.text)
+        assert "**" not in rendered and "<b>" not in rendered and "<mark>" not in rendered
+        assert rendered.replace("\\", "") == shown.text
 
 
 def test_a_citation_marker_stays_visible():
     """The marker beside a number is what separates a measured value from a cited one, so it has
     to survive the renderer: unescaped, markdown reads `[ref 27]` as the start of a link."""
-    highlighted = review.highlight("as reported before [ref 27], 39 min", "39")
+    rendered = review.as_markdown("as reported before [ref 27], 39 min")
 
-    assert "[ref 27]" in highlighted.replace("\\", "")
-    assert "\\[ref 27\\]" in highlighted
+    assert "[ref 27]" in rendered.replace("\\", "")
+    assert "\\[ref 27\\]" in rendered
 
 
-def test_a_text_that_does_not_state_the_value_gets_no_emphasis():
-    assert review.highlight("cells were grown in minimal medium", "39") == (
-        "cells were grown in minimal medium"
+def test_the_paper_s_own_markdown_characters_are_shown_not_interpreted():
+    """An asterisk, an underscore or a dollar sign in a paper's sentence is the paper's, and
+    Streamlit's renderer would otherwise read them as emphasis or mathematics."""
+    rendered = review.as_markdown("p < 0.05 (*) for strain_A at $37")
+
+    assert rendered == "p < 0.05 (\\*) for strain\\_A at \\$37"
+
+
+# --- the whole table beneath the texts -------------------------------------------------------
+
+
+def a_table(*, cell_a: str = "t1r1c2", cell_b: str = "t1r1c3") -> TableView:
+    """Table 1 of `spanning_headers.xml`, by hand: a spanning group header, a row header
+    spanning two rows, and the two cells the texts come from named by parameter."""
+    th, td = TableCell, TableCell
+    return TableView(
+        label="Table 1",
+        caption="Doubling times in two media.",
+        foot="a Mean of three cultures.",
+        rows=(
+            (
+                th(text="Strain", header=True, rowspan=2),
+                th(text="Doubling time (min)", header=True, colspan=2),
+            ),
+            (th(text="Glucose", header=True), th(text="Acetate", header=True)),
+            (
+                th(text="MG1655", header=True, rowspan=2),
+                td(text="39", passage_id=cell_a),
+                td(text="55", passage_id=cell_b),
+            ),
+            (td(text="41", passage_id="t1r2c2"), td(text="57 < 60", passage_id="t1r2c3")),
+        ),
     )
+
+
+def a_table_item(**overrides) -> ReviewItem:
+    supporting = Quote(text="39", location=Location(passage_id="t1r1c2", kind="td"))
+    second = Quote(text="55", location=Location(passage_id="t1r1c3", kind="td"))
+    item = an_item(supporting=supporting, second=second)
+    return item.model_copy(update={"tables": (a_table(),), **overrides})
+
+
+def test_the_whole_table_is_shown_with_its_label_caption_and_footnotes():
+    (rendered,) = review.tables_html(a_table_item())
+
+    assert "<caption>Table 1 Doubling times in two media.</caption>" in rendered
+    assert "a Mean of three cultures." in rendered
+    for text in ("Strain", "Glucose", "Acetate", "MG1655", "39", "55", "41"):
+        assert f">{text}<" in rendered or f">{text}</" in rendered, text
+
+
+def test_the_paper_s_layout_survives_spans_and_all():
+    (rendered,) = review.tables_html(a_table_item())
+
+    assert '<th rowspan="2">Strain</th>' in rendered
+    assert '<th colspan="2">Doubling time (min)</th>' in rendered
+    assert rendered.count("<tr>") == 4
+
+
+def test_both_texts_cells_are_marked_alike_with_their_labels():
+    """The marks orient the reviewer; they must not answer for them. Each of A and B is marked
+    the same way, with its own label, and nothing marks the value."""
+    item = a_table_item()
+    labels = {shown.passage_id: shown.label for shown in review.texts_in_order(item)}
+    (rendered,) = review.tables_html(item)
+
+    for passage_id, cell in (("t1r1c2", "39"), ("t1r1c3", "55")):
+        assert (
+            f'<td class="bn-mark">{cell}<span class="bn-badge">{labels[passage_id]}</span></td>'
+            in rendered
+        )
+    assert rendered.count('class="bn-mark"') == 2
+    assert "<b>" not in rendered and "<mark>" not in rendered
+
+
+def test_a_cell_that_is_neither_text_carries_no_mark():
+    """The negative of the marks: the rule reads the passage id, so a table whose cells are not
+    the texts' is drawn bare."""
+    item = a_table_item(tables=(a_table(cell_a="t9r9c9", cell_b="t9r9c8"),))
+
+    (rendered,) = review.tables_html(item)
+
+    assert 'class="bn-mark"' not in rendered and 'class="bn-badge"' not in rendered
+
+
+def test_a_cell_s_text_is_escaped_not_interpreted():
+    (rendered,) = review.tables_html(a_table_item())
+
+    assert "<td>57 &lt; 60</td>" in rendered
+
+
+def test_two_prose_texts_bring_no_table():
+    assert review.tables_html(an_item()) == ()
 
 
 # --- locations ------------------------------------------------------------------------------
@@ -384,7 +467,8 @@ def test_nothing_the_page_is_given_names_the_second_text_s_kind(second_kind, dis
 
     rendered = [
         *(f"{text.label} {text.text} {text.location_line}" for text in review.texts_in_order(item)),
-        review.highlight(item.second.text, item.claim.value),
+        review.as_markdown(item.second.text),
+        *review.tables_html(a_table_item(second_kind=second_kind, distractor_type=distractor_type)),
         review.citation_line(item.paper),
         *(" ".join(row) for row in review.condition_rows(item.claim)),
     ]
@@ -398,7 +482,8 @@ def test_the_shown_text_carries_no_field_that_could_leak_the_kind():
     is where the leak would be invisible to every test above."""
     fields = {field.name for field in dataclasses.fields(review.Shown)}
 
-    assert fields == {"label", "text", "location_line", "is_supporting"}
+    # `passage_id` is where the text sits, for the table's marks; a location carries no kind.
+    assert fields == {"label", "text", "location_line", "is_supporting", "passage_id"}
 
 
 class TestStoreEngine:

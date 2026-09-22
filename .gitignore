@@ -78,3 +78,6 @@ eval-results/
 .coverage
 .coverage.*
 htmlcov/
+
+# Local trial review databases: items carry paper text and are never committed
+*.sqlite

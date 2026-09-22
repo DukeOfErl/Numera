@@ -21,8 +21,8 @@ both are material for a judgement, not decoration.
 from __future__ import annotations
 
 import hashlib
+import html
 import os
-import re
 from dataclasses import dataclass
 
 from sqlalchemy import Engine
@@ -35,6 +35,7 @@ from bionumbers.records import (
     Paper,
     Provenance,
     ReviewItem,
+    TableView,
 )
 from scinumbers_ask import web
 
@@ -83,10 +84,6 @@ PROVENANCE_LABELS: dict[Provenance, str] = {
 #: column that failed to fill, and this one is a fact about the paper.
 _NO_QUOTE = "—"
 
-#: What a number looks like in a value. Integers and decimals; a value is the paper's own string
-#: (`39`, `39 ± 1`, `20-40`), so this finds each number in it separately.
-_NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
-
 #: The markdown characters that would eat part of a paper's sentence. `[` and `]` are the reason
 #: this exists: the JATS reader keeps bibliographic markers as `[ref 27]` tokens because their
 #: presence beside a number is what separates a measured value from a cited one (design D2), and
@@ -109,6 +106,8 @@ class Shown:
     text: str
     location_line: str
     is_supporting: bool
+    passage_id: str = ""
+    """Where the text sits, so the table beneath can mark its cell with this label."""
 
 
 @dataclass(frozen=True)
@@ -159,40 +158,88 @@ def texts_in_order(item: ReviewItem) -> tuple[Shown, Shown]:
             text=first_quote.text,
             location_line=location_line(first_quote.location),
             is_supporting=first_supports,
+            passage_id=first_quote.location.passage_id,
         ),
         Shown(
             label="B",
             text=second_quote.text,
             location_line=location_line(second_quote.location),
             is_supporting=second_supports,
+            passage_id=second_quote.location.passage_id,
         ),
     )
 
 
-def highlight(text: str, value: str) -> str:
-    """The paper's text as markdown, with every number of the value in bold.
+def as_markdown(text: str) -> str:
+    """The paper's text as markdown that renders exactly the paper's characters.
 
-    *Every* number, because a value is often a pair -- `39 ± 1`, `20-40` -- and the reviewer is
-    judging the whole of it; bolding the first alone would point at half a range.
-
-    The escaping is the other half of this function and runs first. It touches no digit and no
-    decimal point, so the number match below reads the same characters the paper wrote; escaping
-    afterwards would have to distinguish our own `**` from the paper's asterisks.
-
-    Fails towards showing too little emphasis: a number sitting inside a longer one is left alone,
-    so `39` is not bolded in `139` or in `39.5`, where the paper is stating a different number. A
-    missed highlight costs the reviewer a moment's search in three sentences; a wrong one tells
-    them the paper said something it did not.
+    Escaping and nothing else. The value is deliberately *not* emphasised in the texts (ADR-0940,
+    Yoav's decision of 2026-09-22): a text is shown as the paper wrote it, so nothing on the
+    screen points at the number the reviewer is being asked to find, and a text that states the
+    value looks no different from one that merely mentions a number near it. The bolding this
+    replaced lit up every `1` in a value of `39 ± 1`, which was the review's finding 7 -- moot now.
     """
-    escaped = text.translate(_MARKDOWN)
-    # Longest first, so `1` cannot claim the match inside `1.5` when the value contains both.
-    numbers = sorted(set(_NUMBER.findall(value)), key=len, reverse=True)
-    if not numbers:
-        return escaped
-    pattern = re.compile(
-        r"(?<![\d.,])(" + "|".join(re.escape(number) for number in numbers) + r")(?![\d.,])"
-    )
-    return pattern.sub(r"**\1**", escaped)
+    return text.translate(_MARKDOWN)
+
+
+#: The table beneath the texts, and the marks on the two cells. One style block per table
+#: rather than one per page, because a Streamlit script has no head to put it in and a
+#: repeated block costs nothing. Both marks look the same on purpose: which cell is A and which
+#: is B is the only information they may carry.
+_TABLE_STYLE = (
+    "<style>"
+    ".bn-table table{border-collapse:collapse;font-size:0.85em;margin:0.25em 0}"
+    ".bn-table caption{caption-side:top;text-align:left;padding:0.25em 0}"
+    ".bn-table th,.bn-table td{border:1px solid #bbb;padding:0.2em 0.5em;vertical-align:top}"
+    ".bn-table th{font-weight:600;background:rgba(127,127,127,0.12)}"
+    ".bn-table td.bn-mark{outline:2px solid #1f77b4;outline-offset:-2px}"
+    ".bn-table .bn-badge{display:inline-block;margin-left:0.4em;padding:0 0.35em;"
+    "border-radius:0.25em;font-size:0.8em;font-weight:700;color:#fff;background:#1f77b4}"
+    ".bn-table .bn-foot{font-size:0.8em;margin:0.25em 0 0.5em}"
+    "</style>"
+)
+
+
+def tables_html(item: ReviewItem) -> tuple[str, ...]:
+    """Each table the item's texts sit in, as HTML for the page, with both cells marked.
+
+    Whole and with its caption, because two header fragments do not orient anyone in a table
+    with a spanning group header and a control column (Table 3 of PMC13118904 is the case that
+    asked for this). The cells of A and B are marked alike, with their labels, and the value is
+    not distinguished anywhere in the grid: the table orients the reviewer, it must not answer for
+    them. Nothing here reads which text supports the value.
+    """
+    marks = {shown.passage_id: shown.label for shown in texts_in_order(item) if shown.passage_id}
+    return tuple(table_html(table, marks) for table in item.tables)
+
+
+def table_html(table: TableView, marks: dict[str, str]) -> str:
+    """One table as the paper laid it out, cells named in `marks` carrying their label."""
+    caption = " ".join(part for part in (table.label, table.caption) if part)
+    parts = [_TABLE_STYLE, '<div class="bn-table"><table>']
+    if caption:
+        parts.append(f"<caption>{html.escape(caption)}</caption>")
+    for row in table.rows:
+        cells = []
+        for cell in row:
+            tag = "th" if cell.header else "td"
+            attributes = ""
+            if cell.colspan > 1:
+                attributes += f' colspan="{cell.colspan}"'
+            if cell.rowspan > 1:
+                attributes += f' rowspan="{cell.rowspan}"'
+            content = html.escape(cell.text)
+            label = marks.get(cell.passage_id) if cell.passage_id else None
+            if label is not None:
+                attributes += ' class="bn-mark"'
+                content += f'<span class="bn-badge">{html.escape(label)}</span>'
+            cells.append(f"<{tag}{attributes}>{content}</{tag}>")
+        parts.append("<tr>" + "".join(cells) + "</tr>")
+    parts.append("</table>")
+    if table.foot:
+        parts.append(f'<p class="bn-foot">{html.escape(table.foot)}</p>')
+    parts.append("</div>")
+    return "".join(parts)
 
 
 def location_line(location: Location) -> str:
