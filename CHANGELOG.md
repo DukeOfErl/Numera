@@ -53,6 +53,17 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **`question-sets/first-set.jsonl` names four more expected entries and fifteen
+  more admissible ones**, after sweeping five runs for entries a model cited that
+  sat in neither list. Every figure in every evaluation note falls one or two
+  points when re-scored (`--expected-from-set`) — the denominator grows by twelve
+  slots and the numerators by at most three — and no conclusion moves: the
+  ordering holds and the `compound` column is untouched. The four added entries
+  were reached seven times in sixty model-runs, because each carries `units: N/A`
+  with its figure in a table link, and `search_entries` renders such a row with an
+  empty value; the corpus holds the number and the retrieval surface does not show
+  it ([the triage](docs/evaluations/2026-09-22-expected-list-triage.md)).
+
 - **The default model is `anthropic/claude-opus-4.7`**, where it was
   `anthropic/claude-haiku-4.5`. Development ran on a cheap instruction-follower
   while the shape of the app was still moving; what is read now is answers. It
