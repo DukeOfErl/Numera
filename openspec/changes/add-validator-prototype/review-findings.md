@@ -1,9 +1,9 @@
 # Code review of `feat/validator-prototype`, 2026-09-21 (`/code-review high` at `9e8f555`)
 
 Ten findings, ranked. None was observed in the two live runs; each is a hole a later run
-would fall through. Status as of 2026-09-22: **none fixed yet**; Yoav has been asked which to fix
-before the merge. Recommendation: the four correctness items (1–4) plus the two one-liners (8, 9)
-before merging; 5, 6, 7 and 10 can wait for the rebuild.
+would fall through. Status as of 2026-09-22 (Yoav's decision): **1, 2, 3, 4, 8 and 9 fixed**
+(commits `8050e57`, `62da405`, `9d03f7e`); **7 is moot**, the highlighting it concerned is gone
+(ADR-0940, `da690d0`); **5, 6 and 10 stay open** for the rebuild.
 
 | # | Where | Finding | Fix |
 |---|---|---|---|
@@ -18,7 +18,12 @@ before merging; 5, 6, 7 and 10 can wait for the rebuild.
 | 9 | `cli.py` | An unpriced `--model` fails every paper one by one and overwrites the run's results. | Refuse an id not in `spend.PRICES` beside the credential check, before any paper. |
 | 10 | `records.py` docstring, `src/bionumbers/CLAUDE.md` | Both place `ExtractionOutput` in `records.py`; it lives in `extraction.py`. | Correct the two sentences. |
 
-## Asked for at the same time (Yoav, 2026-09-22): show the whole table
+## Asked for at the same time (Yoav, 2026-09-22): show the whole table — **built** (ADR-0940)
+
+Built on 2026-09-22 as proposed below, with two differences: both texts' cells are marked
+alike with their labels rather than the claimed cell highlighted (a highlight would answer the
+forced choice), and footnotes come with the caption. The value is no longer emphasised in the
+texts either, at Yoav's request. The original proposal follows for the record.
 
 When a claim's text is a table cell, the reviewer needs the table it sits in, with its caption
 — Table 3 of PMC13118904 has a spanning group header (`CIP (ng/mL)`, `NLC-CIP (ng/mL)`) over
