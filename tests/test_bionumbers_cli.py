@@ -280,6 +280,23 @@ def test_extract_without_a_key_says_which_variable_and_touches_nothing(
     assert not (dirs.runs / RUN / "results.jsonl").exists()
 
 
+def test_extract_with_an_unpriced_model_refuses_before_any_paper(
+    monkeypatch, provider, dirs, capsys
+):
+    """Left to the ledger, every paper would end FAILED one by one and the run's results would be
+    overwritten with a column of failures."""
+    model = scripted(monkeypatch, ExtractionOutput(state="NOTHING_TO_EXTRACT", reason="unused"))
+    seed_run(dirs, [LICENSED], cached={TABLES_PMCID: ARTICLE_XML})
+
+    code = cli.main(["extract", RUN, "--model", "acme/unknown-model", *common(dirs)])
+
+    assert code == 2
+    assert "acme/unknown-model" in capsys.readouterr().err
+    assert model.calls == []
+    assert provider.requests == []
+    assert not (dirs.runs / RUN / "results.jsonl").exists()
+
+
 def test_a_run_budget_that_affords_nothing_stops_the_run_and_counts_the_papers_left(
     monkeypatch, provider, dirs
 ):

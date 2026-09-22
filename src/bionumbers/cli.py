@@ -59,7 +59,7 @@ from bionumbers.records import (
     ReviewItem,
     Spend,
 )
-from bionumbers.spend import Ceiling, CeilingReached, Ledger
+from bionumbers.spend import PRICES, Ceiling, CeilingReached, Ledger
 
 DB_URL_ENV = "BIONUMBERS_REVIEW_DB_URL"
 
@@ -356,6 +356,13 @@ def extract_run(args: argparse.Namespace) -> int:
         model = _model(args.model)
     except NoCredential:
         print(f"Set {API_KEY_ENV} in the environment before running extract.", file=sys.stderr)
+        return 2
+    if args.model not in PRICES:
+        # The ledger would refuse the projection paper by paper, ending every one FAILED and
+        # overwriting the run's results with a column of failures (code review of 2026-09-21,
+        # finding 9). One sentence here, before any paper is fetched.
+        known = ", ".join(sorted(PRICES))
+        print(f"No prices are configured for {args.model!r}; known: {known}.", file=sys.stderr)
         return 2
 
     request = json.loads((run_dir / REQUEST_FILE).read_text(encoding="utf-8"))

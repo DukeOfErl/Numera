@@ -447,12 +447,21 @@ def choose_second_text(
         # reviewable item, with the reason that stops it being read as "the paper had nothing".
         return NotReviewable(claim_id=claim.claim_id, reason="ceiling reached")
 
-    response = model.parse(
-        system=system,
-        messages=messages,
-        output_format=SecondTextOutput,
-        max_tokens=MAX_OUTPUT_TOKENS,
-    )
+    try:
+        response = model.parse(
+            system=system,
+            messages=messages,
+            output_format=SecondTextOutput,
+            max_tokens=MAX_OUTPUT_TOKENS,
+        )
+    except Exception as failure:
+        # The same clause as `extraction._one_call`: an output the adapter could not read was
+        # still billed, and a ceiling that never hears of it is a ceiling with a hole in it
+        # (code review of 2026-09-21, finding 2). Adapters that know the usage attach it.
+        usage = getattr(failure, "usage", None)
+        if usage is not None:
+            ledger.record(paper.pmcid, cost(model_id, usage))
+        raise
     ledger.record(paper.pmcid, cost(model_id, response.usage))
 
     output = response.parsed_output

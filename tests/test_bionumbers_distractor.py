@@ -211,9 +211,12 @@ class ScriptedModel:
     ledger refuses.
     """
 
-    def __init__(self, *candidates: Candidate, input_tokens: int = 12_000) -> None:
+    def __init__(
+        self, *candidates: Candidate, input_tokens: int = 12_000, raises: Exception | None = None
+    ) -> None:
         self.candidates = list(candidates)
         self.input_tokens = input_tokens
+        self.raises = raises
         self.counted: list[tuple[object, object]] = []
         self.parsed: list[tuple[object, object]] = []
 
@@ -223,6 +226,8 @@ class ScriptedModel:
 
     def parse(self, *, system: object, messages: object, output_format: object, max_tokens: int):
         self.parsed.append((system, messages))
+        if self.raises is not None:
+            raise self.raises
         return SimpleNamespace(
             parsed_output=output_format(candidates=self.candidates),
             usage=SimpleNamespace(
@@ -521,6 +526,29 @@ def test_the_call_is_priced_and_recorded_against_the_paper(claim):
     assert ledger.paper(PAPER.pmcid).calls == 1
     assert ledger.paper(PAPER.pmcid).usd > 0
     assert ledger.paper(PAPER.pmcid).cache_read_tokens > 0
+
+
+def test_a_call_the_adapter_could_not_read_is_still_charged_to_the_paper(claim):
+    """The adapter attaches the provider's usage to the error it raises; the ledger must hear of
+    it, or the ceiling misses every such call (code review of 2026-09-21, finding 2)."""
+
+    class Refused(Exception):
+        def __init__(self):
+            super().__init__("output does not match the schema")
+            self.usage = SimpleNamespace(
+                input_tokens=200,
+                output_tokens=400,
+                cache_creation_input_tokens=0,
+                cache_read_input_tokens=11_800,
+            )
+
+    ledger = Ledger(Ceiling())
+
+    with pytest.raises(Refused):
+        _choose(ScriptedModel(raises=Refused()), claim, ledger)
+
+    assert ledger.paper(PAPER.pmcid).calls == 1
+    assert ledger.paper(PAPER.pmcid).usd > 0
 
 
 def test_a_call_that_would_cross_the_ceiling_is_never_made(claim):

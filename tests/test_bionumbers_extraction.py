@@ -787,6 +787,48 @@ def test_a_verbatim_quote_that_does_not_state_the_value_is_a_failure_too(article
     assert result.unverifiable == ("PMC2288635-1",)
 
 
+def test_a_value_present_only_in_a_cell_s_header_does_not_count_as_stated(tables):
+    """A quote of the rendered table line carries its headers; the value check must read the
+    cell, as `verify` and the stored quote do. Here the value is the row header, and the cell
+    reads something else (code review of 2026-09-21, finding 1)."""
+    cell = next(p for p in tables.passages if p.kind == "td" and p.text == "8.2")
+    rendered = (
+        f"row: {' / '.join(cell.row_headers)} | "
+        f"column: {' / '.join(cell.column_headers)} | cell: {cell.text}"
+    )
+    header_value = cell.row_headers[0]
+    assert header_value != cell.text and quotes.states_value(rendered, header_value), (
+        "the fixture must put the value in a header and not in the cell"
+    )
+    model = ScriptedModel(
+        found(a_claim(rendered, cell.id, value=header_value, unit="")),
+        found(a_claim(rendered, cell.id, value=header_value, unit="")),
+    )
+
+    result = run(model, tables, paper=Paper(pmcid=tables.pmcid, licence="CC BY"))
+
+    assert "does not state the value" in model.calls[1]["messages"][-1]["content"]
+    assert result.claims == ()
+
+
+def test_the_cell_s_own_value_is_still_stated_through_its_headers(tables):
+    """The positive half: the same rendered line passes when the value is the cell's."""
+    cell = next(p for p in tables.passages if p.kind == "td" and p.text == "8.2")
+    rendered = (
+        f"row: {' / '.join(cell.row_headers)} | "
+        f"column: {' / '.join(cell.column_headers)} | cell: {cell.text}"
+    )
+
+    result = run(
+        ScriptedModel(found(a_claim(rendered, cell.id, value="8.2", unit="µm³"))),
+        tables,
+        paper=Paper(pmcid=tables.pmcid, licence="CC BY"),
+    )
+
+    (claim,) = result.claims
+    assert claim.quote.text == "8.2"
+
+
 def test_every_state_but_unreadable_is_reachable_from_here(article, essay):
     """UNREADABLE is a fact about access, established by discovery before extraction is attempted,
     so this step must never produce it -- and must produce every other one."""

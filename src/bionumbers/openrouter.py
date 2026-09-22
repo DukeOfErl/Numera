@@ -195,6 +195,9 @@ class OpenRouterModel:
                 },
             },
             "provider": {"require_parameters": True},
+            # Without this the usage block carries no `cost`, and `reported_cost_usd` was
+            # always None on the first two live runs (code review of 2026-09-21, finding 8).
+            "usage": {"include": True},
         }
         response = self._client.post(self._url, headers=self._headers, json=body)
         response.raise_for_status()

@@ -93,6 +93,14 @@ class TestRequest:
         assert fmt["json_schema"]["name"] == "Answer"
         assert seen[0]["body"]["provider"] == {"require_parameters": True}
 
+    def test_the_cost_is_asked_for_so_the_usage_block_carries_it(self):
+        seen, client = _server(_reply(json.dumps({"state": "ok"})))
+        OpenRouterModel("k", client=client).parse(
+            system=SYSTEM, messages=MESSAGES, output_format=Answer, max_tokens=9
+        )
+
+        assert seen[0]["body"]["usage"] == {"include": True}
+
     def test_the_key_travels_as_a_bearer_token_and_never_in_the_body(self):
         seen, client = _server(_reply(json.dumps({"state": "ok"})))
         OpenRouterModel("sk-or-secret", client=client).parse(

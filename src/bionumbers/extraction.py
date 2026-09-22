@@ -360,11 +360,15 @@ def verify_drafts(output: ExtractionOutput, doc: Document) -> Checked:
 
     for index, claim in enumerate(output.claims):
         check("claim", index, "quote", claim.quote.text, claim.quote.passage_id)
-        if not quotes.states_value(claim.quote.text, claim.value):
+        if not quotes.states_value(quotes.cell_text(claim.quote.text), claim.value):
             # Verbatim is not enough: the first live run produced two claims of 346 h and
             # 693 h whose quote said "nearly 200-fold". Both figures were the model's
             # arithmetic over a table it did not quote. The spec's quote *contains the
             # value*, and a quote that does not is named back like any other failure.
+            # On the cell part, as `verify` and the stored `Quote` are: a rendered cell line
+            # carries its headers, and a value that is only in a header ("500" from
+            # "column: CIP (ng/mL) / 500") would otherwise pass and be stored with a cell
+            # that reads something else (code review of 2026-09-21, finding 1).
             failures.append(
                 QuoteFailure(
                     claim=index,
