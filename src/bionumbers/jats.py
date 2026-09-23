@@ -64,6 +64,11 @@ _SUPERSCRIPT = str.maketrans(
     ),
 )
 _SUPERSCRIPTABLE = re.compile(r"\A[0-9+\-=()ni]+\Z")
+#: MINUS SIGN, HYPHEN, NON-BREAKING HYPHEN, FIGURE DASH, EN DASH, EM DASH: every dash a paper
+#: puts in an exponent means minus.
+_MINUS_LOOKALIKES = str.maketrans(
+    {chr(code): "-" for code in (0x2212, 0x2010, 0x2011, 0x2012, 0x2013, 0x2014)}
+)
 
 #: A section counts as methods when its title, casefolded, holds one of these. "materials" is a
 #: word on its own because two of the sample papers title the section "MATERIALS AND METHODS"
@@ -497,9 +502,11 @@ def _superscript(text: str) -> str:
     inner = _WHITESPACE.sub(" ", text).strip()
     if not inner:
         return ""
-    # A minus sign or a hyphen inside an exponent both mean minus; the superscript minus is
-    # the one character, and `quotes.fold` maps it to `^-`.
-    plain = inner.replace(chr(0x2212), "-")
+    # A minus sign, an en dash or a hyphen inside an exponent all mean minus -- PMC13421595
+    # writes `h<sup>–1</sup>` with an en dash, and the caret form `h^–1` reached three review
+    # items before this clause. The superscript minus is the one character, and `quotes.fold`
+    # maps it to `^-`.
+    plain = inner.translate(_MINUS_LOOKALIKES)
     if _SUPERSCRIPTABLE.match(plain):
         return plain.translate(_SUPERSCRIPT)
     return "^" + inner

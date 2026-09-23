@@ -179,6 +179,21 @@ def test_an_exponent_in_a_value_keeps_its_meaning():
     assert f"2.5 × 10{eight} cells mL{chr(0x207B)}{chr(0x00B9)}" in paragraph.text
 
 
+@pytest.mark.parametrize(
+    "dash", [chr(0x2212), chr(0x2013), "-"], ids=["minus", "en-dash", "hyphen"]
+)
+def test_every_dash_in_an_exponent_is_a_superscript_minus(dash):
+    """PMC13421595 writes `h<sup>–1</sup>` with an en dash; rendered as `h^–1` it put our own
+    notation on the review page in place of the paper's superscript."""
+    xml = (
+        '<article article-type="research-article"><body><sec><title>Results</title>'
+        f"<p>a rate of 0.23 h<sup>{dash}1</sup> was seen</p></sec></body></article>"
+    )
+    doc = read_jats(xml)
+    paragraph = holding(doc, "a rate of", kind="p")
+    assert paragraph.text == f"a rate of 0.23 h{chr(0x207B)}{chr(0x00B9)} was seen"
+
+
 def test_a_superscript_that_is_not_a_number_is_marked_with_a_caret():
     """A footnote letter has no superscript character; a caret says it was raised rather than
     letting `elsewherea` read as a word."""
