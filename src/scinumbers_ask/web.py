@@ -41,7 +41,17 @@ from typing import Any
 
 import streamlit as st
 
-from . import accounts, allowance, bionumbers, entries_table, feedback, messages, trace, trail_store
+from . import (
+    accounts,
+    allowance,
+    bionumbers,
+    entries_table,
+    feedback,
+    hosted_trace,
+    messages,
+    trace,
+    trail_store,
+)
 from .accounts import Account, EnrolmentUnavailable
 from .agent import AskAgent
 from .authorization import Refused, allowed, require
@@ -542,6 +552,19 @@ def account_scope(admission: Admission) -> str | None:
     if not admission.configured or admission.account is None:
         return None
     return hashlib.sha256(admission.account.email.encode()).hexdigest()[:16]
+
+
+def attributed(admission: Admission) -> Any:
+    """Who asked, attached to the hosted trace of every question asked inside this block.
+
+    The same opaque digest the ledger is narrowed by, and for the same reason: it
+    is stable per account, it is `None` without sign-in, and nothing can turn it
+    back into an address (ADR-1020). Attached here, around the page's consumption
+    of the event stream, so the agent is handed nothing new -- the trail's
+    identity is stamped at the sink the same way (ADR-0820). A no-op when tracing
+    is off.
+    """
+    return hosted_trace.current().attributed(account_scope(admission))
 
 
 def effective_session(admission: Admission, url_session: str) -> str:

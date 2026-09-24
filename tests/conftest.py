@@ -102,6 +102,24 @@ def _the_suite_does_not_read_the_developer_s_secrets():
 
 
 @pytest.fixture(autouse=True)
+def _no_test_reaches_a_hosted_tracer(monkeypatch):
+    """Every test starts with hosted tracing off and the process's tracer unbuilt.
+
+    Without this a developer whose shell has `SCINUMBERS_TRACING=langfuse` would
+    send every question the suite asks -- fixture corpus text, scripted prompts --
+    to their Langfuse project, and a vendor switch left set would do the same to
+    LangSmith. Tests that want a tracer install one with an in-memory exporter.
+    """
+    from scinumbers_ask import hosted_trace
+
+    for name in (hosted_trace.SETTING, *hosted_trace.CREDENTIALS, "LANGFUSE_HOST"):
+        monkeypatch.delenv(name, raising=False)
+    hosted_trace.use(None)
+    yield
+    hosted_trace.use(None)
+
+
+@pytest.fixture(autouse=True)
 def _each_test_starts_with_no_open_sessions():
     """The session cap's registry is a cached resource: one per process, which
     is what a cap on a server needs and exactly wrong for a test process that

@@ -57,53 +57,54 @@ recorded.
 
 ## 2. The setting and the refusal — `hosted_trace.py`
 
-- [ ] 2.1 Tests first, from the spec's first requirement. Setting absent / empty / `off` → off; `langfuse`
+- [x] 2.1 Tests first, from the spec's first requirement. Setting absent / empty / `off` → off; `langfuse`
       with all credentials → on; `langfuse` with each credential missing in turn → off, and the report
       names that credential; an unrecognised value → off, and the report names the value; Langfuse keys
       present with the setting absent → off. Pair each off case with the on case that differs in one
       dimension.
-- [ ] 2.2 Implement reading the setting through `config.env_setting`. `langfuse` must not be imported
+- [x] 2.2 Implement reading the setting through `config.env_setting`. `langfuse` must not be imported
       unless the setting is on. Assert that by checking `sys.modules` in a subprocess, not by reading
       the source.
-- [ ] 2.3 Tests: with `LANGSMITH_TRACING=true` (and, separately, `LANGCHAIN_TRACING_V2=true`), a
+- [x] 2.3 Tests: with `LANGSMITH_TRACING=true` (and, separately, `LANGCHAIN_TRACING_V2=true`), a
       question asked through `AskAgent` with a model double sends no run to any LangSmith tracer. Once
       with the project setting off, once with it on. Paired with a control showing that the same
       harness *does* see a LangSmith run when the refusal is removed (in a copy, per the fault-seeding
       skill), or the test proves nothing.
-- [ ] 2.4 Implement the refusal inside `hosted_trace` and use it at the `agent.stream` call in
+- [x] 2.4 Implement the refusal inside `hosted_trace` and use it at the `agent.stream` call in
       `agent.py`. Report to the operator once per process when the vendor switch is set.
-- [ ] 2.5 Add `hosted_trace` to the identity-free set in `tests/test_driver_independence.py`, and to
+- [x] 2.5 Add `hosted_trace` to the identity-free set in `tests/test_driver_independence.py`, and to
       the core side.
 
 ## 3. One question, one trace — and who asked
 
-- [ ] 3.1 Tests: with tracing on and a recording double in place of the export, one question produces
+- [x] 3.1 Tests: with tracing on and a recording double in place of the export, one question produces
       one trace whose id equals `create_trace_id(seed=question_id)`, carrying `question_id`, the session
       and the run label. Two questions in one session produce two ids and share a session.
-- [ ] 3.2 Implement the handler per question in `hosted_trace`, and the Langfuse metadata keys added
+- [x] 3.2 Implement the handler per question in `hosted_trace`, and the Langfuse metadata keys added
       to the config. `trace.py`'s `run_config` is unchanged; assert that its existing tests pass
       untouched.
-- [ ] 3.3 Tests, **against the real propagation path, not a double of it**: a user id set by
+- [x] 3.3 Tests, **against the real propagation path, not a double of it**: a user id set by
       `hosted_trace.attributed(...)` around consumption of `agent.ask` reaches every span of the trace,
       including spans created on LangGraph's worker threads. It must still hold when the driver
       consumes the generator one item at a time with other work in between. `None` attaches nothing.
       If propagation fails, stop and bring it back to design. Do not patch around it.
-- [ ] 3.4 Implement `attributed()`, and use it in `web.py` where the event stream is consumed, with
+- [x] 3.4 Implement `attributed()`, and use it in `web.py` where the event stream is consumed, with
       `account_scope(admission)`. The CLI and the harness do not call it.
-- [ ] 3.5 Test, extending `tests/test_identity_never_reaches_the_agent.py`: two readers, tracing on
+- [x] 3.5 Test (in `tests/test_hosted_tracing.py`, beside the tracer it needs, rather than extending
+      `tests/test_identity_never_reaches_the_agent.py`): two readers, tracing on
       and off. The model doubles' `seen` lists are identical across all four runs.
 
 ## 4. The rating's copy, and failing open
 
-- [ ] 4.1 Tests: `record_verdict` with tracing on writes the trail row, then a `reader_verdict` score
+- [x] 4.1 Tests: `record_verdict` with tracing on writes the trail row, then a `reader_verdict` score
       on `create_trace_id(seed=question_id)` with value 1 or 0. `record_comment` adds `reader_comment`
       with the text. With tracing off, no client is touched at all.
-- [ ] 4.2 Tests: the score client raises, and separately hangs past its timeout. The trail row is
+- [x] 4.2 Tests: the score client raises, and separately hangs past its timeout. The trail row is
       identical to the tracing-off run, `_record` returns, nothing reaches the page, and a
       `tracing.failed` record is written.
-- [ ] 4.3 Implement the copy in `feedback._record`, after the trail record, with deterministic score
+- [x] 4.3 Implement the copy in `feedback._record`, after the trail record, with deterministic score
       ids. `feedback.py` stays free of identity; the score carries none.
-- [ ] 4.4 Tests: the handler raises in `on_llm_start`, and separately its export fails. The answer,
+- [x] 4.4 Tests: the handler raises in `on_llm_start`, and separately its export fails. The answer,
       the entries and the trail records are equal to a tracing-off run of the same question with the
       same doubles. Compare them whole, not by one field.
 - [ ] 4.5 Tests for the conditions (D9), pure, in `hosted_trace`, over stubbed counts:
