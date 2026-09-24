@@ -27,7 +27,9 @@ recorded.
 - [ ] 1.1 CLAUDE.md: add `add-hosted-tracing` → `1000`–`1040` to the ADR table. Create stubs for
       `1000`, `1010` and `1020`, and commit them before anything else.
 - [ ] 1.2 `uv add --optional ask "langfuse>=4.15,<5"`, then read the **installed** 4.x source and docs
-      for each of the following. Record the version and the answer in the design's D-sections (not in
+      for each of the following. For the docs, use the Langfuse skill's method: any page as `….md`,
+      `langfuse.com/llms.txt` as the index, and `langfuse.com/api/search-docs?query=` for search. All
+      three are free and need no key. Record the version and the answer in the design's D-sections (not in
       a chat), and correct the design wherever it guessed:
       (a) the host variable's name (`LANGFUSE_BASE_URL` or `LANGFUSE_HOST`);
       (b) how a `CallbackHandler`'s run is bound to a given trace id;
@@ -37,12 +39,21 @@ recorded.
       (f) whether the SDK registers its own `atexit` flush;
       (g) whether constructing the client touches OpenTelemetry's global provider;
       (h) for D9: how the installed SDK or API counts traces, observations and scores over a time
-      window, and whether anything first-party says how Hobby's billing month is anchored.
+      window, and whether anything first-party says how Hobby's billing month is anchored. The skill's
+      `cli.md` says the `traces` endpoints are outdated on the v4 platform ("always query via
+      observations"), so count traces through observations or metrics (for example, distinct trace
+      ids), not through the traces list;
+      (i) for D5: whether `session_id` should also go through `propagate_attributes`, set before the
+      first observation, so every child observation carries it (the skill's v4 migration note says so).
 - [ ] 1.3 A throwaway probe, not a test and not committed: with `LANGSMITH_TRACING=true` and the
       installed `langsmith` 0.11.0 / `langchain-core` 1.5.6, does `tracing_context(enabled=False)`
       around a lazily consumed `agent.stream` stop LangChain attaching its LangSmith tracer, including
       on LangGraph's worker threads? Record the result in D3. If it does not, the fallback in D3
       becomes the design before group 2 starts.
+- [ ] 1.4 The Langfuse agent skill (`github.com/langfuse/skills`, read at `b8cc05c` on 2026-09-24):
+      the user installs it at user level. `~/.claude/skills` is read-only to the agent's sandbox, and
+      the skill is untracked there until the claude-config `.gitignore` whitelists it. Until then,
+      follow its documented method directly (1.2, 5.2).
 
 ## 2. The setting and the refusal — `hosted_trace.py`
 
@@ -122,7 +133,11 @@ recorded.
       written before the trail row. Each must be killed by the test named for it. Write down any
       survivor and act on it. Then run `mutation-test-module` over `hosted_trace.py`.
 - [ ] 5.2 Live, by hand, with a Langfuse Cloud EU project: ask one question signed in, and rate it down
-      with a comment. Check in the UI that the trace id matches, that session, run label and user id
+      with a comment. Then run the skill's self-audit loop (`references/instrumentation.md` step 3):
+      fetch the trace with `langfuse-cli`, audit it against the best-practices page fetched fresh, fix
+      the gaps and re-run. Its checklist is the audit list: generations typed as generations, model
+      and tokens present, a readable trace name, input and output on the root observation, session
+      and user on the cost-bearing generations. Check in the UI that the trace id matches, that session, run label and user id
       are present, that no address appears anywhere in the trace, and that both scores are on it.
       Record what was seen and on which date. Do not paste corpus text into the record.
 - [ ] 5.3 From that trace, count the units one question costs, and write the figure and the implied
