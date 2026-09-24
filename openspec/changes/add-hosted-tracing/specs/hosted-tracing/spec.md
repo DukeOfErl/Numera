@@ -143,6 +143,41 @@ rate an answer while the tracer is still receiving it.
 - **WHEN** a reader rates an answer with tracing off
 - **THEN** nothing is sent to any hosted tracer
 
+### Requirement: An evaluation run reports the tracer's monthly allowance before it starts
+
+An evaluation run asks many questions unattended, and each traced question spends part of the hosted
+tracer's monthly allowance, which is shared with the readers' own questions. When tracing is on, an
+evaluation run SHALL, before asking its first question, report how much of the current month's
+allowance has been used, and SHALL warn the operator when more than half of it has been used. The
+figure SHALL be stated as an estimate counted by this project, with the period it covers, because it
+is not read from the tracer's billing.
+
+A figure that cannot be obtained SHALL be reported as unknown, never as zero: an unreadable figure
+shown as nothing used is exactly the false all-clear the check exists to prevent. Neither an unknown
+figure nor a warning SHALL stop the run; the operator decides, and a run that needs a terminal to
+proceed cannot run unattended.
+
+With tracing off, the run SHALL NOT contact the tracer at all.
+
+#### Scenario: Less than half the allowance is used
+- **WHEN** an evaluation run starts with tracing on and under half of this month's allowance used
+- **THEN** the operator is shown the share used and the period it covers
+- **AND** no warning is given
+
+#### Scenario: More than half the allowance is used
+- **WHEN** an evaluation run starts with tracing on and more than half of this month's allowance used
+- **THEN** the operator is warned before the first question is asked, with the share used
+- **AND** the run proceeds
+
+#### Scenario: The figure cannot be obtained
+- **WHEN** an evaluation run starts with tracing on and the usage cannot be read
+- **THEN** the operator is told the usage is unknown, not that none is used
+- **AND** the run proceeds
+
+#### Scenario: Tracing is off
+- **WHEN** an evaluation run starts with tracing off
+- **THEN** the tracer is not contacted
+
 ### Requirement: A tracer fault never reaches a reader
 
 A hosted tracer that is unreachable, that rejects what it is sent — including because a usage

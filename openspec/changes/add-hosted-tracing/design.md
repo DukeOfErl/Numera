@@ -190,6 +190,39 @@ After the trail, not before and not instead. The copy is wrapped so that nothing
 imported only inside `hosted_trace`, and only once the setting is on. A deployment with tracing off
 never starts OpenTelemetry's exporter, and never installs anything into its global provider.
 
+### D9 — The allowance check before an evaluation run
+
+Added at the user's request, 2026-09-24. The harness is the one caller that can use up a month's
+allowance in an afternoon, and on Hobby that also switches tracing off for the readers.
+
+**Langfuse has no billing API.** The feature request (GitHub discussion #12612) is open with no
+maintainer reply, and the pricing and billable-units pages point only to the Usage Management
+dashboard. So the figure is **counted, not read**: units = traces + observations + scores
+(the billable-units definition) ingested since the start of the period, divided by the Hobby
+allowance of 50,000.
+
+- **Source.** `hosted_trace.monthly_usage()` counts through the public API with the configured keys.
+  The v2 Metrics API has `observations` and `scores-*` views but no `traces` view, so traces come
+  from v1 metrics or the traces list, whichever the installed SDK exposes (task 1.2 (h)). The Hobby
+  Metrics API allows 100 requests a day, and one check costs a handful.
+- **Period.** The calendar month in UTC unless task 1.2 (h) finds how Hobby's billing month is
+  anchored. The period is printed beside the figure either way, so a wrong anchor is visible.
+- **Scope.** API keys are per project and units are per organisation. The count covers this
+  project only, which is exact while the organisation holds one project. README says so.
+- **Where.** The count lives in `hosted_trace` (core). `eval_cli run` calls it before the first
+  question, prints the share, and adds the warning above 50%. The threshold is the spec's; the
+  wording is the driver's. It warns and never refuses (the spec says why), so this is not a guard
+  that needs to live in the operation.
+- **Unknown is not zero.** Any failure to count, including a partial count where one of the three
+  views failed, returns *unknown*. A sum over the views that did answer would under-report, which
+  is the dangerous direction.
+
+**Alternative rejected:** a local tally of what this process sent. It misses the readers' questions
+on the deployed app, which spend the same allowance.
+
+**Not done, and worth a one-line offer when implementing:** projecting the run's own cost (questions
+× repeats × the units-per-question figure from task 5.3) against what remains.
+
 ## Risks / Trade-offs
 
 - [Hobby's cap is assumed to be a hard stop] → Traces stop for the rest of the month, silently from

@@ -35,7 +35,9 @@ recorded.
       (d) `create_score`'s id, upsert and comment-length behaviour;
       (e) whether the handler sets `raise_error`;
       (f) whether the SDK registers its own `atexit` flush;
-      (g) whether constructing the client touches OpenTelemetry's global provider.
+      (g) whether constructing the client touches OpenTelemetry's global provider;
+      (h) for D9: how the installed SDK or API counts traces, observations and scores over a time
+      window, and whether anything first-party says how Hobby's billing month is anchored.
 - [ ] 1.3 A throwaway probe, not a test and not committed: with `LANGSMITH_TRACING=true` and the
       installed `langsmith` 0.11.0 / `langchain-core` 1.5.6, does `tracing_context(enabled=False)`
       around a lazily consumed `agent.stream` stop LangChain attaching its LangSmith tracer, including
@@ -93,7 +95,14 @@ recorded.
 - [ ] 4.4 Tests: the handler raises in `on_llm_start`, and separately its export fails. The answer,
       the entries and the trail records are equal to a tracing-off run of the same question with the
       same doubles. Compare them whole, not by one field.
-- [ ] 4.5 Add the new requirements to `tests/test_spec_conformance.py`'s map, each pointing at the
+- [ ] 4.5 Tests for the allowance check (D9), with a stubbed API client: 49% → the share and the
+      period are printed, with no warning; 51% → a warning before the first question, and the run
+      proceeds; exactly 50% → no warning (the spec says "more than half"); one of the three counts
+      failing → "unknown", never a partial sum and never 0%; tracing off → the client is never
+      constructed. Pair the unknown case with a control showing the same stub yields a number when
+      all three counts answer.
+- [ ] 4.6 Implement `hosted_trace.monthly_usage()` and the call in `eval_cli run`.
+- [ ] 4.7 Add the new requirements to `tests/test_spec_conformance.py`'s map, each pointing at the
       tests above.
 
 ## 5. Seeding, the live check, and the record
