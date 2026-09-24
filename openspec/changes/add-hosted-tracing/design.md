@@ -190,38 +190,55 @@ After the trail, not before and not instead. The copy is wrapped so that nothing
 imported only inside `hosted_trace`, and only once the setting is on. A deployment with tracing off
 never starts OpenTelemetry's exporter, and never installs anything into its global provider.
 
-### D9 — The allowance check before an evaluation run
+### D9 — The allowance check before an evaluation run: estimate, then pause for approval
 
-Added at the user's request, 2026-09-24. The harness is the one caller that can use up a month's
-allowance in an afternoon, and on Hobby that also switches tracing off for the readers.
+Added at the user's request, 2026-09-24, and revised the same day. The harness is the one caller
+that can use up a month's allowance in an afternoon, and on Hobby that also switches tracing off for
+the readers. **The harness is not run unattended**: the operator starts it and watches it. So it asks
+before spending. It does not just warn.
 
 **Langfuse has no billing API.** The feature request (GitHub discussion #12612) is open with no
 maintainer reply, and the pricing and billable-units pages point only to the Usage Management
-dashboard. So the figure is **counted, not read**: units = traces + observations + scores
-(the billable-units definition) ingested since the start of the period, divided by the Hobby
-allowance of 50,000.
+dashboard. So every figure is **counted, not read**.
 
-- **Source.** `hosted_trace.monthly_usage()` counts through the public API with the configured keys.
-  The v2 Metrics API has `observations` and `scores-*` views but no `traces` view, so traces come
-  from v1 metrics or the traces list, whichever the installed SDK exposes (task 1.2 (h)). The Hobby
-  Metrics API allows 100 requests a day, and one check costs a handful.
+- **Used.** `hosted_trace.monthly_usage()` gives units = traces + observations + scores (the
+  billable-units definition) ingested since the start of the period, over the Hobby allowance of
+  50,000. The v2 Metrics API has `observations` and `scores-*` views but no `traces` view, so traces
+  come from v1 metrics or the traces list, whichever the installed SDK exposes (task 1.2 (h)). The
+  Hobby Metrics API allows 100 requests a day, and one check costs a handful.
+- **Per question.** Units ÷ traces over the same period. It calibrates itself: it is the average of
+  what questions actually cost this month, readers' and earlier runs' alike, with no constant to go
+  stale. With no traces yet this month it is *unknown*, and unknown pauses the run. That is
+  deliberate: the first run of a month asks once, and every later run has a figure.
+- **This run.** Questions still to be asked × per-question. "Still to be asked" is the pairs the
+  resume logic will not skip. It comes from the same place `run_evaluation` decides that, not from
+  `len(questions) × repeats`, which over-counts every resumed run. Task 4.6 exposes it without
+  duplicating the resume rule.
 - **Period.** The calendar month in UTC unless task 1.2 (h) finds how Hobby's billing month is
-  anchored. The period is printed beside the figure either way, so a wrong anchor is visible.
-- **Scope.** API keys are per project and units are per organisation. The count covers this
-  project only, which is exact while the organisation holds one project. README says so.
-- **Where.** The count lives in `hosted_trace` (core). `eval_cli run` calls it before the first
-  question, prints the share, and adds the warning above 50%. The threshold is the spec's; the
-  wording is the driver's. It warns and never refuses (the spec says why), so this is not a guard
-  that needs to live in the operation.
-- **Unknown is not zero.** Any failure to count, including a partial count where one of the three
-  views failed, returns *unknown*. A sum over the views that did answer would under-report, which
-  is the dangerous direction.
+  anchored. The period is printed beside the figures either way, so a wrong anchor is visible.
+- **Scope.** API keys are per project and units are per organisation. The count covers this project
+  only, which is exact while the organisation holds one project. README says so.
+- **Unknown is not zero.** Any failure to count, including a partial count where one of the views
+  failed, gives *unknown*. A sum over the views that did answer would under-report, which is the
+  dangerous direction.
+
+**The pause.** In `eval_cli run`, after the corpus is loaded and before `run_evaluation`. The run
+pauses when more than 50% is used, when the estimate exceeds what remains, or when any figure is
+unknown. Only an explicit `yes` proceeds. Anything else ends the run with its own exit code before
+any question: an empty line, another word, EOF, or stdin that is not a terminal. Declining is the
+cheap direction. A non-interactive invocation therefore cannot pass this gate when a condition holds.
+That is accepted, because the user runs the harness attended. If that changes, an explicit flag
+(an approval given in advance, named on the command line) is the way to add it. Removing the pause
+is not.
+
+**Where each part lives.** The counting and the conditions (`needs_approval(usage, estimate)`) are
+in `hosted_trace`, as pure functions over the counts, so they are testable without a terminal. The
+prompt and its wording are in `eval_cli`, the command. `evaluation.py`, the harness core, gains no
+input and stays runnable without a terminal. That is what `test_driver_independence`'s `HARNESS`
+rule protects, and it only forbids importing a driver, so a prompt in the command does not break it.
 
 **Alternative rejected:** a local tally of what this process sent. It misses the readers' questions
 on the deployed app, which spend the same allowance.
-
-**Not done, and worth a one-line offer when implementing:** projecting the run's own cost (questions
-× repeats × the units-per-question figure from task 5.3) against what remains.
 
 ## Risks / Trade-offs
 
@@ -241,8 +258,11 @@ on the deployed app, which spend the same allowance.
   personal. README says so, beside where it already says prompts and corpus text leave the host.
 - [OpenTelemetry arrives as a dependency] → Langfuse 4.x exports only Langfuse and GenAI spans by
   default. When DeepEval returns with `add-judged-faithfulness`, both will want OTel. Worth checking then.
-- [The evaluation harness can burn the allowance] → The run label is on every trace, and README tells
-  the operator to leave the setting off for large runs.
+- [The evaluation harness can burn the allowance] → D9: the run shows its estimate and pauses for
+  approval when it is at risk. The run label is on every trace.
+- [The per-question average is skewed by the mix of this month's questions] → It is an estimate and is
+  labelled as one. An evaluation set's compound questions may cost more than readers' average. Task 5.3's
+  measured figure is the check on it.
 
 ## Migration Plan
 

@@ -95,14 +95,23 @@ recorded.
 - [ ] 4.4 Tests: the handler raises in `on_llm_start`, and separately its export fails. The answer,
       the entries and the trail records are equal to a tracing-off run of the same question with the
       same doubles. Compare them whole, not by one field.
-- [ ] 4.5 Tests for the allowance check (D9), with a stubbed API client: 49% → the share and the
-      period are printed, with no warning; 51% → a warning before the first question, and the run
-      proceeds; exactly 50% → no warning (the spec says "more than half"); one of the three counts
-      failing → "unknown", never a partial sum and never 0%; tracing off → the client is never
-      constructed. Pair the unknown case with a control showing the same stub yields a number when
-      all three counts answer.
-- [ ] 4.6 Implement `hosted_trace.monthly_usage()` and the call in `eval_cli run`.
-- [ ] 4.7 Add the new requirements to `tests/test_spec_conformance.py`'s map, each pointing at the
+- [ ] 4.5 Tests for the conditions (D9), pure, in `hosted_trace`, over stubbed counts:
+      49% used with the estimate within what remains → proceed; 51% → pause; exactly 50% → proceed
+      (the spec says "more than half"); 10% used but the estimate exceeds what remains → pause; one of
+      the three counts failing → usage unknown → pause, never a partial sum and never 0%; zero traces
+      this month → per-question unknown → pause. Pair each pause with the proceed case that differs in
+      one dimension. Control: the stub that yields unknown yields a number once all three counts answer.
+- [ ] 4.6 Implement `monthly_usage()`, the per-question average and `needs_approval()` in
+      `hosted_trace`. Expose from `evaluation` the count of pairs a run will actually ask after
+      resuming, using the same rule `run_evaluation` uses to skip. Do not write a second copy of it.
+- [ ] 4.7 Tests for the pause in `eval_cli run`, with stdin stubbed: when a condition holds,
+      `yes` proceeds; `no`, an empty line, EOF and a non-terminal stdin each end the run with a
+      non-zero code, before `run_evaluation` is called, with no results file created or appended and
+      the agent's model double never called. When no condition holds, the run proceeds without reading
+      stdin. With tracing off, the tracer client is never constructed and stdin is never read. A
+      resumed file's estimate counts only the remaining pairs.
+- [ ] 4.8 Implement the prompt and its wording in `eval_cli`. `evaluation.py` gains no input.
+- [ ] 4.9 Add the new requirements to `tests/test_spec_conformance.py`'s map, each pointing at the
       tests above.
 
 ## 5. Seeding, the live check, and the record

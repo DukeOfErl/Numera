@@ -143,40 +143,66 @@ rate an answer while the tracer is still receiving it.
 - **WHEN** a reader rates an answer with tracing off
 - **THEN** nothing is sent to any hosted tracer
 
-### Requirement: An evaluation run reports the tracer's monthly allowance before it starts
+### Requirement: An evaluation run waits for approval when the tracer's allowance is at risk
 
-An evaluation run asks many questions unattended, and each traced question spends part of the hosted
-tracer's monthly allowance, which is shared with the readers' own questions. When tracing is on, an
-evaluation run SHALL, before asking its first question, report how much of the current month's
-allowance has been used, and SHALL warn the operator when more than half of it has been used. The
-figure SHALL be stated as an estimate counted by this project, with the period it covers, because it
-is not read from the tracer's billing.
+An evaluation run asks many questions, and each traced question spends part of the hosted tracer's
+monthly allowance, which the readers' own questions share. When the allowance runs out, tracing
+stops for the readers as well. So when tracing is on, an evaluation run SHALL, before asking its
+first question, show the operator:
 
-A figure that cannot be obtained SHALL be reported as unknown, never as zero: an unreadable figure
-shown as nothing used is exactly the false all-clear the check exists to prevent. Neither an unknown
-figure nor a warning SHALL stop the run; the operator decides, and a run that needs a terminal to
-proceed cannot run unattended.
+- how much of the current month's allowance has been used, and the period that covers;
+- an estimate of what this run will spend, from the number of questions it will actually ask
+  (after any it resumes past) and the average cost of a traced question so far this month;
+- whether that estimate exceeds what remains.
 
-With tracing off, the run SHALL NOT contact the tracer at all.
+Both figures SHALL be stated as estimates counted by this project, because neither is read from
+the tracer's billing.
 
-#### Scenario: Less than half the allowance is used
-- **WHEN** an evaluation run starts with tracing on and under half of this month's allowance used
-- **THEN** the operator is shown the share used and the period it covers
-- **AND** no warning is given
+The run SHALL pause and SHALL NOT ask any question until the operator explicitly approves it when
+any of the following holds: more than half of the allowance is used; the estimate exceeds what
+remains; either figure cannot be obtained. Anything other than an explicit approval, including no
+answer because no one is at the terminal, SHALL end the run before its first question, with nothing
+recorded and nothing spent. Declining is the cheap direction: a run can be started again, and an
+allowance spent cannot be recovered until the month turns.
 
-#### Scenario: More than half the allowance is used
+A figure that cannot be obtained SHALL be shown as unknown, never as zero. An unreadable figure
+shown as nothing used is exactly the false all-clear this check exists to prevent.
+
+When none of those conditions holds, the run SHALL show the figures and proceed without asking.
+With tracing off, the run SHALL NOT contact the tracer and SHALL NOT ask.
+
+#### Scenario: Under half used, and the run fits
+- **WHEN** an evaluation run starts with tracing on, under half of this month's allowance used, and an estimate within what remains
+- **THEN** the operator is shown the share used, the period, and the run's estimate
+- **AND** the run proceeds without asking
+
+#### Scenario: More than half used
 - **WHEN** an evaluation run starts with tracing on and more than half of this month's allowance used
-- **THEN** the operator is warned before the first question is asked, with the share used
-- **AND** the run proceeds
+- **THEN** the figures are shown and the run pauses before its first question
+- **AND** it proceeds only on the operator's explicit approval
 
-#### Scenario: The figure cannot be obtained
-- **WHEN** an evaluation run starts with tracing on and the usage cannot be read
-- **THEN** the operator is told the usage is unknown, not that none is used
-- **AND** the run proceeds
+#### Scenario: The run would exceed what remains
+- **WHEN** the run's estimate exceeds the allowance remaining, even with under half used
+- **THEN** the run pauses before its first question
+- **AND** it proceeds only on the operator's explicit approval
+
+#### Scenario: A figure cannot be obtained
+- **WHEN** the usage, or the average cost of a question, cannot be obtained
+- **THEN** it is shown as unknown, not as zero
+- **AND** the run pauses and proceeds only on explicit approval
+
+#### Scenario: The operator declines, or nobody answers
+- **WHEN** the run has paused and the operator declines, or no answer can be read
+- **THEN** the run ends before its first question
+- **AND** no result is recorded and nothing is spent
+
+#### Scenario: A resumed run
+- **WHEN** a run resumes a results file that already holds some of its answers
+- **THEN** the estimate counts only the questions still to be asked
 
 #### Scenario: Tracing is off
 - **WHEN** an evaluation run starts with tracing off
-- **THEN** the tracer is not contacted
+- **THEN** the tracer is not contacted and the run does not pause for it
 
 ### Requirement: A tracer fault never reaches a reader
 

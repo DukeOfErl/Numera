@@ -30,9 +30,11 @@ condition was that hosted tracing be a decision, not an environment variable nob
   `agent.py` and `trace.py` stay free of identity.
 - **A rating is copied to the trace as a score.** The trail table remains the record (ADR-0750); the
   copy exists so that whoever debugs a run sees the thumbs-down beside it.
-- **An evaluation run reports the tracer's monthly allowance before it starts**, and warns above
-  50%. The figure is counted by this project, because Langfuse has no billing API. An unreadable
-  figure is reported as unknown, never as zero, and the run is warned, not stopped.
+- **An evaluation run shows the tracer's monthly usage and its own estimated cost before it starts,
+  and pauses for explicit approval** when more than half is used, when the estimate exceeds what
+  remains, or when a figure is unknown. Anything but an explicit yes ends the run before its first
+  question. The figures are counted by this project, because Langfuse has no billing API, and unknown
+  is never shown as zero.
 - **The tracer cannot affect an answer.** A tracer that is unreachable, rejecting (including the
   Hobby tier's monthly cap), or raising must leave the answer, the trail and the rating exactly as they
   would have been — the same fail-open line the trail draws (ADR-0710).
