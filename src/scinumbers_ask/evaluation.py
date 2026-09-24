@@ -441,6 +441,15 @@ def outstanding(
     return tuple(attempt)
 
 
+def still_to_ask(questions: tuple[Question, ...], results_path: str | Path, repeats: int) -> int:
+    """How many questions a run will actually ask, after what it resumes past.
+
+    The same rule `run_evaluation` skips by, read the same way, so an estimate made
+    before a run and the run itself cannot disagree about what is outstanding.
+    """
+    return len(outstanding(questions, read_results(results_path), repeats))
+
+
 @dataclass
 class Outcome:
     """What a run did, for the caller to report. Not a score."""

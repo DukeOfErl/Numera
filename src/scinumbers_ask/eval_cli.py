@@ -16,8 +16,9 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from typing import Any
 
-from . import autobuild, messages
+from . import autobuild, hosted_trace, messages
 from .agent import AskAgent
 from .answer_sheet import SheetUnavailable, write_answer_sheet
 from .config import Config, NotConfigured, env_setting, format_usd, refuse_retired_env
@@ -28,6 +29,7 @@ from .evaluation import (
     provenance_for,
     read_results,
     run_evaluation,
+    still_to_ask,
 )
 from .events import EndReason
 from .question_set import QuestionSetError, load_question_set
@@ -198,6 +200,53 @@ def main(argv: list[str] | None = None) -> None:
         )
 
 
+def tracing_allowance_approved(questions: int, stdin: Any = None) -> bool:
+    """Show the hosted tracer's allowance and this run's estimate; ask when it is at risk.
+
+    The harness is the one caller that can spend a month's tracing allowance in an
+    afternoon, and on the free tier that also stops tracing for the readers. So when
+    tracing is on, the run shows what is used and what it expects to spend, and
+    pauses for an explicit `yes` when more than half is used, when the estimate
+    would not fit, or when either figure is unknown (`hosted_trace.estimate`).
+    Anything but `yes` -- a `no`, an empty line, end of input, or no terminal to ask
+    on -- is a refusal: a run can be started again, an allowance cannot be unspent.
+
+    The wording is here; the figures and the conditions are `hosted_trace`'s, so
+    they are testable without a terminal and `evaluation` stays runnable without one.
+    With tracing off nothing is counted, nothing is contacted, and nothing is asked.
+    """
+    stdin = sys.stdin if stdin is None else stdin
+    usage = hosted_trace.current().monthly_usage()
+    if usage is None:
+        return True
+    estimate = hosted_trace.estimate(usage, questions)
+    window = f"{usage.since:%Y-%m-%d} to {usage.until:%Y-%m-%d}"
+    if usage.units is None:
+        print(f"Hosted tracing is on. Usage {window}: unknown (it could not be counted).")
+    else:
+        print(
+            f"Hosted tracing is on. Usage {window}: {usage.units:,} of {usage.allowance:,} "
+            f"units ({usage.share:.0%}), counted here and possibly over-counted; "
+            f"{usage.remaining:,} remain."
+        )
+    if estimate.units is None:
+        print(f"This run: {questions} question(s); cost per question unknown.")
+    else:
+        print(
+            f"This run: {questions} question(s) x ~{usage.per_question:,.0f} units "
+            f"= ~{estimate.units:,.0f} units (this month's average per traced question)."
+        )
+    if not estimate.needs_approval:
+        return True
+    print("Paused before the first question: " + "; ".join(estimate.reasons) + ".")
+    if not stdin.isatty():
+        print("No terminal to ask on, so the run ends here.")
+        return False
+    print("Type yes to run anyway: ", end="", flush=True)
+    answer = stdin.readline()
+    return answer.strip().lower() == "yes"
+
+
 def _run(args, questions, corpus: str, entries) -> None:
     """Ask the set and record it. Everything printed here goes to stdout as text."""
     try:
@@ -214,6 +263,12 @@ def _run(args, questions, corpus: str, entries) -> None:
         f"{len(questions)} questions x {args.repeats}, model {config.model}, "
         f"run budget {format_usd(config.run_budget)}, code {provenance.code_version}."
     )
+    try:
+        to_ask = still_to_ask(questions, args.results, args.repeats)
+    except ResultsFileError as exc:
+        raise SystemExit(f"{PROG}: {exc}") from exc
+    if not tracing_allowance_approved(to_ask):
+        raise SystemExit(f"{PROG}: run not approved; nothing was asked or recorded.")
     try:
         outcome = run_evaluation(
             agent,

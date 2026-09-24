@@ -76,8 +76,17 @@ def langsmith_runs() -> Iterator[list[tuple[str, str]]]:
         started.append((run.name, threading.current_thread().name))
         return original(self, run)
 
+    # Counted, then dropped: the client's upload queue is where a run would leave
+    # the host, and an unreachable endpoint still fills the output with retries.
+    import langsmith
+
+    uploads = {name: getattr(langsmith.Client, name) for name in ("create_run", "update_run")}
     LangChainTracer._start_trace = spy
+    for name in uploads:
+        setattr(langsmith.Client, name, lambda *args, **kwargs: None)
     try:
         yield started
     finally:
         LangChainTracer._start_trace = original
+        for name, method in uploads.items():
+            setattr(langsmith.Client, name, method)
