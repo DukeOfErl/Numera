@@ -22,6 +22,24 @@ See `proposal.md` for why. The code this lands on:
   `langfuse.langchain.CallbackHandler`, passed in `config["callbacks"]`. Nothing is traced unless
   that handler is passed.
 
+## Verified against the installed versions (tasks 1.2, 1.3 — 2026-09-24)
+
+`langfuse` 4.15.6, `langsmith` 0.11.0, `langchain-core` 1.5.6, `langgraph` 1.2.11. Read from the
+installed source unless a docs page is named. Each answer corrects or confirms a guess made below.
+
+| | Question | Answer, and where it came from |
+|---|---|---|
+| a | Host variable | `LANGFUSE_BASE_URL`; `LANGFUSE_HOST` is deprecated (`_client/environment_variables.py`). The client also takes `base_url=` directly, which is what we pass. |
+| b | Binding a handler to a trace id | `CallbackHandler(trace_context={"trace_id": ...})` sets the root LangChain run's trace id (`langchain/CallbackHandler.py`). The handler finds its client with `get_client(public_key=...)`, so we construct `Langfuse(...)` once and the handler reuses it. |
+| c | `propagate_attributes` | Contextvar-based OpenTelemetry context. Keyword-only `user_id`, `session_id`, `metadata`, `tags`, `trace_name`, `environment`. Values must be ≤200 US-ASCII characters. Only spans created *after* entering it carry the attributes. |
+| d | Score ids | `create_score(score_id=...)`. The docs (search-docs, scores page) say a re-sent score overwrites only when **id, name and calendar date of the timestamp** all match. A verdict changed on a later day is therefore a second score. Accepted: it is a copy, and the trail holds the answer. `TEXT` scores need 1–500 characters, so the comment goes in `comment` on a `CATEGORICAL` score. |
+| e | Handler errors | `create_score` catches and logs its own exceptions. LangChain's callback manager logs handler exceptions unless the handler sets `raise_error`, and Langfuse's does not. Group 4 still tests the outcome, not these claims. |
+| f | Exit flush | `resource_manager.py` registers `atexit.register(self.shutdown)`. **We write no flush of our own.** |
+| g | Global OTel provider | Without `tracer_provider=`, the client installs a new `TracerProvider` as the **global** one whenever the global is still the default proxy. **We pass our own `tracer_provider=`**, so the global is never touched. `span_exporter=` exists too, and it is the tests' seam: an in-memory exporter on the real code path. |
+| h | Counting units | v2 Metrics API (`api.metrics.metrics(query=...)`): views `observations`, `scores-numeric`, `scores-categorical`, `scores-boolean`, each with a `count` measure. There is **no traces view**; traces are counted as observations with `isRootObservation = true` (docs, metrics-api.md). Hobby has v2 metrics. **Billing period:** Langfuse's own source (via search-docs) stores a per-organisation *billing cycle anchor*, reset to "start of today" on a downgrade to Hobby, so it is not the calendar month and the project API cannot read it. Decision: count the **last 31 days**. That window always contains the current billing period, so it can only over-count, which is the safe direction (it pauses more, never less). |
+| i | Session and user on child spans | The handler reads `langfuse_session_id` / `langfuse_user_id` / `langfuse_tags` from the root run's metadata and enters `propagate_attributes` itself at the root chain start (`CallbackHandler.py` ~l.588). So session goes in the metadata, and every child carries it. User id comes from the driver's outer `propagate_attributes` (D5), and task 3.3 must show the two nest. |
+| 1.3 | LangSmith refusal | Probe: `LANGSMITH_TRACING=true` with a model double and the generator consumed one event at a time. No context: **13** LangSmith runs started, one on `ThreadPoolExecutor-2_0`. Inside `langsmith.tracing_context(enabled=False)`: **0**. D3's mechanism holds and the fallback is not needed. |
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -81,8 +99,7 @@ reach it too):
 
 The credentials are `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and the host variable. **The host is
 required rather than defaulted**, so the region is written down in the deployment's configuration and
-not inherited from an SDK default. Task 1.2 confirms the host variable's exact name in 4.x
-(`LANGFUSE_BASE_URL` or `LANGFUSE_HOST`).
+not inherited from an SDK default. The host variable is `LANGFUSE_BASE_URL` (verified, row a).
 
 **Why not let the Langfuse keys enable it.** A key present is not a decision; the whole point of the
 setting is that someone wrote it on purpose. **Why off rather than refusing to start on an unknown
@@ -214,8 +231,8 @@ dashboard. So every figure is **counted, not read**.
   resume logic will not skip. It comes from the same place `run_evaluation` decides that, not from
   `len(questions) × repeats`, which over-counts every resumed run. Task 4.6 exposes it without
   duplicating the resume rule.
-- **Period.** The calendar month in UTC unless task 1.2 (h) finds how Hobby's billing month is
-  anchored. The period is printed beside the figures either way, so a wrong anchor is visible.
+- **Period.** The last 31 days (row h): the billing month is anchored per organisation and cannot
+  be read, and 31 days always contains it. The window is printed beside the figures.
 - **Scope.** API keys are per project and units are per organisation. The count covers this project
   only, which is exact while the organisation holds one project. README says so.
 - **Unknown is not zero.** Any failure to count, including a partial count where one of the views

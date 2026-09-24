@@ -24,9 +24,9 @@ recorded.
 
 ## 1. Decisions, and the installed APIs they rest on
 
-- [ ] 1.1 CLAUDE.md: add `add-hosted-tracing` → `1000`–`1040` to the ADR table. Create stubs for
+- [x] 1.1 CLAUDE.md: add `add-hosted-tracing` → `1000`–`1040` to the ADR table. Create stubs for
       `1000`, `1010` and `1020`, and commit them before anything else.
-- [ ] 1.2 `uv add --optional ask "langfuse>=4.15,<5"`, then read the **installed** 4.x source and docs
+- [x] 1.2 `uv add --optional ask "langfuse>=4.15,<5"`, then read the **installed** 4.x source and docs
       for each of the following. For the docs, use the Langfuse skill's method: any page as `….md`,
       `langfuse.com/llms.txt` as the index, and `langfuse.com/api/search-docs?query=` for search. All
       three are free and need no key. Record the version and the answer in the design's D-sections (not in
@@ -45,12 +45,12 @@ recorded.
       ids), not through the traces list;
       (i) for D5: whether `session_id` should also go through `propagate_attributes`, set before the
       first observation, so every child observation carries it (the skill's v4 migration note says so).
-- [ ] 1.3 A throwaway probe, not a test and not committed: with `LANGSMITH_TRACING=true` and the
+- [x] 1.3 A throwaway probe, not a test and not committed: with `LANGSMITH_TRACING=true` and the
       installed `langsmith` 0.11.0 / `langchain-core` 1.5.6, does `tracing_context(enabled=False)`
       around a lazily consumed `agent.stream` stop LangChain attaching its LangSmith tracer, including
       on LangGraph's worker threads? Record the result in D3. If it does not, the fallback in D3
       becomes the design before group 2 starts.
-- [ ] 1.4 The Langfuse agent skill (`github.com/langfuse/skills`, read at `b8cc05c` on 2026-09-24):
+- [x] 1.4 The Langfuse agent skill (`github.com/langfuse/skills`, read at `b8cc05c` on 2026-09-24):
       the user installs it at user level. `~/.claude/skills` is read-only to the agent's sandbox, and
       the skill is untracked there until the claude-config `.gitignore` whitelists it. Until then,
       follow its documented method directly (1.2, 5.2).
