@@ -43,6 +43,12 @@ ask = [
     # Streamlit's own extra is `streamlit[auth]`; named directly so the floor is
     # ours to read. Verified against the installed Streamlit 1.61.1 on 2026-09-16.
     "authlib>=1.3.2",
+    # The hosted tracer (ADR-1000). Imported only by `hosted_trace`, and only once
+    # `SCINUMBERS_TRACING` turns it on, so an untraced deployment never starts its
+    # OpenTelemetry exporter. Capped below 5: a major version is where its
+    # LangChain handler and attribute propagation have moved before.
+    # Installed and read: 4.15.6, 2026-09-24.
+    "langfuse>=4.15,<5",
 ]
 ingest = [
     "pydantic>=2.6",

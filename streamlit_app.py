@@ -232,12 +232,15 @@ elif question := st.chat_input("Ask a question", submit_mode="disable", key=web.
         #
         # `items` is the same list being filled as the answer arrives, so by the
         # time the seam is reached it already holds the prose the rating is about.
-        web.answer(
-            agent.ask(session, question),
-            repo,
-            items,
-            after_prose=lambda: web.draw_feedback(items, session),
-        )
+        # Around the consumption rather than the call: the generator runs as it is
+        # read, so this is where the question's trace is actually begun.
+        with web.attributed(admission):
+            web.answer(
+                agent.ask(session, question),
+                repo,
+                items,
+                after_prose=lambda: web.draw_feedback(items, session),
+            )
 
     # Unconditional, and it settles two things this run decided too early.
     #

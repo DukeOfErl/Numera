@@ -42,7 +42,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from . import trace
+from . import hosted_trace, trace
 from .config import env_setting
 
 #: Namespaced, because session state is one flat dictionary shared with every
@@ -147,6 +147,21 @@ def _record(event: str, question_id: str, session_id: str, **fields: Any) -> Non
         print(f"feedback record dropped: {type(exc).__name__}: {exc}", file=sys.stderr)
 
 
+def _copy_to_tracer(question_id: str, name: str, value: Any, **kwargs: Any) -> None:
+    """A copy of the rating on its question's hosted trace, after the trail has it.
+
+    After, never before or instead: the trail is the record (ADR-0750), and a copy
+    that fails must leave it exactly as it would otherwise be. `score` already
+    swallows the tracer's own failures; this also covers building the tracer,
+    because this is the one place a stray exception lands in front of a reader.
+    A no-op when tracing is off.
+    """
+    try:
+        hosted_trace.current().score(question_id, name, value, **kwargs)
+    except Exception as exc:  # noqa: BLE001 - same line `_record` draws, for the same reader
+        print(f"feedback copy to tracer dropped: {type(exc).__name__}: {exc}", file=sys.stderr)
+
+
 def record_verdict(
     state: MutableMapping[str, Any],
     *,
@@ -165,6 +180,12 @@ def record_verdict(
         return False
     ratings(state)[question_id] = Rating(verdict=verdict)
     _record(VERDICT_EVENT, question_id, session_id, verdict=str(verdict))
+    _copy_to_tracer(
+        question_id,
+        hosted_trace.VERDICT_SCORE,
+        1 if verdict is Verdict.UP else 0,
+        data_type="BOOLEAN",
+    )
     return True
 
 
@@ -191,4 +212,11 @@ def record_comment(
         return False
     rating.commented = True
     _record(COMMENT_EVENT, question_id, session_id, comment=text.strip())
+    _copy_to_tracer(
+        question_id,
+        hosted_trace.COMMENT_SCORE,
+        str(rating.verdict),
+        data_type="CATEGORICAL",
+        comment=text.strip(),
+    )
     return True
