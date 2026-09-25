@@ -143,7 +143,7 @@ recorded.
       Record what was seen and on which date. Do not paste corpus text into the record.
 - [x] 5.3 From that trace, count the units one question costs, and write the figure and the implied
       monthly headroom into README.
-- [ ] 5.4 Docs, in this change:
+- [x] 5.4 Docs, in this change:
       README (replace "There is no tracing instrumentation yet", add the setting and keys to the
       configuration table, and state what leaves the host, including readers' comments);
       `.streamlit/secrets.toml.example` (the setting, the keys and the EU host, with placeholder values

@@ -102,6 +102,7 @@ flowchart TB
         events[events.py]
         trace[trace.py]
         store[trail_store.py]
+        ht[hosted_trace.py]
         identity[identity: who may<br/>do what]
     end
     subgraph data["Corpus"]
@@ -110,6 +111,7 @@ flowchart TB
         units[units.py]
     end
     pg[("Postgres<br/>append-only trail")]
+    lf[("Langfuse Cloud EU<br/>one trace per question")]
 
     cli --> messages
     web --> messages
@@ -133,9 +135,20 @@ flowchart TB
     web --> fb
     fb -- "a reader's judgement" --> trace
     web --> identity
+    agent -- "a callback, only if<br/>SCINUMBERS_TRACING=langfuse" --> ht
+    web -- "who asked, as a digest" --> ht
+    fb -- "a copy of the rating" --> ht
+    ht -. "best-effort" .-> lf
 ```
 
 *Caption: which modules exist, and what each may depend on.*
+
+`hosted_trace.py` is the one module that names the hosted tracer. The agent reaches it at its single
+stream call, for a callback and for the refusal of the framework vendor's own tracing; the page
+reaches it only to attach an opaque digest around a question it is drawing; `feedback.py` reaches it
+to copy a rating. None of those paths can change an answer, and all of them do nothing unless
+tracing is switched on (ADR-1010, ADR-1020). The agent's graph (section 1) is unchanged by it:
+callbacks are not nodes, and the middleware list is the same.
 
 `identity` is three modules — `permissions.py` (the roles and the grant table as
 data), `authorization.py` (`require`, called inside the operation it guards) and

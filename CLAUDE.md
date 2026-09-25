@@ -168,6 +168,7 @@ core, and a test there refuses a name with no file behind it.
 | `eval_cli.py` | The evaluation command (`scinumbers-eval`): `check`, `run` and `report` |
 | `trace.py` | The structured trail, one question id and one session id throughout |
 | `trail_store.py` | The trail's durable destination: one append-only table, written best-effort (ADR-0700, ADR-0710) |
+| `hosted_trace.py` | The hosted tracer (Langfuse): the setting that turns it on, the per-question callback, the refusal of LangSmith's own switch, the rating's copy, and the allowance count. Off unless `SCINUMBERS_TRACING=langfuse` (ADR-1000–1020) |
 | `feedback.py` | A reader's judgement of an answer, recorded to the trail. **Presentation, not core** — see below |
 | `permissions.py` | `Role`, `Permission`, `Identity`, and `GRANTS` — the default-deny table as data, with the pruning rule above it (ADR-0800) |
 | `authorization.py` | `allowed` / `require` / `Refused`: the one refusal, called inside the operation it guards, never by the page |
@@ -229,8 +230,8 @@ subagent.
 is next, and the reasons that would otherwise live only in a session transcript.
 It records decisions already taken, not proposals. Read it before proposing a
 change, and reconcile it when one lands; it names the severe findings that gate
-later work (the SQLite ledger on Cloud Run, the LangSmith env var) where a change
-author will meet them rather than rediscover them.
+later work (the SQLite ledger on Cloud Run) where a change author will meet them
+rather than rediscover them.
 
 ## Where the rest of the rules live
 
