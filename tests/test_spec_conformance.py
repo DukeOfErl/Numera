@@ -786,6 +786,9 @@ COVERED.update(
         "One question is one trace, found by the question's identifier": (
             "test_hosted_tracing.py::test_a_question_is_one_trace_whose_id_is_derived_from_the_question",
             "test_hosted_tracing.py::test_two_questions_are_two_traces_in_one_session",
+            "test_hosted_tracing.py::test_a_tagged_question_carries_the_tag_beside_its_own",
+            "test_hosted_tracing.py::test_an_untagged_question_is_not_marked",
+            "test_eval_tracing_allowance.py::test_the_run_is_asked_inside_the_eval_tag",
         ),
         "A trace names who asked only by an opaque value, and the agent is still not told": (
             "test_hosted_tracing.py::test_an_attributed_question_carries_the_value_on_every_span",

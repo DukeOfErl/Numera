@@ -790,3 +790,38 @@ def test_an_abandoned_question_cannot_attribute_a_later_one_to_its_reader(repo, 
         for s in spans
         if format(s.context.trace_id, "032x") == later_trace
     } == {None}
+
+
+# --- an evaluation run is marked, whatever the run label says -----------------------
+
+
+def test_a_tagged_question_carries_the_tag_beside_its_own(repo, config, tmp_path):
+    """Merged, not replacing: the run label and the application tag are still there."""
+    from tracing_doubles import TRACE_TAGS
+
+    agent = agent_with(repo, config, tmp_path, a_question())
+    with recording_tracer() as (tracer, exporter):
+        with tracer.tagged("eval"):
+            ask(agent)
+        spans = finished_spans(tracer, exporter)
+    tag_sets = {tuple(sorted(s.attributes.get(TRACE_TAGS, ()))) for s in spans}
+    assert tag_sets == {tuple(sorted(("eval", "ask", "scinumbers-ask", "run:dev")))}
+
+
+def test_an_untagged_question_is_not_marked(repo, config, tmp_path):
+    """The pair: the same question outside the block carries no `eval`."""
+    from tracing_doubles import TRACE_TAGS
+
+    agent = agent_with(repo, config, tmp_path, a_question())
+    with recording_tracer() as (tracer, exporter):
+        ask(agent)
+        spans = finished_spans(tracer, exporter)
+    assert spans
+    assert all("eval" not in s.attributes.get(TRACE_TAGS, ()) for s in spans)
+
+
+def test_tagging_with_tracing_off_builds_nothing():
+    tracer = HostedTracer(Setting(on=False))
+    with tracer.tagged("eval"):
+        pass
+    assert tracer._client is None

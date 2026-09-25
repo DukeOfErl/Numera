@@ -38,6 +38,10 @@ from .repository import CorpusRepository
 
 PROG = "scinumbers-eval"
 
+#: The tag an evaluation run's hosted traces carry, so they can be told apart
+#: from a person's questions whatever the run label says.
+EVAL_TAG = "eval"
+
 
 def main(argv: list[str] | None = None) -> None:
     # Before the parser, as in `cli.main`: `--corpus` reads the environment as its
@@ -270,14 +274,17 @@ def _run(args, questions, corpus: str, entries) -> None:
     if not tracing_allowance_approved(to_ask):
         raise SystemExit(f"{PROG}: run not approved; nothing was asked or recorded.")
     try:
-        outcome = run_evaluation(
-            agent,
-            questions,
-            args.results,
-            provenance,
-            repeats=args.repeats,
-            announce=lambda text: print(text, file=sys.stderr),
-        )
+        # Marked on the hosted trace as the harness's, whatever `SCINUMBERS_RUN`
+        # says: left unset, an evaluation's run label reads `dev` like a person's.
+        with hosted_trace.current().tagged(EVAL_TAG):
+            outcome = run_evaluation(
+                agent,
+                questions,
+                args.results,
+                provenance,
+                repeats=args.repeats,
+                announce=lambda text: print(text, file=sys.stderr),
+            )
     except (ResultsFileError, ValueError) as exc:
         raise SystemExit(f"{PROG}: {exc}") from exc
 

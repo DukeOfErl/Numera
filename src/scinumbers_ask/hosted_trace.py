@@ -295,6 +295,24 @@ class HostedTracer:
             )
             return nullcontext()
 
+    def tagged(self, *tags: str) -> Any:
+        """Add tags to every trace begun inside this block, beside the question's own.
+
+        For a driver to say what kind of run this is -- the evaluation harness
+        marks its questions `eval` -- without the agent being told who is asking
+        (ADR-0110). Langfuse merges these with the tags the handler sets at the
+        root, rather than replacing them. A no-op when tracing is off.
+        """
+        if not tags or self._langfuse() is None:
+            return nullcontext()
+        try:
+            from langfuse import propagate_attributes
+
+            return propagate_attributes(tags=list(tags))
+        except Exception as exc:  # noqa: BLE001
+            _report_once("tracing.failed", stage="tags", detail=f"{type(exc).__name__}: {exc}")
+            return nullcontext()
+
     def score(
         self,
         question_id: str,

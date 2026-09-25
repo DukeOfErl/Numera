@@ -69,14 +69,23 @@ without consulting any table that maps one to the other. A mapping kept somewher
 can be lost, and without it a rating names a question whose trace cannot be found.
 
 The trace SHALL carry the question's identifier, the session it was asked in, and the run label the
-trail records, so a trace can be filtered to one session and an evaluation run told apart from a
-person's questions.
+trail records, so a trace can be filtered to one session.
+
+A question asked by the evaluation harness SHALL be marked as such on its trace, whatever the run
+label says. The run label is whatever the operator set, and left unset it reads the same for an
+evaluation run as for a person's questions, so it cannot be what tells them apart. The mark SHALL
+come from the harness around its run, not from the agent, which is never told who is asking.
 
 #### Scenario: A question is answered with tracing on
 - **WHEN** a question is answered with tracing on
 - **THEN** exactly one trace is produced for it
 - **AND** its identifier can be computed from the question's identifier alone
 - **AND** it carries the question's identifier, the session and the run label
+
+#### Scenario: A question asked by the evaluation harness
+- **WHEN** the evaluation harness asks a question with tracing on
+- **THEN** its trace is marked as coming from an evaluation run
+- **AND** a question asked through the page or the terminal is not marked
 
 #### Scenario: Two questions in one session
 - **WHEN** two questions are asked in the same session with tracing on

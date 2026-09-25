@@ -182,3 +182,47 @@ def _a_recorded_result(question_id, repeat):
         key = (question_id, repeat)
 
     return Recorded()
+
+
+def test_the_run_is_asked_inside_the_eval_tag(run, monkeypatch):
+    """What the page must not do, the command must: every question it asks is marked.
+
+    Read off the context `run_evaluation` is called in, because that is where each
+    question's trace begins -- the command does not ask anything itself.
+    """
+    from opentelemetry import context as otel
+    from tracing_doubles import on_setting
+
+    seen = []
+    monkeypatch.setattr(
+        eval_cli,
+        "run_evaluation",
+        lambda *a, **k: seen.append(otel.get_current().get("langfuse.propagated.tags")) or _done(),
+    )
+
+    class On(Tracer):
+        def __init__(self):
+            HostedTracer.__init__(self, on_setting())
+            self._usage = usage(1_000)
+            self.counted = 0
+
+    from langfuse._client.resource_manager import LangfuseResourceManager
+
+    try:
+        run(On(), Terminal(""))
+    finally:
+        LangfuseResourceManager.reset()  # one per public key per process otherwise
+    assert seen == [[eval_cli.EVAL_TAG]]
+
+
+def test_with_tracing_off_the_run_carries_no_tag(run, monkeypatch):
+    from opentelemetry import context as otel
+
+    seen = []
+    monkeypatch.setattr(
+        eval_cli,
+        "run_evaluation",
+        lambda *a, **k: seen.append(otel.get_current().get("langfuse.propagated.tags")) or _done(),
+    )
+    run(Tracer(None), Terminal(""))
+    assert seen == [None]
