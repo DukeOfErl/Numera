@@ -28,8 +28,12 @@ present is not the same as someone having decided to send data.
 
 **The vendor's switch is refused where the question is answered, not in a driver.** `AskAgent`
 advances its stream inside `hosted_trace.Isolated`, a private copy of the context with
-`langsmith.tracing_context(enabled=False)` entered inside it. So the web page, the terminal, the
-harness and a test that builds the agent directly all get the same refusal. The probe before it
+`langsmith.tracing_context(enabled=False)` entered inside it, and left inside it again when the
+stream closes. So the web page, the terminal, the harness and a test that builds the agent
+directly all get the same refusal. The review found an earlier version passed a temporary's
+`__enter__`, which exited at once and restored in the caller's context. That was harmless only
+because of how this `langsmith` restores its state. A test now fails if either end of the refusal
+runs outside the private context. The probe before it
 was built: with the switch set, 13 LangSmith runs started, one of them on a LangGraph worker
 thread. With the refusal: none. The variable is left in the environment and the operator is told,
 rather than unset: silently fixing a misconfiguration hides it.

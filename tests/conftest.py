@@ -112,7 +112,12 @@ def _no_test_reaches_a_hosted_tracer(monkeypatch):
     """
     from scinumbers_ask import hosted_trace
 
-    for name in (hosted_trace.SETTING, *hosted_trace.CREDENTIALS, "LANGFUSE_HOST"):
+    for name in (
+        hosted_trace.SETTING,
+        *hosted_trace.CREDENTIALS,
+        "LANGFUSE_HOST",
+        *hosted_trace.VENDOR_SWITCHES,
+    ):
         monkeypatch.delenv(name, raising=False)
     hosted_trace.use(None)
     yield

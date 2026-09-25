@@ -32,9 +32,12 @@ in the change's design ("Verified against the installed versions").
 from __future__ import annotations
 
 import contextvars
+import hashlib
 import json
 import logging
 import os
+import re
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
@@ -203,6 +206,65 @@ def estimate(usage: Usage, questions: int) -> Estimate:
     return Estimate(questions=questions, units=units, reasons=tuple(reasons))
 
 
+def session_ref(session_id: str) -> str:
+    """What the tracer is told a session is: a digest, never the session key itself.
+
+    Without sign-in the session is the `?session=` token from the URL, and that
+    token *is* the key to a reader's conversation -- anyone holding it can open
+    it. Sent as it is, anyone who can read the Langfuse project could. The digest
+    groups a session's traces just as well and opens nothing. Under sign-in the
+    session is already an `acct:` digest; hashing it again costs nothing and keeps
+    one rule for both.
+    """
+    return "s-" + hashlib.sha256(session_id.encode()).hexdigest()[:16]
+
+
+#: Metadata keys that carry the session key itself: `run_config` puts
+#: `session_id` there, and LangGraph copies the checkpoint's `thread_id` -- which is
+#: the session -- into every run's metadata on its own.
+_SESSION_KEYS = ("session_id", "thread_id")
+_DIGEST = re.compile(r"s-[0-9a-f]{16}")
+
+
+def _mask(*, data: Any, **_: Any) -> Any:
+    """Langfuse's client-side mask: the session key never leaves the host.
+
+    Applied by the SDK to every observation's input, output and metadata before
+    export. Only the two keys above are touched, and only when they hold a string.
+    """
+    if isinstance(data, dict) and any(isinstance(data.get(k), str) for k in _SESSION_KEYS):
+        return {
+            k: session_ref(v) if k in _SESSION_KEYS and isinstance(v, str) else v
+            for k, v in data.items()
+        }
+    return data
+
+
+def _mask_spans(*, params: Any) -> Any:
+    """Langfuse's export-stage mask: the same rule, over every exported attribute.
+
+    `_mask` covers what goes through the SDK's own calls, but not the metadata the
+    handler *propagates* to the whole trace (`langfuse.trace.metadata.session_id`,
+    `...thread_id`) -- a test that searched every exported attribute for the raw
+    session found it there. This runs on the finished spans, so nothing gets past
+    it. It must not raise: Langfuse drops the whole batch if it does.
+    """
+    from langfuse.types import MaskOtelSpansResult, OtelSpanPatch
+
+    patches = {}
+    for identifier, span in params.spans.items():
+        changed = {
+            key: session_ref(value)
+            for key, value in (span.attributes or {}).items()
+            if key.rsplit(".", 1)[-1] in _SESSION_KEYS
+            and isinstance(value, str)
+            and not _DIGEST.fullmatch(value)  # already `session_ref`'d by `_mask`
+        }
+        if changed:
+            patches[identifier] = OtelSpanPatch(set_attributes=changed)
+    return MaskOtelSpansResult(span_patches=patches)
+
+
 class HostedTracer:
     """One per process. Every method is safe to call when tracing is off.
 
@@ -218,16 +280,20 @@ class HostedTracer:
         self._span_exporter = span_exporter
         self._client: Any = None
         self._broken = False
-
-    @property
-    def on(self) -> bool:
-        return self.setting.on and not self._broken
+        # Streamlit serves each session on its own thread, and two first questions
+        # can arrive together; Langfuse keeps one client per public key, so a second
+        # build would be silently ignored rather than fail.
+        self._building = threading.Lock()
 
     def _langfuse(self) -> Any:
         """The client, or None. A client that cannot be built is tracing off, reported once."""
         if not self.setting.on or self._broken:
             return None
-        if self._client is None:
+        if self._client is not None:
+            return self._client
+        with self._building:
+            if self._client is not None or self._broken:
+                return self._client
             try:
                 from langfuse import Langfuse
                 from opentelemetry.sdk.trace import TracerProvider
@@ -238,12 +304,14 @@ class HostedTracer:
                     base_url=self.setting.base_url,
                     tracer_provider=TracerProvider(),
                     span_exporter=self._span_exporter,
+                    mask=_mask,
+                    mask_otel_spans=_mask_spans,
                 )
             except Exception as exc:  # noqa: BLE001 -- any failure here is tracing off, never an outage
                 self._broken = True
                 _report_once("tracing.unavailable", detail=f"{type(exc).__name__}: {exc}")
                 return None
-        return self._client
+            return self._client
 
     def traced(self, config: dict[str, Any], trace: QuestionTrace) -> dict[str, Any]:
         """The framework config for one question, with the tracer's callback when it is on.
@@ -252,7 +320,8 @@ class HostedTracer:
         keys the Langfuse handler lifts onto the whole trace at its root (the
         trace's name and its session; its tags come from the run's own `tags`). The
         session travels there rather than in `attributed()`, so every child
-        observation carries it from the first one.
+        observation carries it from the first one -- as `session_ref`, never the
+        session key itself.
         """
         client = self._langfuse()
         if client is None:
@@ -272,7 +341,7 @@ class HostedTracer:
         metadata = dict(config.get("metadata", {}))
         metadata["langfuse_trace_name"] = TRACE_NAME
         if trace.session_id:
-            metadata["langfuse_session_id"] = trace.session_id
+            metadata["langfuse_session_id"] = session_ref(trace.session_id)
         callbacks = [*config.get("callbacks", []), handler]
         return {**config, "metadata": metadata, "callbacks": callbacks}
 
@@ -284,35 +353,51 @@ class HostedTracer:
         when tracing is off or nobody is signed in -- `None` attaches nothing,
         rather than a placeholder that reads as an account.
         """
-        if user_id is None or self._langfuse() is None:
+        if user_id is None:
             return nullcontext()
-        try:
-            from langfuse import propagate_attributes
-
-            return propagate_attributes(user_id=user_id)
-        except Exception as exc:  # noqa: BLE001
-            _report_once(
-                "tracing.failed", stage="attribution", detail=f"{type(exc).__name__}: {exc}"
-            )
-            return nullcontext()
+        return self._propagating("attribution", user_id=user_id)
 
     def tagged(self, *tags: str) -> Any:
         """Add tags to every trace begun inside this block, beside the question's own.
 
-        For a driver to say what kind of run this is -- the evaluation harness
-        marks its questions `eval` -- without the agent being told who is asking
-        (ADR-0110). Langfuse merges these with the tags the handler sets at the
-        root, rather than replacing them. A no-op when tracing is off.
+        For a caller to say what kind of run this is -- `run_evaluation` marks its
+        questions `eval` -- without the agent being told who is asking (ADR-0110).
+        Langfuse merges these with the tags the handler sets at the root, rather
+        than replacing them. A no-op when tracing is off.
         """
-        if not tags or self._langfuse() is None:
+        if not tags:
             return nullcontext()
-        try:
-            from langfuse import propagate_attributes
+        return self._propagating("tags", tags=list(tags))
 
-            return propagate_attributes(tags=list(tags))
-        except Exception as exc:  # noqa: BLE001
-            _report_once("tracing.failed", stage="tags", detail=f"{type(exc).__name__}: {exc}")
-            return nullcontext()
+    @contextmanager
+    def _propagating(self, stage: str, **attributes: Any) -> Iterator[None]:
+        """Langfuse's `propagate_attributes`, failing open at every step.
+
+        One wrapper for both callers above, so a fix to how it fails cannot reach
+        one and miss the other. Entering and leaving are guarded as well as
+        building: a propagation that raised on entry would otherwise escape into
+        the page drawing the answer. The block's own exceptions pass through.
+        """
+        scope = None
+        if self._langfuse() is not None:
+            try:
+                from langfuse import propagate_attributes
+
+                scope = propagate_attributes(**attributes)
+                scope.__enter__()
+            except Exception as exc:  # noqa: BLE001
+                scope = None
+                _report_once("tracing.failed", stage=stage, detail=f"{type(exc).__name__}: {exc}")
+        try:
+            yield
+        finally:
+            if scope is not None:
+                try:
+                    scope.__exit__(None, None, None)
+                except Exception as exc:  # noqa: BLE001
+                    _report_once(
+                        "tracing.failed", stage=stage, detail=f"{type(exc).__name__}: {exc}"
+                    )
 
     def score(
         self,
@@ -325,10 +410,11 @@ class HostedTracer:
     ) -> None:
         """Copy a rating onto its question's trace. Never raises; the trail is the record.
 
-        The score id is derived from the question and the score's name, so a
-        reader who changes their verdict overwrites it -- within a calendar day,
-        which is Langfuse's rule for an overwrite; a change on a later day adds a
-        second score. That is accepted for a copy.
+        The score id is derived from the question and the score's name, so the
+        same score sent twice -- a retried request -- is one score, not two
+        (Langfuse overwrites when id, name and calendar date all match). A reader
+        cannot change a verdict (`feedback.record_verdict` refuses a second), so
+        this is about duplicates, not about keeping a latest opinion.
         """
         client = self._langfuse()
         if client is None:
@@ -468,9 +554,13 @@ class Isolated:
     def __init__(self, stream: Any) -> None:
         self._context = contextvars.copy_context()
         self._stream = stream
-        # Entered inside the private context and never left: the context is
-        # discarded with this object, so there is nothing to restore.
-        self._context.run(vendor_tracing_refused().__enter__)
+        # Entered inside the private context, held here, and left inside it again
+        # in `close`. Holding the reference is the point: passing a temporary's
+        # bound `__enter__` let it be collected at once, and its restore then ran
+        # in the *caller's* context -- which happened to be harmless with this
+        # `langsmith`, and would not be with one that resets by token.
+        self._refusal = vendor_tracing_refused()
+        self._context.run(self._refusal.__enter__)
 
     def __iter__(self) -> Isolated:
         return self
@@ -479,20 +569,31 @@ class Isolated:
         return self._context.run(next, self._stream)
 
     def close(self) -> None:
-        self._context.run(self._stream.close)
+        try:
+            self._context.run(self._stream.close)
+        finally:
+            self._context.run(self._refusal.__exit__, None, None, None)
 
 
 _current: HostedTracer | None = None
+_current_lock = threading.Lock()
 
 
 def current() -> HostedTracer:
-    """The process's tracer, built from the environment on first use."""
+    """The process's tracer, built from the environment on first use.
+
+    Locked, because Streamlit sessions run on threads of their own: two first
+    questions arriving together would otherwise build two tracers, with the
+    process keeping whichever was written last.
+    """
     global _current
     if _current is None:
-        setting = read_setting()
-        if setting.problem:
-            _report_once("tracing.off", detail=setting.problem)
-        _current = HostedTracer(setting)
+        with _current_lock:
+            if _current is None:
+                setting = read_setting()
+                if setting.problem:
+                    _report_once("tracing.off", detail=setting.problem)
+                _current = HostedTracer(setting)
     return _current
 
 

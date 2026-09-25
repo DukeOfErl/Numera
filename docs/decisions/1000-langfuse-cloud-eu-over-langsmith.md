@@ -45,6 +45,13 @@ packages and never runs them.
 
 LangSmith's native LangGraph view is given up, and so is its zero-dependency path.
 
+**An unreachable Langfuse stops an evaluation run until someone approves it.** Usage that cannot
+be counted is shown as unknown and pauses the run, and with no terminal to answer on, the run ends
+before its first question. A code review flagged this as a telemetry outage becoming a harness
+outage. It is deliberate, the user's decision of 2026-09-25: evaluation runs are attended, and an
+unknown figure is not a figure to spend against. The pause is in `run_evaluation`, so every caller
+meets it; the command only words the question.
+
 The allowance is counted in units rather than traces. A question cost 37 units when measured
 (2026-09-25), which is about 1,300 questions a month. The evaluation harness can spend that
 quickly, which is why a run shows its estimate and pauses for approval when the allowance is at

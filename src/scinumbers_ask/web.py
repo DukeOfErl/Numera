@@ -21,6 +21,7 @@ re-run after the next question.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import html
 import json
 import logging
@@ -554,17 +555,41 @@ def account_scope(admission: Admission) -> str | None:
     return hashlib.sha256(admission.account.email.encode()).hexdigest()[:16]
 
 
+def trace_user(admission: Admission, key: str | None = None) -> str | None:
+    """Who asked, as the hosted tracer is told it: a digest keyed with a secret this host holds.
+
+    Not `account_scope`. That is an unsalted hash of the address, fine for a
+    ledger key nobody outside reads, and reversible by anyone who can guess an
+    address -- which a third party holding the traces could, for a handful of
+    named testers. Keyed with `[auth]`'s `cookie_secret`, which the host already
+    has and never sends anywhere, the value is stable per account and opens
+    nothing without the key (ADR-1020).
+
+    `None` without sign-in, and `None` when no key can be read: an unkeyed value
+    is exactly what this replaces, so there is no fallback to one.
+    """
+    if not admission.configured or admission.account is None:
+        return None
+    if key is None:
+        try:
+            key = str(st.secrets["auth"]["cookie_secret"])
+        except Exception:  # noqa: BLE001 - no key means no attribution, never an unkeyed one
+            return None
+    if not key:
+        return None
+    email = admission.account.email.strip().lower().encode()
+    return "u-" + hmac.new(key.encode(), email, hashlib.sha256).hexdigest()[:16]
+
+
 def attributed(admission: Admission) -> Any:
     """Who asked, attached to the hosted trace of every question asked inside this block.
 
-    The same opaque digest the ledger is narrowed by, and for the same reason: it
-    is stable per account, it is `None` without sign-in, and nothing can turn it
-    back into an address (ADR-1020). Attached here, around the page's consumption
-    of the event stream, so the agent is handed nothing new -- the trail's
-    identity is stamped at the sink the same way (ADR-0820). A no-op when tracing
-    is off.
+    As `trace_user`: keyed, stable per account, `None` without sign-in (ADR-1020).
+    Attached here, around the page's consumption of the event stream, so the agent
+    is handed nothing new -- the trail's identity is stamped at the sink the same
+    way (ADR-0820). A no-op when tracing is off.
     """
-    return hosted_trace.current().attributed(account_scope(admission))
+    return hosted_trace.current().attributed(trace_user(admission))
 
 
 def effective_session(admission: Admission, url_session: str) -> str:

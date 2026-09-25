@@ -18,7 +18,7 @@ import os
 import sys
 from typing import Any
 
-from . import autobuild, hosted_trace, messages
+from . import autobuild, messages
 from .agent import AskAgent
 from .answer_sheet import SheetUnavailable, write_answer_sheet
 from .config import Config, NotConfigured, env_setting, format_usd, refuse_retired_env
@@ -26,10 +26,10 @@ from .corpus import CorpusUnavailable, load
 from .evaluation import (
     ResultsFileError,
     ResultsWouldBeCommitted,
+    RunNotApproved,
     provenance_for,
     read_results,
     run_evaluation,
-    still_to_ask,
 )
 from .events import EndReason
 from .question_set import QuestionSetError, load_question_set
@@ -37,10 +37,6 @@ from .report import expected_taken_from_the_set, render
 from .repository import CorpusRepository
 
 PROG = "scinumbers-eval"
-
-#: The tag an evaluation run's hosted traces carry, so they can be told apart
-#: from a person's questions whatever the run label says.
-EVAL_TAG = "eval"
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -204,26 +200,19 @@ def main(argv: list[str] | None = None) -> None:
         )
 
 
-def tracing_allowance_approved(questions: int, stdin: Any = None) -> bool:
-    """Show the hosted tracer's allowance and this run's estimate; ask when it is at risk.
+def approve_on_the_terminal(usage: Any, estimate: Any, stdin: Any = None) -> bool:
+    """Show the tracer's allowance and this run's estimate; ask when approval is needed.
 
-    The harness is the one caller that can spend a month's tracing allowance in an
-    afternoon, and on the free tier that also stops tracing for the readers. So when
-    tracing is on, the run shows what is used and what it expects to spend, and
-    pauses for an explicit `yes` when more than half is used, when the estimate
-    would not fit, or when either figure is unknown (`hosted_trace.estimate`).
-    Anything but `yes` -- a `no`, an empty line, end of input, or no terminal to ask
-    on -- is a refusal: a run can be started again, an allowance cannot be unspent.
-
-    The wording is here; the figures and the conditions are `hosted_trace`'s, so
-    they are testable without a terminal and `evaluation` stays runnable without one.
-    With tracing off nothing is counted, nothing is contacted, and nothing is asked.
+    The wording only. Whether a run needs approval, and the refusal when it is
+    not given, belong to `run_evaluation`, where every caller passes; this is the
+    command's way of answering. It shows the figures whenever tracing is on, and
+    when `estimate.needs_approval` it reads one line: only `yes` approves. A `no`,
+    an empty line, end of input or no terminal to ask on is a refusal -- a run can
+    be started again, an allowance cannot be unspent. Deliberate even when the
+    figure is unknown because Langfuse is unreachable: an evaluation run is
+    attended, and the operator decides (ADR-1000).
     """
     stdin = sys.stdin if stdin is None else stdin
-    usage = hosted_trace.current().monthly_usage()
-    if usage is None:
-        return True
-    estimate = hosted_trace.estimate(usage, questions)
     window = f"{usage.since:%Y-%m-%d} to {usage.until:%Y-%m-%d}"
     if usage.units is None:
         print(f"Hosted tracing is on. Usage {window}: unknown (it could not be counted).")
@@ -233,12 +222,13 @@ def tracing_allowance_approved(questions: int, stdin: Any = None) -> bool:
             f"units ({usage.share:.0%}), counted here and possibly over-counted; "
             f"{usage.remaining:,} remain."
         )
+    attempts = f"{estimate.questions} attempt(s) (questions x repeats still to ask)"
     if estimate.units is None:
-        print(f"This run: {questions} question(s); cost per question unknown.")
+        print(f"This run: {attempts}; cost per attempt unknown.")
     else:
         print(
-            f"This run: {questions} question(s) x ~{usage.per_question:,.0f} units "
-            f"= ~{estimate.units:,.0f} units (this month's average per traced question)."
+            f"This run: {attempts} x ~{usage.per_question:,.0f} units "
+            f"= ~{estimate.units:,.0f} units (this window's average per traced question)."
         )
     if not estimate.needs_approval:
         return True
@@ -247,8 +237,7 @@ def tracing_allowance_approved(questions: int, stdin: Any = None) -> bool:
         print("No terminal to ask on, so the run ends here.")
         return False
     print("Type yes to run anyway: ", end="", flush=True)
-    answer = stdin.readline()
-    return answer.strip().lower() == "yes"
+    return stdin.readline().strip().lower() == "yes"
 
 
 def _run(args, questions, corpus: str, entries) -> None:
@@ -268,23 +257,17 @@ def _run(args, questions, corpus: str, entries) -> None:
         f"run budget {format_usd(config.run_budget)}, code {provenance.code_version}."
     )
     try:
-        to_ask = still_to_ask(questions, args.results, args.repeats)
-    except ResultsFileError as exc:
-        raise SystemExit(f"{PROG}: {exc}") from exc
-    if not tracing_allowance_approved(to_ask):
-        raise SystemExit(f"{PROG}: run not approved; nothing was asked or recorded.")
-    try:
-        # Marked on the hosted trace as the harness's, whatever `SCINUMBERS_RUN`
-        # says: left unset, an evaluation's run label reads `dev` like a person's.
-        with hosted_trace.current().tagged(EVAL_TAG):
-            outcome = run_evaluation(
-                agent,
-                questions,
-                args.results,
-                provenance,
-                repeats=args.repeats,
-                announce=lambda text: print(text, file=sys.stderr),
-            )
+        outcome = run_evaluation(
+            agent,
+            questions,
+            args.results,
+            provenance,
+            repeats=args.repeats,
+            announce=lambda text: print(text, file=sys.stderr),
+            approve=approve_on_the_terminal,
+        )
+    except RunNotApproved as exc:
+        raise SystemExit(f"{PROG}: run not approved; nothing was asked or recorded.") from exc
     except (ResultsFileError, ValueError) as exc:
         raise SystemExit(f"{PROG}: {exc}") from exc
 

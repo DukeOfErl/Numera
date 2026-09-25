@@ -68,8 +68,10 @@ from the question's identifier alone — the same identifier the trail and any r
 without consulting any table that maps one to the other. A mapping kept somewhere is a mapping that
 can be lost, and without it a rating names a question whose trace cannot be found.
 
-The trace SHALL carry the question's identifier, the session it was asked in, and the run label the
-trail records, so a trace can be filtered to one session.
+The trace SHALL carry the question's identifier, a value identifying the session it was asked in,
+and the run label the trail records, so a trace can be filtered to one session. The value SHALL NOT
+be the session's own key: where a session is named by a token from the link, that token opens the
+conversation, and a trace is read by a third party.
 
 A question asked by the evaluation harness SHALL be marked as such on its trace, whatever the run
 label says. The run label is whatever the operator set, and left unset it reads the same for an
@@ -87,6 +89,11 @@ come from the harness around its run, not from the agent, which is never told wh
 - **THEN** its trace is marked as coming from an evaluation run
 - **AND** a question asked through the page or the terminal is not marked
 
+#### Scenario: The session's key is not sent
+- **WHEN** a question is asked in a session named by a token from the link, with tracing on
+- **THEN** nothing sent to the tracer contains that token
+- **AND** the trace still carries a value identifying the session
+
 #### Scenario: Two questions in one session
 - **WHEN** two questions are asked in the same session with tracing on
 - **THEN** they produce two traces with different identifiers
@@ -96,7 +103,10 @@ come from the harness around its run, not from the agent, which is never told wh
 
 A trace of a question asked by a signed-in reader SHALL carry a value that is the same for every
 question that account asks and different between accounts, and SHALL NOT carry the reader's address,
-name or role. The tracer is a third party, and attribution needs a stable key, not a person.
+name or role. The tracer is a third party, and attribution needs a stable key, not a person. The
+value SHALL NOT be computable from a reader's address by anyone who does not hold a secret this
+host keeps: an unkeyed digest of an address is confirmed by anyone who guesses the address. Where
+no such secret is available, the trace SHALL carry no per-account value.
 
 Where nobody is signed in — no sign-in configured, the terminal, the evaluation harness — a trace
 SHALL carry no such value, rather than a placeholder that reads as an account.

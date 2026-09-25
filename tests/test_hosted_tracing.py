@@ -289,7 +289,7 @@ def test_a_question_is_one_trace_whose_id_is_derived_from_the_question(repo, con
     assert len(spans) > 1  # the model call and the tool call are in it, not only a root
     metadata = " ".join(str(dict(s.attributes)) for s in spans)
     assert qid in metadata
-    assert all(s.attributes.get(SESSION_ID) == "session-7" for s in spans)
+    assert all(s.attributes.get(SESSION_ID) == hosted_trace.session_ref("session-7") for s in spans)
     assert "run:dev" in metadata
 
 
@@ -312,7 +312,7 @@ def test_two_questions_are_two_traces_in_one_session(repo, config, tmp_path):
     expected = {hosted_trace.trace_id_for(question_id_of(e)) for e in (first, second)}
     assert len(expected) == 2
     assert trace_ids(spans) == expected
-    assert {s.attributes.get(SESSION_ID) for s in spans} == {"s-shared"}
+    assert {s.attributes.get(SESSION_ID) for s in spans} == {hosted_trace.session_ref("s-shared")}
 
 
 def test_the_trace_id_depends_on_the_question_not_the_session():
@@ -710,11 +710,14 @@ def test_the_page_attaches_the_account_digest_and_never_the_address(repo, config
     account = Account(email="tester@example.org", role=Role.SCIENTIST, openrouter_key="sk-t")
     admission = web.Admission(web.Door.OPEN, configured=True, account=account)
     agent = agent_with(repo, config, tmp_path, a_question())
-    with recording_tracer() as (tracer, exporter):
-        with web.attributed(admission):
-            ask(agent)
-        spans = finished_spans(tracer, exporter)
-    assert {s.attributes.get(USER_ID) for s in spans} == {web.account_scope(admission)}
+    with _secrets({"auth": {"cookie_secret": "a-key-only-this-host-holds"}}):
+        expected = web.trace_user(admission)
+        with recording_tracer() as (tracer, exporter):
+            with web.attributed(admission):
+                ask(agent)
+            spans = finished_spans(tracer, exporter)
+    assert expected is not None
+    assert {s.attributes.get(USER_ID) for s in spans} == {expected}
     everything = " ".join(str(dict(s.attributes)) for s in spans)
     assert "tester@example.org" not in everything
     assert str(account.role) not in everything
@@ -908,3 +911,167 @@ def test_the_client_is_built_from_the_setting_and_never_touches_the_global_provi
     )
     assert kwargs["tracer_provider"] is not None
     assert kwargs["tracer_provider"] is not otel_trace.get_tracer_provider()
+
+
+# --- review fixes: what reaches the tracer, and how the pieces hold up ---------------
+
+
+from contextlib import contextmanager as _contextmanager  # noqa: E402
+
+
+@_contextmanager
+def _secrets(values):
+    """`st.secrets` with the given content, for the length of the block."""
+    import streamlit as st
+    from streamlit.runtime.secrets import Secrets
+
+    replacement = Secrets()
+    replacement._secrets = values
+    original = st.secrets
+    st.secrets = replacement
+    try:
+        yield
+    finally:
+        st.secrets = original
+
+
+def _admitted(email):
+    from scinumbers_ask import web
+    from scinumbers_ask.accounts import Account
+    from scinumbers_ask.permissions import Role
+
+    account = Account(email=email, role=Role.SCIENTIST, openrouter_key="sk")
+    return web.Admission(web.Door.OPEN, configured=True, account=account)
+
+
+def test_the_tracer_user_is_keyed_and_cannot_be_recomputed_from_a_guessed_address():
+    """ADR-1020, after review: an unsalted hash of an address is confirmed by anyone who
+    guesses the address. The keyed value is stable, differs between accounts, changes
+    with the key, and is not the unkeyed digest the ledger uses."""
+    import hashlib
+
+    from scinumbers_ask import web
+
+    a, b = _admitted("tester@example.org"), _admitted("other@example.org")
+    one = web.trace_user(a, key="k1")
+    assert one == web.trace_user(a, key="k1")
+    assert one != web.trace_user(b, key="k1")
+    assert one != web.trace_user(a, key="k2")
+    assert hashlib.sha256(b"tester@example.org").hexdigest()[:16] not in one
+    assert one != web.account_scope(a)
+
+
+def test_without_a_key_nobody_is_attributed_rather_than_attributed_unkeyed():
+    from scinumbers_ask import web
+
+    with _secrets({}):
+        assert web.trace_user(_admitted("tester@example.org")) is None
+    with _secrets({"auth": {"cookie_secret": "k"}}):
+        assert web.trace_user(_admitted("tester@example.org")) is not None  # the pair
+
+
+def test_the_session_key_never_reaches_the_tracer(repo, config, tmp_path):
+    """Without sign-in the session is the URL token, and the token opens the
+    conversation. It must not appear anywhere in what is exported -- the propagated
+    session, the `session_id` metadata, or the `thread_id` LangGraph copies in."""
+    token = "url-token-that-opens-a-conversation"
+    agent = agent_with(repo, config, tmp_path, a_question())
+    with recording_tracer() as (tracer, exporter):
+        ask(agent, session=token)
+        spans = finished_spans(tracer, exporter)
+    assert spans
+    everything = " ".join(str(dict(s.attributes)) for s in spans)
+    assert token not in everything
+    assert hosted_trace.session_ref(token) in everything  # the pair: the session is there
+
+
+def test_the_vendor_refusal_is_entered_and_left_inside_the_private_context():
+    """The review found the refusal exited at once, in the caller's context, by
+    accident. A context variable reset by token raises when reset in a different
+    context -- so this fails if either end of the refusal leaves the private one."""
+    import contextvars
+
+    marker = contextvars.ContextVar("marker", default="caller")
+    exits = []
+
+    @_contextmanager
+    def refusal():
+        token = marker.set("refused")
+        try:
+            yield
+        finally:
+            marker.reset(token)
+            exits.append(True)
+
+    def stream():
+        yield marker.get()
+
+    original = hosted_trace.vendor_tracing_refused
+    hosted_trace.vendor_tracing_refused = refusal
+    try:
+        isolated = hosted_trace.Isolated(stream())
+        assert next(isolated) == "refused"
+        assert marker.get() == "caller"
+        isolated.close()
+    finally:
+        hosted_trace.vendor_tracing_refused = original
+    assert exits == [True]
+    assert marker.get() == "caller"
+
+
+def test_a_propagation_that_fails_on_entry_does_not_reach_the_page(monkeypatch):
+    import langfuse
+
+    class Breaks:
+        def __enter__(self):
+            raise RuntimeError("entry failed")
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(langfuse, "propagate_attributes", lambda **kwargs: Breaks())
+    tracer = HostedTracer(on_setting())
+    tracer._client = object()
+    ran = []
+    with tracer.attributed("u"), tracer.tagged("eval"):
+        ran.append(True)
+    assert ran == [True]
+
+
+def test_first_questions_from_many_sessions_build_one_tracer_and_one_client(monkeypatch):
+    import threading
+    import time
+
+    import langfuse
+
+    built = []
+
+    def slow_client(**kwargs):
+        time.sleep(0.05)
+        built.append(kwargs)
+        return object()
+
+    monkeypatch.setattr(langfuse, "Langfuse", slow_client)
+    monkeypatch.setattr(hosted_trace, "read_setting", on_setting)
+    got = []
+    threads = [
+        threading.Thread(target=lambda: got.append(hosted_trace.current()._langfuse()))
+        for _ in range(8)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert len(built) == 1
+    assert len({id(c) for c in got}) == 1
+
+
+def test_a_raw_session_shaped_like_a_prefix_is_still_masked():
+    """Only an exact digest is left alone; a token that merely starts like one is not."""
+    from types import SimpleNamespace
+
+    span = SimpleNamespace(attributes={"langfuse.trace.metadata.session_id": "s-abc-raw-token"})
+    result = hosted_trace._mask_spans(params=SimpleNamespace(spans={"x": span}))
+    assert result.span_patches["x"].set_attributes == {
+        "langfuse.trace.metadata.session_id": hosted_trace.session_ref("s-abc-raw-token")
+    }

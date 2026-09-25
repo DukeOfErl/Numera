@@ -32,7 +32,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
-from . import messages
+from . import hosted_trace, messages
 from .agent import SYSTEM_PROMPT, AskAgent
 from .config import Config
 from .events import (
@@ -441,13 +441,20 @@ def outstanding(
     return tuple(attempt)
 
 
-def still_to_ask(questions: tuple[Question, ...], results_path: str | Path, repeats: int) -> int:
-    """How many questions a run will actually ask, after what it resumes past.
+#: The tag an evaluation run's hosted traces carry, so they can be told apart
+#: from a person's questions whatever the run label says.
+EVAL_TAG = "eval"
 
-    The same rule `run_evaluation` skips by, read the same way, so an estimate made
-    before a run and the run itself cannot disagree about what is outstanding.
+
+class RunNotApproved(Exception):
+    """The hosted tracer's allowance was at risk and the run was not approved.
+
+    Raised before the first question, so nothing has been asked, recorded or spent.
     """
-    return len(outstanding(questions, read_results(results_path), repeats))
+
+    def __init__(self, reasons: tuple[str, ...]) -> None:
+        super().__init__("; ".join(reasons))
+        self.reasons = reasons
 
 
 @dataclass
@@ -475,12 +482,24 @@ def run_evaluation(
     *,
     repeats: int = 1,
     announce: Any = None,
+    approve: Any = None,
 ) -> Outcome:
     """Ask every outstanding question, recording each result as it completes.
 
     The run stops when a question ends on the run budget: the budget bounds the
     run, not the question, so every question after it would end the same way and
     cost a model call each to say so.
+
+    **With hosted tracing on, it asks before it spends the tracer's allowance.**
+    The questions still to ask, after resume, are costed against this month's
+    counted usage (`hosted_trace.estimate`). `approve(usage, estimate)` is called
+    with both -- for the caller to show them, and to answer when the estimate says
+    approval is needed -- and a run that needs approval and does not get it raises
+    `RunNotApproved` before the first question. With no `approve`, such a run is
+    refused: the refusal belongs here, where every caller passes, and the caller
+    keeps only the wording (the user-level rule "guards belong to the
+    operation"). Nothing to ask means nothing to cost: the tracer is not
+    contacted. Every question asked is tagged `eval` on its trace.
     """
     if repeats < 1:
         raise ValueError("a run has at least one repeat")
@@ -490,35 +509,45 @@ def run_evaluation(
     outcome = Outcome()
     stopped_at: int | None = None
 
-    for position, (question, repeat) in enumerate(todo):
-        if stopped_at is not None:
-            outcome.questions_skipped += 1
-            outcome.skipped = outcome.skipped + (question.question_id,)
-            continue
-        session = session_for(_root_of(question, by_id), repeat)
-        if announce:
-            announce(f"[{position + 1}/{len(todo)}] {question.question_id} (repeat {repeat})")
-        outcome.attempted += 1
-        result = _ask_one(agent, question, repeat, session, provenance)
-        append_result(results_path, result)
-        outcome.recorded += 1
-        if result.failure:
-            outcome.failed += 1
-        # Every ending after which asking again cannot come out differently, not the
-        # run budget alone. `STOP_THE_RUN` is the set both interactive drivers already
-        # stop on, and it is shared for exactly this reason: a third adapter deciding
-        # for itself which endings are final is how they come to disagree. Left as
-        # `RUN_BUDGET` only, a key that ran out of credit part-way would leave the
-        # harness asking every remaining question, recording the agent's "no credit
-        # left" notice as each answer and scoring each as an ungrounded non-answer --
-        # a results file that reads as the model failing rather than a run that
-        # stopped.
-        if result.end_reason in messages.STOP_THE_RUN:
-            # Back to the enum: a `Result` holds the reason as a string, because a
-            # record has to be readable without this package. `Outcome` is in-memory
-            # and its caller compares against members, so the string stops here.
-            outcome.stopped_on = EndReason(result.end_reason)
-            stopped_at = position
+    tracer = hosted_trace.current()
+    if todo:
+        usage = tracer.monthly_usage()
+        if usage is not None:
+            estimate = hosted_trace.estimate(usage, len(todo))
+            approved = bool(approve(usage, estimate)) if approve is not None else False
+            if estimate.needs_approval and not approved:
+                raise RunNotApproved(estimate.reasons)
+
+    with tracer.tagged(EVAL_TAG):
+        for position, (question, repeat) in enumerate(todo):
+            if stopped_at is not None:
+                outcome.questions_skipped += 1
+                outcome.skipped = outcome.skipped + (question.question_id,)
+                continue
+            session = session_for(_root_of(question, by_id), repeat)
+            if announce:
+                announce(f"[{position + 1}/{len(todo)}] {question.question_id} (repeat {repeat})")
+            outcome.attempted += 1
+            result = _ask_one(agent, question, repeat, session, provenance)
+            append_result(results_path, result)
+            outcome.recorded += 1
+            if result.failure:
+                outcome.failed += 1
+            # Every ending after which asking again cannot come out differently, not the
+            # run budget alone. `STOP_THE_RUN` is the set both interactive drivers already
+            # stop on, and it is shared for exactly this reason: a third adapter deciding
+            # for itself which endings are final is how they come to disagree. Left as
+            # `RUN_BUDGET` only, a key that ran out of credit part-way would leave the
+            # harness asking every remaining question, recording the agent's "no credit
+            # left" notice as each answer and scoring each as an ungrounded non-answer --
+            # a results file that reads as the model failing rather than a run that
+            # stopped.
+            if result.end_reason in messages.STOP_THE_RUN:
+                # Back to the enum: a `Result` holds the reason as a string, because a
+                # record has to be readable without this package. `Outcome` is in-memory
+                # and its caller compares against members, so the string stops here.
+                outcome.stopped_on = EndReason(result.end_reason)
+                stopped_at = position
     return outcome
 
 

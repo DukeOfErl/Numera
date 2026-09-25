@@ -191,7 +191,9 @@ The keys alone turn nothing on, an unrecognised value leaves it off and says so 
 - **Found by the question.** A trace's id is derived from the question's identifier, so a trail row
   or a rating leads straight to it. Traces are named `ask` and tagged `run:<SCINUMBERS_RUN>`;
   evaluation runs are tagged `eval` as well.
-- **Who asked** appears only as an opaque per-account digest, and only where sign-in is configured
+- **Who asked** appears only as a per-account digest keyed with `[auth]`'s `cookie_secret`, so it
+  cannot be recomputed from a guessed address, and only where sign-in is configured. The session
+  appears only as a digest too, since a session token from the link would open the conversation
   ([ADR-1020](docs/decisions/1020-attribution-is-an-opaque-digest-attached-by-the-driver.md)).
 - **Ratings** are copied to the trace as scores (`reader_verdict`, `reader_comment`).
 - **What leaves the host when it is on:** prompts, tool results, corpus text, answers, and readers'
@@ -201,7 +203,9 @@ The keys alone turn nothing on, an unrecognised value leaves it off and says so 
   One question measured 37 units (2026-09-25), so roughly 1,300 questions a month; questions with
   more tool calls cost more. `scinumbers-eval run` shows the month's usage and its own estimate
   before asking anything, and waits for a typed `yes` when more than half is used, when the run
-  would not fit, or when either figure cannot be counted. The count covers this Langfuse project
+  would not fit, or when either figure cannot be counted. That includes Langfuse being unreachable,
+  and the run then cannot proceed unattended. The check is in `run_evaluation`, so any caller of it
+  meets the same refusal. The count covers this Langfuse project
   only, which is exact while it is the organisation's only one.
 - **A tracer fault never reaches a reader.** An unreachable or refusing Langfuse, including one
   whose allowance has run out, costs the traces and nothing else.

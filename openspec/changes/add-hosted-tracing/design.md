@@ -282,6 +282,21 @@ rule protects, and it only forbids importing a driver, so a prompt in the comman
 **Alternative rejected:** a local tally of what this process sent. It misses the readers' questions
 on the deployed app, which spend the same allowance.
 
+### Review fixes (2026-09-25, `/code-review high`)
+
+- **The allowance check and the `eval` tag moved into `run_evaluation`.** The command passes
+  `approve(usage, estimate)` for the prompt. A caller with no `approve` is refused when approval is
+  needed. The tracer is not contacted when nothing is left to ask, or before `repeats` is
+  validated.
+- **The user value is keyed** (`web.trace_user`, HMAC with `cookie_secret`). **The session is a
+  digest** (`session_ref`), enforced by the `mask` and `mask_otel_spans` hooks as well as at the
+  source. See ADR-1020.
+- **`Isolated` holds its refusal and leaves it inside the private context** (ADR-1010).
+  `current()` and the client build are locked. `attributed` and `tagged` share one wrapper that
+  also guards entering and leaving. `HostedTracer.on` was removed as unused.
+- **Kept on purpose:** an unknown usage figure pauses the run even when nobody can answer
+  (ADR-1000).
+
 ## Risks / Trade-offs
 
 - [Hobby's cap is assumed to be a hard stop] → Traces stop for the rest of the month, silently from
