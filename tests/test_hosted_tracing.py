@@ -592,6 +592,13 @@ def test_a_client_that_cannot_be_built_is_tracing_off_and_the_question_is_answer
 
 
 # --- the allowance: counted, and unknown is never zero ------------------------------
+#
+# Mutation testing (2026-09-25, 405 mutants over hosted_trace.py) left these alive on
+# purpose. An empty metrics response counting 1 rather than 0 over-counts, which is
+# the safe direction. The wording and fields of the operator's `tracing.*` reports
+# are unasserted, like the rest of the trail's content. A client that failed to
+# build being retried per question rather than once is still reported once, and no
+# requirement says how often to retry.
 
 
 class MetricsClient:
@@ -825,3 +832,79 @@ def test_tagging_with_tracing_off_builds_nothing():
     with tracer.tagged("eval"):
         pass
     assert tracer._client is None
+
+
+def test_each_count_asks_the_metrics_api_in_its_documented_shape():
+    """The request, not the arithmetic: a misspelt key is invisible to every stub
+    that answers regardless, and would only show against the live API.
+
+    The expected shape is Langfuse's own v2 example (metrics-api.md, read
+    2026-09-24): a `view`, `metrics` as `[{"measure": ..., "aggregation": ...}]`,
+    `dimensions`, `filters`, and both timestamps as ISO 8601 in UTC. Traces are the
+    `observations` view filtered to root observations, because v2 has no traces
+    view. Confirmed live on 2026-09-25, when this query counted 37 units.
+    """
+    _, client = usage_from(COUNTS)
+    assert {q["view"] for q in client.queries} == {
+        "observations",
+        "scores-numeric",
+        "scores-categorical",
+        "scores-boolean",
+    }
+    for q in client.queries:
+        assert set(q) == {
+            "view",
+            "metrics",
+            "dimensions",
+            "filters",
+            "fromTimestamp",
+            "toTimestamp",
+        }
+        assert q["metrics"] == [{"measure": "count", "aggregation": "count"}]
+        assert q["dimensions"] == []
+        assert (q["fromTimestamp"], q["toTimestamp"]) == (
+            "2026-08-24T00:00:00Z",
+            "2026-09-24T00:00:00Z",
+        )
+    roots = [q for q in client.queries if q["filters"]]
+    assert [q["filters"] for q in roots] == [
+        [{"column": "isRootObservation", "operator": "=", "value": True, "type": "boolean"}]
+    ]
+
+
+def test_usage_is_counted_up_to_now_in_utc_when_no_time_is_given():
+    """The Metrics API takes ISO 8601 in UTC. Every test above passes `now`; this is
+    the call the command makes, and a naive local time would be read as UTC and
+    shift the window by the host's offset."""
+    tracer = HostedTracer(on_setting())
+    tracer._client = MetricsClient(COUNTS)
+    before = datetime.now(UTC)
+    usage = tracer.monthly_usage()
+    assert usage.until.tzinfo is not None
+    assert before <= usage.until <= datetime.now(UTC)
+    assert all(q["toTimestamp"].endswith("Z") for q in tracer._client.queries)
+
+
+def test_the_client_is_built_from_the_setting_and_never_touches_the_global_provider(
+    monkeypatch,
+):
+    """ADR-1010: the region is the one written in the configuration, never an SDK
+    default; and the client gets a provider of its own, so the process's global
+    OpenTelemetry provider is not replaced."""
+    import langfuse
+    from opentelemetry import trace as otel_trace
+
+    built = []
+    monkeypatch.setattr(langfuse, "Langfuse", lambda **kwargs: built.append(kwargs) or object())
+    setting = Setting(
+        on=True, public_key="pk-a", secret_key="sk-b", base_url="https://region.example"
+    )
+    HostedTracer(setting)._langfuse()
+    (kwargs,) = built
+    assert (kwargs["public_key"], kwargs["secret_key"], kwargs["base_url"]) == (
+        "pk-a",
+        "sk-b",
+        "https://region.example",
+    )
+    assert kwargs["tracer_provider"] is not None
+    assert kwargs["tracer_provider"] is not otel_trace.get_tracer_provider()

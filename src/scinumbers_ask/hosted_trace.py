@@ -172,7 +172,6 @@ class Usage:
 class Estimate:
     """What a run is expected to spend, and whether the operator must approve it."""
 
-    usage: Usage
     questions: int
     units: float | None
     reasons: tuple[str, ...] = field(default=())
@@ -201,7 +200,7 @@ def estimate(usage: Usage, questions: int) -> Estimate:
             reasons.append("the cost of a question is unknown (no traces counted yet)")
     elif usage.remaining is not None and units > usage.remaining:
         reasons.append("this run is estimated to exceed what remains")
-    return Estimate(usage=usage, questions=questions, units=units, reasons=tuple(reasons))
+    return Estimate(questions=questions, units=units, reasons=tuple(reasons))
 
 
 class HostedTracer:
@@ -250,7 +249,8 @@ class HostedTracer:
         """The framework config for one question, with the tracer's callback when it is on.
 
         Adds only: a callback bound to the question's trace id, and the metadata
-        keys the Langfuse handler lifts onto the whole trace at its root. The
+        keys the Langfuse handler lifts onto the whole trace at its root (the
+        trace's name and its session; its tags come from the run's own `tags`). The
         session travels there rather than in `attributed()`, so every child
         observation carries it from the first one.
         """
@@ -267,9 +267,10 @@ class HostedTracer:
         except Exception as exc:  # noqa: BLE001
             trace.record("tracing.failed", stage="handler", detail=f"{type(exc).__name__}: {exc}")
             return config
+        # No `langfuse_tags`: the handler already turns the run's own `tags` into
+        # the trace's (mutation testing found the line changed nothing).
         metadata = dict(config.get("metadata", {}))
         metadata["langfuse_trace_name"] = TRACE_NAME
-        metadata["langfuse_tags"] = list(config.get("tags", []))
         if trace.session_id:
             metadata["langfuse_session_id"] = trace.session_id
         callbacks = [*config.get("callbacks", []), handler]

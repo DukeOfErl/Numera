@@ -128,7 +128,7 @@ recorded.
 
 ## 5. Seeding, the live check, and the record
 
-- [ ] 5.1 Fault-seed `hosted_trace.py` in a copy, following the `fault-seeding` skill. At minimum:
+- [x] 5.1 Fault-seed `hosted_trace.py` in a copy, following the `fault-seeding` skill. At minimum:
       the setting read as on for an unknown value; the LangSmith refusal removed; the trace id seeded
       from `session_id` instead of `question_id`; the user id attached when it is `None`; the score
       written before the trail row. Each must be killed by the test named for it. Write down any
@@ -151,5 +151,5 @@ recorded.
       generated agent graph is unchanged); CLAUDE.md (the module table row for `hosted_trace.py`);
       `docs/roadmap.md` (WP4 split: tracing done, usage events still open; WP3 moved to Done; the
       LangSmith hazard marked closed); CHANGELOG `[Unreleased]`; ADRs `1000`–`1020` completed.
-- [ ] 5.5 Full suite, lint and `openspec validate add-hosted-tracing --strict`. Then commit, and
+- [x] 5.5 Full suite, lint and `openspec validate add-hosted-tracing --strict`. Then commit, and
       suggest `/code-review` before the merge.
