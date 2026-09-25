@@ -40,6 +40,31 @@ installed source unless a docs page is named. Each answer corrects or confirms a
 | i | Session and user on child spans | The handler reads `langfuse_session_id` / `langfuse_user_id` / `langfuse_tags` from the root run's metadata and enters `propagate_attributes` itself at the root chain start (`CallbackHandler.py` ~l.588). So session goes in the metadata, and every child carries it. User id comes from the driver's outer `propagate_attributes` (D5), and task 3.3 must show the two nest. |
 | 1.3 | LangSmith refusal | Probe: `LANGSMITH_TRACING=true` with a model double and the generator consumed one event at a time. No context: **13** LangSmith runs started, one on `ThreadPoolExecutor-2_0`. Inside `langsmith.tracing_context(enabled=False)`: **0**. D3's mechanism holds and the fallback is not needed. |
 
+## Live audit (tasks 5.2, 5.3 — 2026-09-25)
+
+One web question (trace `4f6f4210…`, signed in, 36 observations) and three evaluation traces, fetched
+through `api.observations.get_many` and summarised without printing any text content. Checked
+against the Langfuse skill's baseline (`references/instrumentation.md`):
+
+- **Holds:** trace id = `create_trace_id(seed=question_id)`; trace name `ask`; model name and
+  input/output tokens on every generation; `GENERATION` and `TOOL` types; graph nodes nest their
+  calls; user digest and session on every span, generations included; no `@` in any metadata, user
+  or session field; tags as designed, and `eval` on the evaluation trace sent after that change.
+- **No cost in Langfuse.** It has no price for OpenRouter's model names. Not fixed in code: the spend
+  ledger is the record. A model definition in Langfuse's Settings → Models would add it.
+- **The root's output is the whole final graph state** (about 25k characters). Complete, but noisy.
+  Left as it is.
+- **Middleware hooks are a third of the spans** (`*.before_model`, `*.after_model`,
+  `SpendGate.after_model`). Filtering them with `should_export_span` would cut units by about a
+  third. Deferred: they show where spend was checked.
+- **Units per question: 37** (36 observations + 1 trace), plus 2 once rated. That is about 1,300
+  questions a month on Hobby. A question with more tool calls costs more.
+- **Scores.** The web question had not been rated (the local trail has no feedback record for it),
+  so no score was expected. A probe score sent by the SDK came back `201` from
+  `/api/public/ingestion`. The legacy `GET /api/public/v2/scores` returns `410` for organisations
+  created on or after 2026-09-16, and Langfuse's notice says the live paths are OTel ingestion plus
+  v2 observations and v2 metrics. That is what this code reads. It does not read scores back.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -275,6 +300,10 @@ on the deployed app, which spend the same allowance.
   personal. README says so, beside where it already says prompts and corpus text leave the host.
 - [OpenTelemetry arrives as a dependency] → Langfuse 4.x exports only Langfuse and GenAI spans by
   default. When DeepEval returns with `add-judged-faithfulness`, both will want OTel. Worth checking then.
+- [Langfuse is retiring its v3 APIs on Cloud (removal of legacy endpoints from 2026-11-16)] → The
+  code reads only v2 metrics, and writes through OTel and the SDK's score ingestion, which accepted a
+  probe on 2026-09-25. An SDK update is the likely fix if ingestion moves. The pin `<5` means a
+  deliberate bump.
 - [The evaluation harness can burn the allowance] → D9: the run shows its estimate and pauses for
   approval when it is at risk. The run label is on every trace.
 - [The per-question average is skewed by the mix of this month's questions] → It is an estimate and is

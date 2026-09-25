@@ -133,7 +133,7 @@ recorded.
       from `session_id` instead of `question_id`; the user id attached when it is `None`; the score
       written before the trail row. Each must be killed by the test named for it. Write down any
       survivor and act on it. Then run `mutation-test-module` over `hosted_trace.py`.
-- [ ] 5.2 Live, by hand, with a Langfuse Cloud EU project: ask one question signed in, and rate it down
+- [x] 5.2 Live, by hand, with a Langfuse Cloud EU project: ask one question signed in, and rate it down
       with a comment. Then run the skill's self-audit loop (`references/instrumentation.md` step 3):
       fetch the trace with `langfuse-cli`, audit it against the best-practices page fetched fresh, fix
       the gaps and re-run. Its checklist is the audit list: generations typed as generations, model
@@ -141,7 +141,7 @@ recorded.
       and user on the cost-bearing generations. Check in the UI that the trace id matches, that session, run label and user id
       are present, that no address appears anywhere in the trace, and that both scores are on it.
       Record what was seen and on which date. Do not paste corpus text into the record.
-- [ ] 5.3 From that trace, count the units one question costs, and write the figure and the implied
+- [x] 5.3 From that trace, count the units one question costs, and write the figure and the implied
       monthly headroom into README.
 - [ ] 5.4 Docs, in this change:
       README (replace "There is no tracing instrumentation yet", add the setting and keys to the
