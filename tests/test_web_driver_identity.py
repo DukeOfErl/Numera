@@ -393,6 +393,35 @@ def test_an_unverified_address_is_refused_with_its_own_sentence(page, caught):
     assert "sign out" not in said.lower(), "the reader is sent to a button, not out of the app"
 
 
+def test_an_admission_is_recorded_once_and_carries_the_account(page, caught, monkeypatch):
+    """Until this existed the trail held only refusals, so "nobody tried today" and
+    "everybody got in" looked identical -- and nothing said a reader's problem was
+    solved, because signing in without asking anything wrote no record at all. The
+    daily check reads it.
+
+    Recorded in `establish_identity`, after the stamp is registered, so it carries
+    the account like every other record of a signed-in session. Written at the door
+    it would have carried none, which the spec forbids.
+    """
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    admitted = [r for r in caught.records if r.getMessage() == "signin.admitted"]
+    assert len(admitted) == 1, f"recorded {len(admitted)} times for one arrival"
+    assert getattr(admitted[0], "user_email", None) == TESTER.email
+    assert getattr(admitted[0], "user_role", None) == "scientist"
+    # Every rerun calls `establish_identity`; only the first is an arrival.
+    at = _ask(at, "how many?")
+    assert len([r for r in caught.records if r.getMessage() == "signin.admitted"]) == 1, (
+        "a rerun was recorded as a second arrival"
+    )
+
+
+def test_a_refused_account_is_not_recorded_as_admitted(page, caught):
+    """The negative case varies what the rule reads -- whether an identity was
+    established -- rather than merely the outcome."""
+    page(auth=True, email="stranger@example.org", enrolled={}).run()
+    assert not [r for r in caught.records if r.getMessage() == "signin.admitted"]
+
+
 def test_a_reader_can_say_the_email_never_arrived_and_it_reaches_the_trail(page, caught):
     """The one dead end left on that door. Nothing is sent from here -- resending
     needs a provider credential that could also create accounts -- so the request

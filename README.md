@@ -574,11 +574,11 @@ that only reads:
 
 **It reports only what is still stuck.** A problem that resolved itself stops
 appearing, and no state is kept to achieve that — the trail already says who got
-through. An address the identity stamp wrote as `user_email` was admitted, because
-the stamp lands only on a session that passed the door; an address later seen as
-`signin.refused` got past *verification*, because that door is behind the verified
-check. So "never got the email" clears on any later sign of verification, and
-"verified but not enrolled" clears on a later admitted session.
+through. A session records `signin.admitted` on arrival, stamped with the account
+like every other record, so admission is observable; and an address later seen as
+`signin.refused` got past *verification*, because that door sits behind the
+verified check. So "never got the email" clears on any later sign of verification,
+and "verified but not enrolled" clears on a later admitted session.
 
 Anything unresolved keeps being reported until it is fixed, which is what makes the
 daily mail worth opening: the list is the work, and it empties as the work is done.

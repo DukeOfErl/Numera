@@ -52,11 +52,20 @@ from .enrol import MANAGEMENT_KEY_ENV, NEON_API_KEY_ENV, NEON_PROJECT_ENV, NO_BR
 #: to keep each report to one appearance. A daily run misses nothing inside it.
 DEFAULT_HOURS = 24 * 30
 
-#: Everyone the stamp says was admitted, or who got past verification. `user_email`
-#: is written only onto a signed-in session's records (ADR-0810), and
-#: `signin.refused` sits *behind* the verified-address check (ADR-0890), so either
-#: is proof that a stage was cleared -- which is why resolution needs no state of
-#: its own.
+#: Two kinds of proof that a reader got somewhere, unioned.
+#:
+#: `user_email` is stamped onto every record of a signed-in session (ADR-0810), so
+#: it is proof the door opened. **It was not enough on its own**, and that is the
+#: defect this query was shipped with: the door recorded only refusals, so a reader
+#: who signed in and asked nothing wrote no record at all, and their solved problem
+#: went on being reported every morning. Found by an operator watching a resolved
+#: row refuse to disappear. `web.establish_identity` now records `signin.admitted`
+#: on arrival, which is stamped like anything else -- so this arm covers it without
+#: naming it, and admission is observable for the first time.
+#:
+#: `signin.refused` sits *behind* the verified-address check (ADR-0890), so it
+#: proves verification even though it is itself a problem: someone who asked for
+#: their email and then reached that door got what they needed.
 _PROGRESS = """
 select lower(user_email) as address, max(at) as at
 from {table}

@@ -101,14 +101,20 @@ def test_a_request_answered_by_verification_stops_being_reported(table):
 
 def test_an_account_that_was_admitted_stops_being_reported(table):
     """The identity stamp writes `user_email` only onto a signed-in session's
-    records, so its presence is proof the door opened."""
+    records, so its presence is proof the door opened.
+
+    The realistic record here is `signin.admitted`, written on arrival and stamped
+    like any other; a `question.asked` is the same shape and the same arm of the
+    union. Before `signin.admitted` existed this only resolved for readers who went
+    on to ask something, which is how a solved problem came to be reported daily.
+    """
     engine, name = table
     _write(
         engine,
         name,
         [
             ("signin.refused", "enrolled@example.org", None),
-            ("question.asked", None, "enrolled@example.org"),
+            ("signin.admitted", None, "enrolled@example.org"),
         ],
     )
     no_email, not_enrolled = waiting(engine, table=name)
