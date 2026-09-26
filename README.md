@@ -258,6 +258,40 @@ gates it. The operator's steps, in order:
    **Settings → Basic Information**) and the tenant's
    `.well-known/openid-configuration` under `[auth.auth0]`.
 
+   **Leave the database connection's sign-ups enabled.** With them disabled you
+   create every tester's Auth0 user by hand, which is the third-console step this
+   command exists to remove — Auth0's user list simply becomes the Google
+   test-user list. Open sign-up is safe here because two refusals already stand in
+   front of it: an unverified address is refused (ADR-0890) and an unenrolled one
+   is refused and recorded. The cost is noise in the user list, and if bots ever
+   make that a problem, disabling sign-ups is a dashboard setting rather than a
+   code change.
+
+   **`[auth]` stays, and its own keys must come *before* any sub-table.** This is
+   TOML, not Streamlit: after a `[auth.auth0]` header every bare key belongs to
+   that sub-table until the next header, so a `redirect_uri` written below it
+   becomes `auth.auth0.redirect_uri` and sign-in breaks **for every provider**
+   with a message about a missing key. `redirect_uri` and `cookie_secret` are
+   shared and required whichever button is clicked, and `[auth]`'s remaining keys
+   are the Google client as the unnamed default provider.
+
+   ```toml
+   [auth]
+   redirect_uri = "https://YOUR-APP.streamlit.app/oauth2callback"
+   cookie_secret = "a long random string"
+   client_id = "....apps.googleusercontent.com"
+   client_secret = "..."
+   server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
+
+   [auth.auth0]
+   client_id = "..."
+   client_secret = "..."
+   server_metadata_url = "https://YOUR-TENANT.eu.auth0.com/.well-known/openid-configuration"
+   ```
+
+   Order has a second, harmless effect: buttons are drawn in secrets order with
+   the default first, so the above gives Google then email.
+
    A custom domain — login on `login.example.org` rather than
    `<tenant>.eu.auth0.com` — is available at no charge but needs a card on file
    for verification. Not worth doing before there are testers; it is the route if
