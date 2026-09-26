@@ -300,18 +300,35 @@ on a crash — is holding it.
 shell that asked for it, and nowhere else:
 
 ```bash
-mkdir -p ~/.config/scinumbers && chmod 700 ~/.config/scinumbers
-cat > ~/.config/scinumbers/enrol.env <<'EOF'
-OPENROUTER_MANAGEMENT_KEY=...
-NEON_API_KEY=...
-NEON_PROJECT_ID=...
-EOF
-chmod 600 ~/.config/scinumbers/enrol.env
+mkdir -p ~/.config/scinumbers
+chmod 700 ~/.config/scinumbers
+touch ~/.config/scinumbers/enrol.env
+chmod 600 ~/.config/scinumbers/enrol.env      # before anything secret is in it
+nano ~/.config/scinumbers/enrol.env           # or your editor
+```
 
-# then, in the shell where you are enrolling someone:
+Three lines, no quotes and no `export`:
+
+```
+OPENROUTER_MANAGEMENT_KEY=sk-or-...
+NEON_API_KEY=napi_...
+NEON_PROJECT_ID=your-project-id
+```
+
+Then, in the shell where you are enrolling someone:
+
+```bash
 set -a; source ~/.config/scinumbers/enrol.env; set +a
 scinumbers-enrol maria@example.org scientist --limit-usd 5 --branch alpha
 ```
+
+**Write it with an editor rather than a heredoc.** Bash keeps a multi-line
+command as a single history entry, so `cat > file <<'EOF'` puts the keys into
+`~/.bash_history` — the one thing this file exists to avoid, arrived at by the
+convenient route. An editor writes nothing to history; `cat > file` followed by
+typing the lines and pressing Ctrl-D is fine too, because stdin is not history.
+`chmod` comes **before** the content, so the file is never briefly world-readable
+with a key already in it.
 
 Outside the repository rather than gitignored inside it: three checkouts of this
 project share one origin, git history is permanent, and a `.gitignore` is one
