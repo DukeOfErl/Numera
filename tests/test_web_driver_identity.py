@@ -412,8 +412,10 @@ def test_a_reader_can_say_the_email_never_arrived_and_it_reaches_the_trail(page,
     # clicks again, and the sentence must not claim an email was sent.
     assert messages.RESEND_NOTED in [i.value for i in at.info]
     assert messages.RESEND_REQUEST not in [b.label for b in at.button]
-    assert "on its way" not in messages.RESEND_NOTED.lower()
-    assert "sent" not in messages.RESEND_NOTED.lower().split("send the email")[0]
+    # Must not imply anything was sent from here, because nothing was.
+    noted = messages.RESEND_NOTED.lower()
+    assert "recorded" in noted
+    assert "on its way" not in noted and "has been sent" not in noted
 
 
 def test_asking_twice_writes_one_row_and_a_second_reader_starts_clean():

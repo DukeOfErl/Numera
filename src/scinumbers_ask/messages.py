@@ -124,12 +124,16 @@ CONFIRMED_IT = "I have confirmed my email"
 #: instead, and the operator resends from the provider's dashboard.
 RESEND_REQUEST = "I did not get the email"
 
-#: Deliberately not "an email is on its way": nothing was sent, and a person told
-#: to wait for a message nobody has sent yet waits twice. What is true is that the
-#: request is now where the operator will find it (`sql/signin.sql`).
+#: Deliberately not "an email is on its way": nothing was sent from here, and a
+#: person told to wait for a message nobody has sent waits twice.
+#:
+#: The second sentence is the honest part. The request goes to the trail, where the
+#: operator finds it by looking (`sql/signin.sql`) -- so the wait is however long
+#: until they look. This is a prototype run by one person, and saying so while
+#: inviting a direct message is truer than implying a support desk.
 RESEND_NOTED = (
-    "Thanks — that is now recorded for whoever runs this, and they can send the email "
-    "again. You can close this page and come back later."
+    "Your issue has been recorded. Since this is a prototype, please also contact the "
+    "developer personally."
 )
 NOT_ENROLLED = (
     "This account is not enrolled. Ask whoever runs this to enrol it; there is nothing to do here."
