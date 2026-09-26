@@ -12,6 +12,22 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **A successful sign-in is recorded.** The trail held only refusals at the door, so
+  "nobody tried today" and "everybody got in" looked the same, and a reader who
+  signed in without asking anything left no trace of having got through. It is
+  written once per arrival and carries the account and role like every other record
+  of a signed-in session.
+
+- **`scinumbers-pending`, a daily check for readers stuck at the door.** It reads
+  the trail for people who said their confirmation email never came and for
+  verified accounts waiting to be enrolled, and **prints nothing when nothing is
+  waiting** — which is what makes it usable from `cron`, since a monitor that
+  reports a quiet day every morning is one whose output stops being read. A problem
+  that resolved itself stops appearing, and nothing is tracked to achieve that:
+  whether a reader got past verification is derived from records the app already
+  writes, and whether an account is enrolled is read from the accounts table rather
+  than inferred from the reader returning — which they may never do.
+
 - **The sign-in buttons can be put in any order.** A provider is "the default",
   and therefore drawn first, only because its credentials sit among `[auth]`'s own
   keys; moving them into a sub-table of its own makes it an ordinary named

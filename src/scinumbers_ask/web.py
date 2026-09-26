@@ -704,7 +704,31 @@ def establish_identity(admission: Admission, session_id: str) -> None:
     held admission that never re-registered used to have.
     """
     if admission.identity is not None:
+        # **The door's one positive record, written here and not in `admit`.**
+        # Until it existed the trail held only refusals, so "nobody tried today"
+        # and "everybody got in" looked identical -- and nothing marked a reader's
+        # problem as solved, because a person who signed in and asked nothing left
+        # no trace of having got through. `pending.py` reads it; without it a
+        # resolved request goes on being reported daily, which is how it was found.
+        #
+        # Here rather than in `admit` because the stamp is registered *below*, so a
+        # record written a line later carries `user_email` and `user_role` from the
+        # filter like every other record of a signed-in session. Written at the
+        # door instead, it would have carried neither -- and "every record carries
+        # the account" is a spec requirement with a test behind it, which is what
+        # caught the first attempt.
+        #
+        # Only on the first establishment: this runs on every rerun of an open
+        # page. A session pruned for idleness and returned to records again, which
+        # is right -- that is an arrival, and the reader had gone away.
+        arriving = session_id not in IDENTITIES
         remember_identity(session_id, admission.identity)
+        if arriving:
+            trace.QuestionTrace(
+                question_id="",
+                session_id=session_id,
+                run_label=Config.from_env().run_label,
+            ).record("signin.admitted")
     else:
         forget_identity(session_id)
 

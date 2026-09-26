@@ -550,6 +550,54 @@ power than one message is worth. `sql/signin.sql` holds the three queries that
 surface them — who asked, who gave up without asking, and who is verified and
 waiting to be enrolled.
 
+#### Checking daily who is stuck
+
+`scinumbers-pending` reads those first and third queries and **prints nothing when
+nothing is waiting**, which is what makes it usable from `cron`: mail arrives only
+on the days something happened. A monitor that reports "0 pending" every morning is
+one whose output stops being read, and then the morning it says 1 goes unread too.
+
+```bash
+scinumbers-pending --branch alpha              # silent unless somebody is still stuck
+scinumbers-pending --branch alpha --hours 168  # only the last week
+```
+
+Daily, from the operator's own crontab (`crontab -e`):
+
+```cron
+0 9 * * * bash -lc 'set -a; . "$HOME/.config/scinumbers/enrol.env"; set +a;   "$HOME/AI Engineering/BioNumbers/.venv/bin/scinumbers-pending" --branch alpha'
+```
+
+**It reports only what is still stuck.** A problem that resolved itself stops
+appearing, and no state is kept to achieve that — the trail already says who got
+through. A session records `signin.admitted` on arrival, stamped with the account
+like every other record, so admission is observable; and an address later seen as
+`signin.refused` got past *verification*, because that door sits behind the
+verified check. So "never got the email" clears on any later sign of verification,
+and "verified but not enrolled" clears on a later admitted session.
+
+**Enrolment is read from the accounts table, not inferred.** A review caught the
+first version asking the trail whether somebody had signed in again — which a tester
+who was enrolled and never came back never does, and which an enrolled account with
+*no credential* cannot do at all, because that door stops the page before anything
+is recorded. So the enrolment queue asks the authority: an address with no enabled
+row. A withdrawn account counts as not enrolled, exactly as it does at the door.
+
+Anything unresolved keeps being reported until it is fixed, which is what makes the
+daily mail worth opening: the list is the work, and it empties as the work is done.
+`--hours` bounds how far back to look, thirty days by default, so an address
+abandoned months ago ages out instead of nagging forever; a span that could match
+nothing is refused rather than answered with silence.
+
+It reads the trail and the accounts table and touches no provider, so give the cron
+line **only the two Neon variables**. It needs nothing else, and a management key in
+a scheduled job's environment is a credential that can mint keys sitting in a process
+that only reads.
+
+On WSL, `cron` is not running by default (`sudo service cron start`, and see your
+distribution's notes on starting it at boot). Without it, run the command by hand;
+it costs one line and two seconds.
+
 **Five roles exist — student, scientist, senior scientist, dev and admin — as
 foundations, built and tested now so that ratings can later be weighted by who
 gave them.** Today they differ in one visible thing: dev and admin get an extra
