@@ -173,7 +173,7 @@ core, and a test there refuses a name with no file behind it.
 | `authorization.py` | `allowed` / `require` / `Refused`: the one refusal, called inside the operation it guards, never by the page |
 | `accounts.py` | `lookup(engine, email)` and `insert(...)`: enrolment off one row, **fails closed** — the deliberate inverse of `trail_store` (ADR-0780). Both here so the case-folding rule has one home |
 | `enrol.py` | The enrolment command (`scinumbers-enrol`): mint a capped key, insert the row, withdraw the key if the row cannot be written (ADR-0900). A harness module |
-| `pending.py` | The daily check (`scinumbers-pending`): who is stuck at the door, read out of the trail. **Silent when nobody is** — that is the contract a cron line rests on. A harness module |
+| `pending.py` | The daily check (`scinumbers-pending`): who is **still** stuck at the door, read out of the trail. Resolution is derived from `user_email` and `signin.refused` rather than tracked, so no state is added. **Silent when nobody is stuck** — the contract a cron line rests on. A harness module |
 | `neon.py` | Neon's control plane: a branch's *name* to its connection URL, so no database url is kept on disk |
 
 **`ask` wraps `_ask`, and the wrapper is where the records are written.** The

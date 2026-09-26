@@ -10,12 +10,28 @@ a daily `cron` line mails the operator only on the days something happened. A
 monitor that reports "0 pending" every morning is one whose output stops being
 read, and then the morning it says 1 goes unread too.
 
-**A window, not a ledger.** Nothing marks a request as handled: the row stays in
-the trail forever, because the trail is append-only and is not a work queue. So this
-looks at a window — the last `--hours`, matching the interval it is run on — and
-each request is therefore reported once. Miss a day and you miss those; query 2 of
-`sql/signin.sql` is the wider net for people who gave up, and it is for reading
-occasionally rather than on a schedule.
+**Only what is still stuck.** The first version reported everything inside a
+window, on the grounds that nothing marks a request as handled — and that was wrong
+twice over. It reported people whose problem had since resolved, which is the noise
+that teaches an operator to skip the mail; and it missed the fact that **the trail
+already says who got through**. An address the identity stamp wrote as `user_email`
+was admitted, because the stamp lands only on a session that passed the door
+(ADR-0810); an address later seen as `signin.refused` got past *verification*,
+because that door is behind the verified check (ADR-0890). So resolution is
+derived, not tracked, and no new column or state is needed:
+
+- *never got the email* resolves on any later sign of verification — a
+  `signin.refused` or an admitted session;
+- *verified but not enrolled* resolves on a later admitted session.
+
+Anything still unresolved keeps being reported until it is fixed, which is what
+makes a daily run worth reading: the list is the work, and it empties as the work is
+done. The window survives as `--hours`, no longer as the mechanism but as a bound
+on how far back to look, so an address abandoned months ago ages out rather than
+nagging forever.
+
+Read-only, and both queries are read-only by construction: resolution is a `join`
+against records the app already writes.
 
 Read-only. It runs no `insert`, `update` or `delete`, which is why it is safe to
 point at the branch the deployment writes to.
@@ -31,20 +47,49 @@ from dataclasses import dataclass
 from . import neon, trail_store
 from .enrol import MANAGEMENT_KEY_ENV, NEON_API_KEY_ENV, NEON_PROJECT_ENV, NO_BRANCH
 
-#: Matches the interval the cron line in the README uses. A window rather than a
-#: mark, for the reason the module docstring gives.
-DEFAULT_HOURS = 24
+#: Thirty days. Generous because the list now empties itself as problems resolve,
+#: so the window is only there to age out an address that was abandoned rather than
+#: to keep each report to one appearance. A daily run misses nothing inside it.
+DEFAULT_HOURS = 24 * 30
 
-#: One row per address, newest first. `make_interval` rather than string
-#: interpolation into the interval, so the window is a bound parameter.
-_WAITING = """
-select detail->>'email' as address, max(at) as last_seen, count(*) as times
+#: Everyone the stamp says was admitted, or who got past verification. `user_email`
+#: is written only onto a signed-in session's records (ADR-0810), and
+#: `signin.refused` sits *behind* the verified-address check (ADR-0890), so either
+#: is proof that a stage was cleared -- which is why resolution needs no state of
+#: its own.
+_PROGRESS = """
+select lower(user_email) as address, max(at) as at
 from {table}
-where event = :event
-  and detail->>'email' is not null
-  and at > now() - make_interval(hours => :hours)
+where user_email is not null
 group by 1
-order by max(at) desc
+union all
+select lower(detail->>'email') as address, max(at) as at
+from {table}
+where event = 'signin.refused' and detail->>'email' is not null
+group by 1
+"""
+
+#: Lower-cased on both sides of the join: the trail carries the address as the
+#: provider asserted it and as the accounts row spells it, and `accounts.lookup`
+#: folds case, so two spellings of one person must not read as two people.
+#: `make_interval` rather than interpolation, so the window is a bound parameter.
+_STILL_WAITING = """
+with asked as (
+    select lower(detail->>'email') as address, max(at) as last_seen, count(*) as times
+    from {table}
+    where event = :event
+      and detail->>'email' is not null
+      and at > now() - make_interval(hours => :hours)
+    group by 1
+),
+progress as (
+    select address, max(at) as at from ({progress}) as p group by 1
+)
+select asked.address, asked.last_seen, asked.times
+from asked
+left join progress on progress.address = asked.address
+where progress.at is null or progress.at < asked.last_seen
+order by asked.last_seen desc
 """
 
 
@@ -60,16 +105,16 @@ class Waiting:
 def _query(engine, event: str, hours: int, table: str) -> list[Waiting]:
     from sqlalchemy import text
 
+    statement = _STILL_WAITING.format(table=table, progress=_PROGRESS.format(table=table))
     with engine.begin() as conn:
         conn.execute(text(f"set local statement_timeout = {trail_store.STATEMENT_TIMEOUT_MS}"))
-        rows = conn.execute(
-            text(_WAITING.format(table=table)), {"event": event, "hours": hours}
-        ).all()
+        rows = conn.execute(text(statement), {"event": event, "hours": hours}).all()
     return [Waiting(address=r[0], last_seen=r[1], times=r[2]) for r in rows]
 
 
 def waiting(engine, *, hours: int = DEFAULT_HOURS, table: str = trail_store.DEFAULT_TABLE):
-    """Who asked for their confirmation email again, and who is waiting to be enrolled.
+    """Who is **still** stuck: asked for their email and never got verified, or got
+    verified and is still not enrolled.
 
     Returned rather than printed, so a second caller -- a test, a different
     report -- is not made to parse a report.
@@ -84,7 +129,9 @@ def _report(no_email: list[Waiting], not_enrolled: list[Waiting], hours: int) ->
     """The lines to print, or "" when there is nothing to say."""
     if not no_email and not not_enrolled:
         return ""
-    lines = [f"Waiting on you, from the last {hours} hours:", ""]
+    days = hours / 24
+    span = f"{days:.0f} days" if days >= 2 else f"{hours} hours"
+    lines = [f"Still waiting on you (looking back {span}):", ""]
     if no_email:
         lines.append("  Never received the confirmation email — resend it at the provider:")
         lines += [f"    {w.address}  (asked {w.times}x, last {w.last_seen})" for w in no_email]

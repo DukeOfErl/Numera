@@ -558,8 +558,8 @@ on the days something happened. A monitor that reports "0 pending" every morning
 one whose output stops being read, and then the morning it says 1 goes unread too.
 
 ```bash
-scinumbers-pending --branch alpha              # silent unless somebody is waiting
-scinumbers-pending --branch alpha --hours 168  # the last week, by hand
+scinumbers-pending --branch alpha              # silent unless somebody is still stuck
+scinumbers-pending --branch alpha --hours 168  # only the last week
 ```
 
 Daily, from the operator's own crontab (`crontab -e`). It reads the trail and
@@ -572,11 +572,18 @@ that only reads:
 0 9 * * * bash -lc 'set -a; . "$HOME/.config/scinumbers/enrol.env"; set +a;   "$HOME/AI Engineering/BioNumbers/.venv/bin/scinumbers-pending" --branch alpha'
 ```
 
-**It is a window, not a work queue.** Nothing marks a request as handled — the trail
-is append-only and is not a task list — so the command looks at the last `--hours`,
-matching the interval it runs on, and each request is reported once. Miss a day and
-those go unreported; query 2 of `sql/signin.sql` is the wider net for people who gave
-up quietly, and is for reading occasionally rather than on a schedule.
+**It reports only what is still stuck.** A problem that resolved itself stops
+appearing, and no state is kept to achieve that — the trail already says who got
+through. An address the identity stamp wrote as `user_email` was admitted, because
+the stamp lands only on a session that passed the door; an address later seen as
+`signin.refused` got past *verification*, because that door is behind the verified
+check. So "never got the email" clears on any later sign of verification, and
+"verified but not enrolled" clears on a later admitted session.
+
+Anything unresolved keeps being reported until it is fixed, which is what makes the
+daily mail worth opening: the list is the work, and it empties as the work is done.
+`--hours` bounds how far back to look, thirty days by default, so an address
+abandoned months ago ages out instead of nagging forever.
 
 On WSL, `cron` is not running by default (`sudo service cron start`, and see your
 distribution's notes on starting it at boot). Without it, run the command by hand;
