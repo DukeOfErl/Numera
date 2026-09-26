@@ -372,6 +372,34 @@ gates it. The operator's steps, in order:
    stops working too — it is the same key — so do that from the OpenRouter
    dashboard.
 
+#### Every secret this deployment needs, and who issues it
+
+**No value in this table belongs in the repository**, and none of them needs
+backing up: each is re-obtainable from the service that issued it. What is hard to
+reconstruct is *this table* — which secret exists, which console holds it, and
+what breaks without it — so it lives here and the values live in a password
+manager.
+
+| Secret | Where it lives | Who issues it | Lost or rotated |
+| --- | --- | --- | --- |
+| `OPENROUTER_API_KEY` | secrets box, top level | openrouter.ai | New key. The one credential a deployment without sign-in uses; unused where every account has its own |
+| `[connections.usage]` `url` | secrets box | Neon console, the branch's **Connect** dialog | Fetch it again. Carries the password, so it is never written down anywhere else |
+| `[auth]` `cookie_secret` | secrets box | you — any long random string | Any new string. Replacing it signs everyone out and nothing worse |
+| `[auth]` Google `client_id` / `client_secret` | secrets box | Google Cloud → APIs & Services → Credentials | Rotate there |
+| `[auth.auth0]` `client_id` / `client_secret` | secrets box | Auth0 → Applications → your app → Settings | Rotate there |
+| `OPENROUTER_MANAGEMENT_KEY` | the operator's shell only | openrouter.ai/settings/management-keys | New key. Never in the secrets box: the app has no use for it, and it can mint credentials |
+| `NEON_API_KEY` | the operator's shell only | Neon → organisation **Settings** → **API keys** | New key. Also never in the secrets box |
+| `NEON_PROJECT_ID` | the operator's shell only | Neon → project → **Settings** → **General** | Not a secret; copy it again |
+| Each tester's runtime key | the `accounts` table | minted by `scinumbers-enrol` | **Already stored** — that column is the source of truth, not a copy. Revoke at OpenRouter and re-enrol |
+
+Two consequences worth stating. A **local** `.streamlit/secrets.toml` is not a
+backup of the deployed one: it must carry the branch *this checkout* writes to, so
+copying the deployment's values into it — even commented out — is the spare
+credential the file's own rule forbids, and the line someone uncomments by
+accident. And the last row means losing the accounts table costs every tester's
+credential at once; Neon's point-in-time restore covers it, and re-enrolling is
+the fallback.
+
 #### Where to keep the operator's credentials
 
 Not on the command line, once you are doing this more than once: every
