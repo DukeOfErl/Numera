@@ -65,6 +65,19 @@ any release; `1.0.0` when it stabilizes.
   ([ADR-0900](docs/decisions/0900-enrolment-mints-then-inserts-and-compensates.md)).
 
 
+- **Hosted tracing to Langfuse Cloud, off unless the project says so.** With
+  `SCINUMBERS_TRACING=langfuse` and the three Langfuse keys, each question becomes
+  one trace — its model turns, tool calls, tokens and timings — whose id is derived
+  from the question's own identifier, so a trail row or a rating leads straight to
+  it. Readers appear only as an opaque per-account digest; ratings are copied as
+  scores; evaluation runs are tagged `eval`. Anything short of the setting sends
+  nothing, and a tracer that fails costs traces and never an answer
+  ([ADR-1000], [ADR-1010], [ADR-1020]).
+- **An evaluation run shows the tracer's monthly usage and its own estimated cost
+  before asking anything,** and waits for a typed `yes` when more than half the
+  free allowance is used, when the run would not fit, or when a figure cannot be
+  counted. Anything else ends it with nothing asked or recorded.
+
 - **The SciNumbers mark, beside the page's title** — on the conversation and on
   the sign-in and refusal pages, so the app looks like itself before a reader is
   admitted. Inlined rather than linked, so its strokes take the reader's own text
@@ -197,6 +210,11 @@ any release; `1.0.0` when it stabilizes.
   shows what the model provider says is left on that tester's key.
 
 ### Fixed
+
+- **`LANGSMITH_TRACING` no longer sends anything.** `langsmith` arrives with
+  `langchain-core`, and that one variable, set by anyone, used to ship prompts and
+  corpus text to a third party. It is now refused inside the agent for every caller
+  ([ADR-1010]).
 
 - A session pruned for idleness and returned to kept drawing "signed in as" while
   recording no account at all; identity is re-established on every rerun.
@@ -537,4 +555,6 @@ number rather than an error:
 [ADR-0830]: docs/decisions/0830-the-session-is-keyed-on-the-account-not-the-link.md
 [ADR-0820]: docs/decisions/0820-one-agent-per-session-handed-a-credential-not-an-identity.md
 [ADR-0840]: docs/decisions/0840-what-a-question-s-trail-keeps.md
-
+[ADR-1000]: docs/decisions/1000-langfuse-cloud-eu-over-langsmith.md
+[ADR-1010]: docs/decisions/1010-tracing-is-a-project-setting.md
+[ADR-1020]: docs/decisions/1020-attribution-is-an-opaque-digest-attached-by-the-driver.md

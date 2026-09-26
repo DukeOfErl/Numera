@@ -325,7 +325,11 @@ IDENTITY_TOKENS = {
 # three get stamped by the web driver's filter without knowing, which is the
 # design's whole point -- a parameter, a field or an import here would mean the
 # side door had been opened.
-IDENTITY_FREE = ("agent", "trace", "feedback")
+#
+# `hosted_trace.py` joins them: it is what sends a question to a third party, so
+# identity reaching it would reach the tracer. Who asked arrives there only as an
+# opaque digest the web driver passes to `attributed()` (ADR-1020).
+IDENTITY_FREE = ("agent", "trace", "feedback", "hosted_trace")
 
 
 def identifiers_of(module: str) -> set[str]:
@@ -380,5 +384,5 @@ def test_the_identity_free_modules_exist_and_are_core():
     """A renamed module would make the test above pass over nothing."""
     for module in IDENTITY_FREE:
         assert (PACKAGE / f"{module}.py").exists(), module
-    assert {"agent", "trace"} <= set(AGENT_CORE)
+    assert {"agent", "trace", "hosted_trace"} <= set(AGENT_CORE)
     assert "feedback" in PRESENTATION  # stamped from outside like the other two

@@ -820,6 +820,75 @@ AWAITING_THE_PROMPT = (
     "Leading with a figure does not displace what qualifies it",
 )
 
+# `add-hosted-tracing`. Each requirement names the tests that assert it in both
+# directions; the conditions of the allowance pause are pure and tested beside the
+# tracer, the command that asks is tested on its own.
+COVERED.update(
+    {
+        "Hosted tracing is off unless this project's own setting turns it on": (
+            "test_hosted_tracing.py::test_absent_or_off_is_off_and_says_nothing",
+            "test_hosted_tracing.py::test_langfuse_with_every_credential_is_on",
+            "test_hosted_tracing.py::test_a_missing_credential_is_off_and_is_named",
+            "test_hosted_tracing.py::test_an_unrecognised_value_is_off_and_is_named",
+            "test_hosted_tracing.py::test_credentials_without_the_setting_do_not_turn_it_on",
+            "test_hosted_tracing.py::test_a_misconfigured_setting_still_answers",
+            "test_hosted_tracing.py::test_langfuse_is_not_imported_unless_tracing_is_on",
+        ),
+        "A tracing vendor's own switch does not send anything": (
+            "test_hosted_tracing.py::test_the_vendor_switch_sends_nothing_with_tracing_off",
+            "test_hosted_tracing.py::test_the_vendor_switch_sends_nothing_beside_the_chosen_tracer",
+            "test_hosted_tracing.py::test_control_without_the_refusal_the_same_harness_sees_langsmith",
+            "test_hosted_tracing.py::test_the_refusal_holds_while_the_generator_is_consumed_one_event_at_a_time",
+            "test_hosted_tracing.py::test_the_vendor_refusal_is_entered_and_left_inside_the_private_context",
+        ),
+        "One question is one trace, found by the question's identifier": (
+            "test_hosted_tracing.py::test_a_question_is_one_trace_whose_id_is_derived_from_the_question",
+            "test_hosted_tracing.py::test_two_questions_are_two_traces_in_one_session",
+            "test_hosted_tracing.py::test_a_tagged_question_carries_the_tag_beside_its_own",
+            "test_hosted_tracing.py::test_an_untagged_question_is_not_marked",
+            "test_eval_tracing_allowance.py::test_every_question_is_asked_inside_the_eval_tag",
+            "test_hosted_tracing.py::test_the_session_key_never_reaches_the_tracer",
+        ),
+        "A trace names who asked only by an opaque value, and the agent is still not told": (
+            "test_hosted_tracing.py::test_an_attributed_question_carries_the_value_on_every_span",
+            "test_hosted_tracing.py::test_two_readers_carry_two_values",
+            "test_hosted_tracing.py::test_nobody_signed_in_attaches_nothing",
+            "test_hosted_tracing.py::test_the_page_attaches_the_account_digest_and_never_the_address",
+            "test_hosted_tracing.py::test_the_tracer_user_is_keyed_and_cannot_be_recomputed_from_a_guessed_address",
+            "test_hosted_tracing.py::test_without_a_key_nobody_is_attributed_rather_than_attributed_unkeyed",
+            "test_hosted_tracing.py::test_an_abandoned_question_cannot_attribute_a_later_one_to_its_reader",
+            "test_hosted_tracing.py::test_what_the_agent_is_given_does_not_depend_on_tracing_or_the_reader",
+        ),
+        "A rating is copied to its question's trace, and the trail remains the record": (
+            "test_hosted_tracing.py::test_a_verdict_reaches_its_question_trace_after_the_trail",
+            "test_hosted_tracing.py::test_a_comment_reaches_the_same_trace",
+            "test_hosted_tracing.py::test_a_failed_copy_leaves_the_trail_exactly_as_it_would_be",
+            "test_hosted_tracing.py::test_tracing_off_touches_no_client",
+        ),
+        "An evaluation run waits for approval when the tracer's allowance is at risk": (
+            "test_eval_tracing_allowance.py::test_a_direct_caller_at_risk_is_refused_before_the_first_question",
+            "test_eval_tracing_allowance.py::test_a_direct_caller_not_at_risk_proceeds_without_being_asked",
+            "test_eval_tracing_allowance.py::test_unknown_usage_refuses_a_caller_that_does_not_approve",
+            "test_eval_tracing_allowance.py::test_nothing_left_to_ask_contacts_no_tracer",
+            "test_eval_tracing_allowance.py::test_under_half_and_fitting_runs_without_asking",
+            "test_eval_tracing_allowance.py::test_more_than_half_ends_on_anything_but_yes",
+            "test_eval_tracing_allowance.py::test_no_terminal_ends_the_run_without_reading",
+            "test_eval_tracing_allowance.py::test_unknown_usage_is_shown_as_unknown_and_pauses",
+            "test_eval_tracing_allowance.py::test_a_run_that_would_not_fit_pauses_under_half",
+            "test_eval_tracing_allowance.py::test_a_resumed_run_estimates_only_what_it_still_has_to_ask",
+            "test_eval_tracing_allowance.py::test_tracing_off_asks_nothing_and_says_nothing",
+            "test_hosted_tracing.py::test_one_view_failing_makes_usage_unknown_never_a_partial_sum",
+            "test_hosted_tracing.py::test_exactly_half_does_not_pause",
+        ),
+        "A tracer fault never reaches a reader": (
+            "test_hosted_tracing.py::test_a_raising_handler_changes_nothing_a_reader_sees",
+            "test_hosted_tracing.py::test_an_export_that_fails_changes_nothing_a_reader_sees",
+            "test_hosted_tracing.py::test_a_client_that_cannot_be_built_is_tracing_off_and_the_question_is_answered",
+        ),
+    }
+)
+
+
 UNMAPPED: dict[str, str] = {
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),

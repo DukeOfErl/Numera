@@ -160,6 +160,8 @@ one of the above.
 | `SCINUMBERS_TRACE` | `logs/trace.jsonl` | the structured trail; `-` for stderr, empty to discard |
 | `SCINUMBERS_MAX_SESSIONS` | `20` | how many browser sessions the deployment holds open at once; the next is told to try later |
 | `SCINUMBERS_SESSION_IDLE_S` | `600` | how long a quiet session keeps its place before it is freed |
+| `SCINUMBERS_TRACING` | off | `langfuse` turns hosted tracing on, and nothing else does; see below |
+| `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` | — | all three required when tracing is on; the base URL names the region |
 
 Every variable above is read from the process environment. A hosted deployment has
 no shell to export one from, so **put it in the app's Secrets box as a top-level
@@ -207,6 +209,40 @@ everything kept about one account. Deletion on request, and any retention limit,
 are deferred until there are users rather than invited testers
 ([ADR-0840](docs/decisions/0840-what-a-question-s-trail-keeps.md),
 [ADR-0810](docs/decisions/0810-the-role-is-written-at-record-time.md)).
+
+### Hosted tracing (optional)
+
+Each question can be sent to [Langfuse](https://langfuse.com) Cloud as one trace: the model's turns,
+every tool call, tokens and timings. It is a debugger for one question, not a record — the trail is
+where anything is read back from ([ADR-0750](docs/decisions/0750-feedback-is-recorded-here-not-at-the-tracer.md)).
+
+It is **off unless you say so**: set `SCINUMBERS_TRACING = "langfuse"` and all three Langfuse keys,
+as top-level keys in `.streamlit/secrets.toml` (above the first `[section]`) or in the environment.
+The keys alone turn nothing on, an unrecognised value leaves it off and says so once, and a
+`LANGSMITH_TRACING` left in the environment sends nothing anywhere
+([ADR-1010](docs/decisions/1010-tracing-is-a-project-setting.md)).
+
+- **Found by the question.** A trace's id is derived from the question's identifier, so a trail row
+  or a rating leads straight to it. Traces are named `ask` and tagged `run:<SCINUMBERS_RUN>`;
+  evaluation runs are tagged `eval` as well.
+- **Who asked** appears only as a per-account digest keyed with `[auth]`'s `cookie_secret`, so it
+  cannot be recomputed from a guessed address, and only where sign-in is configured. The session
+  appears only as a digest too, since a session token from the link would open the conversation
+  ([ADR-1020](docs/decisions/1020-attribution-is-an-opaque-digest-attached-by-the-driver.md)).
+- **Ratings** are copied to the trace as scores (`reader_verdict`, `reader_comment`).
+- **What leaves the host when it is on:** prompts, tool results, corpus text, answers, and readers'
+  rating comments — free text a reader wrote, which may say anything. Sent to the region the base
+  URL names; `https://cloud.langfuse.com` is the EU.
+- **The free tier's allowance** is 50,000 units a month, a unit being a trace, a span or a score.
+  One question measured 37 units (2026-09-25), so roughly 1,300 questions a month; questions with
+  more tool calls cost more. `scinumbers-eval run` shows the month's usage and its own estimate
+  before asking anything, and waits for a typed `yes` when more than half is used, when the run
+  would not fit, or when either figure cannot be counted. That includes Langfuse being unreachable,
+  and the run then cannot proceed unattended. The check is in `run_evaluation`, so any caller of it
+  meets the same refusal. The count covers this Langfuse project
+  only, which is exact while it is the organisation's only one.
+- **A tracer fault never reaches a reader.** An unreachable or refusing Langfuse, including one
+  whose allowance has run out, costs the traces and nothing else.
 
 ### Sign-in and enrolment (hosted deployments only)
 
@@ -711,11 +747,10 @@ deterministic: they say what was cited and retrieved, never whether a sentence i
 withdrawn on account of a thumbs-down; the rating is evidence for whoever is improving the tool, and
 it reaches them rather than the agent.
 
-**There is no tracing instrumentation yet.** LangSmith or Langfuse — per-question traces with
-per-user attribution, and ratings pushed as scores — is planned and deliberately not enabled:
-`langsmith` is already present as a transitive dependency, and turning tracing on ships prompts,
-tool results and corpus text to a third-party service. That is a decision to take deliberately
-rather than by setting an environment variable.
+**The tracer is not the record, and nothing in it is masked.** Hosted tracing, when switched on,
+sends a question's full text, tool results and answer to Langfuse; nothing is redacted, which was
+accepted for corpus text. Traces are kept 30 days on the free tier and are never read back by the
+app — ratings and the trail are.
 
 **Enrolment is not managed from the app.** It is one command an operator runs (`scinumbers-enrol`). Adding a tester, assigning a role and issuing a
 credential are rows and keys the operator writes by hand (`sql/accounts.sql`); there is no page for

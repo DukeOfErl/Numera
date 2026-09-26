@@ -133,7 +133,9 @@ mid-session; withdrawal, re-keying and role changes from the command rather than
 from `sql/accounts.sql`. The helper script itself has landed — see above.
 
 ### WP4 — Usage events + hosted tracing
-Depends on WP1 and WP3. Not yet proposed.
+Depends on WP1 and WP3. **Split:** hosted tracing is built as `add-hosted-tracing`
+on `feat/hosted-tracing` (Langfuse Cloud EU, ADR-1000–1020, 2026-09-25) and moves to
+Done at merge. The usage-events table is still to propose, as its own change.
 
 **Both the tally table and a hosted tracer were agreed — they are not
 alternatives.** The table is the system of record; the tracer is a debugger.
@@ -143,7 +145,7 @@ alternatives.** The table is the system of record; the tracer is a debugger.
   metadata. `QuestionTrace.run_config()` already returns the `RunnableConfig`
   shape both read, and `agent.py` already merges it — per-user attribution is one
   more key in an existing dict, not a new mechanism.
-- Per-answer verdicts pushed as scores with `extend_trace_retention=True`.
+- Per-answer verdicts pushed as scores. (Langfuse has no retention flag; see ADR-1000.)
 - Install the LangSmith skills: https://docs.langchain.com/langsmith/skills (or the langfuse skills)
 
 **Why the tracer cannot be the record.** Feedback is a child of a run, the free
@@ -155,6 +157,8 @@ tier expires traces at 14 days, and max retention was cut 400 → 180 days on
 setting that one variable, by anyone, at any time, immediately ships full prompts,
 tool results and corpus text to a US-hosted service. Exposing corpus entries was
 accepted; the point is that it must be a decision, not an env var nobody chose.
+**Closed by `add-hosted-tracing`:** the agent's stream runs with LangSmith's own
+tracing refused whatever the environment says, for every caller (ADR-1010).
 
 ### WP5 — Cloud Run, and the ledger that has to move first
 Not now. Revisit when the alpha outgrows Community Cloud.
