@@ -286,20 +286,40 @@ def test_progress_before_the_request_does_not_resolve_it(table, accounts_table):
 
 
 def test_two_spellings_of_one_address_are_one_person(table, accounts_table):
-    """`accounts.lookup` folds case, so the provider's spelling and the row's may
-    differ. Without folding here, an admitted `Tester@` would not resolve a request
-    from `tester@` and the operator would chase a solved problem forever."""
+    """Both places a spelling can differ, because `accounts.lookup` folds case and
+    nothing makes the provider's assertion and the operator's typing agree.
+
+    Without folding, a solved problem is chased forever: an admitted `Mixed@` would
+    not resolve a request from `mixed@`, and an accounts row spelled either way
+    would not clear a refusal spelled the other.
+
+    This test previously asserted that an *admitted* session cleared the enrolment
+    queue, which stopped being true when that queue started asking the accounts
+    table -- correctly, since a reader may be enrolled and never come back. It was
+    stale rather than failing, and it was the only one of the nine not updated.
+    """
+    from sqlalchemy import text
+
     engine, name = table
     _write(
         engine,
         name,
         [
-            ("signin.refused", "Mixed@Example.org", None),
-            ("question.asked", None, "mixed@example.org"),
+            ("signin.resend_requested", "Asked@Example.org", None),
+            ("signin.admitted", None, "asked@example.org"),
+            ("signin.refused", "Rowed@Example.org", None),
         ],
     )
-    _, not_enrolled = waiting(engine, table=name, accounts_table=accounts_table)
-    assert not_enrolled == [], "case alone made one person look like two"
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                f"insert into {accounts_table} (email, role) "
+                f"values ('rowed@example.org', 'student')"
+            )
+        )
+    no_email, not_enrolled = waiting(engine, table=name, accounts_table=accounts_table)
+    assert no_email == [], "an admission under another capitalisation did not resolve the request"
+    assert not_enrolled == [], "an accounts row under another capitalisation did not count"
 
 
 def test_the_window_bounds_how_far_back_it_looks(table, accounts_table):
