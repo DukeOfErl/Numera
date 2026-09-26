@@ -346,6 +346,20 @@ refused — the same empty output as a project with no branches — which is a c
 that cannot tell you it failed. Read the status, then filter once you are getting
 `HTTP 200`.
 
+To check the connection-URL call as well, **discard the body**: its response
+carries the branch's password, and a check that prints it has put a live
+credential into your scrollback and your terminal's history to verify a number.
+
+```bash
+curl -sS -o /dev/null -w 'HTTP %{http_code}\n' \
+  "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/connection_uri\
+?branch_id=BRANCH_ID&database_name=neondb&role_name=neondb_owner&pooled=true" \
+  -H "Authorization: Bearer $NEON_API_KEY"
+```
+
+`200` means the `--database` and `--role-name` defaults suit the project and
+neither flag is needed.
+
 `HTTP 401` from the first call means the key; from the second, the project id.
 The command cannot make that distinction from inside — an expired key and a key
 that cannot see the project are refused identically — so its message names both.
