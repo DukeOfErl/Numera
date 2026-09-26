@@ -324,20 +324,35 @@ Where each comes from (Neon's console, read 2026-09-26):
 | `NEON_PROJECT_ID` | The project → **Settings** → **General**, with a copy button |
 
 Check both before you need them, which also tells you the exact branch name to
-pass to `--branch`:
+pass to `--branch`. **Load the file in this shell first**, and let the shell say
+so if you have not:
 
 ```bash
-curl -s https://console.neon.tech/api/v2/projects \
-  -H "Authorization: Bearer $NEON_API_KEY" | python3 -m json.tool | grep -E '"id"|"name"'
+set -a; source ~/.config/scinumbers/enrol.env; set +a
+: "${NEON_API_KEY:?not set — source ~/.config/scinumbers/enrol.env first}"
+: "${NEON_PROJECT_ID:?not set — source ~/.config/scinumbers/enrol.env first}"
 
-curl -s "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches" \
-  -H "Authorization: Bearer $NEON_API_KEY" | python3 -m json.tool | grep '"name"'
+curl -sS -w '\nHTTP %{http_code}\n' https://console.neon.tech/api/v2/projects \
+  -H "Authorization: Bearer $NEON_API_KEY"
+
+curl -sS -w '\nHTTP %{http_code}\n' \
+  "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches" \
+  -H "Authorization: Bearer $NEON_API_KEY"
 ```
 
-A 401 from the first means the key; a 401 from the second means the project id.
-That is the one distinction the command cannot make for you — from inside, a key
-that is expired and a key that cannot see the project are refused identically —
-so its message names both.
+The status code is printed on purpose, and there is no `grep`. A pipeline that
+filters for the field you want prints **nothing at all** when the call was
+refused — the same empty output as a project with no branches — which is a check
+that cannot tell you it failed. Read the status, then filter once you are getting
+`HTTP 200`.
+
+`HTTP 401` from the first call means the key; from the second, the project id.
+The command cannot make that distinction from inside — an expired key and a key
+that cannot see the project are refused identically — so its message names both.
+
+Verified against the live API on 2026-09-26: a wrong key, well formed or not,
+gives `401`; an **empty** `Authorization` header gives `400 not authenticated`,
+which is why the command refuses on an unset variable before it calls anything.
 
 Then, in the shell where you are enrolling someone:
 

@@ -40,6 +40,15 @@ DEFAULT_ROLE = "neondb_owner"
 
 
 #: As `enrol.REFUSING_STATUSES`, and for the same reason.
+#:
+#: `401` is what Neon actually answers for a key that is wrong, whether or not it
+#: is well formed -- checked against the live API on 2026-09-26 with a plausible
+#: `napi_`-prefixed key and with the string `not-a-key`, both `401 supplied
+#: credentials do not pass authentication`. An **empty** `Authorization` header
+#: gives `400 not authenticated` instead, and `400` is deliberately not in this
+#: tuple: the command refuses on an unset or empty variable before it calls
+#: anything, so an empty header cannot arise from here, and treating a general
+#: `400` as a credential problem would mislabel a malformed request.
 REFUSING_STATUSES = (401, 403)
 
 API_KEY_REFUSED = (
