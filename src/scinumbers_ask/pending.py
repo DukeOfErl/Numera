@@ -30,11 +30,16 @@ done. The window survives as `--hours`, no longer as the mechanism but as a boun
 on how far back to look, so an address abandoned months ago ages out rather than
 nagging forever.
 
-Read-only, and both queries are read-only by construction: resolution is a `join`
-against records the app already writes.
+**Read-only.** It runs no `insert`, `update` or `delete` — resolution is a `join`
+against records the app already writes — which is why it is safe to point at the
+branch the deployment writes to.
 
-Read-only. It runs no `insert`, `update` or `delete`, which is why it is safe to
-point at the branch the deployment writes to.
+**Verified against real Postgres on 2026-09-26**, `tests/test_pending_live.py`,
+seven cases. Two runs of it found two defects: `jsonb_build_object` with a bound
+parameter in the test's own helper, and -- the one that mattered --
+`signin.refused` appearing in its own progress set, which emptied the enrolment
+queue completely while every offline test passed. Neither was reachable by reading,
+and the offline double cannot reach either, because it never runs the join.
 """
 
 from __future__ import annotations
