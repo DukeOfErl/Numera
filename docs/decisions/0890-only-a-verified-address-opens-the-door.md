@@ -77,6 +77,28 @@ folder, and the two steps after, in the order they happen. A true sentence that
 does not move anybody is a failed refusal, and only a person meeting it cold
 reveals that.
 
+## The door is a way back, not a dead end
+
+A refusal a reader cannot act on from where they are standing is a dead end, and
+this one nearly was: the first two wordings ended by telling them to sign out and
+sign in again. Signing out is not necessary. `st.login` carries no
+already-signed-in guard (read from the installed Streamlit 1.61.1) — it redirects
+to the provider, which still holds its own session and issues a fresh token
+carrying the now-confirmed address. So the page offers one button, the reader
+clicks it after following the emailed link, and they are admitted without retyping
+a password.
+
+**The sentence must not claim a confirmation email has just been sent.** This page
+cannot know that. It is true on a fresh sign-up and false for the reader who
+signed up days ago and never clicked, and for an address confirmed at one provider
+and signed in through another — both of which reach this door. Promising a send
+that did not happen leaves somebody waiting for a message that is not coming.
+
+Which provider to send them back through is read from the `provider` claim, in the
+driver, for the driver's own purpose. It remains absent from the session key and
+from every record (ADR-0880): the address is the identity, and this is only the
+route back to it.
+
 ## Trade-off accepted
 
 **A provider that omits `email_verified` shuts its users out entirely**, with a

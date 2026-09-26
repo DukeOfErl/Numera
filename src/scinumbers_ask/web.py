@@ -811,6 +811,22 @@ def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None =
             )
     elif admission.door is Door.UNVERIFIED:
         st.error(as_text(messages.UNVERIFIED), icon=":material/mark_email_unread:")
+        # Back through the same provider rather than out and in again. The claim
+        # is read here, in the driver, for the driver's own purpose: which button
+        # to offer. It is still not part of the session key and still reaches no
+        # record (ADR-0880) -- the address is the identity, and this is only the
+        # route back to it.
+        provider = (signed_in_claims() or {}).get("provider") or DEFAULT_PROVIDER
+        st.button(
+            as_text(messages.CONFIRMED_IT),
+            key="confirmed-email",
+            on_click=st.login,
+            args=() if provider == DEFAULT_PROVIDER else (provider,),
+            type="primary",
+            icon=":material/refresh:",
+        )
+        # Still offered, for the reader who confirmed nothing and wants to come
+        # back as somebody else.
         st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id))
     elif admission.door is Door.NOT_ENROLLED:
         st.error(as_text(messages.NOT_ENROLLED), icon=":material/person_off:")

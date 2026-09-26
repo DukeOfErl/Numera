@@ -90,11 +90,12 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
-- **The unverified-address refusal tells the reader where to look.** It named
-  "the link your sign-in provider emailed you", which the first person to meet it
-  read without realising they already had the email — nobody thinks of their
-  identity provider that way. It now sends them to their inbox and their spam
-  folder, then back to sign out and in.
+- **The unverified-address refusal is a way back in, not a dead end.** It asks the
+  reader to confirm their address and offers one button to continue with — no
+  signing out and no password to retype, because a fresh login through the same
+  provider is enough. It does not claim a confirmation email has just been sent,
+  which is true only on a first sign-up and would leave a returning reader waiting
+  for a message that is not coming.
 
 - **Only an address the identity provider says it has verified is admitted**, and
   a provider that says nothing counts as unverified. Where sign-up is open this is

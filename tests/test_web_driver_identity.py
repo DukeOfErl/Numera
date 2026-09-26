@@ -367,21 +367,31 @@ def test_an_unverified_address_is_refused_with_its_own_sentence(page, caught):
     (refused,) = [r for r in caught.records if r.getMessage() == "signin.unverified"]
     assert refused.fields["email"] == "unverified@example.org"
     assert web.IDENTITIES == {}, "a refused account must not enter the registry"
-    # This door's sentence tells the reader to sign in again, which they cannot
-    # do while signed in as an unverified account. The `NO_CREDENTIAL` door has
-    # carried this assertion since it existed; this one did not until a verifier
-    # deleted the button and nothing failed.
-    assert "Sign out" in [b.label for b in at.button], "no way out of the closed door"
-    # The words a reader acts on, not merely a true statement. The first wording
-    # said "the link your sign-in provider emailed you" and the reader who met it
-    # had the email and did not look, because nobody thinks of their identity
-    # provider that way. The sentence has to send them to their inbox and then
-    # back here, in that order.
-    said = messages.UNVERIFIED
-    assert "email" in said.lower() and "spam" in said.lower()
-    assert said.lower().index("email") < said.lower().index("sign out"), (
-        "the steps are out of order: look first, then come back"
+    # **The way back is one click, not a sign-out.** `st.login` redirects to the
+    # provider, which still has its own session and issues a fresh token carrying
+    # the now-confirmed address -- so the reader who did what the sentence asked
+    # is admitted without retyping a password. Sign out stays for the reader who
+    # wants to come back as somebody else.
+    labels = [b.label for b in at.button]
+    assert messages.CONFIRMED_IT in labels, "the door tells them to use a button that is absent"
+    assert "Sign out" in labels, "no way out of the closed door"
+    # Asserted as a property, not against the constant. `CONFIRMED_IT in labels`
+    # compares the constant to itself and so survives any rewording -- seeding
+    # caught it passing while the label read "Sign out and back in", which
+    # contradicts the button's entire reason for existing.
+    assert "sign out" not in messages.CONFIRMED_IT.lower(), (
+        "the one button that exists to avoid signing out must not ask for it"
     )
+    # The sentence has to name the thing a reader acts on. Two earlier wordings
+    # failed differently: one named "your sign-in provider", which the reader did
+    # not recognise as the sender of an email they had; the other explained itself
+    # at length, which reads as a system addressing its operator. It must **not**
+    # claim an email was just sent -- this page cannot know that, and the repeat
+    # visitor would wait for a message that is not coming.
+    said = messages.UNVERIFIED
+    assert "confirm" in said.lower() and "spam" in said.lower()
+    assert "has been sent" not in said.lower()
+    assert "sign out" not in said.lower(), "the reader is sent to a button, not out of the app"
 
 
 def test_an_unverified_address_is_never_looked_up(monkeypatch):
@@ -654,16 +664,6 @@ def test_an_enrolled_account_with_no_credential_meets_a_door_of_its_own(page, ca
     assert messages.NO_CREDENTIAL in [e.value for e in at.error]
     assert page.built == [], "an agent was built, and would spend the environment's key"
     assert "Sign out" in [b.label for b in at.button], "no way out of the closed door"
-    # The words a reader acts on, not merely a true statement. The first wording
-    # said "the link your sign-in provider emailed you" and the reader who met it
-    # had the email and did not look, because nobody thinks of their identity
-    # provider that way. The sentence has to send them to their inbox and then
-    # back here, in that order.
-    said = messages.UNVERIFIED
-    assert "email" in said.lower() and "spam" in said.lower()
-    assert said.lower().index("email") < said.lower().index("sign out"), (
-        "the steps are out of order: look first, then come back"
-    )
 
 
 def test_a_credential_the_provider_refuses_is_caught_at_sign_in(monkeypatch):
