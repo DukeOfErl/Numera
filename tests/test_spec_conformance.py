@@ -363,13 +363,13 @@ COVERED: dict[str, tuple[str, ...]] = {
     #     through two OIDC providers is not something AppTest can drive.
     #   - "A credential capped at that amount, renewing monthly, is issued":
     #     asserted against a double's echo. **That the provider honours
-    #     `limit_reset` on create is unverified against the real OpenRouter**:
-    #     there is no live check, `network`-marked or otherwise, and the earlier
-    #     wording here claimed there was. It is the one thing a double cannot
-    #     tell us, because the double is what we wrote -- which is exactly why a
-    #     false note about it is worse than none, retiring the suspicion that
-    #     would find a provider-side surprise. `tasks.md` 2.9 is the live run,
-    #     and it is an operator's to make.
+    #     `limit_reset` on create was answered by one live run rather than by a
+    #     test**: on 2026-09-26 a $0.01 key came back
+    #     `"limit_reset": "monthly"`, recorded in ADR-0900 and `tasks.md` 2.9.
+    #     There is still no `network`-marked check, deliberately -- a standing
+    #     one would mint a real key on every marked run to re-answer a settled
+    #     question. What remains unverified live is the `PATCH` retry, which the
+    #     create call has not yet made necessary.
     #   - "The named environment does not exist ... names the environments that
     #     do exist": the refusal and its list are asserted; that Neon's `search`
     #     really is a partial match is read from its documentation, not driven.

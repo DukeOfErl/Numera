@@ -192,10 +192,30 @@ repository, and the implementer's job is to leave the instructions right.
       three of the could-not-be-written tests. **G** the cap echo unchecked →
       killed `test_a_cap_that_comes_back_wrong_is_revoked_and_refused`. **H**
       (added) nothing minted at all → killed four, including the happy path.*
-- [ ] 2.9 (operator, `network` marker) One live mint against OpenRouter with a
+- [x] 2.9 (operator, `network` marker) One live mint against OpenRouter with a
       $0.01 cap into a throwaway name, read the echo, then revoke — recording
       in the ADR whether `limit_reset` is honoured on create or needed the
       `PATCH`. The one live run this change needs.
+
+      *Run 2026-09-26, into the `dev` branch. Minted, row written, and
+      `GET /api/v1/keys` reported `"limit": 0.01, "limit_reset": "monthly"`.
+      **OpenRouter honours `limit_reset` on create**, so the `PATCH` retry has
+      never run against the real provider — tested and mutation-covered, but
+      unexercised in anger. ADR-0900 says so rather than implying the retry is
+      known to work.*
+
+      *The operator path was confirmed in the same run, and two things in it were
+      wrong in the documentation beforehand: a **personal** Neon key refuses the
+      list-projects call with `400 org_id is required` where an **organisation**
+      key needs no such parameter and reaches both endpoints the command uses;
+      and Neon's docs give `ep-cool-darkness-123456` as a project-id example,
+      which is the shape of an endpoint id rather than a project id. Both
+      corrected in the README, both found by running it rather than by reading.*
+
+      *No `network`-marked test was added. The value here was the one-off answer
+      about the provider's create-side behaviour, which is now in the ADR; a
+      standing test would mint a real key on every marked run to re-answer a
+      question already answered.*
 - [x] 2.10 `verifier` on group 2: measure that no test passes if `enrol()` mints
       before checking the cap, and that `KeyLeftBehind` carries the hash.
 

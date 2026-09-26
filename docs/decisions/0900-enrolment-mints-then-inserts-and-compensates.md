@@ -40,12 +40,30 @@ credential**, because ADR-0780's case for storing keys in the clear rests
 entirely on every key having a cap. A cap that is missing, zero or negative is
 refused before anything is called.
 
+**Verified against the live provider on 2026-09-26.** One enrolment of a
+throwaway address into the `dev` branch with a `$0.01` cap: the key was minted,
+the row was written, and `GET /api/v1/keys` then reported
+`"limit": 0.01, "limit_reset": "monthly"` for it. So **OpenRouter honours
+`limit_reset` on create**, and the `PATCH` retry below has never run against the
+real provider — it is exercised by tests and by seeded mutants, and is
+unexercised in anger. Recorded because "there is a retry" and "the retry has been
+seen to work" are different claims, and only the first is true here. Whether it
+earns its twenty lines is worth asking again if OpenRouter's behaviour is stable
+for a while; the case for keeping it is that a provider which stopped honouring
+the field would otherwise block every enrolment rather than cost one extra call.
+
+The same run confirmed the operator path end to end: an organisation-scoped Neon
+API key reaches both control-plane endpoints with no `org_id`, and the
+`--database` and `--role-name` defaults (`neondb`, `neondb_owner`) suit a
+default project.
+
 **The echo is checked.** A credential whose returned `limit` is not the amount
 asked for is revoked rather than handed out — what is verified is not that the
 call succeeded but that the key has the property the storage decision depends on.
-A `limit_reset` the create call did not honour is retried once as a `PATCH`; a
-`limit` that comes back wrong is not retried, because a provider disagreeing
-about the number is not a provider to argue with.
+A `limit_reset` the create call did not honour is retried once as a `PATCH` —
+which, per the live run above, it has not yet had to be; a `limit` that comes
+back wrong is not retried, because a provider disagreeing about the number is not
+a provider to argue with.
 
 **The branch is named every time and has no default.** Without `--branch` the
 command refuses before doing anything, with a sentence saying the row has to land
