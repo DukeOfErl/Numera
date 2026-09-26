@@ -88,11 +88,20 @@ carrying the now-confirmed address. So the page offers one button, the reader
 clicks it after following the emailed link, and they are admitted without retyping
 a password.
 
-**The sentence must not claim a confirmation email has just been sent.** This page
-cannot know that. It is true on a fresh sign-up and false for the reader who
-signed up days ago and never clicked, and for an address confirmed at one provider
-and signed in through another — both of which reach this door. Promising a send
-that did not happen leaves somebody waiting for a message that is not coming.
+**Three wordings, and the third came from the reader.** The first named "your
+sign-in provider" and the link it had emailed; the person who met it had that email
+and did not look, because nobody thinks of a tenant that way. The second said what
+to do and explained why at length, which reads as a system addressing its operator.
+The third is the reader's own sentence: *a confirmation email has been sent to your
+address (check your spam folder too)*.
+
+That third wording was resisted first, on the grounds that the page cannot know an
+email was sent — and the objection was wrong. It does not claim *just now*, and
+sign-up does send one, whether five minutes or five days ago. What had happened was
+"was sent" being read as "was just sent". Worth recording because the correction
+came from outside twice, and both times the fault was in the explaining rather than
+in the facts: a refusal is a piece of writing for somebody who is stuck, and its
+author is the last person able to judge whether it lands.
 
 Which provider to send them back through is read from the `provider` claim, in the
 driver, for the driver's own purpose. It remains absent from the session key and

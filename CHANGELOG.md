@@ -93,9 +93,8 @@ any release; `1.0.0` when it stabilizes.
 - **The unverified-address refusal is a way back in, not a dead end.** It asks the
   reader to confirm their address and offers one button to continue with — no
   signing out and no password to retype, because a fresh login through the same
-  provider is enough. It does not claim a confirmation email has just been sent,
-  which is true only on a first sign-up and would leave a returning reader waiting
-  for a message that is not coming.
+  provider is enough. Sign out stays beside it, as the only way back for someone
+  who signed in with the wrong address.
 
 - **Only an address the identity provider says it has verified is admitted**, and
   a provider that says nothing counts as unverified. Where sign-up is open this is

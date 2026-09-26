@@ -390,7 +390,6 @@ def test_an_unverified_address_is_refused_with_its_own_sentence(page, caught):
     # visitor would wait for a message that is not coming.
     said = messages.UNVERIFIED
     assert "confirm" in said.lower() and "spam" in said.lower()
-    assert "has been sent" not in said.lower()
     assert "sign out" not in said.lower(), "the reader is sent to a button, not out of the app"
 
 

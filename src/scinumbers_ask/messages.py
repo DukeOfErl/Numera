@@ -87,25 +87,25 @@ def sign_in_label(provider: str) -> str:
 # is theirs to take and it will work; there it is the operator's and nothing on
 # this page helps. A single sentence for both would send half of each group to
 # the wrong place.
-# Two goes at this one, and both failures are worth keeping.
+# Three goes at this one, and the failures are the useful part.
 #
 # The first named "your sign-in provider" and "the link it emailed you": accurate,
 # and inert. The reader who met it had the email and did not look, because nobody
 # thinks of Auth0 as their sign-in provider.
 #
-# The second said what to do and explained itself at length, which reads as a
-# system talking to its operator rather than to a person trying to ask a question.
+# The second said what to do and explained why at length, which reads as a system
+# addressing its operator rather than a person trying to ask a question.
 #
-# What it does **not** say is that a confirmation email has just been sent,
-# because this page has no way to know. The obvious case is a fresh sign-up, where
-# one has; the other cases are a reader who signed up days ago and never clicked,
-# and an address confirmed at one provider but signed in through another. Claiming
-# a send that did not happen sends someone to wait for a message that is not
-# coming.
+# The third -- this one -- is a reader's own wording. "A confirmation email has
+# been sent" was resisted on the grounds that this page cannot know it, and that
+# was wrong: the sentence does not claim *just now*, and sign-up does send one,
+# whether that was five minutes or five days ago. The objection had conflated "was
+# sent" with "was just sent". Recorded because the useful correction came from the
+# person meeting the sentence cold, twice, and both times the fault was in
+# explaining rather than in the facts.
 UNVERIFIED = (
-    "Please confirm your email address before asking anything. Open the confirmation "
-    "link that was emailed to you — check your spam folder if you cannot find it — then "
-    "use the button below."
+    "A confirmation email has been sent to your address (check your spam folder too). "
+    "Please confirm it, then use the button below."
 )
 
 #: The way back in without signing out. `st.login` has no already-signed-in guard
