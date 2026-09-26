@@ -7,8 +7,10 @@ else" is a claim about what the page did not draw, and no unit below the script
 can see that. The unconfigured test runs first and is the regression guard for
 every other web test in this suite -- they all run with no `[auth]` in secrets.
 
-What is stubbed, and why it is honest to: `web.signed_in_email` stands in for
-`st.user`, which `AppTest` fixes to a test address with no `is_logged_in`;
+What is stubbed, and why it is honest to: `web.signed_in_claims` stands in for
+`st.user`, which `AppTest` fixes to a test address with no `is_logged_in`. The
+fixture asserts a verified address unless a test says otherwise, which is what
+keeps the admitted population admitted while the refused one grows;
 `web.accounts.lookup` stands in for the database; `web.AskAgent` is wrapped to
 record the credential each agent was built with. `web.admit` and `web.agent_for`
 themselves run for real, which is the point.
@@ -86,6 +88,8 @@ def page(monkeypatch, repo, config, tmp_path):
         enrolled: dict[str, Account] | None = None,
         unavailable: bool = False,
         answers=("an answer",),
+        claims: dict | None = None,
+        auth_section: dict | None = None,
     ) -> AppTest:
         agent = agent_with(repo, config, tmp_path, scripted(*(says(a) for a in answers)))
 
@@ -98,7 +102,12 @@ def page(monkeypatch, repo, config, tmp_path):
             return agent
 
         monkeypatch.setattr(web, "AskAgent", building)
-        monkeypatch.setattr(web, "signed_in_email", lambda: email)
+        asserted = (
+            None
+            if email is None and claims is None
+            else {"email": email, "email_verified": True, **(claims or {})}
+        )
+        monkeypatch.setattr(web, "signed_in_claims", lambda: asserted)
 
         def lookup(engine, who, **kwargs):
             if unavailable:
@@ -108,7 +117,7 @@ def page(monkeypatch, repo, config, tmp_path):
         monkeypatch.setattr(web.accounts, "lookup", lookup)
         at = AppTest.from_file(APP, default_timeout=TIMEOUT)
         if auth:
-            at.secrets["auth"] = {"client_id": "test-client"}
+            at.secrets["auth"] = auth_section or {"client_id": "test-client"}
         return at
 
     make.built = built  # type: ignore[attr-defined]
@@ -161,6 +170,395 @@ def test_a_visitor_who_is_not_signed_in_is_offered_sign_in_and_nothing_else(page
     assert all("bn-title" in text or "<style>" in text for text in drawn), drawn
     assert [b.label for b in at.button] == ["Sign in with Google"]
     assert caught.events() == [], "a record was written for a visitor who asked nothing"
+
+
+# --- more than one way in ---------------------------------------------------------
+
+
+def test_providers_reads_the_default_and_every_sub_table(monkeypatch):
+    """`[auth]` holds the shared settings, the default provider's credentials, and
+    a sub-table per named provider. Only the sub-tables are mappings, which is
+    what separates them without naming Streamlit's own keys here."""
+    shared = {"redirect_uri": "http://localhost:8501/oauth2callback", "cookie_secret": "s"}
+    cases = {
+        "google only": ({**shared, "client_id": "g"}, ["default"]),
+        "google and auth0": (
+            {**shared, "client_id": "g", "auth0": {"client_id": "a"}},
+            ["default", "auth0"],
+        ),
+        "auth0 only": ({**shared, "auth0": {"client_id": "a"}}, ["auth0"]),
+        "shared settings alone": (shared, []),
+        # Two sub-tables, because with one the docstring's "in the order secrets
+        # lists them" has no negative case at all. **Both orderings, and that is
+        # the point**: with only the first of these, reverse-sorting the names
+        # still passed -- `zeta` before `auth0` is what sorting backwards
+        # produces anyway, so the case varied the outcome without varying what
+        # the rule reads. A pair no sort can satisfy is what pins the claim. The
+        # order is what the buttons appear in.
+        "three providers keep their order": (
+            {**shared, "client_id": "g", "zeta": {"client_id": "z"}, "auth0": {"client_id": "a"}},
+            ["default", "zeta", "auth0"],
+        ),
+        # `client_kwargs` is a documented mapping under `[auth]`, not a
+        # provider: the installed Streamlit lifts it into the default provider's
+        # own section (`auth_util.generate_default_provider_section`). A "is it
+        # a mapping" rule offered it as a third way in, and clicking that button
+        # calls `st.login("client_kwargs")`, which cannot resolve. The
+        # discriminator is `client_id`, which is one of the three keys Streamlit
+        # itself requires of a provider section.
+        "client_kwargs is not a way in": (
+            {
+                **shared,
+                "client_id": "g",
+                "client_kwargs": {"prompt": "login"},
+                "auth0": {"client_id": "a"},
+            },
+            ["default", "auth0"],
+        ),
+        "a mapping with no client_id is not a provider": (
+            {**shared, "client_id": "g", "expose_tokens": {"id": True}},
+            ["default"],
+        ),
+        # Offered twice, the two buttons share the key `sign-in-default` and
+        # Streamlit raises `StreamlitDuplicateElementKey` -- which takes the
+        # whole door down rather than the one button.
+        "a sub-table called default is not a second default": (
+            {**shared, "client_id": "g", "default": {"client_id": "d"}},
+            ["default"],
+        ),
+        "and the other way round": (
+            {**shared, "client_id": "g", "auth0": {"client_id": "a"}, "zeta": {"client_id": "z"}},
+            ["default", "auth0", "zeta"],
+        ),
+    }
+    for name, (section, expected) in cases.items():
+        monkeypatch.setattr(web.st, "secrets", {"auth": section})
+        assert web.providers() == expected, name
+
+
+def test_providers_is_empty_with_no_auth_section(monkeypatch):
+    """The type Streamlit actually raises for a missing secrets file, because
+    `_is_not_configured` matches by type and a double raising something else
+    would pass while proving nothing about the real path."""
+    from streamlit.errors import StreamlitSecretNotFoundError
+
+    class NoSecrets(dict):
+        def __getitem__(self, key):
+            raise StreamlitSecretNotFoundError("No secrets files found")
+
+    monkeypatch.setattr(web.st, "secrets", NoSecrets())
+    assert web.providers() == []
+
+    class Broken(dict):
+        def __getitem__(self, key):
+            raise RuntimeError("a broken secrets file is not an absent one")
+
+    monkeypatch.setattr(web.st, "secrets", Broken())
+    with pytest.raises(RuntimeError):
+        web.providers()
+
+    # A secrets file that exists and simply has no `[auth]`. Streamlit raises a
+    # plain `KeyError` here, which is not one of its own error types, so
+    # `_is_not_configured` does not match it -- and must not, since widening that
+    # predicate would make it answer "not configured" to any missing key.
+    class NoAuthSection(dict):
+        def __getitem__(self, key):
+            raise KeyError(key)
+
+    monkeypatch.setattr(web.st, "secrets", NoAuthSection())
+    assert web.providers() == []
+
+    # `[auth] = "something"` rather than a section. Streamlit would not usually
+    # produce it, but the rule is "a mapping or nothing" and an unexecuted branch
+    # is a branch nobody has read.
+    monkeypatch.setattr(web.st, "secrets", {"auth": "not a section"})
+    assert web.providers() == []
+
+
+def test_each_configured_provider_gets_its_own_button(page):
+    at = page(
+        auth=True,
+        email=None,
+        auth_section={"client_id": "g", "auth0": {"client_id": "a"}},
+    ).run()
+    assert [b.label for b in at.button] == ["Sign in with Google", "Sign in with email"]
+
+
+def test_the_default_provider_is_signed_in_to_with_no_argument(page, monkeypatch):
+    """`st.login()` and `st.login("default")` are different calls: the
+    no-argument form means the credentials in `[auth]` itself, and Streamlit
+    resolves the name "default" against a section that need not exist. Forcing
+    either form for both providers passed every test until this one, so the
+    comment in `draw_closed_door` asserting the distinction had nothing behind
+    it."""
+    asked: list = []
+    monkeypatch.setattr(web.st, "login", lambda *args: asked.append(args))
+    at = page(
+        auth=True,
+        email=None,
+        auth_section={"client_id": "g", "auth0": {"client_id": "a"}},
+    ).run()
+    at.button[0].click().run()
+    assert asked == [()], "the default provider was named, and it must not be"
+    at.button[1].click().run()
+    assert asked == [(), ("auth0",)], "a named provider was not named"
+
+
+def test_auth_with_no_credentials_still_offers_the_default_button(page):
+    """A misconfigured `[auth]` has to be diagnosable. The button calls
+    `st.login()`, which raises Streamlit's own "credentials are missing" error
+    naming the keys; drawing nothing would leave the operator a sentence, no
+    control and no clue. The visitor is stuck either way, so the tie goes to the
+    person who can fix it."""
+    at = page(auth=True, email=None, auth_section={"redirect_uri": "x", "cookie_secret": "y"}).run()
+    assert [b.label for b in at.button] == ["Sign in with Google"]
+
+
+def test_the_google_client_can_be_a_named_provider_to_reorder_the_buttons(page):
+    """The unnamed default is always drawn first, so the only way to put another
+    provider above it is to name Google too. Then both are sub-tables and secrets
+    order decides, which is what the order test above pins -- and the label has to
+    survive the move, or the button reads "Sign in with google"."""
+    at = page(
+        auth=True,
+        email=None,
+        auth_section={
+            "redirect_uri": "x",
+            "cookie_secret": "y",
+            "auth0": {"client_id": "a"},
+            "google": {"client_id": "g"},
+        },
+    ).run()
+    assert [b.label for b in at.button] == ["Sign in with email", "Sign in with Google"]
+
+
+def test_a_provider_with_no_label_still_gets_a_button(page):
+    """An operator adding `[auth.okta]` meets a plain button, not a KeyError."""
+    at = page(auth=True, email=None, auth_section={"okta": {"client_id": "o"}}).run()
+    assert [b.label for b in at.button] == ["Sign in with okta"]
+
+
+# --- a verified address, or none ---------------------------------------------------
+
+
+def test_address_verified_reads_the_claim_and_refuses_its_absence():
+    """The negatives vary what the rule actually reads -- the claim's value and
+    whether it is there at all -- not merely the outcome. `1` is here because it
+    equals `True` in Python: a truthy check would admit anything a provider sent.
+    """
+    assert web.address_verified({"email_verified": True})
+    assert web.address_verified({"email_verified": "true"})
+    for value in (False, "false", 1, 0, None, "", "True", "yes"):
+        assert not web.address_verified({"email_verified": value}), value
+    assert not web.address_verified({}), "a provider that says nothing is refused"
+
+
+def test_an_unverified_address_is_refused_with_its_own_sentence(page, caught):
+    at = page(
+        auth=True,
+        email="unverified@example.org",
+        enrolled={"unverified@example.org": TESTER},
+        claims={"email_verified": False},
+    ).run()
+    assert not at.chat_input, "a question could be asked"
+    shown = [e.value for e in at.error]
+    assert messages.UNVERIFIED in shown
+    assert messages.NOT_ENROLLED not in shown, "the two sentences send readers to different places"
+    (refused,) = [r for r in caught.records if r.getMessage() == "signin.unverified"]
+    assert refused.fields["email"] == "unverified@example.org"
+    assert web.IDENTITIES == {}, "a refused account must not enter the registry"
+    # **The way back is one click, not a sign-out.** `st.login` redirects to the
+    # provider, which still has its own session and issues a fresh token carrying
+    # the now-confirmed address -- so the reader who did what the sentence asked
+    # is admitted without retyping a password. Sign out stays for the reader who
+    # wants to come back as somebody else.
+    labels = [b.label for b in at.button]
+    assert messages.CONFIRMED_IT in labels, "the door tells them to use a button that is absent"
+    assert "Sign out" in labels, "no way out of the closed door"
+    # Asserted as a property, not against the constant. `CONFIRMED_IT in labels`
+    # compares the constant to itself and so survives any rewording -- seeding
+    # caught it passing while the label read "Sign out and back in", which
+    # contradicts the button's entire reason for existing.
+    assert "sign out" not in messages.CONFIRMED_IT.lower(), (
+        "the one button that exists to avoid signing out must not ask for it"
+    )
+    # The sentence has to name the thing a reader acts on. Two earlier wordings
+    # failed differently: one named "your sign-in provider", which the reader did
+    # not recognise as the sender of an email they had; the other explained itself
+    # at length, which reads as a system addressing its operator. It must **not**
+    # claim an email was just sent -- this page cannot know that, and the repeat
+    # visitor would wait for a message that is not coming.
+    said = messages.UNVERIFIED
+    assert "confirm" in said.lower() and "spam" in said.lower()
+    assert "sign out" not in said.lower(), "the reader is sent to a button, not out of the app"
+
+
+def test_an_admission_is_recorded_once_and_carries_the_account(page, caught, monkeypatch):
+    """Until this existed the trail held only refusals, so "nobody tried today" and
+    "everybody got in" looked identical -- and nothing said a reader's problem was
+    solved, because signing in without asking anything wrote no record at all. The
+    daily check reads it.
+
+    Recorded in `establish_identity`, after the stamp is registered, so it carries
+    the account like every other record of a signed-in session. Written at the door
+    it would have carried none, which the spec forbids.
+    """
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    admitted = [r for r in caught.records if r.getMessage() == "signin.admitted"]
+    assert len(admitted) == 1, f"recorded {len(admitted)} times for one arrival"
+    assert getattr(admitted[0], "user_email", None) == TESTER.email
+    assert getattr(admitted[0], "user_role", None) == "scientist"
+    # Every rerun calls `establish_identity`; only the first is an arrival.
+    at = _ask(at, "how many?")
+    assert len([r for r in caught.records if r.getMessage() == "signin.admitted"]) == 1, (
+        "a rerun was recorded as a second arrival"
+    )
+
+
+def test_a_refused_account_is_not_recorded_as_admitted(page, caught):
+    """The negative case varies what the rule reads -- whether an identity was
+    established -- rather than merely the outcome."""
+    page(auth=True, email="stranger@example.org", enrolled={}).run()
+    assert not [r for r in caught.records if r.getMessage() == "signin.admitted"]
+
+
+def test_a_reader_can_say_the_email_never_arrived_and_it_reaches_the_trail(page, caught):
+    """The one dead end left on that door. Nothing is sent from here -- resending
+    needs a provider credential that could also create accounts -- so the request
+    is recorded where the operator looks (`sql/signin.sql`) and they resend."""
+    at = page(
+        auth=True,
+        email="stuck@example.org",
+        enrolled={},
+        claims={"email_verified": False},
+    ).run()
+    ask = [b for b in at.button if b.label == messages.RESEND_REQUEST]
+    assert ask, "no way to say the email never came"
+    at = ask[0].click().run()
+    (asked,) = [r for r in caught.records if r.getMessage() == "signin.resend_requested"]
+    assert asked.fields["email"] == "stuck@example.org"
+    # The button becomes its own acknowledgement: a reader who sees nothing happen
+    # clicks again, and the sentence must not claim an email was sent.
+    assert messages.RESEND_NOTED in [i.value for i in at.info]
+    assert messages.RESEND_REQUEST not in [b.label for b in at.button]
+    # Must not imply anything was sent from here, because nothing was.
+    noted = messages.RESEND_NOTED.lower()
+    assert "recorded" in noted
+    assert "on its way" not in noted and "has been sent" not in noted
+
+
+def test_asking_twice_writes_one_row_and_a_second_reader_starts_clean():
+    """Keyed on the address rather than a flag, because `st.session_state`
+    outlives a sign-out on the same tab -- a boolean would show the next account an
+    acknowledgement it never asked for, which is the bug `end_session` exists to
+    prevent, in a store that does not go through it."""
+    import streamlit as st
+
+    state: dict = {}
+    records: list = []
+
+    class _Trace:
+        def __init__(self, **kwargs):
+            pass
+
+        def record(self, event, **fields):
+            records.append(fields.get("email"))
+
+    claims = {"email": "one@example.org"}
+    try:
+        st.session_state.clear()
+    except Exception:  # noqa: BLE001 - no script context outside AppTest
+        pass
+    import unittest.mock as mock
+
+    with (
+        mock.patch.object(web, "signed_in_claims", lambda: claims),
+        mock.patch.object(web.trace, "QuestionTrace", _Trace),
+        mock.patch.object(web.st, "session_state", state),
+    ):
+        web.request_resend("s1")
+        web.request_resend("s1")
+        assert records == ["one@example.org"], "clicking twice wrote twice"
+        claims["email"] = "two@example.org"
+        web.request_resend("s1")
+        assert records == ["one@example.org", "two@example.org"], (
+            "the next account on the same tab was treated as having already asked"
+        )
+
+
+def test_an_unverified_address_is_never_looked_up(monkeypatch):
+    """The check is before the lookup, so an unverified address never reaches the
+    accounts table -- and an enrolled tester cannot be impersonated by registering
+    their address at a provider with open sign-up."""
+    looked_up: list[str] = []
+    _configured(monkeypatch, TESTER.email, email_verified=False)
+    monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: looked_up.append(who) or TESTER)
+    assert web.admit({}, object(), "s1").door is web.Door.UNVERIFIED
+    assert looked_up == []
+
+
+def test_the_unverified_refusal_is_recorded_once_and_not_once_per_rerun(monkeypatch, caught):
+    """The decision is re-made on every rerun; the record is not. Every other
+    refusal is written once per account per session because its admission is
+    cached, and this one would otherwise charge the trail an insert per click --
+    the only door that does."""
+    state: dict = {}
+    _configured(monkeypatch, TESTER.email, email_verified=False)
+    monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: TESTER)
+    for _ in range(4):
+        assert web.admit(state, object(), "s1").door is web.Door.UNVERIFIED
+    assert [r.getMessage() for r in caught.records].count("signin.unverified") == 1
+    # A different unverified account on the same tab is its own refusal.
+    _configured(monkeypatch, DEV.email, email_verified=False)
+    assert web.admit(state, object(), "s1").door is web.Door.UNVERIFIED
+    assert [r.getMessage() for r in caught.records].count("signin.unverified") == 2
+
+
+def test_the_unverified_door_is_not_held_across_reruns(monkeypatch):
+    """`end_session` does not clear the held admission, so a cached refusal would
+    outlive the reader signing out, verifying and signing back in on the same tab
+    -- which is the sequence the sentence asks them to perform."""
+    state: dict = {}
+    _configured(monkeypatch, TESTER.email, email_verified=False)
+    monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: TESTER)
+    assert web.admit(state, object(), "s1").door is web.Door.UNVERIFIED
+    _configured(monkeypatch, TESTER.email)
+    assert web.admit(state, object(), "s1").door is web.Door.OPEN
+
+
+def test_the_same_address_through_a_second_provider_is_the_same_reader(monkeypatch):
+    """The address is the identity. A tester who used Google yesterday and email
+    today keeps their role and their conversation: the provider is not part of
+    the key and is not stamped on anything."""
+    monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: TESTER)
+    seen = []
+    for provider in ("google-oauth2", "auth0"):
+        _configured(monkeypatch, TESTER.email, provider=provider)
+        admission = web.admit({}, object(), "s1")
+        assert admission.door is web.Door.OPEN
+        seen.append((admission.account, web.effective_session(admission, "s1")))
+    assert seen[0] == seen[1], "a second provider must not be a second account"
+
+
+def test_which_provider_was_used_is_not_recorded_anywhere(page, caught):
+    """The claim task 1.6 made and did not check. It passes vacuously today --
+    nothing in `web.py` reads the `provider` claim at all -- and that is the
+    point of writing it down: the day someone stamps it to "help with debugging",
+    this is what says the address is the identity and the route to it is not
+    (ADR-0880). A guard, declared as a guard."""
+    at = page(
+        auth=True,
+        email=TESTER.email,
+        enrolled={TESTER.email: TESTER},
+        claims={"provider": "auth0", "sub": "auth0|abc123"},
+    ).run()
+    at = _ask(at, "how many?")
+    assert not at.exception
+    assert caught.records, "nothing was recorded, so this asserts nothing"
+    for record in caught.records:
+        for field in ("provider", "sub"):
+            assert not getattr(record, field, None), field
+            assert field not in getattr(record, "fields", {}), field
 
 
 def test_a_signed_in_account_that_is_not_enrolled_is_refused_and_recorded(page, caught):
@@ -507,9 +905,10 @@ def test_two_sessions_get_two_agents_and_one_repository(monkeypatch, tmp_path):
 # --- `admit` and `agent_for` below the page ----------------------------------------------
 
 
-def _configured(monkeypatch, email):
+def _configured(monkeypatch, email, **claims):
     monkeypatch.setattr(web, "identity_configured", lambda: True)
-    monkeypatch.setattr(web, "signed_in_email", lambda: email)
+    asserted = None if email is None else {"email": email, "email_verified": True, **claims}
+    monkeypatch.setattr(web, "signed_in_claims", lambda: asserted)
 
 
 def test_enrolment_is_read_once_per_account_per_session(monkeypatch):
@@ -522,7 +921,9 @@ def test_enrolment_is_read_once_per_account_per_session(monkeypatch):
             assert web.admit(state, object(), "s1").door is web.Door.OPEN
         assert calls == [TESTER.email]
         # A different account on the same tab is looked up afresh.
-        monkeypatch.setattr(web, "signed_in_email", lambda: DEV.email)
+        monkeypatch.setattr(
+            web, "signed_in_claims", lambda: {"email": DEV.email, "email_verified": True}
+        )
         monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: calls.append(who) or DEV)
         admission = web.admit(state, object(), "s1")
         assert admission.account == DEV
@@ -576,7 +977,7 @@ def test_signing_out_forgets_the_session_s_identity(monkeypatch):
         session = web.effective_session(admission, "s1")
         web.establish_identity(admission, session)
         assert session in web.IDENTITIES
-        monkeypatch.setattr(web, "signed_in_email", lambda: None)
+        monkeypatch.setattr(web, "signed_in_claims", lambda: None)
         after = web.admit(state, object(), "s1")
         assert after.door is web.Door.SIGN_IN
         web.establish_identity(after, web.effective_session(after, "s1"))
@@ -597,7 +998,11 @@ def test_a_refusal_after_another_account_was_admitted_carries_no_stamp(monkeypat
     state: dict = {}
     admitted = web.admit(state, object(), "s1")
     web.establish_identity(admitted, web.effective_session(admitted, "s1"))
-    monkeypatch.setattr(web, "signed_in_email", lambda: "stranger@example.org")
+    monkeypatch.setattr(
+        web,
+        "signed_in_claims",
+        lambda: {"email": "stranger@example.org", "email_verified": True},
+    )
     monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: None)
     assert web.admit(state, object(), "s1").door is web.Door.NOT_ENROLLED
     (refused,) = [r for r in caught.records if r.getMessage() == "signin.refused"]
@@ -661,17 +1066,17 @@ def test_agent_for_holds_one_agent_per_state_and_rebuilds_on_a_new_credential(
     assert built[-1] is None, "unconfigured: the environment's key"
 
 
-def test_signed_in_email_is_none_without_is_logged_in(monkeypatch):
+def test_signed_in_claims_are_none_without_is_logged_in(monkeypatch):
     """`AppTest` fixes `st.user` to an address with no `is_logged_in`; a real
     unconfigured deployment has no such key either. Neither is signed in."""
     monkeypatch.setattr(web.st, "user", type("U", (), {"to_dict": lambda self: {"email": "x@y"}})())
-    assert web.signed_in_email() is None
+    assert web.signed_in_claims() is None
     monkeypatch.setattr(
         web.st,
         "user",
         type("U", (), {"to_dict": lambda self: {"email": "x@y", "is_logged_in": True}})(),
     )
-    assert web.signed_in_email() == "x@y"
+    assert web.signed_in_claims() == {"email": "x@y", "is_logged_in": True}
 
 
 # --- 4.5: the note, both variants -----------------------------------------------------------

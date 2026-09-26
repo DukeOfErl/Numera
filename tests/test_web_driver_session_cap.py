@@ -76,7 +76,7 @@ def test_a_visitor_who_has_not_passed_the_door_holds_no_place(capped, monkeypatc
     so each sign-in stranded exactly one. What costs the host is a session with
     an agent behind it, which is what the cap now counts."""
     monkeypatch.setattr(web, "identity_configured", lambda: True)
-    monkeypatch.setattr(web, "signed_in_email", lambda: None)
+    monkeypatch.setattr(web, "signed_in_claims", lambda: None)
     for _ in range(5):
         at = capped().run()
         assert not at.chat_input, "control: the door was closed"

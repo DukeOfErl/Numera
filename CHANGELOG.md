@@ -12,6 +12,59 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **A successful sign-in is recorded.** The trail held only refusals at the door, so
+  "nobody tried today" and "everybody got in" looked the same, and a reader who
+  signed in without asking anything left no trace of having got through. It is
+  written once per arrival and carries the account and role like every other record
+  of a signed-in session.
+
+- **`scinumbers-pending`, a daily check for readers stuck at the door.** It reads
+  the trail for people who said their confirmation email never came and for
+  verified accounts waiting to be enrolled, and **prints nothing when nothing is
+  waiting** — which is what makes it usable from `cron`, since a monitor that
+  reports a quiet day every morning is one whose output stops being read. A problem
+  that resolved itself stops appearing, and nothing is tracked to achieve that:
+  whether a reader got past verification is derived from records the app already
+  writes, and whether an account is enrolled is read from the accounts table rather
+  than inferred from the reader returning — which they may never do.
+
+- **The sign-in buttons can be put in any order.** A provider is "the default",
+  and therefore drawn first, only because its credentials sit among `[auth]`'s own
+  keys; moving them into a sub-table of its own makes it an ordinary named
+  provider and secrets order decides. A secrets change with no code change, and
+  the Google button keeps its label either way.
+
+- **Sign-in with any address, not only a Google one.** Any OpenID Connect
+  provider is a sub-table in secrets and gets its own button on the door; the
+  Google client stays exactly where it was, and a tester who signs in through a
+  second provider keeps the role and the conversation they had, because the
+  address is the identity
+  ([ADR-0880](docs/decisions/0880-a-second-provider-beside-the-first.md)).
+
+- **A refused operator credential says which one and what to do.** A 401 or 403
+  from OpenRouter names the management key and where to make a new one, and adds
+  the consequence nobody guesses: the same key withdraws a tester's credential,
+  so that stops working too while it is refused. One from Neon names
+  `NEON_API_KEY` and `NEON_PROJECT_ID` rather than blaming the branch name. Any
+  other status is still reported as itself, because a 502 read as an expired key
+  sends the operator to replace a key that is fine. The README also says where
+  to keep those three values, and why not on the command line or in `~/.bashrc`.
+
+- **README says where the console scripts are and how to reach them.** `uv sync`
+  installs them into the project's virtualenv rather than onto `PATH`, so a bare
+  `scinumbers-enrol` is `command not found` until you say otherwise — the three
+  ways are listed, and the table notes that `bionumbers` is a declared entry
+  point for a package this repository does not yet contain.
+
+- **`scinumbers-enrol`, one command to enrol a tester.** It mints a capped
+  OpenRouter key and inserts the accounts row in one step, naming the database
+  branch every time and resolving it through Neon's API so no database URL is
+  kept on disk. Nothing is issued without a positive cap, an address already
+  enrolled keeps its row, and a key minted for a row that could not be written is
+  withdrawn again
+  ([ADR-0900](docs/decisions/0900-enrolment-mints-then-inserts-and-compensates.md)).
+
+
 - **Hosted tracing to Langfuse Cloud, off unless the project says so.** With
   `SCINUMBERS_TRACING=langfuse` and the three Langfuse keys, each question becomes
   one trace — its model turns, tool calls, tokens and timings — whose id is derived
@@ -65,6 +118,25 @@ any release; `1.0.0` when it stabilizes.
   each tester's credential already bounds ([ADR-0790]).
 
 ### Changed
+
+- **The unverified-address refusal is a way back in, not a dead end.** It asks the
+  reader to confirm their address and offers one button to continue with — no
+  signing out and no password to retype, because a fresh login through the same
+  provider is enough. Sign out stays beside it, as the only way back for someone
+  who signed in with the wrong address.
+
+- **A reader whose confirmation email never arrived can say so**, and the request
+  reaches the durable trail where the operator finds it (`sql/signin.sql`, which
+  also lists those who gave up without asking, and the enrolment queue). Nothing is
+  sent from the app: resending needs a provider credential that could also create
+  accounts, which is not a trade worth making for one message.
+
+- **Only an address the identity provider says it has verified is admitted**, and
+  a provider that says nothing counts as unverified. Where sign-up is open this is
+  the one thing standing between an enrolled tester and anyone who registers their
+  address. The refusal has its own sentence, separate from "not enrolled", because
+  the reader's next step is different
+  ([ADR-0890](docs/decisions/0890-only-a-verified-address-opens-the-door.md)).
 
 - **The default model is `anthropic/claude-opus-4.7`**, where it was
   `anthropic/claude-haiku-4.5`. Development ran on a cheap instruction-follower

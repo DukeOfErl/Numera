@@ -61,6 +61,80 @@ BUDGET_NOTE = (
 # each asks the reader to do a different thing -- and "not enrolled" during an
 # outage would send a person to the operator, who finds them already enrolled.
 SIGN_IN_NEEDED = "Sign in to ask a question. Nothing is shown, and nothing is kept, until you do."
+#: What each configured provider's button says. Keyed by the name the provider
+#: has in secrets -- `"default"` for the section's own credentials, a sub-table's
+#: name otherwise -- so adding a third provider is a secrets edit and, at most, a
+#: row here. A name with no row gets "Sign in with <name>" rather than a
+#: KeyError: an operator who adds `[auth.okta]` should meet a plain button, not a
+#: blank page.
+SIGN_IN_LABELS = {
+    "default": "Sign in with Google",
+    # `google` as a *named* provider, which is how the Google client is written
+    # when the buttons need to be in an order other than "default first". Moving
+    # it out of `[auth]`'s own keys into `[auth.google]` is a secrets change and
+    # nothing else -- the same label, reached by the other route.
+    "google": "Sign in with Google",
+    "auth0": "Sign in with email",
+}
+
+
+def sign_in_label(provider: str) -> str:
+    """The button's words for one provider."""
+    return SIGN_IN_LABELS.get(provider, f"Sign in with {provider}")
+
+
+# Distinct from NOT_ENROLLED on purpose: the reader's next step differs. Here it
+# is theirs to take and it will work; there it is the operator's and nothing on
+# this page helps. A single sentence for both would send half of each group to
+# the wrong place.
+# Three goes at this one, and the failures are the useful part.
+#
+# The first named "your sign-in provider" and "the link it emailed you": accurate,
+# and inert. The reader who met it had the email and did not look, because nobody
+# thinks of Auth0 as their sign-in provider.
+#
+# The second said what to do and explained why at length, which reads as a system
+# addressing its operator rather than a person trying to ask a question.
+#
+# The third -- this one -- is a reader's own wording. "A confirmation email has
+# been sent" was resisted on the grounds that this page cannot know it, and that
+# was wrong: the sentence does not claim *just now*, and sign-up does send one,
+# whether that was five minutes or five days ago. The objection had conflated "was
+# sent" with "was just sent". Recorded because the useful correction came from the
+# person meeting the sentence cold, twice, and both times the fault was in
+# explaining rather than in the facts.
+UNVERIFIED = (
+    "A confirmation email has been sent to your address (check your spam folder too). "
+    "Please confirm it, then use the button below."
+)
+
+#: The way back in without signing out. `st.login` has no already-signed-in guard
+#: (read from the installed Streamlit 1.61.1): it redirects to the provider, which
+#: sees its own session and issues a fresh token carrying the now-confirmed
+#: address. So the reader clicks once and is admitted, with no password to retype
+#: and no apparent sign-out -- which is the difference between a door and a dead
+#: end.
+CONFIRMED_IT = "I have confirmed my email"
+
+#: The other thing a reader on that door might need, and the only dead end left in
+#: it: the email never arrived. Resending it needs an Auth0 Management credential
+#: with `update:users`, which can also create accounts and change addresses -- far
+#: more power than one message is worth, and the first credential this app would
+#: hold that acts on other people's accounts. So the button records a request
+#: instead, and the operator resends from the provider's dashboard.
+RESEND_REQUEST = "I did not get the email"
+
+#: Deliberately not "an email is on its way": nothing was sent from here, and a
+#: person told to wait for a message nobody has sent waits twice.
+#:
+#: The second sentence is the honest part. The request goes to the trail, where the
+#: operator finds it by looking (`sql/signin.sql`) -- so the wait is however long
+#: until they look. This is a prototype run by one person, and saying so while
+#: inviting a direct message is truer than implying a support desk.
+RESEND_NOTED = (
+    "Your issue has been recorded. Since this is a prototype, please also contact the "
+    "developer personally."
+)
 NOT_ENROLLED = (
     "This account is not enrolled. Ask whoever runs this to enrol it; there is nothing to do here."
 )

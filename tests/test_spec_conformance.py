@@ -356,6 +356,23 @@ COVERED: dict[str, tuple[str, ...]] = {
     #     hand against Neon, not a test.
     #   - "The credential is never shown": asserted over the elements the tests
     #     draw, not over every page state.
+    # `add-open-enrolment`. Both requirements are claimed above; the gaps are:
+    #   - "The same address arrives through a second provider ... the same
+    #     conversation": asserted below the page, on `admit` and
+    #     `effective_session` under two `provider` claims. A real round trip
+    #     through two OIDC providers is not something AppTest can drive.
+    #   - "A credential capped at that amount, renewing monthly, is issued":
+    #     asserted against a double's echo. **That the provider honours
+    #     `limit_reset` on create was answered by one live run rather than by a
+    #     test**: on 2026-09-26 a $0.01 key came back
+    #     `"limit_reset": "monthly"`, recorded in ADR-0900 and `tasks.md` 2.9.
+    #     There is still no `network`-marked check, deliberately -- a standing
+    #     one would mint a real key on every marked run to re-answer a settled
+    #     question. What remains unverified live is the `PATCH` retry, which the
+    #     create call has not yet made necessary.
+    #   - "The named environment does not exist ... names the environments that
+    #     do exist": the refusal and its list are asserted; that Neon's `search`
+    #     really is a partial match is read from its documentation, not driven.
     "A reader signs in before anything is shown, and identity comes from the provider": (
         "test_web_driver_identity.py::"
         "test_a_visitor_who_is_not_signed_in_is_offered_sign_in_and_nothing_else",
@@ -363,7 +380,47 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_an_enrolled_account_is_admitted_and_its_records_carry_who_and_as_what",
         "test_web_driver_identity.py::test_the_sidebar_says_who_is_signed_in_and_offers_sign_out",
         "test_web_driver_identity.py::test_signing_out_forgets_the_session_s_identity",
-        "test_web_driver_identity.py::test_signed_in_email_is_none_without_is_logged_in",
+        "test_web_driver_identity.py::test_signed_in_claims_are_none_without_is_logged_in",
+        # `add-open-enrolment`: more than one provider, and a verified address.
+        "test_web_driver_identity.py::test_providers_reads_the_default_and_every_sub_table",
+        "test_web_driver_identity.py::test_providers_is_empty_with_no_auth_section",
+        "test_web_driver_identity.py::test_each_configured_provider_gets_its_own_button",
+        "test_web_driver_identity.py::test_a_provider_with_no_label_still_gets_a_button",
+        "test_web_driver_identity.py::"
+        "test_address_verified_reads_the_claim_and_refuses_its_absence",
+        "test_web_driver_identity.py::test_an_unverified_address_is_refused_with_its_own_sentence",
+        "test_web_driver_identity.py::test_an_unverified_address_is_never_looked_up",
+        "test_web_driver_identity.py::test_the_unverified_door_is_not_held_across_reruns",
+        "test_web_driver_identity.py::"
+        "test_the_same_address_through_a_second_provider_is_the_same_reader",
+    ),
+    "The operator can see who is stuck at the door, and only who is still stuck": (
+        "test_pending.py::test_nothing_waiting_prints_nothing_at_all",
+        "test_pending.py::test_a_request_for_the_email_is_reported_with_what_to_do",
+        "test_pending.py::test_an_unenrolled_account_is_reported_as_the_enrolment_queue",
+        "test_pending.py::test_a_trail_that_cannot_be_read_says_so_and_fails",
+        "test_pending.py::test_a_window_that_can_match_nothing_is_refused",
+        "test_pending.py::test_the_management_key_note_goes_to_a_terminal_and_never_to_cron",
+        # The resolution rule is a join; only a real database can assert it.
+        "test_pending_live.py::test_a_request_answered_by_verification_stops_being_reported",
+        "test_pending_live.py::test_an_admitted_session_resolves_a_request_for_the_email",
+        "test_pending_live.py::test_the_enrolment_queue_reports_everyone_with_no_row",
+        "test_pending_live.py::test_an_enrolled_account_leaves_the_queue_even_if_it_never_returns",
+        "test_pending_live.py::test_a_withdrawn_account_is_not_enrolled",
+        "test_pending_live.py::test_the_window_bounds_how_far_back_it_looks",
+    ),
+    "Enrolling an account is one operator action, and it never issues an uncapped credential": (
+        "test_enrol.py::test_enrolling_mints_a_capped_key_and_records_the_account",
+        "test_enrol.py::test_a_credential_is_never_issued_without_a_cap",
+        "test_enrol.py::test_a_role_that_is_not_a_role_is_refused_before_minting",
+        "test_enrol.py::test_an_address_already_enrolled_keeps_its_row_and_loses_the_new_key",
+        "test_enrol.py::test_a_row_that_cannot_be_written_withdraws_the_credential",
+        "test_enrol.py::test_a_credential_that_cannot_be_withdrawn_is_named",
+        "test_enrol.py::test_what_the_command_prints_carries_no_credential",
+        "test_enrol.py::test_the_command_refuses_without_a_branch_and_says_why",
+        "test_enrol.py::test_a_branch_that_does_not_exist_is_refused_with_what_does",
+        "test_enrol.py::test_the_branch_is_matched_exactly_among_partial_hits",
+        "test_accounts.py::test_insert_refuses_an_address_that_already_has_a_row",
     ),
     "An account must be enrolled, and enrolment happens outside the application": (
         "test_web_driver_identity.py::"

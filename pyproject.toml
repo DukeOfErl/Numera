@@ -81,6 +81,8 @@ bionumbers = "bionumbers.cli:main"
 scinumbers-ask = "scinumbers_ask.cli:main"
 bionumbers-ingest = "bionumbers_ingest.cli:main"
 scinumbers-eval = "scinumbers_ask.eval_cli:main"
+scinumbers-enrol = "scinumbers_ask.enrol:main"
+scinumbers-pending = "scinumbers_ask.pending:main"
 
 [dependency-groups]
 dev = [
