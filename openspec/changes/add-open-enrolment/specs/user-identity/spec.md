@@ -135,3 +135,58 @@ credential: the credential is looked up by the system and seen by nobody.
 - **WHEN** an enrolment succeeds
 - **THEN** what is reported names the account, the role and the environment
 - **AND** the credential does not appear in it
+
+### Requirement: The operator can see who is stuck at the door, and only who is still stuck
+
+There SHALL be a way for the operator to ask who is waiting on them: a reader whose
+confirmation message never arrived and who has not since been verified, and a
+verified account that is not enrolled. It SHALL be answerable without a browser and
+without a person watching, so that it can be asked on a schedule.
+
+Asking SHALL produce nothing at all when nobody is waiting. An answer that names an
+empty queue is an answer that stops being read, and the next one that names a full
+queue is then unread too. Where the question cannot be answered — the records cannot
+be reached — that SHALL be said, loudly and as a failure, because silence otherwise
+means "nobody is waiting" and would be indistinguishable from it.
+
+A problem that has resolved SHALL NOT be reported. Whether a reader got past
+verification SHALL be determined from what is recorded about them; whether an
+account is enrolled SHALL be determined from the enrolment record itself and never
+inferred from the reader returning, because a reader may be enrolled and never come
+back, and an enrolled account with no credential cannot come back at all. A
+withdrawn account SHALL count as not enrolled, as it does everywhere else.
+
+How far back to look SHALL be the operator's to choose, and a span that could match
+nothing SHALL be refused rather than answered with silence.
+
+#### Scenario: Nobody is waiting
+- **WHEN** the operator asks who is stuck and nobody is
+- **THEN** nothing is reported at all
+
+#### Scenario: Somebody never received their confirmation message
+- **WHEN** a reader has said their confirmation message never arrived, and has not since been verified
+- **THEN** they are reported, with how long they have been waiting
+
+#### Scenario: They were verified afterwards
+- **WHEN** a reader who said that has since been verified
+- **THEN** they are not reported as waiting for it
+
+#### Scenario: A verified account is not enrolled
+- **WHEN** a verified account has no enrolment record
+- **THEN** it is reported as waiting to be enrolled
+
+#### Scenario: An account is enrolled and does not return
+- **WHEN** an account is enrolled after being refused, and never signs in again
+- **THEN** it is not reported as waiting to be enrolled
+
+#### Scenario: A withdrawn account tries again
+- **WHEN** an account whose enrolment has been withdrawn is refused
+- **THEN** it is reported as waiting to be enrolled
+
+#### Scenario: The records cannot be read
+- **WHEN** the records cannot be reached
+- **THEN** the failure is reported and is distinguishable from nobody waiting
+
+#### Scenario: A span that can match nothing
+- **WHEN** the operator asks over a span that cannot include anything
+- **THEN** the request is refused rather than answered with silence

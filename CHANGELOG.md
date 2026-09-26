@@ -23,9 +23,10 @@ any release; `1.0.0` when it stabilizes.
   verified accounts waiting to be enrolled, and **prints nothing when nothing is
   waiting** — which is what makes it usable from `cron`, since a monitor that
   reports a quiet day every morning is one whose output stops being read. A problem
-  that resolved itself stops appearing, and nothing is tracked to achieve that: the
-  trail already says who got through, so resolution is derived from records the app
-  already writes.
+  that resolved itself stops appearing, and nothing is tracked to achieve that:
+  whether a reader got past verification is derived from records the app already
+  writes, and whether an account is enrolled is read from the accounts table rather
+  than inferred from the reader returning — which they may never do.
 
 - **The sign-in buttons can be put in any order.** A provider is "the default",
   and therefore drawn first, only because its credentials sit among `[auth]`'s own

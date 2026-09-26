@@ -44,6 +44,11 @@ class _Conn:
             def all(self):
                 return self._rows
 
+        # Keyed on the statement, not only on the event, because the enrolment
+        # queue binds no event at all now: whether somebody is enrolled is asked of
+        # the accounts table, so that query joins rather than filtering by event.
+        if "not exists" in text.lower():
+            return _Result(self.rows.get("unenrolled", []))
         if params and "event" in params:
             return _Result(self.rows.get(params["event"], []))
         return _Result([])
@@ -96,11 +101,11 @@ def test_a_request_for_the_email_is_reported_with_what_to_do(monkeypatch, capsys
 
 def test_an_unenrolled_account_is_reported_as_the_enrolment_queue(monkeypatch, capsys):
     # **This test is blind to the resolution rule** and cannot be otherwise: the
-    # double answers by the bound event and never runs the join. It passed while
+    # double never runs the join or the `not exists`. It passed while
     # `signin.refused` appeared in its own progress set, which emptied this queue
     # completely. `test_pending_live.py` is where that is caught, and the reason
     # this file is not enough.
-    _wire(monkeypatch, _Engine({"signin.refused": [("new@example.org", WHEN, 1)]}))
+    _wire(monkeypatch, _Engine({"unenrolled": [("new@example.org", WHEN, 1)]}))
     assert main(["--branch", "alpha"]) == 0
     said = capsys.readouterr().out
     assert "new@example.org" in said and "scinumbers-enrol" in said
@@ -139,26 +144,77 @@ def test_a_trail_that_cannot_be_read_says_so_and_fails(monkeypatch, capsys):
     assert "could not read the trail" in err and "could not connect" in err
 
 
-def test_no_branch_is_refused_with_the_same_sentence_as_enrolment(monkeypatch, capsys):
+def test_no_branch_is_refused_in_this_command_s_own_words(monkeypatch, capsys):
+    """Not enrolment's sentence. That one talks about a row landing in the wrong
+    branch and enrolling a tester the app will never find, and this command writes
+    nothing -- an operator debugging a failed cron job should not be told about
+    rows."""
+    from scinumbers_ask import enrol as enrol_mod
+
     _wire(monkeypatch, _Engine())
     assert main(["--hours", "24"]) == 2
-    assert "none is assumed" in capsys.readouterr().err
+    said = capsys.readouterr().err
+    assert "--branch" in said and "no default" in said
+    assert "row" not in said.lower(), "a read-only command talked about writing"
+    assert said.strip() != enrol_mod.NO_BRANCH.strip()
 
 
-def test_the_management_key_is_not_required_and_is_flagged_if_present(monkeypatch, capsys):
-    """This command reads the trail and touches no provider, so a cron line that
-    sources the whole enrolment env file is handing a key that can mint credentials
-    to a job that only reads. Harmless here; worth one line before somebody copies
-    the cron entry somewhere it is not."""
+@pytest.mark.parametrize("hours", [0, -1])
+def test_a_window_that_can_match_nothing_is_refused(monkeypatch, capsys, hours):
+    """Silence means nobody is stuck, so a window matching nothing would be a
+    confident all-clear manufactured by a bad argument -- in the one tool whose
+    entire contract is that an empty report means an empty queue."""
+    reached: list = []
     _wire(monkeypatch, _Engine())
-    monkeypatch.delenv("OPENROUTER_MANAGEMENT_KEY", raising=False)
-    assert main(["--branch", "alpha"]) == 0
-    assert "not needed" not in capsys.readouterr().err
+    monkeypatch.setattr(neon, "branch_id", lambda *a, **k: reached.append(a))
+    assert main(["--branch", "alpha", "--hours", str(hours)]) == 2
+    assert "positive" in capsys.readouterr().err
+    assert reached == [], "a bad window still opened a connection"
+
+
+class _Tty:
+    """Stderr that claims to be a terminal, writing through to whatever captures it."""
+
+    def __init__(self, inner):
+        self._inner = inner
+
+    def isatty(self):
+        return True
+
+    def write(self, text):
+        return self._inner.write(text)
+
+    def flush(self):
+        return self._inner.flush()
+
+
+def test_the_management_key_note_goes_to_a_terminal_and_never_to_cron(monkeypatch, capsys):
+    """**The note must not reach a scheduled run.** The documented cron line sources
+    the enrolment env file, whose first line is this variable, so an ungated note
+    went to stderr every morning and cron mailed it -- daily mail about something
+    harmless, which is precisely how the report that matters stops being read. A
+    review found it; it would have made the whole silence contract worthless.
+
+    A person at a prompt can act on it, so they still see it.
+    """
+    import sys
 
     _wire(monkeypatch, _Engine())
     monkeypatch.setenv("OPENROUTER_MANAGEMENT_KEY", "mgmt")
     assert main(["--branch", "alpha"]) == 0
+    assert capsys.readouterr().err == "", "a scheduled run was sent mail"
+
+    _wire(monkeypatch, _Engine())
+    monkeypatch.setenv("OPENROUTER_MANAGEMENT_KEY", "mgmt")
+    monkeypatch.setattr(sys, "stderr", _Tty(sys.stderr))
+    assert main(["--branch", "alpha"]) == 0
     assert "not needed" in capsys.readouterr().err
+
+    _wire(monkeypatch, _Engine())
+    monkeypatch.delenv("OPENROUTER_MANAGEMENT_KEY", raising=False)
+    monkeypatch.setattr(sys, "stderr", _Tty(sys.stderr))
+    assert main(["--branch", "alpha"]) == 0
+    assert "not needed" not in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("missing", ["NEON_API_KEY", "NEON_PROJECT_ID"])

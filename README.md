@@ -562,11 +562,7 @@ scinumbers-pending --branch alpha              # silent unless somebody is still
 scinumbers-pending --branch alpha --hours 168  # only the last week
 ```
 
-Daily, from the operator's own crontab (`crontab -e`). It reads the trail and
-touches no provider, so it needs only the two Neon variables — the management key
-is not required and the command says so if it finds one, because a cron entry that
-sources the whole enrolment file hands a key that can mint credentials to a job
-that only reads:
+Daily, from the operator's own crontab (`crontab -e`):
 
 ```cron
 0 9 * * * bash -lc 'set -a; . "$HOME/.config/scinumbers/enrol.env"; set +a;   "$HOME/AI Engineering/BioNumbers/.venv/bin/scinumbers-pending" --branch alpha'
@@ -580,10 +576,23 @@ like every other record, so admission is observable; and an address later seen a
 verified check. So "never got the email" clears on any later sign of verification,
 and "verified but not enrolled" clears on a later admitted session.
 
+**Enrolment is read from the accounts table, not inferred.** A review caught the
+first version asking the trail whether somebody had signed in again — which a tester
+who was enrolled and never came back never does, and which an enrolled account with
+*no credential* cannot do at all, because that door stops the page before anything
+is recorded. So the enrolment queue asks the authority: an address with no enabled
+row. A withdrawn account counts as not enrolled, exactly as it does at the door.
+
 Anything unresolved keeps being reported until it is fixed, which is what makes the
 daily mail worth opening: the list is the work, and it empties as the work is done.
 `--hours` bounds how far back to look, thirty days by default, so an address
-abandoned months ago ages out instead of nagging forever.
+abandoned months ago ages out instead of nagging forever; a span that could match
+nothing is refused rather than answered with silence.
+
+It reads the trail and the accounts table and touches no provider, so give the cron
+line **only the two Neon variables**. It needs nothing else, and a management key in
+a scheduled job's environment is a credential that can mint keys sitting in a process
+that only reads.
 
 On WSL, `cron` is not running by default (`sudo service cron start`, and see your
 distribution's notes on starting it at boot). Without it, run the command by hand;

@@ -394,6 +394,21 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_web_driver_identity.py::"
         "test_the_same_address_through_a_second_provider_is_the_same_reader",
     ),
+    "The operator can see who is stuck at the door, and only who is still stuck": (
+        "test_pending.py::test_nothing_waiting_prints_nothing_at_all",
+        "test_pending.py::test_a_request_for_the_email_is_reported_with_what_to_do",
+        "test_pending.py::test_an_unenrolled_account_is_reported_as_the_enrolment_queue",
+        "test_pending.py::test_a_trail_that_cannot_be_read_says_so_and_fails",
+        "test_pending.py::test_a_window_that_can_match_nothing_is_refused",
+        "test_pending.py::test_the_management_key_note_goes_to_a_terminal_and_never_to_cron",
+        # The resolution rule is a join; only a real database can assert it.
+        "test_pending_live.py::test_a_request_answered_by_verification_stops_being_reported",
+        "test_pending_live.py::test_an_admitted_session_resolves_a_request_for_the_email",
+        "test_pending_live.py::test_the_enrolment_queue_reports_everyone_with_no_row",
+        "test_pending_live.py::test_an_enrolled_account_leaves_the_queue_even_if_it_never_returns",
+        "test_pending_live.py::test_a_withdrawn_account_is_not_enrolled",
+        "test_pending_live.py::test_the_window_bounds_how_far_back_it_looks",
+    ),
     "Enrolling an account is one operator action, and it never issues an uncapped credential": (
         "test_enrol.py::test_enrolling_mints_a_capped_key_and_records_the_account",
         "test_enrol.py::test_a_credential_is_never_issued_without_a_cap",

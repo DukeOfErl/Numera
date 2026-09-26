@@ -44,17 +44,42 @@ def _url() -> str:
         pytest.skip("no [connections.usage] url configured")
 
 
+#: Every table these tests make, so an orphan from an interrupted run is
+#: recognisable and can be swept. The url in `secrets.toml` is the branch *this
+#: checkout* writes to -- `dev` on a laptop -- but nothing stops an operator having
+#: pointed it elsewhere, so a table left behind is a table left in whatever database
+#: that is.
+TABLE_PREFIX = "pending_test_"
+
+
 @pytest.fixture
 def table():
-    """A throwaway table, dropped afterwards. Never the real `trail`: these tests
-    write rows, and rows left in the table an operator reads make it untrustworthy."""
+    """A throwaway table, dropped afterwards, and orphans from earlier runs swept
+    first.
+
+    Never the real `trail`: these tests write rows, and rows left in the table an
+    operator reads make it untrustworthy. The sweep is because a run interrupted
+    between `ensure_schema` and teardown -- Ctrl-C, a failed assertion inside the
+    fixture, a lost connection -- leaves its table behind, and nothing else would
+    ever remove it.
+    """
+    from sqlalchemy import text
+
     engine = engine_from_url(_url())
-    name = f"trail_test_{uuid.uuid4().hex[:8]}"
+    with engine.begin() as conn:
+        orphans = conn.execute(
+            text(
+                "select tablename from pg_tables "
+                "where schemaname = 'public' and tablename like :like"
+            ),
+            {"like": f"{TABLE_PREFIX}%"},
+        ).scalars()
+        for orphan in list(orphans):
+            conn.execute(text(f"drop table if exists {orphan}"))
+    name = f"{TABLE_PREFIX}{uuid.uuid4().hex[:8]}"
     store = TrailStore(engine=engine, table=name)
     assert store.ensure_schema(), "could not create the test table"
     yield engine, name
-    from sqlalchemy import text
-
     with engine.begin() as conn:
         conn.execute(text(f"drop table if exists {name}"))
     engine.dispose()
@@ -91,14 +116,14 @@ def _write(engine, name, rows):
             )
 
 
-def test_a_request_with_no_later_progress_is_reported(table):
+def test_a_request_with_no_later_progress_is_reported(table, accounts_table):
     engine, name = table
     _write(engine, name, [("signin.resend_requested", "stuck@example.org", None)])
-    no_email, _ = waiting(engine, table=name)
+    no_email, _ = waiting(engine, table=name, accounts_table=accounts_table)
     assert [w.address for w in no_email] == ["stuck@example.org"]
 
 
-def test_a_request_answered_by_verification_stops_being_reported(table):
+def test_a_request_answered_by_verification_stops_being_reported(table, accounts_table):
     """`signin.refused` sits behind the verified-address check, so seeing it later
     is proof the address got verified -- the reader's problem moved on."""
     engine, name = table
@@ -110,21 +135,94 @@ def test_a_request_answered_by_verification_stops_being_reported(table):
             ("signin.refused", "moved@example.org", None),
         ],
     )
-    no_email, not_enrolled = waiting(engine, table=name)
+    no_email, not_enrolled = waiting(engine, table=name, accounts_table=accounts_table)
     assert no_email == [], "a resolved request was reported again"
     assert [w.address for w in not_enrolled] == ["moved@example.org"], (
         "they are now in the other queue, which is the point"
     )
 
 
-def test_an_unenrolled_account_is_reported_until_it_is_admitted(table):
-    """The query that was broken, asserted directly.
+@pytest.fixture
+def accounts_table(table):
+    """An `accounts` table of its own, because the enrolment queue asks the authority
+    rather than inferring from later sign-ins."""
+    from sqlalchemy import text
 
-    Progress is **per stage**, and one shared definition made `signin.refused`
-    appear in its own progress set — so every unenrolled account resolved itself and
-    this queue was permanently empty. `test_pending.py` passed throughout, because
-    its double ignores the join; reproduced against real rows, the buggy form
-    returns nothing here and the correct one returns both addresses.
+    engine, _ = table
+    name = f"{TABLE_PREFIX}accounts_{uuid.uuid4().hex[:8]}"
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                f"create table {name} (email text primary key, role text not null, "
+                f"openrouter_key text, issued_at timestamptz not null default now(), "
+                f"disabled boolean not null default false)"
+            )
+        )
+    yield name
+    with engine.begin() as conn:
+        conn.execute(text(f"drop table if exists {name}"))
+
+
+def test_an_enrolled_account_leaves_the_queue_even_if_it_never_returns(table, accounts_table):
+    """The finding that sent this query to the accounts table. Resolution used to be
+    "signed in again through an open door", so a tester who was enrolled and did not
+    come back was reported for thirty days -- and following the advice failed with
+    `AlreadyEnrolled`. Whether somebody is enrolled is a row, and this asks for it.
+    """
+    from sqlalchemy import text
+
+    engine, name = table
+    _write(
+        engine,
+        name,
+        [
+            ("signin.refused", "done@example.org", None),
+            ("signin.refused", "waiting@example.org", None),
+        ],
+    )
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                f"insert into {accounts_table} (email, role) values ('Done@Example.org', 'student')"
+            )
+        )
+    _, not_enrolled = waiting(engine, table=name, accounts_table=accounts_table)
+    assert [w.address for w in not_enrolled] == ["waiting@example.org"], (
+        "an enrolled account was still reported, or an unenrolled one was not"
+    )
+
+
+def test_a_withdrawn_account_is_not_enrolled(table, accounts_table):
+    """`accounts.lookup` refuses a disabled row exactly as an absent one, so this
+    must agree: a withdrawn tester who tries again is genuinely waiting."""
+    from sqlalchemy import text
+
+    engine, name = table
+    _write(engine, name, [("signin.refused", "gone@example.org", None)])
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                f"insert into {accounts_table} (email, role, disabled) "
+                f"values ('gone@example.org', 'student', true)"
+            )
+        )
+    _, not_enrolled = waiting(engine, table=name, accounts_table=accounts_table)
+    assert [w.address for w in not_enrolled] == ["gone@example.org"]
+
+
+def test_the_enrolment_queue_reports_everyone_with_no_row(table, accounts_table):
+    """This queue was empty twice, for two different reasons, and both are worth
+    keeping.
+
+    First `signin.refused` appeared in its own progress set, so every unenrolled
+    account resolved itself. Then, with that fixed, resolution was still "signed in
+    again through an open door" — which a tester who was enrolled and never came
+    back never does, and which an enrolled account with no credential *cannot* do,
+    because that door stops the page before anything is recorded. Whether somebody
+    is enrolled is a row, and this asks for it.
+
+    `test_pending.py` passed through both, because its double runs neither the join
+    nor the `not exists`.
     """
     engine, name = table
     _write(
@@ -135,37 +233,40 @@ def test_an_unenrolled_account_is_reported_until_it_is_admitted(table):
             ("signin.refused", "also-waiting@example.org", None),
         ],
     )
-    _, not_enrolled = waiting(engine, table=name)
+    _, not_enrolled = waiting(engine, table=name, accounts_table=accounts_table)
     assert sorted(w.address for w in not_enrolled) == [
         "also-waiting@example.org",
         "waiting@example.org",
     ], "the enrolment queue is empty when two people are in it"
 
 
-def test_an_account_that_was_admitted_stops_being_reported(table):
+def test_an_admitted_session_resolves_a_request_for_the_email(table, accounts_table):
     """The identity stamp writes `user_email` only onto a signed-in session's
-    records, so its presence is proof the door opened.
+    records, so its presence proves the door opened -- which is what a reader who
+    never got their confirmation email needs.
 
-    The realistic record here is `signin.admitted`, written on arrival and stamped
-    like any other; a `question.asked` is the same shape and the same arm of the
-    union. Before `signin.admitted` existed this only resolved for readers who went
-    on to ask something, which is how a solved problem came to be reported daily.
+    The realistic record is `signin.admitted`, written on arrival and stamped like
+    any other. Before it existed this resolved only for readers who went on to ask
+    something, which is how a solved problem came to be reported daily.
+
+    It does **not** resolve the enrolment queue: that asks the accounts table, and
+    this address has no row, so it is still reported there. Two stages, two
+    authorities.
     """
     engine, name = table
     _write(
         engine,
         name,
         [
-            ("signin.refused", "enrolled@example.org", None),
-            ("signin.admitted", None, "enrolled@example.org"),
+            ("signin.resend_requested", "in@example.org", None),
+            ("signin.admitted", None, "in@example.org"),
         ],
     )
-    no_email, not_enrolled = waiting(engine, table=name)
-    assert not_enrolled == [], "an enrolled account was still reported as waiting"
-    assert no_email == []
+    no_email, _ = waiting(engine, table=name, accounts_table=accounts_table)
+    assert no_email == [], "an admitted reader was still asked to check their email"
 
 
-def test_progress_before_the_request_does_not_resolve_it(table):
+def test_progress_before_the_request_does_not_resolve_it(table, accounts_table):
     """The comparison is directional. `progress.at < asked.last_seen` inverted
     would silence every genuine request from anyone who had ever signed in, which
     is the population most likely to ask."""
@@ -178,13 +279,13 @@ def test_progress_before_the_request_does_not_resolve_it(table):
             ("signin.resend_requested", "again@example.org", None),
         ],
     )
-    no_email, _ = waiting(engine, table=name)
+    no_email, _ = waiting(engine, table=name, accounts_table=accounts_table)
     assert [w.address for w in no_email] == ["again@example.org"], (
         "an old success was treated as answering a new problem"
     )
 
 
-def test_two_spellings_of_one_address_are_one_person(table):
+def test_two_spellings_of_one_address_are_one_person(table, accounts_table):
     """`accounts.lookup` folds case, so the provider's spelling and the row's may
     differ. Without folding here, an admitted `Tester@` would not resolve a request
     from `tester@` and the operator would chase a solved problem forever."""
@@ -197,11 +298,11 @@ def test_two_spellings_of_one_address_are_one_person(table):
             ("question.asked", None, "mixed@example.org"),
         ],
     )
-    _, not_enrolled = waiting(engine, table=name)
+    _, not_enrolled = waiting(engine, table=name, accounts_table=accounts_table)
     assert not_enrolled == [], "case alone made one person look like two"
 
 
-def test_the_window_bounds_how_far_back_it_looks(table):
+def test_the_window_bounds_how_far_back_it_looks(table, accounts_table):
     """An address abandoned long ago ages out rather than nagging forever."""
     engine, name = table
     from sqlalchemy import text
@@ -214,7 +315,10 @@ def test_the_window_bounds_how_far_back_it_looks(table):
                 f'cast(\'{{"email": "ancient@example.org"}}\' as jsonb))'
             )
         )
-    assert waiting(engine, hours=24 * 30, table=name)[0] == [], "outside the window"
-    assert [w.address for w in waiting(engine, hours=24 * 60, table=name)[0]] == [
-        "ancient@example.org"
-    ]
+    assert waiting(engine, hours=24 * 30, table=name, accounts_table=accounts_table)[0] == [], (
+        "outside the window"
+    )
+    assert [
+        w.address
+        for w in waiting(engine, hours=24 * 60, table=name, accounts_table=accounts_table)[0]
+    ] == ["ancient@example.org"]

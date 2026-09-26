@@ -524,6 +524,36 @@ def test_the_connection_url_is_pooled_and_renamed_for_psycopg():
     assert "pooled=true" in asked and "branch_id=br-alpha" in asked
 
 
+def test_the_database_and_role_reach_the_request(monkeypatch):
+    """Mutation testing deleted `database_name` and renamed `role_name`, and
+    nothing failed: the URL assertions covered `pooled` and `branch_id` only. A
+    dropped `role_name` asks Neon for its default role, so the command would hand
+    back a connection URL for a role the operator did not choose — and the insert
+    would fail, or worse succeed, somewhere else entirely."""
+    opener = _Opener({"connection_uri": {"uri": "postgresql://u:p@h-pooler.x/db"}})
+    neon.connection_url("napi", "proj", "br-alpha", opener=opener)
+    (_, asked) = opener.calls[0]
+    assert "database_name=neondb" in asked and "role_name=neondb_owner" in asked
+
+    other = _Opener({"connection_uri": {"uri": "postgresql://u:p@h-pooler.x/db"}})
+    neon.connection_url("napi", "proj", "br-alpha", database="other", role="reader", opener=other)
+    (_, asked) = other.calls[0]
+    assert "database_name=other" in asked and "role_name=reader" in asked
+
+
+def test_both_control_plane_calls_carry_a_timeout():
+    """An operator waiting at a prompt has to meet a failure rather than a hang,
+    and mutation testing showed the timeout could be dropped or set to `None` with
+    nothing failing — in `neon.py` as in `enrol.py`, where the same gap was found
+    and closed first."""
+    branches = _Opener({"branches": _branches("alpha")})
+    neon.branch_id("napi", "proj", "alpha", opener=branches)
+    uri = _Opener({"connection_uri": {"uri": "postgresql://u:p@h-pooler.x/db"}})
+    neon.connection_url("napi", "proj", "br-alpha", opener=uri)
+    for opener in (branches, uri):
+        assert opener.timeouts and all(t is not None for t in opener.timeouts)
+
+
 def test_a_response_with_no_uri_is_an_error():
     opener = _Opener({"connection_uri": {}})
     with pytest.raises(RuntimeError):
