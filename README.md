@@ -550,6 +550,38 @@ power than one message is worth. `sql/signin.sql` holds the three queries that
 surface them — who asked, who gave up without asking, and who is verified and
 waiting to be enrolled.
 
+#### Checking daily who is stuck
+
+`scinumbers-pending` reads those first and third queries and **prints nothing when
+nothing is waiting**, which is what makes it usable from `cron`: mail arrives only
+on the days something happened. A monitor that reports "0 pending" every morning is
+one whose output stops being read, and then the morning it says 1 goes unread too.
+
+```bash
+scinumbers-pending --branch alpha              # silent unless somebody is waiting
+scinumbers-pending --branch alpha --hours 168  # the last week, by hand
+```
+
+Daily, from the operator's own crontab (`crontab -e`). It reads the trail and
+touches no provider, so it needs only the two Neon variables — the management key
+is not required and the command says so if it finds one, because a cron entry that
+sources the whole enrolment file hands a key that can mint credentials to a job
+that only reads:
+
+```cron
+0 9 * * * bash -lc 'set -a; . "$HOME/.config/scinumbers/enrol.env"; set +a;   "$HOME/AI Engineering/BioNumbers/.venv/bin/scinumbers-pending" --branch alpha'
+```
+
+**It is a window, not a work queue.** Nothing marks a request as handled — the trail
+is append-only and is not a task list — so the command looks at the last `--hours`,
+matching the interval it runs on, and each request is reported once. Miss a day and
+those go unreported; query 2 of `sql/signin.sql` is the wider net for people who gave
+up quietly, and is for reading occasionally rather than on a schedule.
+
+On WSL, `cron` is not running by default (`sudo service cron start`, and see your
+distribution's notes on starting it at boot). Without it, run the command by hand;
+it costs one line and two seconds.
+
 **Five roles exist — student, scientist, senior scientist, dev and admin — as
 foundations, built and tested now so that ratings can later be weighted by who
 gave them.** Today they differ in one visible thing: dev and admin get an extra

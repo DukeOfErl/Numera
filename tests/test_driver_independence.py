@@ -45,6 +45,9 @@ HARNESS = {
     # `neon` is deliberately *not* here -- it imports nothing but the standard
     # library, and leaving it in the core is the stricter of the two placements.
     "enrol",
+    # The daily check. Runs from cron with nobody watching, so it may not reach
+    # for a terminal or a browser either.
+    "pending",
 }
 ADAPTERS = DRIVERS | HARNESS
 # `autobuild` joins them: it decides whether to build a corpus, which is a driver's
