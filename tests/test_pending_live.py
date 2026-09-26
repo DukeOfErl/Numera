@@ -1,5 +1,13 @@
 """Whether a resolved problem stops being reported. Real Postgres only.
 
+These caught two things on their first run, which is the argument for having them.
+The query itself was right -- all four semantics were confirmed against real rows.
+The *test helper* was not: `jsonb_build_object` with a bound parameter raises
+`IndeterminateDatatype`, and every offline test had passed because a double accepts
+any string. A live test whose own SQL is wrong still tells you something, and it
+told it immediately.
+
+
 The resolution rule is a `join`, and a `join` lives in SQL. A double accepts any
 string, so every offline test in `test_pending.py` would pass with the join written
 backwards, with the case-folding dropped, or with `progress.at < asked.last_seen`
@@ -52,22 +60,32 @@ def table():
     engine.dispose()
 
 
+#: The same shape `trail_store._INSERT` uses, and for the reason its failure taught:
+#: `jsonb_build_object('email', :email)` with a bound parameter raises
+#: `IndeterminateDatatype` -- the function takes `any`, so Postgres cannot infer an
+#: untyped parameter's type from it, and every offline test passed because a double
+#: accepts any string. `cast(:detail as jsonb)` says the type outright, which is
+#: what the store already does against this same database.
+_INSERT = """
+insert into {name} (at, event, detail, user_email)
+values (now() - cast(:ago as interval), :event, cast(:detail as jsonb), :stamped)
+"""
+
+
 def _write(engine, name, rows):
-    """Rows in the order given, each a second apart, so "later" is unambiguous."""
+    """Rows in the order given, a minute apart, so "later" is unambiguous."""
+    import json
+
     from sqlalchemy import text
 
     with engine.begin() as conn:
         for index, (event, email, stamped) in enumerate(rows):
             conn.execute(
-                text(
-                    f"insert into {name} (at, event, detail, user_email) values "
-                    f"(now() - make_interval(secs => :ago), :event, "
-                    f"jsonb_build_object('email', :email), :stamped)"
-                ),
+                text(_INSERT.format(name=name)),
                 {
-                    "ago": (len(rows) - index) * 60,
+                    "ago": f"{(len(rows) - index) * 60} seconds",
                     "event": event,
-                    "email": email,
+                    "detail": json.dumps({"email": email} if email else {}),
                     "stamped": stamped,
                 },
             )
@@ -167,8 +185,8 @@ def test_the_window_bounds_how_far_back_it_looks(table):
         conn.execute(
             text(
                 f"insert into {name} (at, event, detail) values "
-                f"(now() - make_interval(days => 40), 'signin.resend_requested', "
-                f"jsonb_build_object('email', 'ancient@example.org'))"
+                f"(now() - interval '40 days', 'signin.resend_requested', "
+                f'cast(\'{{"email": "ancient@example.org"}}\' as jsonb))'
             )
         )
     assert waiting(engine, hours=24 * 30, table=name)[0] == [], "outside the window"
