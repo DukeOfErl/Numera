@@ -372,6 +372,16 @@ def test_an_unverified_address_is_refused_with_its_own_sentence(page, caught):
     # carried this assertion since it existed; this one did not until a verifier
     # deleted the button and nothing failed.
     assert "Sign out" in [b.label for b in at.button], "no way out of the closed door"
+    # The words a reader acts on, not merely a true statement. The first wording
+    # said "the link your sign-in provider emailed you" and the reader who met it
+    # had the email and did not look, because nobody thinks of their identity
+    # provider that way. The sentence has to send them to their inbox and then
+    # back here, in that order.
+    said = messages.UNVERIFIED
+    assert "email" in said.lower() and "spam" in said.lower()
+    assert said.lower().index("email") < said.lower().index("sign out"), (
+        "the steps are out of order: look first, then come back"
+    )
 
 
 def test_an_unverified_address_is_never_looked_up(monkeypatch):
@@ -644,6 +654,16 @@ def test_an_enrolled_account_with_no_credential_meets_a_door_of_its_own(page, ca
     assert messages.NO_CREDENTIAL in [e.value for e in at.error]
     assert page.built == [], "an agent was built, and would spend the environment's key"
     assert "Sign out" in [b.label for b in at.button], "no way out of the closed door"
+    # The words a reader acts on, not merely a true statement. The first wording
+    # said "the link your sign-in provider emailed you" and the reader who met it
+    # had the email and did not look, because nobody thinks of their identity
+    # provider that way. The sentence has to send them to their inbox and then
+    # back here, in that order.
+    said = messages.UNVERIFIED
+    assert "email" in said.lower() and "spam" in said.lower()
+    assert said.lower().index("email") < said.lower().index("sign out"), (
+        "the steps are out of order: look first, then come back"
+    )
 
 
 def test_a_credential_the_provider_refuses_is_caught_at_sign_in(monkeypatch):

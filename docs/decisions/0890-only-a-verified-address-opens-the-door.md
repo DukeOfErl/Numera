@@ -59,6 +59,24 @@ bounded by their own clicks.
 The check sits **before** the lookup, so an unverified address never reaches the
 accounts table at all.
 
+## Confirmed against a live provider
+
+On 2026-09-26, an Auth0 database sign-up with an unverified address: Auth0 issued
+an ID token carrying `"email_verified": false` and **admitted the reader**, and
+the app refused them with this door's own sentence. That is the whole argument for
+placing the check here rather than trusting a tenant setting — the provider let
+them in, and the operation is what stopped them. Until that run the claim had only
+ever held against a test double.
+
+The same run found the sentence wanting. Its first wording — "open the link your
+sign-in provider emailed you" — is accurate, and the reader who met it **had
+received the email and did not look**, because nobody thinks of Auth0 as their
+sign-in provider. A refusal has to carry the one thing its reader will act on, and
+"go and check your inbox" was the missing part. It now names the inbox, the spam
+folder, and the two steps after, in the order they happen. A true sentence that
+does not move anybody is a failed refusal, and only a person meeting it cold
+reveals that.
+
 ## Trade-off accepted
 
 **A provider that omits `email_verified` shuts its users out entirely**, with a

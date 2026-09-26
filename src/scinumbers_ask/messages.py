@@ -87,9 +87,17 @@ def sign_in_label(provider: str) -> str:
 # is theirs to take and it will work; there it is the operator's and nothing on
 # this page helps. A single sentence for both would send half of each group to
 # the wrong place.
+# The first wording here named "your sign-in provider" and "the link it emailed
+# you", which is accurate and was not enough: the reader who met it had received
+# the email and did not connect the two, because nobody thinks of Auth0 as their
+# sign-in provider. What was missing is the only part a reader acts on -- go and
+# look in your inbox. So: the inbox, the spam folder, and the two steps after, in
+# the order they happen. No provider is named, because which one sent it depends
+# on the button that was clicked.
 UNVERIFIED = (
-    "This address has not been verified yet. Open the link your sign-in provider "
-    "emailed you, then sign in again. Until then nothing can be asked, because an "
+    "This address has not been verified yet. Check your email for a message asking you "
+    "to confirm it — look in your spam folder too — and click the link inside. Then "
+    "sign out below and sign in again. Until then nothing can be asked, because an "
     "unverified address is not evidence of who you are."
 )
 NOT_ENROLLED = (

@@ -90,6 +90,12 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **The unverified-address refusal tells the reader where to look.** It named
+  "the link your sign-in provider emailed you", which the first person to meet it
+  read without realising they already had the email — nobody thinks of their
+  identity provider that way. It now sends them to their inbox and their spam
+  folder, then back to sign out and in.
+
 - **Only an address the identity provider says it has verified is admitted**, and
   a provider that says nothing counts as unverified. Where sign-up is open this is
   the one thing standing between an enrolled tester and anyone who registers their

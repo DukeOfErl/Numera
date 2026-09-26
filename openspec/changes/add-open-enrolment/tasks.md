@@ -368,6 +368,30 @@ repository, and the implementer's job is to leave the instructions right.
       is deliberate rather than an omission to fix later — the same reasoning
       that keeps it away from `.streamlit/secrets.toml`.*
 
+## 3d. What a live round trip found (added; not in the plan)
+
+- [x] 3d.1 One real Auth0 sign-up against the app running locally, 2026-09-26.
+
+      *The claim held: Auth0 issued `"email_verified": false` and **admitted the
+      reader**, and the app refused them with the unverified door. ADR-0890's
+      central argument — the guard belongs to the operation, not to a tenant
+      setting — demonstrated rather than reasoned. Nothing offline could have
+      shown it, because the double is what we wrote.*
+
+      *Two defects, both in documentation and both found by following it:*
+
+      *• **The logout allowlist needs the `/oauth2callback` URL, not the app's
+      root.** Streamlit sends `redirect_uri` as `post_logout_redirect_uri`, and a
+      tenant listing only the root answers a sign-out with the provider's own
+      "something went wrong" page — which reads like an outage. The README said
+      the app's own address. Corrected there and in the secrets example.*
+
+      *• **The unverified sentence did not move its reader.** It said "open the
+      link your sign-in provider emailed you"; the reader had the email and did
+      not look, because nobody thinks of Auth0 that way. A refusal that is true
+      and inert is a failed refusal, and only somebody meeting it cold shows
+      that. It now names the inbox, the spam folder and the two steps after.*
+
 ## 4. Landing
 
 - [x] 4.1 Full suite once, at the end (`.venv/bin/python -m pytest`); ruff.
