@@ -543,6 +543,13 @@ is the branch *this checkout* writes to.
    ([ADR-0780](docs/decisions/0780-accounts-live-in-the-trail-database.md),
    [ADR-0820](docs/decisions/0820-one-agent-per-session-handed-a-credential-not-an-identity.md)).
 
+**A reader who never receives their confirmation email can say so**, and that
+request lands in the trail rather than sending anything: resending through the
+identity provider needs a credential that could also create accounts, which is more
+power than one message is worth. `sql/signin.sql` holds the three queries that
+surface them — who asked, who gave up without asking, and who is verified and
+waiting to be enrolled.
+
 **Five roles exist — student, scientist, senior scientist, dev and admin — as
 foundations, built and tested now so that ratings can later be weighted by who
 gave them.** Today they differ in one visible thing: dev and admin get an extra

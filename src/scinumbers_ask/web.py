@@ -377,6 +377,15 @@ ADMISSION_KEY = "scinumbers_ask.admission"
 #: The address whose unverified refusal has already been recorded this session.
 #: Not the admission -- that is decided fresh; see `admit`.
 UNVERIFIED_KEY = "scinumbers_ask.unverified_recorded"
+#: The address that has already asked for its confirmation email again. Held so a
+#: reader clicking twice does not write two rows, and so the button can become its
+#: own acknowledgement rather than looking as if it did nothing.
+#:
+#: **The address, not a boolean.** `st.session_state` outlives a sign-out on the
+#: same tab, so a flag would show the next account an acknowledgement it never
+#: asked for -- the same shape as the bug `end_session` exists to prevent. Keyed on
+#: who asked, it corrects itself without depending on an exit path remembering it.
+RESEND_ASKED_KEY = "scinumbers_ask.resend_asked"
 AGENT_KEY = "scinumbers_ask.agent"
 
 
@@ -775,6 +784,28 @@ def agent_for(
     return agent
 
 
+def request_resend(session_id: str) -> None:
+    """Record that this reader never received their confirmation email.
+
+    A separate event from `signin.unverified`, which fires for *everybody* at
+    sign-up and mostly for people who click the link a minute later -- querying
+    that would hand the operator a list of readers who are fine. This one fires
+    only when somebody says they are stuck, which is the list worth acting on.
+
+    Written once per session: the held flag also turns the button into its own
+    acknowledgement, so a reader who sees nothing happen does not click again.
+    """
+    email = (signed_in_claims() or {}).get("email") or ""
+    if st.session_state.get(RESEND_ASKED_KEY) == email:
+        return
+    st.session_state[RESEND_ASKED_KEY] = email
+    trace.QuestionTrace(
+        question_id="",
+        session_id=session_id,
+        run_label=Config.from_env().run_label,
+    ).record("signin.resend_requested", email=email)
+
+
 def _sign_out(conversation_id: str, tab_id: str | None = None) -> None:
     end_session(conversation_id, tab_id)
     st.logout()
@@ -825,6 +856,20 @@ def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None =
             type="primary",
             icon=":material/refresh:",
         )
+        # The email that never arrived, which was the one dead end left on this
+        # door. Nothing is sent from here -- the request is recorded where the
+        # operator looks (`sql/signin.sql`) and they resend from the provider.
+        asked = st.session_state.get(RESEND_ASKED_KEY)
+        if asked is not None and asked == (signed_in_claims() or {}).get("email"):
+            st.info(as_text(messages.RESEND_NOTED), icon=":material/mark_email_read:")
+        else:
+            st.button(
+                as_text(messages.RESEND_REQUEST),
+                key="resend-request",
+                on_click=request_resend,
+                args=(session_id,),
+                icon=":material/outgoing_mail:",
+            )
         # Still offered, for the reader who confirmed nothing and wants to come
         # back as somebody else.
         st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id))

@@ -393,6 +393,68 @@ def test_an_unverified_address_is_refused_with_its_own_sentence(page, caught):
     assert "sign out" not in said.lower(), "the reader is sent to a button, not out of the app"
 
 
+def test_a_reader_can_say_the_email_never_arrived_and_it_reaches_the_trail(page, caught):
+    """The one dead end left on that door. Nothing is sent from here -- resending
+    needs a provider credential that could also create accounts -- so the request
+    is recorded where the operator looks (`sql/signin.sql`) and they resend."""
+    at = page(
+        auth=True,
+        email="stuck@example.org",
+        enrolled={},
+        claims={"email_verified": False},
+    ).run()
+    ask = [b for b in at.button if b.label == messages.RESEND_REQUEST]
+    assert ask, "no way to say the email never came"
+    at = ask[0].click().run()
+    (asked,) = [r for r in caught.records if r.getMessage() == "signin.resend_requested"]
+    assert asked.fields["email"] == "stuck@example.org"
+    # The button becomes its own acknowledgement: a reader who sees nothing happen
+    # clicks again, and the sentence must not claim an email was sent.
+    assert messages.RESEND_NOTED in [i.value for i in at.info]
+    assert messages.RESEND_REQUEST not in [b.label for b in at.button]
+    assert "on its way" not in messages.RESEND_NOTED.lower()
+    assert "sent" not in messages.RESEND_NOTED.lower().split("send the email")[0]
+
+
+def test_asking_twice_writes_one_row_and_a_second_reader_starts_clean():
+    """Keyed on the address rather than a flag, because `st.session_state`
+    outlives a sign-out on the same tab -- a boolean would show the next account an
+    acknowledgement it never asked for, which is the bug `end_session` exists to
+    prevent, in a store that does not go through it."""
+    import streamlit as st
+
+    state: dict = {}
+    records: list = []
+
+    class _Trace:
+        def __init__(self, **kwargs):
+            pass
+
+        def record(self, event, **fields):
+            records.append(fields.get("email"))
+
+    claims = {"email": "one@example.org"}
+    try:
+        st.session_state.clear()
+    except Exception:  # noqa: BLE001 - no script context outside AppTest
+        pass
+    import unittest.mock as mock
+
+    with (
+        mock.patch.object(web, "signed_in_claims", lambda: claims),
+        mock.patch.object(web.trace, "QuestionTrace", _Trace),
+        mock.patch.object(web.st, "session_state", state),
+    ):
+        web.request_resend("s1")
+        web.request_resend("s1")
+        assert records == ["one@example.org"], "clicking twice wrote twice"
+        claims["email"] = "two@example.org"
+        web.request_resend("s1")
+        assert records == ["one@example.org", "two@example.org"], (
+            "the next account on the same tab was treated as having already asked"
+        )
+
+
 def test_an_unverified_address_is_never_looked_up(monkeypatch):
     """The check is before the lookup, so an unverified address never reaches the
     accounts table -- and an enrolled tester cannot be impersonated by registering

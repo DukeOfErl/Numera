@@ -115,6 +115,22 @@ UNVERIFIED = (
 #: and no apparent sign-out -- which is the difference between a door and a dead
 #: end.
 CONFIRMED_IT = "I have confirmed my email"
+
+#: The other thing a reader on that door might need, and the only dead end left in
+#: it: the email never arrived. Resending it needs an Auth0 Management credential
+#: with `update:users`, which can also create accounts and change addresses -- far
+#: more power than one message is worth, and the first credential this app would
+#: hold that acts on other people's accounts. So the button records a request
+#: instead, and the operator resends from the provider's dashboard.
+RESEND_REQUEST = "I did not get the email"
+
+#: Deliberately not "an email is on its way": nothing was sent, and a person told
+#: to wait for a message nobody has sent yet waits twice. What is true is that the
+#: request is now where the operator will find it (`sql/signin.sql`).
+RESEND_NOTED = (
+    "Thanks — that is now recorded for whoever runs this, and they can send the email "
+    "again. You can close this page and come back later."
+)
 NOT_ENROLLED = (
     "This account is not enrolled. Ask whoever runs this to enrol it; there is nothing to do here."
 )

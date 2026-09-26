@@ -96,6 +96,12 @@ any release; `1.0.0` when it stabilizes.
   provider is enough. Sign out stays beside it, as the only way back for someone
   who signed in with the wrong address.
 
+- **A reader whose confirmation email never arrived can say so**, and the request
+  reaches the durable trail where the operator finds it (`sql/signin.sql`, which
+  also lists those who gave up without asking, and the enrolment queue). Nothing is
+  sent from the app: resending needs a provider credential that could also create
+  accounts, which is not a trade worth making for one message.
+
 - **Only an address the identity provider says it has verified is admitted**, and
   a provider that says nothing counts as unverified. Where sign-up is open this is
   the one thing standing between an enrolled tester and anyone who registers their

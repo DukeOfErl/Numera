@@ -103,6 +103,23 @@ came from outside twice, and both times the fault was in the explaining rather t
 in the facts: a refusal is a piece of writing for somebody who is stuck, and its
 author is the last person able to judge whether it lands.
 
+**The email that never arrives is the remaining dead end, and it is answered by
+recording rather than by sending.** Resending it through Auth0 needs a Management
+API token with `update:users`, which also creates accounts and changes addresses —
+far more power than one message is worth, and it would be the first credential this
+app holds that can act on other people's accounts. So a second button records
+`signin.resend_requested` to the trail, and the operator resends from the
+provider's dashboard. Nothing is sent from the app, and the acknowledgement says so
+rather than promising a message on its way.
+
+The event is separate from `signin.unverified` deliberately. That one fires for
+*everybody* between signing up and clicking the link, so querying it hands the
+operator a list of readers who are mostly fine; the request fires only when somebody
+says they are stuck. `sql/signin.sql` holds both, and says which to act on. A
+scheduled job to watch for them is not built: three queries an operator runs while
+there are a dozen testers is the right amount of machinery, and the alternative is a
+cron that pages somebody about a working system.
+
 Which provider to send them back through is read from the `provider` claim, in the
 driver, for the driver's own purpose. It remains absent from the session key and
 from every record (ADR-0880): the address is the identity, and this is only the
