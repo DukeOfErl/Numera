@@ -233,11 +233,35 @@ gates it. The operator's steps, in order:
 
 1. **Identity providers.** Keep the Google OAuth client under `[auth]`, and add
    any OpenID Connect provider as a sub-table. For email sign-in this deployment
-   uses Auth0: create a *Regular Web Application*, set the allowed callback URL
-   to `<your app>/oauth2callback` and the logout URL to the app's own address,
-   enable the database connection with sign-up open and **email verification
-   required**, and put `client_id`, `client_secret` and the tenant's
+   uses Auth0.
+
+   **Two choices at tenant creation are permanent, and the defaults are wrong for
+   this project** (Auth0's docs, read 2026-09-26: "The tenant name cannot be
+   changed after creation", and no procedure is offered for moving a region):
+
+   - **Region: EU.** What the tenant holds is testers' addresses and passwords —
+     personal data belonging to European scientists — so keeping it in the EU is
+     the simpler position to defend to an institution.
+   - **Name: type over the suggested one.** Auth0 offers something like
+     `dev-kzi63k4oj51iewcb`. Without a custom domain, Universal Login runs on
+     `<tenant>.eu.auth0.com`, so that string is what a reader sees in the address
+     bar *while typing a password* — which reads as phishing, and a careful
+     person stops. It is also baked into `server_metadata_url` below, so changing
+     your mind means a new tenant and a re-paste. Lowercase, digits and hyphens,
+     3–63 characters, globally unique.
+
+   Then: **Applications → Applications → Create Application → Regular Web
+   Applications**; set **Allowed Callback URLs** to `<your app>/oauth2callback`
+   and **Allowed Logout URLs** to the app's own address, under **Settings →
+   Application URIs**; leave the database connection's sign-up open and require
+   email verification; and put `client_id`, `client_secret` (both under
+   **Settings → Basic Information**) and the tenant's
    `.well-known/openid-configuration` under `[auth.auth0]`.
+
+   A custom domain — login on `login.example.org` rather than
+   `<tenant>.eu.auth0.com` — is available at no charge but needs a card on file
+   for verification. Not worth doing before there are testers; it is the route if
+   the `auth0.com` address becomes a problem.
    `.streamlit/secrets.toml.example` has the shape. Auth0's default mail sender
    is for testing; a real sender is a tenant setting before wider use, and an
    Auth0 Action refusing login until verified is worth setting too — the app
