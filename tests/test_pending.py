@@ -95,6 +95,11 @@ def test_a_request_for_the_email_is_reported_with_what_to_do(monkeypatch, capsys
 
 
 def test_an_unenrolled_account_is_reported_as_the_enrolment_queue(monkeypatch, capsys):
+    # **This test is blind to the resolution rule** and cannot be otherwise: the
+    # double answers by the bound event and never runs the join. It passed while
+    # `signin.refused` appeared in its own progress set, which emptied this queue
+    # completely. `test_pending_live.py` is where that is caught, and the reason
+    # this file is not enough.
     _wire(monkeypatch, _Engine({"signin.refused": [("new@example.org", WHEN, 1)]}))
     assert main(["--branch", "alpha"]) == 0
     said = capsys.readouterr().out

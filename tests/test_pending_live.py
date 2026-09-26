@@ -117,6 +117,31 @@ def test_a_request_answered_by_verification_stops_being_reported(table):
     )
 
 
+def test_an_unenrolled_account_is_reported_until_it_is_admitted(table):
+    """The query that was broken, asserted directly.
+
+    Progress is **per stage**, and one shared definition made `signin.refused`
+    appear in its own progress set — so every unenrolled account resolved itself and
+    this queue was permanently empty. `test_pending.py` passed throughout, because
+    its double ignores the join; reproduced against real rows, the buggy form
+    returns nothing here and the correct one returns both addresses.
+    """
+    engine, name = table
+    _write(
+        engine,
+        name,
+        [
+            ("signin.refused", "waiting@example.org", None),
+            ("signin.refused", "also-waiting@example.org", None),
+        ],
+    )
+    _, not_enrolled = waiting(engine, table=name)
+    assert sorted(w.address for w in not_enrolled) == [
+        "also-waiting@example.org",
+        "waiting@example.org",
+    ], "the enrolment queue is empty when two people are in it"
+
+
 def test_an_account_that_was_admitted_stops_being_reported(table):
     """The identity stamp writes `user_email` only onto a signed-in session's
     records, so its presence is proof the door opened.

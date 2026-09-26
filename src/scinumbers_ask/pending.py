@@ -52,31 +52,39 @@ from .enrol import MANAGEMENT_KEY_ENV, NEON_API_KEY_ENV, NEON_PROJECT_ENV, NO_BR
 #: to keep each report to one appearance. A daily run misses nothing inside it.
 DEFAULT_HOURS = 24 * 30
 
-#: Two kinds of proof that a reader got somewhere, unioned.
+#: **Progress is per stage, and one shared definition was a real bug.** The first
+#: version unioned both proofs for both queries, which meant `signin.refused`
+#: appeared in the progress set for the `signin.refused` query -- so every
+#: unenrolled account resolved *itself* and the enrolment queue was permanently
+#: empty. Offline tests could not see it: the double ignores the join. The live
+#: test found it on its second run, which is the argument for having one.
 #:
 #: `user_email` is stamped onto every record of a signed-in session (ADR-0810), so
-#: it is proof the door opened. **It was not enough on its own**, and that is the
-#: defect this query was shipped with: the door recorded only refusals, so a reader
-#: who signed in and asked nothing wrote no record at all, and their solved problem
-#: went on being reported every morning. Found by an operator watching a resolved
-#: row refuse to disappear. `web.establish_identity` now records `signin.admitted`
-#: on arrival, which is stamped like anything else -- so this arm covers it without
-#: naming it, and admission is observable for the first time.
-#:
-#: `signin.refused` sits *behind* the verified-address check (ADR-0890), so it
-#: proves verification even though it is itself a problem: someone who asked for
-#: their email and then reached that door got what they needed.
-_PROGRESS = """
+#: it is proof the door opened. `web.establish_identity` records `signin.admitted`
+#: on arrival, stamped like anything else, so admission is observable even for a
+#: reader who asks nothing -- which it was not at first, and which is how a solved
+#: problem came to be reported every morning.
+_ADMITTED = """
 select lower(user_email) as address, max(at) as at
 from {table}
 where user_email is not null
 group by 1
+"""
+
+#: For the reader who never got their email, reaching the *enrolment* door is
+#: progress: `signin.refused` sits behind the verified-address check (ADR-0890), so
+#: it proves verification even though it is itself a problem. Their problem moved
+#: on, and the other query picks them up.
+_VERIFIED = (
+    _ADMITTED
+    + """
 union all
 select lower(detail->>'email') as address, max(at) as at
 from {table}
 where event = 'signin.refused' and detail->>'email' is not null
 group by 1
 """
+)
 
 #: Lower-cased on both sides of the join: the trail carries the address as the
 #: provider asserted it and as the accounts row spells it, and `accounts.lookup`
@@ -111,10 +119,10 @@ class Waiting:
     times: int
 
 
-def _query(engine, event: str, hours: int, table: str) -> list[Waiting]:
+def _query(engine, event: str, progress: str, hours: int, table: str) -> list[Waiting]:
     from sqlalchemy import text
 
-    statement = _STILL_WAITING.format(table=table, progress=_PROGRESS.format(table=table))
+    statement = _STILL_WAITING.format(table=table, progress=progress.format(table=table))
     with engine.begin() as conn:
         conn.execute(text(f"set local statement_timeout = {trail_store.STATEMENT_TIMEOUT_MS}"))
         rows = conn.execute(text(statement), {"event": event, "hours": hours}).all()
@@ -129,8 +137,11 @@ def waiting(engine, *, hours: int = DEFAULT_HOURS, table: str = trail_store.DEFA
     report -- is not made to parse a report.
     """
     return (
-        _query(engine, "signin.resend_requested", hours, table),
-        _query(engine, "signin.refused", hours, table),
+        # Verification *or* admission clears "never got the email".
+        _query(engine, "signin.resend_requested", _VERIFIED, hours, table),
+        # Only admission clears "verified but not enrolled" -- passing `_VERIFIED`
+        # here is the bug above, and it empties this queue completely.
+        _query(engine, "signin.refused", _ADMITTED, hours, table),
     )
 
 
