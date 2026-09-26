@@ -289,6 +289,14 @@ gates it. The operator's steps, in order:
    server_metadata_url = "https://YOUR-TENANT.eu.auth0.com/.well-known/openid-configuration"
    ```
 
+   **Developing locally, write the port as `{port}`** —
+   `http://localhost:{port}/oauth2callback`. Streamlit substitutes `server.port`
+   at runtime, so the value cannot drift from the port the app is served on, which
+   matters as soon as something else on the machine has taken 8501. Register the
+   *concrete* URL at the provider, one per port you use; forgetting
+   `--server.port` then produces a callback-mismatch error from the provider
+   rather than a silent wrong redirect.
+
    Order has a second, harmless effect: buttons are drawn in secrets order with
    the default first, so the above gives Google then email.
 
