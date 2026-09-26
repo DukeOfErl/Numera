@@ -292,6 +292,35 @@ gates it. The operator's steps, in order:
    Order has a second, harmless effect: buttons are drawn in secrets order with
    the default first, so the above gives Google then email.
 
+   **To put another provider above Google, name Google too.** The unnamed default
+   is always drawn first, so it cannot be reordered in place — but a provider is
+   only "the default" because its credentials sit among `[auth]`'s own keys, and
+   moving them into `[auth.google]` makes it an ordinary named provider. `[auth]`
+   then holds nothing but the shared settings, and both buttons come from
+   sub-tables in the order written:
+
+   ```toml
+   [auth]
+   redirect_uri = "https://YOUR-APP.streamlit.app/oauth2callback"
+   cookie_secret = "a long random string"
+
+   [auth.auth0]
+   client_id = "..."
+   client_secret = "..."
+   server_metadata_url = "https://YOUR-TENANT.eu.auth0.com/.well-known/openid-configuration"
+
+   [auth.google]
+   client_id = "....apps.googleusercontent.com"
+   client_secret = "..."
+   server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
+   ```
+
+   Nothing in the code changes, and the Google button keeps its label. One thing
+   to expect: the identity cookie records which provider signed a reader in, so
+   anyone signed in through the old unnamed route will be asked to sign in again
+   once. Their account, role and conversation are unaffected — the address is the
+   identity, not the route to it (ADR-0880).
+
    A custom domain — login on `login.example.org` rather than
    `<tenant>.eu.auth0.com` — is available at no charge but needs a card on file
    for verification. Not worth doing before there are testers; it is the route if

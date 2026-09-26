@@ -69,6 +69,11 @@ SIGN_IN_NEEDED = "Sign in to ask a question. Nothing is shown, and nothing is ke
 #: blank page.
 SIGN_IN_LABELS = {
     "default": "Sign in with Google",
+    # `google` as a *named* provider, which is how the Google client is written
+    # when the buttons need to be in an order other than "default first". Moving
+    # it out of `[auth]`'s own keys into `[auth.google]` is a secrets change and
+    # nothing else -- the same label, reached by the other route.
+    "google": "Sign in with Google",
     "auth0": "Sign in with email",
 }
 

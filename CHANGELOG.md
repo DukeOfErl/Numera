@@ -12,6 +12,12 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **The sign-in buttons can be put in any order.** A provider is "the default",
+  and therefore drawn first, only because its credentials sit among `[auth]`'s own
+  keys; moving them into a sub-table of its own makes it an ordinary named
+  provider and secrets order decides. A secrets change with no code change, and
+  the Google button keeps its label either way.
+
 - **Sign-in with any address, not only a Google one.** Any OpenID Connect
   provider is a sub-table in secrets and gets its own button on the door; the
   Google client stays exactly where it was, and a tester who signs in through a

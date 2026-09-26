@@ -314,6 +314,24 @@ def test_auth_with_no_credentials_still_offers_the_default_button(page):
     assert [b.label for b in at.button] == ["Sign in with Google"]
 
 
+def test_the_google_client_can_be_a_named_provider_to_reorder_the_buttons(page):
+    """The unnamed default is always drawn first, so the only way to put another
+    provider above it is to name Google too. Then both are sub-tables and secrets
+    order decides, which is what the order test above pins -- and the label has to
+    survive the move, or the button reads "Sign in with google"."""
+    at = page(
+        auth=True,
+        email=None,
+        auth_section={
+            "redirect_uri": "x",
+            "cookie_secret": "y",
+            "auth0": {"client_id": "a"},
+            "google": {"client_id": "g"},
+        },
+    ).run()
+    assert [b.label for b in at.button] == ["Sign in with email", "Sign in with Google"]
+
+
 def test_a_provider_with_no_label_still_gets_a_button(page):
     """An operator adding `[auth.okta]` meets a plain button, not a KeyError."""
     at = page(auth=True, email=None, auth_section={"okta": {"client_id": "o"}}).run()
