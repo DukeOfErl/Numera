@@ -449,3 +449,10 @@ repository, and the implementer's job is to leave the instructions right.
 - [ ] 4.6 (operator) Create a Neon API key for the operator's shell; note
       `NEON_PROJECT_ID`. Enrol the first non-Google tester with
       `scinumbers-enrol ... --branch alpha` and have them sign in.
+
+      *Half done, 2026-09-26. The credentials exist — an organisation-scoped Neon
+      key, the project id, and an OpenRouter management key with an expiry — and
+      live in a mode-600 file outside the repository. A rehearsal enrolment into
+      `dev` with a `$0.01` cap succeeded end to end. **Still to do:** revoke that
+      rehearsal key and delete its row, then enrol a real tester into `alpha`,
+      which needs 4.3 first or they have no email button to sign in with.*
