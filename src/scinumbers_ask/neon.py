@@ -43,10 +43,11 @@ DEFAULT_ROLE = "neondb_owner"
 REFUSING_STATUSES = (401, 403)
 
 API_KEY_REFUSED = (
-    "Neon refused the API key, so nothing was enrolled and no branch was read. If you "
-    "created it with an expiry it has most likely reached it: make a new one under "
-    "Account settings, API keys, and set NEON_API_KEY to it. Check NEON_PROJECT_ID too "
-    "-- a key that cannot see the project is refused the same way."
+    "Neon refused the API key, so nothing was enrolled and no branch was read. Make a "
+    "new one from the profile menu, Settings then API keys (an organisation's live "
+    "under the organisation's own Settings), and set NEON_API_KEY to it -- it is shown "
+    "once. Check NEON_PROJECT_ID too: a key that cannot see the project is refused the "
+    "same way, and the two are indistinguishable from here."
 )
 
 

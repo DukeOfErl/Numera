@@ -315,6 +315,30 @@ NEON_API_KEY=napi_...
 NEON_PROJECT_ID=your-project-id
 ```
 
+Where each comes from (Neon's console, read 2026-09-26):
+
+| Value | Where |
+| --- | --- |
+| `OPENROUTER_MANAGEMENT_KEY` | `openrouter.ai/settings/management-keys`. It mints runtime keys and cannot itself call a model. An expiry is optional and supported |
+| `NEON_API_KEY` | Profile menu, top right → **Settings** → **API keys**. Starts `napi_` and is **shown once**. An organisation's keys live under the organisation's own **Settings** and start `neon_org_key_`. The console offers no expiry: they last until revoked |
+| `NEON_PROJECT_ID` | The project → **Settings** → **General**, with a copy button |
+
+Check both before you need them, which also tells you the exact branch name to
+pass to `--branch`:
+
+```bash
+curl -s https://console.neon.tech/api/v2/projects \
+  -H "Authorization: Bearer $NEON_API_KEY" | python3 -m json.tool | grep -E '"id"|"name"'
+
+curl -s "https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID/branches" \
+  -H "Authorization: Bearer $NEON_API_KEY" | python3 -m json.tool | grep '"name"'
+```
+
+A 401 from the first means the key; a 401 from the second means the project id.
+That is the one distinction the command cannot make for you — from inside, a key
+that is expired and a key that cannot see the project are refused identically —
+so its message names both.
+
 Then, in the shell where you are enrolling someone:
 
 ```bash
