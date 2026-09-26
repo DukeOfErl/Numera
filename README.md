@@ -320,8 +320,8 @@ Where each comes from (Neon's console, read 2026-09-26):
 | Value | Where |
 | --- | --- |
 | `OPENROUTER_MANAGEMENT_KEY` | `openrouter.ai/settings/management-keys`. It mints runtime keys and cannot itself call a model. An expiry is optional and supported |
-| `NEON_API_KEY` | Profile menu, top right → **Settings** → **API keys**. Starts `napi_` and is **shown once**. An organisation's keys live under the organisation's own **Settings** and start `neon_org_key_`. The console offers no expiry: they last until revoked |
-| `NEON_PROJECT_ID` | The project → **Settings** → **General**, with a copy button |
+| `NEON_API_KEY` | **Prefer an organisation key** if the project belongs to an organisation: the organisation → **Settings** → **API keys**. It scopes every request to that organisation, so no `org_id` is needed anywhere. A *personal* key (profile menu → **Settings** → **API keys**, prefix `napi_`) requires `org_id` on the list-projects call and refuses with `400 org_id is required` without it. Either kind is **shown once**, and the console offers no expiry — they last until revoked |
+| `NEON_PROJECT_ID` | The project → **Settings** → **General**, with a copy button. Two words and digits, like `sparkling-bread-74230014` — **not** the `ep-…` form Neon's own docs give as an example, which is an endpoint id |
 
 Check both before you need them, which also tells you the exact branch name to
 pass to `--branch`. **Load the file in this shell first**, and let the shell say
@@ -353,6 +353,9 @@ that cannot see the project are refused identically — so its message names bot
 Verified against the live API on 2026-09-26: a wrong key, well formed or not,
 gives `401`; an **empty** `Authorization` header gives `400 not authenticated`,
 which is why the command refuses on an unset variable before it calls anything.
+An organisation key lists projects with no `org_id` and returns `200`; a personal
+key without one returns `400 org_id is required`, which is a different failure
+wearing the same status code — read the message, not the number.
 
 Then, in the shell where you are enrolling someone:
 
