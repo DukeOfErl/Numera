@@ -252,8 +252,8 @@ gates it. The operator's steps, in order:
 
    Then: **Applications → Applications → Create Application → Regular Web
    Applications**; set **Allowed Callback URLs** to `<your app>/oauth2callback`
-   and **Allowed Logout URLs** to the app's own address, under **Settings →
-   Application URIs**; leave the database connection's sign-up open and require
+   and **Allowed Logout URLs** to **that same `/oauth2callback` URL** — not the
+   app's root — under **Settings → Application URIs**; leave the database connection's sign-up open and require
    email verification; and put `client_id`, `client_secret` (both under
    **Settings → Basic Information**) and the tenant's
    `.well-known/openid-configuration` under `[auth.auth0]`.
@@ -288,6 +288,14 @@ gates it. The operator's steps, in order:
    client_secret = "..."
    server_metadata_url = "https://YOUR-TENANT.eu.auth0.com/.well-known/openid-configuration"
    ```
+
+   **Both allowed-URL lists get the `/oauth2callback` address, including the
+   logout one.** Streamlit sends the callback URL as `post_logout_redirect_uri`
+   rather than the app's root — "some providers seem to require URL to be in a
+   whitelist", says its own comment (`starlette_auth_routes.py`, installed
+   1.61.1). An Auth0 tenant that lists only the root answers a sign-out with
+   "Oops!, something went wrong" on its own error page, which reads like an outage
+   and is a missing allowlist entry.
 
    **Developing locally, write the port as `{port}`** —
    `http://localhost:{port}/oauth2callback`. Streamlit substitutes `server.port`
