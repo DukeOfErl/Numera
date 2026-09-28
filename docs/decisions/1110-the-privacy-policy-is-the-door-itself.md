@@ -56,6 +56,18 @@ signed in weeks ago never meets the door again.
 The contact address in the text is a deliberate publication, which is why it is
 its own constant rather than a word in a paragraph.
 
+**Naming what receives the material is the part that was got wrong first**, and
+it is worth recording how. The first draft named Auth0, Neon, OpenRouter and
+Langfuse — four services the code calls explicitly — and missed three that it does
+not: the **host** (everything runs on Streamlit Community Cloud), the provider
+**behind** a provider (Auth0 federates to Google, so a reader signing in with a
+Google account is handing Google the request), and the **stores that are not the
+database** (the conversation's own sqlite checkpoints and the trail's log file,
+both on the app's filesystem). The pattern is that a recipient reached by calling
+an API gets named and one reached by running at all does not — and the omission
+that mattered most was Google, the party whose consent screen this document exists
+to satisfy.
+
 ## Trade-off accepted
 
 **The policy is code, so changing it is a deployment.** A statement of this kind
