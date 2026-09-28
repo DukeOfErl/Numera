@@ -253,11 +253,30 @@ in and be enrolled before anything is drawn.** Signed in but not enrolled is
 refused with one sentence and recorded, so the operator can enrol someone who
 tried.
 
-**Any address can sign in, and only a verified one is admitted.** Each configured
-provider gets its own button. The provider must say it has verified the address —
-a provider that says nothing counts as unverified — because where sign-up is open
-anyone could otherwise register an enrolled tester's address and be signed in as
-them. That refusal has a sentence of its own, separate from "not enrolled",
+**The door draws a button for each provider the deployment *offers*,** which is not
+necessarily each one it has configured: `web.OFFERED_PROVIDERS` names them, and it
+currently names Auth0 alone. The Google client stays configured and every line of the multi-provider
+machinery stays with it, because Auth0 signs a reader in with their Google account
+anyway — so the second button was two routes to one thing. Restoring it is that
+tuple ([ADR-1100](docs/decisions/1100-one-way-in-with-the-others-kept.md)).
+
+**If you withdraw the Google button, enable Auth0's Google connection**, or you have
+withdrawn Google sign-in altogether. Auth0 provides one by default using *its own
+development keys*, which are rate-limited and show their own consent warning, so put
+the Google client you already own into that connection.
+
+**Every door carries the privacy policy**, collapsed, and so does the side panel:
+what is recorded, what it is used for, which services it passes through, how long it
+is kept, and where to write to see it or have it deleted. It is under the refusals
+too — an attempt records an address whether or not it is admitted — and it is
+readable without signing in, which is what lets the app's own address be the one
+Google's consent screen points at
+([ADR-1110](docs/decisions/1110-the-privacy-policy-is-the-door-itself.md)).
+
+**Any address can sign in, and only a verified one is admitted.** The provider must
+say it has verified the address, and one that says nothing counts as unverified,
+because where sign-up is open anyone could otherwise register an enrolled tester's
+address and be signed in as them. That refusal has a sentence of its own, separate from "not enrolled",
 because the reader's next step is different
 ([ADR-0890](docs/decisions/0890-only-a-verified-address-opens-the-door.md)).
 The address is the identity: a tester who used one provider yesterday and another
@@ -387,6 +406,20 @@ gates it. The operator's steps, in order:
    about whether an unverified app in production shows a click-through warning
    for `openid email profile`, so sign in once from an address that is not on the
    test-user list and see what a tester would see before inviting anyone.
+
+   **The Publish button stays greyed out until Branding is complete**, and what
+   completes it is the App domain: the home page and the privacy policy. Both are
+   the app's own address — the door is a public page and it carries the policy
+   ([ADR-1110](docs/decisions/1110-the-privacy-policy-is-the-door-itself.md)), so
+   no second host and no extra authorised domain is involved. Set
+   `messages.PRIVACY_CONTACT` to the address a reader should write to before
+   publishing; it is a public disclosure, not a detail.
+
+   **Do not upload a logo.** With only `openid email profile` the app needs no
+   verification at all — but a logo obliges brand verification, which is a review
+   with a wait, in exchange for an icon. Every link entered must sit under an
+   authorised domain, and Google enforces that on Save, so entering them and
+   reading the error is the check.
 3. **The `accounts` table** in the same database as the trail, from
    `sql/accounts.sql`.
 4. **One command per tester.** `scinumbers-enrol` mints a capped runtime key at

@@ -275,32 +275,53 @@ def test_providers_is_empty_with_no_auth_section(monkeypatch):
     assert web.providers() == []
 
 
-def test_each_configured_provider_gets_its_own_button(page):
-    at = page(
-        auth=True,
-        email=None,
-        auth_section={"client_id": "g", "auth0": {"client_id": "a"}},
-    ).run()
-    assert [b.label for b in at.button] == ["Sign in with Google", "Sign in with email"]
+def test_the_door_offers_one_way_in_while_the_others_stay_configured(page):
+    """Google's client is still in secrets and `providers()` still finds it; the
+    door simply does not draw a button for it (ADR-1100). Both halves are asserted,
+    because "we kept the machinery" is the claim worth checking."""
+    section = {"client_id": "g", "auth0": {"client_id": "a"}}
+    at = page(auth=True, email=None, auth_section=section).run()
+    assert [b.label for b in at.button] == ["Sign in"]
+
+
+def test_what_is_configured_is_unchanged_by_what_is_offered(monkeypatch):
+    """The narrowing is at the door, not in what the deployment has. Restoring the
+    Google button is `OFFERED_PROVIDERS`, and this is what says so."""
+    section = {
+        "redirect_uri": "x",
+        "cookie_secret": "y",
+        "client_id": "g",
+        "auth0": {"client_id": "a"},
+    }
+    monkeypatch.setattr(web.st, "secrets", {"auth": section})
+    assert web.providers() == ["default", "auth0"], "a provider stopped being configured"
+    assert web.offered_providers() == ["auth0"]
+    monkeypatch.setattr(web, "OFFERED_PROVIDERS", ("auth0", "default"))
+    assert web.offered_providers() == ["default", "auth0"], "the Google button is one tuple away"
 
 
 def test_the_default_provider_is_signed_in_to_with_no_argument(page, monkeypatch):
-    """`st.login()` and `st.login("default")` are different calls: the
-    no-argument form means the credentials in `[auth]` itself, and Streamlit
-    resolves the name "default" against a section that need not exist. Forcing
-    either form for both providers passed every test until this one, so the
-    comment in `draw_closed_door` asserting the distinction had nothing behind
-    it."""
+    """`st.login()` and `st.login("default")` are different calls: the no-argument
+    form means the credentials in `[auth]` itself, and Streamlit resolves the name
+    "default" against a section that need not exist. Forcing either form for both
+    providers passed every test until this one existed.
+
+    Still asserted through the door now that only one provider is offered, because
+    the default is still drawn where it is the only thing configured -- a
+    developer's machine with the Google client and no Auth0 section. That path is
+    exactly where the no-argument form has to be right."""
     asked: list = []
     monkeypatch.setattr(web.st, "login", lambda *args: asked.append(args))
-    at = page(
-        auth=True,
-        email=None,
-        auth_section={"client_id": "g", "auth0": {"client_id": "a"}},
-    ).run()
-    at.button[0].click().run()
+
+    only_google = page(auth=True, email=None, auth_section={"client_id": "g"}).run()
+    assert [b.label for b in only_google.button] == ["Sign in with Google"], (
+        "nothing offered leaves a door with no button, which is never right"
+    )
+    only_google.button[0].click().run()
     assert asked == [()], "the default provider was named, and it must not be"
-    at.button[1].click().run()
+
+    named = page(auth=True, email=None, auth_section={"auth0": {"client_id": "a"}}).run()
+    named.button[0].click().run()
     assert asked == [(), ("auth0",)], "a named provider was not named"
 
 
@@ -314,22 +335,23 @@ def test_auth_with_no_credentials_still_offers_the_default_button(page):
     assert [b.label for b in at.button] == ["Sign in with Google"]
 
 
-def test_the_google_client_can_be_a_named_provider_to_reorder_the_buttons(page):
-    """The unnamed default is always drawn first, so the only way to put another
-    provider above it is to name Google too. Then both are sub-tables and secrets
-    order decides, which is what the order test above pins -- and the label has to
-    survive the move, or the button reads "Sign in with google"."""
+def test_buttons_keep_secrets_order_where_more_than_one_is_drawn(page):
+    """The ordering machinery, still exercised. With one provider offered the door
+    has nothing to order, so this uses the widening path: two providers, neither of
+    them offered, both drawn in the order secrets lists them. The label has to
+    survive being a named provider too, or the button reads "Sign in with google".
+    """
     at = page(
         auth=True,
         email=None,
         auth_section={
             "redirect_uri": "x",
             "cookie_secret": "y",
-            "auth0": {"client_id": "a"},
+            "zeta": {"client_id": "z"},
             "google": {"client_id": "g"},
         },
     ).run()
-    assert [b.label for b in at.button] == ["Sign in with email", "Sign in with Google"]
+    assert [b.label for b in at.button] == ["Sign in with zeta", "Sign in with Google"]
 
 
 def test_a_provider_with_no_label_still_gets_a_button(page):
@@ -1413,3 +1435,37 @@ def test_an_unconfigured_deployment_is_told_nothing_about_the_operator_s_key(pag
     )
     at = page(auth=False).run()
     assert not any("3.40" in c.value for c in at.sidebar.caption)
+
+
+# --- what is kept about a reader ----------------------------------------------------
+
+
+def test_the_policy_is_readable_without_signing_in(page):
+    """The consent screen links a visitor to the app's own address, and a visitor
+    following that link has by definition not signed in. A policy only a signed-in
+    reader can reach is one the visitor was told to read and cannot."""
+    at = page(auth=True, email=None).run()
+    assert [e.label for e in at.expander] == [messages.PRIVACY_HEADING]
+    said = " ".join(c.value for c in at.caption)
+    assert messages.PRIVACY_CONTACT in said, "no way to ask what is held, or to have it deleted"
+
+
+def test_the_policy_is_offered_rather_than_imposed(page):
+    """Collapsed. The door's job is to let an invited reader in; a wall of text
+    opened over the button would be read by nobody and would obstruct everybody."""
+    at = page(auth=True, email=None).run()
+    assert not at.expander[0].proto.expanded
+
+
+def test_a_signed_in_reader_can_still_find_it(page):
+    """The door is seen once. A reader who signed in weeks ago never meets it
+    again, and the address the policy is published at is this same page."""
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    assert messages.PRIVACY_HEADING in [e.label for e in at.sidebar.expander]
+
+
+def test_a_refused_reader_is_told_what_was_kept_about_them(page):
+    """Under every door, not only the sign-in one. Being refused does not undo the
+    record the attempt wrote, and it is the door with nobody to ask."""
+    at = page(auth=True, email="stranger@example.org", enrolled={}).run()
+    assert [e.label for e in at.expander] == [messages.PRIVACY_HEADING]

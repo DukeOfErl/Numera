@@ -690,7 +690,10 @@ def test_the_side_panel_is_there_before_any_question(monkeypatch, repo, config, 
     at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
 
     assert any(t.label == web.ENTRIES_TAB for t in at.sidebar.tabs)
-    assert not at.sidebar.expander, "entries before anything was retrieved"
+    # Every expander bar the standing one, which is the privacy statement and is
+    # there from the first draw by design (ADR-1110).
+    entries = [e for e in at.sidebar.expander if e.label != messages.PRIVACY_HEADING]
+    assert not entries, "entries before anything was retrieved"
 
 
 def test_the_legend_sits_between_the_two_tables(monkeypatch, repo, config, tmp_path):

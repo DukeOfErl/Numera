@@ -464,6 +464,18 @@ def identity_configured() -> bool:
 #: which is the right place for that error.
 PROVIDER_KEY = "client_id"
 
+#: Which configured providers the door actually offers.
+#:
+#: **Not a filter on what is configured, but on what is shown.** Google's client
+#: stays in secrets, `providers()` still finds it, and `st.login()` would still use
+#: it -- every line of the multi-provider machinery is exercised by the tests and
+#: none of it is removed. What changes is that the door draws one button, because
+#: Auth0 signs a reader in with their Google account anyway and two buttons for one
+#: account was a choice nobody needed to make (ADR-1100).
+#:
+#: Restoring the Google button is this tuple, and nothing else.
+OFFERED_PROVIDERS = ("auth0",)
+
 #: The unnamed provider: `st.login()` with no argument, whose credentials sit
 #: directly in `[auth]`. Deliberately not passed to `st.login` as a name --
 #: Streamlit resolves a name against a sub-table, and a sub-table called
@@ -510,6 +522,22 @@ def providers() -> list[str]:
         if isinstance(value, Mapping) and PROVIDER_KEY in value
     ]
     return list(dict.fromkeys(found))
+
+
+def offered_providers() -> list[str]:
+    """The buttons to draw: what is configured, narrowed to what is offered.
+
+    **A door with no button is never the right answer**, so two things can widen
+    it back. If the offered set matches nothing configured -- a developer's machine
+    with only the Google client, say -- every configured provider is drawn instead
+    of none. And `[auth]` present but carrying no credentials at all still draws
+    the default button, because `st.login()` then raises Streamlit's own
+    "credentials are missing" error naming the keys: the visitor is stuck either
+    way and the operator is not.
+    """
+    configured = providers()
+    offered = [name for name in configured if name in OFFERED_PROVIDERS]
+    return offered or configured or [DEFAULT_PROVIDER]
 
 
 def signed_in_claims() -> Mapping[str, Any] | None:
@@ -883,19 +911,30 @@ def _sign_out(conversation_id: str, tab_id: str | None = None) -> None:
     st.logout()
 
 
+def draw_privacy() -> None:
+    """What is kept about a reader, collapsed.
+
+    Drawn on the door *and* in the panel, because the two audiences are different
+    and neither can reach the other's copy: a visitor who follows the consent
+    screen's link is not signed in and sees only the door, and a reader who signed
+    in weeks ago never sees the door again. One expander, two call sites, one
+    sentence in `messages.py`.
+
+    A caption rather than markdown, like the two shorter notes it extends -- and,
+    incidentally, out of `at.markdown`, which the door's "nothing else is drawn"
+    test reads.
+    """
+    with st.expander(as_text(messages.PRIVACY_HEADING)):
+        st.caption(as_text(messages.PRIVACY))
+
+
 def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None = None) -> None:
     """What a visitor sees instead of the page. Sign-in and nothing else, or the
     one sentence that says why not. The caller stops the script after this."""
     draw_title()
     if admission.door is Door.SIGN_IN:
         st.info(as_text(messages.SIGN_IN_NEEDED), icon=":material/login:")
-        # `[auth]` present but carrying no credentials anywhere is a
-        # misconfiguration, and the default button is how the operator finds out:
-        # `st.login()` then raises Streamlit's own "credentials are missing"
-        # error, naming the keys. Drawing nothing would leave a sentence, no
-        # control and no diagnosis -- the visitor's dead end costs the same
-        # either way, and the operator's does not.
-        for provider in providers() or [DEFAULT_PROVIDER]:
+        for provider in offered_providers():
             # `st.login()` and `st.login("name")` are different calls: the
             # no-argument form means the credentials in `[auth]` itself, and
             # passing "default" is not a synonym for it.
@@ -961,6 +1000,11 @@ def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None =
         # A widget, so the retry the docstring promises can happen without the
         # reader reloading: Streamlit only reruns on interaction.
         st.button("Try again", on_click=lambda: None, icon=":material/refresh:")
+    # Under every door rather than under the sign-in one. A person refused here
+    # has had their address recorded by the attempt, which is the moment the
+    # question "what do you keep about me" is most reasonable -- and the door that
+    # admits nobody is the one where it is hardest to ask anyone.
+    draw_privacy()
 
 
 #: The button's own key, which Streamlit also emits as the CSS class

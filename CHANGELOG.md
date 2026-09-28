@@ -10,7 +10,28 @@ any release; `1.0.0` when it stabilizes.
 
 ## [Unreleased]
 
+### Changed
+
+- **The door says why there is a door, and offers one way in.** It reads "Use of
+  this app is by invitation only since you are using the developer's budget" — the
+  button already says what to do, and a stranger needs the reason. The Google button
+  is withdrawn because Auth0 signs a reader in with their Google account anyway, so
+  the remaining button says just "Sign in". **The Google client stays configured and
+  none of the multi-provider machinery is removed**; which providers the door draws
+  is one tuple, and restoring it is that tuple
+  ([ADR-1100](docs/decisions/1100-one-way-in-with-the-others-kept.md)).
+
 ### Added
+
+- **The page says what is kept about a reader, in full and in one place.** The side
+  panel's one-line note gains a collapsed statement beside it: what is recorded,
+  what it is used for, which services it passes through, how long it is kept, and
+  where to write to see it or have it deleted. The same statement is drawn under
+  **every** door, so a visitor who has not signed in — and a reader who was refused,
+  whose address the attempt already recorded — can read it too. It is served by the
+  app at its own address rather than by a second host, because the door was always
+  the public page
+  ([ADR-1110](docs/decisions/1110-the-privacy-policy-is-the-door-itself.md)).
 
 - **A successful sign-in is recorded.** The trail held only refusals at the door, so
   "nobody tried today" and "everybody got in" looked the same, and a reader who

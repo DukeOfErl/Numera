@@ -35,10 +35,11 @@ from .events import (
 # controls a reader actually came for. So it says the thing that matters, which
 # is that what passes through here is recorded and why.
 #
-# **A fuller disclaimer is deferred, not dropped** (`docs/roadmap.md`). When
-# there are real users rather than invited testers, what is kept about a person
-# is shown once, before they use the app, where a person will read it -- which is
-# the right shape for that obligation and the wrong shape for a side panel.
+# **The fuller disclaimer arrived** as `PRIVACY` below, earlier than the "real
+# users rather than invited testers" condition that was to reopen it: Google will
+# not publish a consent screen without a policy at a public address. It is offered
+# rather than shown once before use -- a collapsed expander beside this line and on
+# the door -- because a notice a reader must dismiss to proceed is dismissed.
 #
 # The same sentence whether or not sign-in is configured. It was a function of
 # that for one release; with both variants identical the parameter only invited
@@ -57,10 +58,58 @@ BUDGET_NOTE = (
     "purposeful, and don't abuse budget."
 )
 
+#: Where a reader is told to write. Published on a public page, so it is a
+#: deliberate disclosure rather than a detail: change it here and it changes in
+#: both places the policy is drawn.
+PRIVACY_CONTACT = "yoavpol@gmail.com"
+
+#: The standing statement about what is kept, in full rather than in a line.
+#:
+#: `RECORDS_NOTE` says *that* exchanges are logged, which is the right length for
+#: a sidebar caption and too short to be a privacy policy. This is the long form,
+#: behind a collapsed expander so that it is reachable without being imposed.
+#: Written now because Google requires a policy at a public address before it will
+#: take a consent screen out of testing, and the app's own address is the one the
+#: consent screen points at (ADR-1100).
+#:
+#: **It must be readable without signing in**, which is why it is drawn on the
+#: door as well as in the panel: the app's own address is what the consent screen
+#: links to, and a visitor following that link is by definition not signed in.
+#:
+#: Every service named here is one this app actually hands something to. Naming
+#: them is the part a reader cannot discover for themselves, and the part that
+#: dates fastest -- a new sink means a line here, in the same change.
+PRIVACY_HEADING = "Privacy Policy"
+PRIVACY = f"""SciNumbers Ask is a research prototype, run by one person and offered by
+invitation. Using it means the following is recorded.
+
+- **Your email address**, as the sign-in provider reports it, and the role you were
+  enrolled under.
+- **Your questions, the answers given and the corpus entries behind them**, together
+  with any rating or comment you leave on an answer.
+- **Timestamps, and identifiers for the session and for each question**, so one
+  conversation can be told from another.
+
+This is kept in a hosted Postgres database, and is used to run the app, to keep it
+inside the developer's budget, and to find where its answers go wrong. Your questions,
+and the corpus entries looked up for them, are sent to a model provider to be answered.
+
+What it passes through: Auth0 (sign-in), Neon (the database), and OpenRouter with the
+model provider it routes to; where tracing is switched on, Langfuse receives the same
+material. Nothing is sold, and nothing is shared beyond those.
+
+Records are kept for as long as the prototype runs. To see what is held about you, or
+to have it deleted, email {PRIVACY_CONTACT}."""
+
 # The door, before anything else is drawn. Each is a different sentence because
 # each asks the reader to do a different thing -- and "not enrolled" during an
 # outage would send a person to the operator, who finds them already enrolled.
-SIGN_IN_NEEDED = "Sign in to ask a question. Nothing is shown, and nothing is kept, until you do."
+# Says *why* there is a door rather than what to do about it. The button beside it
+# already says what to do, and a visitor who was not invited needs the reason more
+# than the instruction: without it the refusal reads as a system that has not
+# recognised them yet, and they try again. Naming the budget is the honest form --
+# this is one person's money, which is also why every account is capped.
+SIGN_IN_NEEDED = "Use of this app is by invitation only since you are using the developer's budget"
 #: What each configured provider's button says. Keyed by the name the provider
 #: has in secrets -- `"default"` for the section's own credentials, a sub-table's
 #: name otherwise -- so adding a third provider is a secrets edit and, at most, a
@@ -74,7 +123,11 @@ SIGN_IN_LABELS = {
     # it out of `[auth]`'s own keys into `[auth.google]` is a secrets change and
     # nothing else -- the same label, reached by the other route.
     "google": "Sign in with Google",
-    "auth0": "Sign in with email",
+    # Just "Sign in", because it is the only button on the door. "Sign in with
+    # email" distinguished it from the Google button beside it, and that button is
+    # gone (ADR-1100); naming the method now invites the question of what the other
+    # methods are, when the provider's own page answers it.
+    "auth0": "Sign in",
 }
 
 
