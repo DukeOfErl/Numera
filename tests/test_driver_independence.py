@@ -32,7 +32,23 @@ DRIVERS = {"cli", "web"}
 # as each module lands, and `test_every_named_adapter_exists` refuses a name with no
 # file: a guard listing a module that was renamed protects nothing, and nothing else
 # would say so.
-HARNESS = {"question_set", "evaluation", "scoring", "report", "answer_sheet", "eval_cli"}
+HARNESS = {
+    "question_set",
+    "evaluation",
+    "scoring",
+    "report",
+    "answer_sheet",
+    "eval_cli",
+    # The enrolment command. Here for the same reason as the rest: an operator
+    # runs it from a terminal against a deployment they are not looking at, so a
+    # module that reached for `web` would need a browser to enrol anybody.
+    # `neon` is deliberately *not* here -- it imports nothing but the standard
+    # library, and leaving it in the core is the stricter of the two placements.
+    "enrol",
+    # The daily check. Runs from cron with nobody watching, so it may not reach
+    # for a terminal or a browser either.
+    "pending",
+}
 ADAPTERS = DRIVERS | HARNESS
 # `autobuild` joins them: it decides whether to build a corpus, which is a driver's
 # policy and not the agent's, and it is the one module allowed to import the

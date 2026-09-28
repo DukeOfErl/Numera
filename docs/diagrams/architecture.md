@@ -168,11 +168,12 @@ sequenceDiagram
     participant Door as web.admit
     participant Accounts as accounts.py
     participant Trail as trace logger
-    Reader->>Page: opens the app
+    Reader->>Page: opens the app, having signed in with one of the providers
     Page->>Door: which door?
+    Door->>Door: has the provider verified this address?
     Door->>Accounts: lookup(email)
     Accounts-->>Door: account, or none
-    alt not signed in, not enrolled, no credential, check unavailable
+    alt unverified, not signed in, not enrolled, no credential, check unavailable
         Door-->>Page: a closed door
         Page-->>Reader: one sentence, and nothing else
     else enrolled, with a credential
@@ -187,6 +188,59 @@ sequenceDiagram
 *Caption: what the page decides before it draws anything, and where identity
 joins the trail. The refusals are one branch because they differ only in the
 sentence shown; ADR-0830 says why the session is keyed on the account.*
+
+**The verification check is drawn before the lookup because that is where it
+is**, and the order is the point rather than a detail of the drawing: an
+unverified address never reaches the accounts table. Where sign-up at a provider
+is open, the claim is the only thing separating an enrolled tester from anyone
+who registers their address (ADR-0890). The reader arrives having chosen one of
+the configured providers; which one they used is not part of the session key and
+is not stamped on anything, because the address is the identity (ADR-0880).
+
+## 3c. What happens when the operator enrols a tester
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operator
+    participant Cmd as scinumbers-enrol
+    participant Neon as neon.py
+    participant OR as OpenRouter
+    participant Accounts as accounts.py
+    Operator->>Cmd: email, role, cap, --branch
+    Cmd->>Cmd: refuse a cap that is not positive, or an unknown role
+    Cmd->>Neon: which branch is called this?
+    Note over Cmd,Neon: the cheap refusals run first, so a<br/>mistyped cap costs no live call
+    Neon-->>Cmd: exactly one, or a refusal listing what was found
+    Cmd->>OR: mint a key capped at the amount, renewing monthly
+    OR-->>Cmd: the key, and the cap it actually set
+    Cmd->>Accounts: insert the row
+    alt the row was written
+        Accounts-->>Operator: enrolled, without the credential
+    else it was not
+        Cmd->>OR: withdraw the key again
+        Cmd-->>Operator: nothing was enrolled
+    end
+```
+
+*Caption: two systems with no transaction between them, and what a half-done
+enrolment leaves behind. Everything that can be refused from the arguments alone
+is refused before any live call; the branch is resolved before the mint, so a
+mistyped name is free too. ADR-0900.*
+
+The cap and role checks belong to `enrol`, not to the command, and `enrol` runs
+them — the command runs the same expression of them first only so that
+`--limit-usd 0` does not spend two control-plane calls before anything says no.
+A review found this diagram drawn in the order the code *should* have run rather
+than the order it did; the code moved to match the drawing, which was the right
+way round here because the drawing was the better design.
+
+**The order is the decision.** Inserting first would leave a row with no key —
+a door of its own, where the tester is told no credential has been issued and the
+operator sees an account that looks deliberately keyless rather than half-made.
+Minting first leaves, at worst, a capped key nobody refers to, and the command
+withdraws it on the way out. Where the withdrawal fails too, the key is named so
+a person can revoke it by hand; that is the one outcome this leaves work for.
 
 **The identity modules are core so that the refusal is reachable without a
 browser**, and `test_driver_independence.py` names them as such on purpose

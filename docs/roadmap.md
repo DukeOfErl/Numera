@@ -97,9 +97,18 @@ it — this section points rather than repeats:
   permitted, it is handed permissions, never the role** — ADR-0820.
 - **The grant table itself** is `GRANTS` in `src/scinumbers_ask/permissions.py`,
   with the rule for growing it in the comment above.
-- **Operator's steps** — Google OAuth client, `[auth]` in secrets, the
+- **Operator's steps** — the identity providers, `[auth]` in secrets, the
   `accounts` table from `sql/accounts.sql`, one capped OpenRouter key per tester
   — are in `README.md` §"Sign-in and enrolment".
+
+**Since `add-open-enrolment` (2026-09-18):** sign-in is no longer Google-only —
+any OpenID Connect provider is a sub-table in secrets and gets its own button,
+and only an address the provider says it has verified is admitted (ADR-0880,
+ADR-0890). The helper script below is no longer "left for later": it is
+`scinumbers-enrol`, which mints the capped key and inserts the row in one step
+and names the database branch every time (ADR-0900). Two operator steps remain
+outside the repository and are in the README: creating the Auth0 tenant, and
+publishing the Google consent screen so testers need not be listed by hand.
 
 Kept here because it is operational reference an ADR would bury: OpenRouter's
 **Management API Keys**, verified against openrouter.ai/docs/features/provisioning-api-keys
@@ -118,9 +127,10 @@ own ending (ADR-0600). The tester never sees the key; nothing is accepted from
 anyone, the operator's own credit is subdivided — which is what keeps this clear
 of Streamlit Cloud's terms about accepting third-party credentials.
 
-Left for later, on purpose: a helper script for minting keys and inserting rows;
-the deletion path and any retention limit for what is kept about a person (the
-spec says why: nobody to ask yet); re-reading enrolment mid-session.
+Left for later, on purpose: the deletion path and any retention limit for what is
+kept about a person (the spec says why: nobody to ask yet); re-reading enrolment
+mid-session; withdrawal, re-keying and role changes from the command rather than
+from `sql/accounts.sql`. The helper script itself has landed — see above.
 
 ### WP4 — Usage events + hosted tracing
 Depends on WP1 and WP3. **Split:** hosted tracing is built as `add-hosted-tracing`
