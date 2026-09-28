@@ -265,6 +265,14 @@ withdrawn Google sign-in altogether. Auth0 provides one by default using *its ow
 development keys*, which are rate-limited and show their own consent warning, so put
 the Google client you already own into that connection.
 
+**Every door carries the privacy policy**, collapsed, and so does the side panel:
+what is recorded, what it is used for, which services it passes through, how long it
+is kept, and where to write to see it or have it deleted. It is under the refusals
+too — an attempt records an address whether or not it is admitted — and it is
+readable without signing in, which is what lets the app's own address be the one
+Google's consent screen points at
+([ADR-1110](docs/decisions/1110-the-privacy-policy-is-the-door-itself.md)).
+
 **Any address can sign in, and only a verified one is admitted.** The provider must
 say it has verified the address, and one that says nothing counts as unverified,
 because where sign-up is open anyone could otherwise register an enrolled tester's
@@ -398,6 +406,20 @@ gates it. The operator's steps, in order:
    about whether an unverified app in production shows a click-through warning
    for `openid email profile`, so sign in once from an address that is not on the
    test-user list and see what a tester would see before inviting anyone.
+
+   **The Publish button stays greyed out until Branding is complete**, and what
+   completes it is the App domain: the home page and the privacy policy. Both are
+   the app's own address — the door is a public page and it carries the policy
+   ([ADR-1110](docs/decisions/1110-the-privacy-policy-is-the-door-itself.md)), so
+   no second host and no extra authorised domain is involved. Set
+   `messages.PRIVACY_CONTACT` to the address a reader should write to before
+   publishing; it is a public disclosure, not a detail.
+
+   **Do not upload a logo.** With only `openid email profile` the app needs no
+   verification at all — but a logo obliges brand verification, which is a review
+   with a wait, in exchange for an icon. Every link entered must sit under an
+   authorised domain, and Google enforces that on Save, so entering them and
+   reading the error is the check.
 3. **The `accounts` table** in the same database as the trail, from
    `sql/accounts.sql`.
 4. **One command per tester.** `scinumbers-enrol` mints a capped runtime key at

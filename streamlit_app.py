@@ -144,6 +144,10 @@ with st.sidebar:
     # design; the sidebar is the page's standing statement about itself, and
     # this belongs beside the other one.
     st.caption(web.as_text(web.RECORDS_NOTE))
+    # The long form of the line above, collapsed. Here as well as on the door
+    # because a reader who signed in weeks ago never meets the door again, and
+    # the app's own address is what the consent screen points a reader at.
+    web.draw_privacy()
     # Who this page thinks you are, or that it is nobody's. A person reading
     # under an account they did not expect is a person whose questions are being
     # recorded against the wrong name.

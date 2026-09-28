@@ -911,6 +911,23 @@ def _sign_out(conversation_id: str, tab_id: str | None = None) -> None:
     st.logout()
 
 
+def draw_privacy() -> None:
+    """What is kept about a reader, collapsed.
+
+    Drawn on the door *and* in the panel, because the two audiences are different
+    and neither can reach the other's copy: a visitor who follows the consent
+    screen's link is not signed in and sees only the door, and a reader who signed
+    in weeks ago never sees the door again. One expander, two call sites, one
+    sentence in `messages.py`.
+
+    A caption rather than markdown, like the two shorter notes it extends -- and,
+    incidentally, out of `at.markdown`, which the door's "nothing else is drawn"
+    test reads.
+    """
+    with st.expander(as_text(messages.PRIVACY_HEADING)):
+        st.caption(as_text(messages.PRIVACY))
+
+
 def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None = None) -> None:
     """What a visitor sees instead of the page. Sign-in and nothing else, or the
     one sentence that says why not. The caller stops the script after this."""
@@ -983,6 +1000,11 @@ def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None =
         # A widget, so the retry the docstring promises can happen without the
         # reader reloading: Streamlit only reruns on interaction.
         st.button("Try again", on_click=lambda: None, icon=":material/refresh:")
+    # Under every door rather than under the sign-in one. A person refused here
+    # has had their address recorded by the attempt, which is the moment the
+    # question "what do you keep about me" is most reasonable -- and the door that
+    # admits nobody is the one where it is hardest to ask anyone.
+    draw_privacy()
 
 
 #: The button's own key, which Streamlit also emits as the CSS class

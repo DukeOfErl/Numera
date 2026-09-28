@@ -75,3 +75,60 @@ whose questions are being recorded against the wrong name.
 #### Scenario: A verified address that is not enrolled
 - **WHEN** a provider asserts a verified address the operator has not enrolled
 - **THEN** the page says the account is not enrolled, as before
+
+### Requirement: What is kept about a person, and that they are told
+
+Where identity is configured, every record written during a session SHALL carry
+the account it was written under and the role that account held at the time,
+recorded when the record is written and never looked up afterwards. A role
+changed later SHALL NOT change records already written: a judgement's weight is
+the weight it carried when given.
+
+The interface SHALL state that what passes through the app is recorded, and why.
+A standing side-panel notice carries the short form; it SHALL NOT be obliged to
+enumerate the fields, because one long enough to list the question, the answer,
+the entries, the account and the role is one a reader stops finishing — which
+tells them nothing while appearing to tell them everything.
+
+The interface SHALL also carry the full statement: what is recorded, what it is
+used for, which services it passes through, and how long it is kept. It SHALL be
+offered rather than imposed — a reader who wants it can open it, and a reader who
+does not is not made to scroll past it — and it SHALL be readable **without
+signing in**, because a visitor sent to it by a sign-in provider's consent screen
+has not signed in and cannot be made to.
+
+Every record about a person SHALL be attributable to that person, so that
+deleting what is kept about them is possible, and the full statement SHALL name
+how to ask for that. A retention limit is deferred: there is nobody yet whose
+records are old enough for one to bind, and a rule written before its first case
+is a rule written for the wrong case. Deferred is not unmentioned; when it is
+decided it lands here.
+
+#### Scenario: A signed-in reader's records carry their identity
+- **WHEN** an enrolled account asks a question and rates the answer
+- **THEN** every record of that question and rating carries the account and its role
+
+#### Scenario: A role changed afterwards does not rewrite history
+- **WHEN** an account's role is changed after it has asked and rated
+- **THEN** the records already written still carry the role held at the time
+
+#### Scenario: The interface says that what passes through it is recorded
+- **WHEN** a reader views the page
+- **THEN** the page states that exchanges in the app are logged, and why
+
+#### Scenario: A person's records can be found
+- **WHEN** the operator looks for everything kept about one account
+- **THEN** every record about that account is found by the account alone
+
+#### Scenario: A visitor who has not signed in reads what would be kept
+- **WHEN** a visitor who is not signed in views the page
+- **THEN** the full statement is reachable from that page
+- **AND** it is closed until the visitor opens it
+
+#### Scenario: A reader who is refused reads it too
+- **WHEN** an account is refused at the door
+- **THEN** the full statement is reachable from the page that refuses it
+
+#### Scenario: A reader asks for what is kept about them to be deleted
+- **WHEN** a reader reads the full statement
+- **THEN** it names where to write to see what is held, or to have it deleted

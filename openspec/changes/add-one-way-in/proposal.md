@@ -22,6 +22,12 @@ Auth0 signs them in with their Google account either way.
   which of the configured providers the door draws — one tuple, `OFFERED_PROVIDERS`.
   Switching back is that tuple and nothing else.
 
+- **The door carries the privacy policy**, collapsed, and so does the side panel.
+  Google will not take an OAuth consent screen out of Testing without a policy at a
+  public address, and Testing caps testers at 100, admits only hand-added ones and
+  expires their consent weekly. The door is already the unauthenticated page, so the
+  app's own address is that public address and no second host is involved (ADR-1110).
+
 ## Capabilities
 
 ### New Capabilities
@@ -34,15 +40,19 @@ None.
   and identity comes from the provider"* — being configured and being offered
   become different things, and the guarantee becomes that a visitor is always
   offered at least one way in rather than one per configured provider.
+- `user-identity`: the requirement *"What is kept about a person, and that they are
+  told"* — the fuller statement stops being deferred and becomes required, offered
+  rather than imposed, and readable without signing in.
 
 ## Impact
 
-**Code.** `messages.py`: the door's sentence and the Auth0 label. `web.py`: a new
-`OFFERED_PROVIDERS` and `offered_providers()`, and one call site in
-`draw_closed_door`. Nothing is deleted.
+**Code.** `messages.py`: the door's sentence, the Auth0 label, and `PRIVACY` with
+its contact. `web.py`: a new `OFFERED_PROVIDERS` and `offered_providers()`, and
+`draw_privacy()` called from `draw_closed_door`. `streamlit_app.py`: the same
+expander in the panel. Nothing is deleted.
 
 **Documentation.** README's sign-in section, `.streamlit/secrets.toml.example`,
-`CHANGELOG.md`, ADR-1100.
+`CHANGELOG.md`, ADR-1100 and ADR-1110.
 
 **Deliberately unaffected.** Enrolment, the verified-address check, the trail, and
 what a signed-in reader sees. This is the door's face, not its decisions.

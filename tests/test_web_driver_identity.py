@@ -1435,3 +1435,37 @@ def test_an_unconfigured_deployment_is_told_nothing_about_the_operator_s_key(pag
     )
     at = page(auth=False).run()
     assert not any("3.40" in c.value for c in at.sidebar.caption)
+
+
+# --- what is kept about a reader ----------------------------------------------------
+
+
+def test_the_policy_is_readable_without_signing_in(page):
+    """The consent screen links a visitor to the app's own address, and a visitor
+    following that link has by definition not signed in. A policy only a signed-in
+    reader can reach is one the visitor was told to read and cannot."""
+    at = page(auth=True, email=None).run()
+    assert [e.label for e in at.expander] == [messages.PRIVACY_HEADING]
+    said = " ".join(c.value for c in at.caption)
+    assert messages.PRIVACY_CONTACT in said, "no way to ask what is held, or to have it deleted"
+
+
+def test_the_policy_is_offered_rather_than_imposed(page):
+    """Collapsed. The door's job is to let an invited reader in; a wall of text
+    opened over the button would be read by nobody and would obstruct everybody."""
+    at = page(auth=True, email=None).run()
+    assert not at.expander[0].proto.expanded
+
+
+def test_a_signed_in_reader_can_still_find_it(page):
+    """The door is seen once. A reader who signed in weeks ago never meets it
+    again, and the address the policy is published at is this same page."""
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    assert messages.PRIVACY_HEADING in [e.label for e in at.sidebar.expander]
+
+
+def test_a_refused_reader_is_told_what_was_kept_about_them(page):
+    """Under every door, not only the sign-in one. Being refused does not undo the
+    record the attempt wrote, and it is the door with nobody to ask."""
+    at = page(auth=True, email="stranger@example.org", enrolled={}).run()
+    assert [e.label for e in at.expander] == [messages.PRIVACY_HEADING]
