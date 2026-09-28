@@ -384,8 +384,11 @@ COVERED: dict[str, tuple[str, ...]] = {
         # `add-open-enrolment`: more than one provider, and a verified address.
         "test_web_driver_identity.py::test_providers_reads_the_default_and_every_sub_table",
         "test_web_driver_identity.py::test_providers_is_empty_with_no_auth_section",
-        "test_web_driver_identity.py::test_each_configured_provider_gets_its_own_button",
+        "test_web_driver_identity.py::"
+        "test_the_door_offers_one_way_in_while_the_others_stay_configured",
         "test_web_driver_identity.py::test_a_provider_with_no_label_still_gets_a_button",
+        "test_web_driver_identity.py::test_what_is_configured_is_unchanged_by_what_is_offered",
+        "test_web_driver_identity.py::test_buttons_keep_secrets_order_where_more_than_one_is_drawn",
         "test_web_driver_identity.py::"
         "test_address_verified_reads_the_claim_and_refuses_its_absence",
         "test_web_driver_identity.py::test_an_unverified_address_is_refused_with_its_own_sentence",

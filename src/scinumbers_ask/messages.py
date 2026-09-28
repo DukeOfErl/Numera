@@ -60,7 +60,12 @@ BUDGET_NOTE = (
 # The door, before anything else is drawn. Each is a different sentence because
 # each asks the reader to do a different thing -- and "not enrolled" during an
 # outage would send a person to the operator, who finds them already enrolled.
-SIGN_IN_NEEDED = "Sign in to ask a question. Nothing is shown, and nothing is kept, until you do."
+# Says *why* there is a door rather than what to do about it. The button beside it
+# already says what to do, and a visitor who was not invited needs the reason more
+# than the instruction: without it the refusal reads as a system that has not
+# recognised them yet, and they try again. Naming the budget is the honest form --
+# this is one person's money, which is also why every account is capped.
+SIGN_IN_NEEDED = "Use of this app is by invitation only since you are using the developer's budget"
 #: What each configured provider's button says. Keyed by the name the provider
 #: has in secrets -- `"default"` for the section's own credentials, a sub-table's
 #: name otherwise -- so adding a third provider is a secrets edit and, at most, a
@@ -74,7 +79,11 @@ SIGN_IN_LABELS = {
     # it out of `[auth]`'s own keys into `[auth.google]` is a secrets change and
     # nothing else -- the same label, reached by the other route.
     "google": "Sign in with Google",
-    "auth0": "Sign in with email",
+    # Just "Sign in", because it is the only button on the door. "Sign in with
+    # email" distinguished it from the Google button beside it, and that button is
+    # gone (ADR-1100); naming the method now invites the question of what the other
+    # methods are, when the provider's own page answers it.
+    "auth0": "Sign in",
 }
 
 

@@ -253,11 +253,22 @@ in and be enrolled before anything is drawn.** Signed in but not enrolled is
 refused with one sentence and recorded, so the operator can enrol someone who
 tried.
 
-**Any address can sign in, and only a verified one is admitted.** Each configured
-provider gets its own button. The provider must say it has verified the address —
-a provider that says nothing counts as unverified — because where sign-up is open
-anyone could otherwise register an enrolled tester's address and be signed in as
-them. That refusal has a sentence of its own, separate from "not enrolled",
+**The door draws a button for each provider the deployment *offers*,** which is not
+necessarily each one it has configured: `web.OFFERED_PROVIDERS` names them, and it
+currently names Auth0 alone. The Google client stays configured and every line of the multi-provider
+machinery stays with it, because Auth0 signs a reader in with their Google account
+anyway — so the second button was two routes to one thing. Restoring it is that
+tuple ([ADR-1100](docs/decisions/1100-one-way-in-with-the-others-kept.md)).
+
+**If you withdraw the Google button, enable Auth0's Google connection**, or you have
+withdrawn Google sign-in altogether. Auth0 provides one by default using *its own
+development keys*, which are rate-limited and show their own consent warning, so put
+the Google client you already own into that connection.
+
+**Any address can sign in, and only a verified one is admitted.** The provider must
+say it has verified the address, and one that says nothing counts as unverified,
+because where sign-up is open anyone could otherwise register an enrolled tester's
+address and be signed in as them. That refusal has a sentence of its own, separate from "not enrolled",
 because the reader's next step is different
 ([ADR-0890](docs/decisions/0890-only-a-verified-address-opens-the-door.md)).
 The address is the identity: a tester who used one provider yesterday and another
