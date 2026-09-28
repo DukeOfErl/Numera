@@ -73,6 +73,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-question-and-answer-records` | `0840`–`0870` |
 | `add-open-enrolment` | `0880`–`0920` — `0880`, `0890`, `0900` written |
 | `add-hosted-tracing` | `1000`–`1040` — clear of `0880`–`0940`, spent on other branches |
+| `add-one-way-in` | `1100`–`1140` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets
