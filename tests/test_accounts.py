@@ -19,8 +19,10 @@ from scinumbers_ask.accounts import (
     Account,
     AlreadyEnrolled,
     EnrolmentUnavailable,
+    UnusableAddress,
     insert,
     lookup,
+    usable,
 )
 from scinumbers_ask.permissions import Role
 
@@ -374,3 +376,102 @@ def test_insert_lets_any_other_failure_raise_as_itself():
     with pytest.raises(RuntimeError) as failed:
         insert(engine, "new@example.org", Role.STUDENT, "sk-new")
     assert not isinstance(failed.value, AlreadyEnrolled)
+
+
+# --- an address nothing could match -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "typed",
+    [
+        "tester@example.org\n",
+        " tester@example.org",
+        "tester@example.org\t",
+        "\ntester@example.org ",
+    ],
+    ids=["trailing newline", "leading space", "trailing tab", "both"],
+)
+def test_surrounding_whitespace_is_trimmed_rather_than_refused(typed):
+    """The operator's tool, not their intent: a heredoc adds the newline and a
+    pasted line adds the spaces. Trimming costs nothing and refusing would cost
+    the operator a second attempt over a character they cannot see."""
+    assert usable(typed) == "tester@example.org"
+
+
+@pytest.mark.parametrize(
+    "typed",
+    ["tes ter@example.org", "tester@exa\tmple.org", "tester@example.org x"],
+    ids=["a space in the name", "a tab in the domain", "a second word"],
+)
+def test_whitespace_inside_an_address_is_refused_rather_than_removed(typed):
+    """The asymmetry is the decision. Removing it would enrol an address the
+    operator did not type, and no provider would assert either form."""
+    with pytest.raises(UnusableAddress):
+        usable(typed)
+
+
+def test_a_control_character_is_refused_even_where_it_is_not_whitespace():
+    """`'\\x00'.isspace()` is False, so the whitespace rule alone lets it through
+    -- and a NUL in a primary key is a row no claim can ever match."""
+    with pytest.raises(UnusableAddress):
+        usable("tester@exam\x00ple.org")
+
+
+@pytest.mark.parametrize("typed", ["", "   ", "\n"], ids=["empty", "spaces", "newline"])
+def test_an_address_that_is_only_whitespace_is_refused(typed):
+    with pytest.raises(UnusableAddress):
+        usable(typed)
+
+
+@pytest.mark.parametrize(
+    "typed",
+    ["tester", "@example.org", "tester@"],
+    ids=["no @ at all", "no name", "no domain"],
+)
+def test_something_that_is_not_an_address_is_refused(typed):
+    with pytest.raises(UnusableAddress):
+        usable(typed)
+
+
+def test_the_refusal_shows_the_character_that_cannot_be_seen():
+    """`repr`, not the bare string. An error naming `tester@example.org` when the
+    address ends in a newline tells the operator what they already believe."""
+    with pytest.raises(UnusableAddress) as refused:
+        usable("tes ter@example.org")
+    assert "\\n" in str(refused.value) or "'tes ter@example.org'" in str(refused.value)
+
+
+def test_insert_stores_the_trimmed_address_not_the_typed_one():
+    """The row is what every later claim is matched against, so this is the write
+    that decides whether the account can ever be used."""
+    engine = _WriteEngine()
+    account = insert(engine, "New@example.org\n", Role.SCIENTIST, "sk-new")
+    (params,) = engine.conn.params
+    assert params["email"] == "New@example.org", "the newline reached the row"
+    assert account.email == "New@example.org"
+
+
+def test_insert_refuses_an_unusable_address_and_writes_nothing():
+    """Before the connection is opened, so there is nothing to compensate for."""
+    engine = _WriteEngine()
+    with pytest.raises(UnusableAddress):
+        insert(engine, "new user@example.org", Role.SCIENTIST, "sk-new")
+    assert engine.conn.params == [], "a row was written for an address nothing can match"
+
+
+def test_a_claim_is_trimmed_before_it_is_matched():
+    """The other direction of the same rule. A provider will not send whitespace,
+    but the rule having one home is what keeps the two directions in step."""
+    engine = _Engine(_row())
+    assert lookup(engine, " tester@example.org\n") is not None
+    (params,) = engine.conns[0].params
+    assert params == {"email": "tester@example.org"}
+
+
+def test_a_claim_that_cannot_be_matched_is_not_enrolled_rather_than_an_error():
+    """Fails closed into a door that already exists. Raising here would take the
+    page down; inventing a new sentence would be a refusal for a case no provider
+    produces."""
+    engine = _Engine(_row())
+    assert lookup(engine, "not an address") is None
+    assert engine.conns == [], "the database was asked about an address it cannot hold"
