@@ -53,6 +53,50 @@ where lower(email) = lower(:email)
 """
 
 
+class UnusableAddress(ValueError):
+    """The address cannot be stored or matched as it stands. Nothing was written."""
+
+
+def usable(email: str) -> str:
+    """The address as it will be stored and matched, or a refusal.
+
+    Surrounding whitespace is **stripped** and anything else odd is **refused**,
+    and the asymmetry is the decision. A trailing newline off a heredoc or a
+    pasted line is the operator's tool, not their intent, and trimming it costs
+    nothing; whitespace or a control character *inside* an address is a paste
+    that went wrong, and quietly rewriting it would enrol an address nobody
+    asked for.
+
+    Both directions of getting this wrong were paid for. `dev.accounts` holds a
+    row keyed `'yoav.g.pollack@gmail.com\\n'`: it was accepted, it looks right in
+    every listing that prints it unquoted, and no provider will ever assert a
+    claim that matches it -- so the account exists, is enabled, and admits
+    nobody. The person meets "not enrolled", the operator looks at the table and
+    sees their row sitting there, and nothing on either side says why. That is
+    the expensive direction, and it is expensive precisely because it is silent.
+
+    Refusing is the cheap direction: it costs the operator one sentence, at the
+    moment they are watching a command they just ran. The sentence quotes the
+    address with `repr` so an invisible character is visible in it -- an error
+    naming `yoav@example.org` when the string ends in a newline is the same
+    mistake told twice.
+
+    In the operation, not in the command (`.claude/rules/identity.md`): `insert`
+    calls this, so a second caller -- a test, a migration, a future web page --
+    gets the same refusal without knowing it exists.
+    """
+    cleaned = email.strip()
+    if not cleaned:
+        raise UnusableAddress("an address is required; this one is empty or only whitespace")
+    if any(character.isspace() for character in cleaned):
+        raise UnusableAddress(f"{email!r} has whitespace inside it, and an address cannot")
+    if any(character < " " or character == "\x7f" for character in cleaned):
+        raise UnusableAddress(f"{email!r} has a control character in it, and an address cannot")
+    if "@" not in cleaned or cleaned.startswith("@") or cleaned.endswith("@"):
+        raise UnusableAddress(f"{email!r} is not an address: it needs a name, an @ and a domain")
+    return cleaned
+
+
 class AlreadyEnrolled(RuntimeError):
     """This address already has a row. Nothing was written.
 
@@ -109,6 +153,16 @@ def lookup(engine, email: str, *, table: str = DEFAULT_TABLE) -> Account | None:
     """
     from sqlalchemy import text
 
+    # The same rule as `insert`, read in the other direction and with the other
+    # answer: a claim this module cannot match is "not enrolled", never an
+    # exception. The door has a sentence for that and none for a malformed
+    # claim, and inventing one would be a new refusal for a case no provider
+    # produces -- while raising here would take the page down instead.
+    try:
+        email = usable(email)
+    except UnusableAddress as refused:
+        complain(f"a sign-in claim carried an address that cannot be matched: {refused}", refused)
+        return None
     try:
         with engine.begin() as conn:
             conn.execute(text(f"set local statement_timeout = {STATEMENT_TIMEOUT_MS}"))
@@ -144,9 +198,12 @@ values (:email, :role, :key)
 def insert(engine, email: str, role: Role, key: str, *, table: str = DEFAULT_TABLE) -> Account:
     """Enrol one account. Raises `AlreadyEnrolled` if the address already has a row.
 
-    The row's own spelling of the address is what goes in, unfolded: `lookup`
-    folds when it matches, so the operator's capitalisation is preserved for
-    display without affecting who is found. Any failure that is not a duplicate
+    The row's own spelling of the address is what goes in, unfolded but
+    **trimmed**: `lookup` folds when it matches, so the operator's capitalisation
+    is preserved for display without affecting who is found, while surrounding
+    whitespace is removed because nothing downstream can match through it
+    (`usable`). An address that is odd in any other way is refused with
+    `UnusableAddress` and nothing is written. Any failure that is not a duplicate
     raises as itself -- an unreachable database, a missing table and a refused
     password are all things the operator has to see, and this is a command they
     are watching rather than a page they are reading.
@@ -157,6 +214,7 @@ def insert(engine, email: str, role: Role, key: str, *, table: str = DEFAULT_TAB
     from sqlalchemy import text
     from sqlalchemy.exc import IntegrityError
 
+    email = usable(email)
     try:
         with engine.begin() as conn:
             conn.execute(text(f"set local statement_timeout = {STATEMENT_TIMEOUT_MS}"))
