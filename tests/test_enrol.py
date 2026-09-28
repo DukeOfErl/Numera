@@ -166,6 +166,30 @@ def test_a_role_that_is_not_a_role_is_refused_before_minting(engine):
     assert opener.calls == []
 
 
+def test_an_address_nothing_could_match_is_refused_before_minting(engine):
+    """Leaving this to `insert` would work -- the compensating revoke withdraws
+    the key -- but it spends a live call on both ends to learn what a string
+    could have said, and the operator reads a sentence about withdrawal rather
+    than about their typo."""
+    opener = _Opener()
+    with pytest.raises(accounts.UnusableAddress) as refused:
+        enrol(engine, "mgmt", "new user@example.org", Role.SCIENTIST, 5, opener=opener)
+    assert "new user@example.org" in str(refused.value)
+    assert opener.calls == [], "a credential was minted for an address with no row to hold it"
+    assert engine.inserted == []
+
+
+def test_the_key_is_minted_under_the_address_the_row_will_carry(engine):
+    """The name is how the operator finds the key at OpenRouter to withdraw it.
+    Minted under the untrimmed address and stored under the trimmed one, it is
+    findable by an address that matches nothing in the table."""
+    opener = _Opener({"POST https://openrouter.ai/api/v1/keys": _minted()})
+    account = enrol(engine, "mgmt", " new@example.org\n", Role.SCIENTIST, 5, opener=opener)
+    assert account.email == "new@example.org"
+    (minting,) = [body for body in opener.bodies if "name" in body]
+    assert minting["name"] == "new@example.org"
+
+
 # --- the happy path ----------------------------------------------------------------
 
 

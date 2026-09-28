@@ -251,11 +251,18 @@ def enrol(
 ) -> Account:
     """Issue a credential and record the account. The operation, with its guards.
 
-    Refuses before touching anything: a cap that is not positive, and a role that
-    is not one of `Role`'s. Both are the operator's typo, and both are free to
-    catch here -- `mint` is what costs something.
+    Refuses before touching anything: a cap that is not positive, a role that is
+    not one of `Role`'s, and an address nothing downstream could match. All three
+    are the operator's typo, and all three are free to catch here -- `mint` is
+    what costs something.
+
+    The address is trimmed here rather than only in `insert` so that the *key* is
+    minted under the name the row will carry. Leaving it to `insert` would work --
+    the compensating revoke would withdraw the key when the address was refused --
+    but it spends a live call to learn something a string could have said.
     """
     role = checked(role, limit_usd)
+    email = accounts.usable(email)
     minted = mint(management_key, name=email, limit_usd=limit_usd, opener=opener)
     try:
         return accounts.insert(engine, email, role, minted.key)
@@ -329,9 +336,10 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         # Before the branch is resolved, so a mistyped cap costs no live call.
-        # `enrol` checks again; this is the same rule read twice, not a second
-        # rule that could drift.
+        # `enrol` checks both again; this is the same rule read twice, not a
+        # second rule that could drift.
         checked(args.role, args.limit_usd)
+        accounts.usable(args.email)
     except (Uncapped, ValueError) as exc:
         print(str(exc), file=sys.stderr)
         return 1

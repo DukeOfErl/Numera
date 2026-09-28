@@ -21,6 +21,20 @@ any release; `1.0.0` when it stabilizes.
   is one tuple, and restoring it is that tuple
   ([ADR-1100](docs/decisions/1100-one-way-in-with-the-others-kept.md)).
 
+### Fixed
+
+- **An address that nothing could ever match can no longer be enrolled.** A
+  trailing newline off a heredoc, or spaces off a pasted line, went into the
+  accounts table verbatim — producing an account that exists, is enabled, looks
+  right in every listing that prints it unquoted, and admits nobody, because no
+  provider will assert a claim that matches it. The person meets "not enrolled",
+  the operator sees their row sitting there, and neither side is told why.
+  Surrounding whitespace is now trimmed; whitespace or a control character inside
+  an address, or something that is not an address at all, is refused with a
+  sentence that quotes it so an invisible character is visible. The guard is in
+  `accounts.insert`, so every caller gets it, and in `enrol` before the key is
+  minted, so a typo costs no live call.
+
 ### Added
 
 - **The page says what is kept about a reader, in full and in one place.** The side
