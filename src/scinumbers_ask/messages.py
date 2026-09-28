@@ -79,7 +79,7 @@ PRIVACY_CONTACT = "yoavpol@gmail.com"
 #: Every service named here is one this app actually hands something to. Naming
 #: them is the part a reader cannot discover for themselves, and the part that
 #: dates fastest -- a new sink means a line here, in the same change.
-PRIVACY_HEADING = "What this prototype keeps about you"
+PRIVACY_HEADING = "Privacy Policy"
 PRIVACY = f"""SciNumbers Ask is a research prototype, run by one person and offered by
 invitation. Using it means the following is recorded.
 
