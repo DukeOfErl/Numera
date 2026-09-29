@@ -257,15 +257,24 @@ select disabled from {table} where lower(email) = lower(:email)
 #: which is the opposite of the case -- and the operator's next step is different:
 #: there is nothing to reconsider, there is a row to clear.
 #:
+#: Rewritten once, shorter. The first version explained *why* the row is kept
+#: before saying what to do, which is the wrong order for something read at a
+#: prompt: the operator wants the state and the next step, and the reasoning is
+#: in ADR-1150 where someone can go looking for it.
+#:
+#: "key revoked" is what `scinumbers-withdraw` does and not something this row
+#: records -- a row disabled by hand, or one whose revoke was refused, says the
+#: same thing here. Kept because the common case is the command, and because the
+#: operator's next step is the same either way; if it ever misleads, the honest
+#: form is "withdrawn" with nothing in the brackets.
+#:
 #: Re-enrolment is deliberately **not** offered here (ADR-1150): reinstating a
 #: withdrawn account is its own operation, and doing it as a side effect of
 #: `enrol` would hand a new credential to whoever a mistyped address happened to
 #: match among the withdrawn.
 WITHDRAWN_ALREADY = (
-    "{email} has a row here and it is withdrawn, so nothing was issued. The row is "
-    "kept on purpose -- the records it wrote stay attributed to it. To enrol this "
-    "address again, clear or re-admit the row by hand first; `sql/accounts.sql` has "
-    "both statements."
+    "{email} is an existing account, but withdrawn (disabled and key revoked). "
+    "To re-enrol, delete the account or add a key by hand; sql/accounts.sql has both."
 )
 
 

@@ -63,7 +63,7 @@ any release; `1.0.0` when it stabilizes.
 
 - **Enrolling an address that was withdrawn says so**, rather than "already
   enrolled" — which is true of a withdrawn row and reads as though the person has
-  access. It names where the statements to clear or re-admit the row are.
+  access. It names the state and the next step, in one line.
   Reinstating from the command is deferred deliberately: as a side effect of
   enrolling, a mistyped address matching a withdrawn one would issue a credential
   nobody meant to.
