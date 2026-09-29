@@ -493,6 +493,17 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_trail_store.py::test_the_handler_carries_the_role_beside_the_email",
         "test_web_driver_identity.py::test_the_sidebar_says_who_is_signed_in_and_offers_sign_out",
         "test_web_driver_identity.py::test_the_note_is_one_short_sentence_whatever_is_configured",
+        # The full statement, added with the door's own address (ADR-1110). Named
+        # here because the requirement's older clauses were already claimed by the
+        # identity-stamping tests above, so the suite stayed green while four new
+        # clauses were covered by tests that assert none of them -- which is the
+        # state this file exists to make visible.
+        "test_web_driver_identity.py::test_the_policy_is_readable_without_signing_in",
+        "test_web_driver_identity.py::test_the_policy_is_offered_rather_than_imposed",
+        "test_web_driver_identity.py::test_a_signed_in_reader_can_still_find_it",
+        "test_web_driver_identity.py::test_a_refused_reader_is_told_what_was_kept_about_them",
+        "test_web_driver_session_cap.py::"
+        "test_the_turned_away_visitor_can_still_read_what_is_kept_about_them",
     ),
     "An operator can see a session's own trail": (
         "test_web_driver_dev_panel.py::test_an_operator_s_page_has_the_section",

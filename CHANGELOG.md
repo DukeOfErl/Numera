@@ -23,6 +23,30 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **The privacy policy now names every store and every recipient.** It said the
+  material is kept in a hosted Postgres database, while the conversation's own
+  checkpoints and the trail's log file sit on the app's filesystem — so a reader
+  exercising the deletion right it grants would have had their database rows
+  removed and those files left. Its list of services named the four the code calls
+  by name and missed the three it does not: the host (Streamlit Community Cloud),
+  the provider behind the provider (Google, which Auth0 federates sign-in to), and
+  those two files. Google was the omission that mattered most, being the party whose
+  consent screen the policy exists to satisfy.
+
+- **The policy is reachable from the session-cap page too.** That page refuses a
+  reader *after* their sign-in has been recorded, and it was the one door with no
+  statement on it.
+
+- **A sign-in button's label follows the number of buttons**, rather than being
+  written for today's arrangement. Auth0's label had been shortened to "Sign in" in
+  place, which made the promise that restoring the Google button is one tuple false:
+  it would have drawn "Sign in with Google" beside an unqualified "Sign in".
+
+- **A provider configured without its `client_id` is reported.** Half a credential
+  in the secrets box is invisible to `providers()`, so the door widened back to the
+  withdrawn Google button with nothing said in the app or the trail. It still widens
+  — a door with no button is never right — but the operator is now told.
+
 - **An address that nothing could ever match can no longer be enrolled.** A
   trailing newline off a heredoc, or spaces off a pasted line, went into the
   accounts table verbatim — producing an account that exists, is enabled, looks

@@ -258,7 +258,15 @@ necessarily each one it has configured: `web.OFFERED_PROVIDERS` names them, and 
 currently names Auth0 alone. The Google client stays configured and every line of the multi-provider
 machinery stays with it, because Auth0 signs a reader in with their Google account
 anyway — so the second button was two routes to one thing. Restoring it is that
-tuple ([ADR-1100](docs/decisions/1100-one-way-in-with-the-others-kept.md)).
+tuple ([ADR-1100](docs/decisions/1100-one-way-in-with-the-others-kept.md)): the
+labels follow the button count by themselves, so a lone button says "Sign in" and
+two or more say what tells them apart.
+
+**A provider left half-configured is reported rather than silently dropped.** A
+sub-table with no `client_id` — a rotation in the secrets box that wrote the secret
+and not the id — is invisible to `providers()`, so the door would widen back to the
+withdrawn button with nothing said. It still widens, because a door with no button
+is never right, but the operator gets a line on stderr naming the section.
 
 **If you withdraw the Google button, enable Auth0's Google connection**, or you have
 withdrawn Google sign-in altogether. Auth0 provides one by default using *its own
@@ -266,9 +274,10 @@ development keys*, which are rate-limited and show their own consent warning, so
 the Google client you already own into that connection.
 
 **Every door carries the privacy policy**, collapsed, and so does the side panel:
-what is recorded, what it is used for, which services it passes through, how long it
-is kept, and where to write to see it or have it deleted. It is under the refusals
-too — an attempt records an address whether or not it is admitted — and it is
+what is recorded, where it is kept (the database *and* the app's own filesystem),
+which services it passes through, how long it is kept, and where to write to see it
+or have it deleted. It is under the refusals too — including the session cap, which
+turns a reader away *after* recording their sign-in — and it is
 readable without signing in, which is what lets the app's own address be the one
 Google's consent screen points at
 ([ADR-1110](docs/decisions/1110-the-privacy-policy-is-the-door-itself.md)).

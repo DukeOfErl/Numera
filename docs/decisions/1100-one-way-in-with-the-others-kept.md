@@ -55,6 +55,14 @@ is the honest form: this is one person's money, which is also why every account 
 capped (ADR-0780). And the remaining button says just **"Sign in"**, since there is
 no longer another method to distinguish it from.
 
+That last part is a rule on the *count*, not on Auth0: a lone button says "Sign
+in", two or more say what tells them apart. Written the other way first — the
+`auth0` label shortened in place — it quietly falsified the paragraph above it,
+because restoring the Google button would then have drawn "Sign in with Google"
+beside an unqualified "Sign in", reintroducing the very ambiguity this ADR
+removes. A promise that restoration is one tuple holds only if everything else
+follows by itself.
+
 ## Trade-off accepted
 
 **Dead configuration, deliberately.** A provider sits in secrets that nothing draws,
