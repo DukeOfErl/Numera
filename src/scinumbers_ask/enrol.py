@@ -352,9 +352,14 @@ MANAGEMENT_KEY_ENV = "OPENROUTER_MANAGEMENT_KEY"
 NEON_API_KEY_ENV = "NEON_API_KEY"
 NEON_PROJECT_ENV = "NEON_PROJECT_ID"
 
+#: Shared by both commands, and it has to name both mistakes: the wording said
+#: only "enrols a tester the app will never find" while `scinumbers-withdraw` was
+#: using it, which described the opposite of that command's failure. A refusal
+#: that names the wrong consequence is read as being about somebody else.
 NO_BRANCH = (
-    "no branch named. The row has to land in the branch the deployed app reads, and "
-    "none is assumed -- naming the wrong one enrols a tester the app will never find. "
+    "no branch named. The account has to be acted on in the branch the deployed app "
+    "reads, and none is assumed -- naming the wrong one enrols a tester the app will "
+    "never find, or reports a withdrawal for an account that goes on working. "
     "Add --branch alpha, or --branch dev for a rehearsal."
 )
 

@@ -449,14 +449,17 @@ gates it. The operator's steps, in order:
 
    ```bash
    scinumbers-enrol maria@example.org scientist --limit-usd 5
-   # -> no branch named. The row has to land in the branch the deployed app reads...
+   # -> no branch named. The account has to be acted on in the branch the deployed app reads...
    ```
 
    To rehearse against a real database without touching the deployment, enrol a
    throwaway address into `dev` with a one-cent cap, then withdraw it.
 
 5. **One command to withdraw one**, taking the same three variables and the same
-   required `--branch`:
+   required `--branch`. It is a *new* console script, so after pulling this change
+   run `uv sync --extra ask` (or `uv pip install -e . --no-deps`) before reaching
+   for it — entry points are written when the package is installed, and an
+   existing environment has no idea a command was added:
 
    ```bash
    scinumbers-withdraw maria@example.org --branch alpha
