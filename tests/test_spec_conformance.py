@@ -479,6 +479,18 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_web_driver_identity.py::test_the_credential_is_never_on_the_page",
         "test_web_driver_identity.py::test_two_sessions_get_two_agents_and_one_repository",
     ),
+    "Withdrawing an account is one operator action, and it ends both halves of access": (
+        "test_enrol.py::test_withdrawing_disables_the_row_and_revokes_the_credential",
+        "test_enrol.py::test_an_account_that_is_not_there_withdraws_nothing",
+        "test_enrol.py::test_a_row_with_no_handle_is_disabled_and_said_to_be_unwithdrawable",
+        "test_enrol.py::test_a_refused_revoke_leaves_the_account_disabled_and_names_the_key",
+        "test_enrol.py::test_the_command_refuses_without_a_branch",
+        "test_accounts.py::test_disabling_returns_the_handle_that_can_withdraw_the_credential",
+        "test_accounts.py::test_disabling_an_account_that_is_not_there_is_none",
+        # The records surviving is `disable` keeping the row rather than deleting
+        # it, which the statement itself asserts.
+        "test_accounts.py::test_disabling_is_unconditional_so_a_hand_disabled_row_still_yields_its_handle",
+    ),
     "What is kept about a person, and that they are told": (
         "test_identity_never_reaches_the_agent.py::"
         "test_two_sessions_under_two_identities_each_carry_their_own",

@@ -28,9 +28,22 @@ create table if not exists accounts (
     email          text primary key,
     role           text not null,
     openrouter_key text,
+    -- OpenRouter's handle for the key above, and the only thing that can withdraw
+    -- it. The Management API deletes a key by its *hash*, which is returned once,
+    -- at creation -- so a deployment that stores the key and not the hash holds a
+    -- live credential it cannot revoke through any API. `scinumbers-enrol` used
+    -- the hash for its compensating revoke and then discarded it, which is why
+    -- rows enrolled before this column exist with no way to withdraw them but the
+    -- OpenRouter dashboard. Null for those rows, and for an account enrolled with
+    -- no credential at all.
+    openrouter_key_hash text,
     issued_at      timestamptz not null default now(),
     disabled       boolean not null default false
 );
+
+-- For a database created before the column existed. Idempotent, like the table
+-- above: this file is run whole against a branch whose state nobody has checked.
+alter table accounts add column if not exists openrouter_key_hash text;
 
 -- **One row per address, whatever its case.** `accounts.lookup` matches on
 -- `lower(email)`, and the primary key above is case-sensitive -- so without this
@@ -47,11 +60,31 @@ create unique index if not exists accounts_email_lower on accounts (lower(email)
 -- insert into accounts (email, role, openrouter_key)
 -- values ('tester@example.org', 'scientist', 'sk-or-v1-...');
 
--- Withdraw an account without deleting what it wrote.
+-- Withdraw an account without deleting what it wrote. Prefer `scinumbers-withdraw`,
+-- which does this *and* revokes the credential at OpenRouter; this statement alone
+-- refuses the reader while leaving a live key in the hands of whoever holds it.
 --
 -- update accounts set disabled = true where email = 'tester@example.org';
 
+-- Re-admitting a withdrawn account. `scinumbers-enrol` refuses an address that
+-- already has a row, withdrawn or not, and says which -- reinstating is deliberately
+-- not a side effect of enrolling (ADR-1150), because a mistyped address that matched
+-- a withdrawn one would hand somebody a fresh credential.
+--
+-- Either give it a new credential by hand, minted at openrouter.ai and capped:
+--
+-- update accounts
+--    set disabled = false, openrouter_key = 'sk-or-v1-...', openrouter_key_hash = '...'
+--  where email = 'tester@example.org';
+--
+-- or clear the row so the command can enrol it again -- which loses the record that
+-- this address ever had access, while the trail rows it wrote keep its address:
+--
+-- delete from accounts where email = 'tester@example.org';
+
 -- Who is enrolled, without the credentials.
 --
--- select email, role, issued_at, disabled, openrouter_key is not null as has_key
+-- select email, role, issued_at, disabled,
+--        openrouter_key is not null as has_key,
+--        openrouter_key_hash is not null as can_be_withdrawn
 -- from accounts order by issued_at;
