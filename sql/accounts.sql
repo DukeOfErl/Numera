@@ -66,6 +66,22 @@ create unique index if not exists accounts_email_lower on accounts (lower(email)
 --
 -- update accounts set disabled = true where email = 'tester@example.org';
 
+-- Re-admitting a withdrawn account. `scinumbers-enrol` refuses an address that
+-- already has a row, withdrawn or not, and says which -- reinstating is deliberately
+-- not a side effect of enrolling (ADR-1150), because a mistyped address that matched
+-- a withdrawn one would hand somebody a fresh credential.
+--
+-- Either give it a new credential by hand, minted at openrouter.ai and capped:
+--
+-- update accounts
+--    set disabled = false, openrouter_key = 'sk-or-v1-...', openrouter_key_hash = '...'
+--  where email = 'tester@example.org';
+--
+-- or clear the row so the command can enrol it again -- which loses the record that
+-- this address ever had access, while the trail rows it wrote keep its address:
+--
+-- delete from accounts where email = 'tester@example.org';
+
 -- Who is enrolled, without the credentials.
 --
 -- select email, role, issued_at, disabled,

@@ -67,6 +67,16 @@ withdrawn account still shows `has_key`. Clearing it would mean a third statemen
 after the revoke, and losing the handle before the revoke is confirmed would make
 a failed withdrawal unretryable. `disabled` beside it says what happened.
 
+**Re-enrolment is refused, not handled.** Keeping the row makes withdrawal
+reversible in principle, and nothing exposes that: `scinumbers-enrol` on a
+withdrawn address mints a key, meets the unique index, revokes the key it just
+minted and refuses. The refusal now says *which* kind of duplicate it met, because
+"already enrolled" is true of a withdrawn row and reads as the opposite, and
+`sql/accounts.sql` carries both statements. Doing it properly — reinstating with a
+fresh capped credential, under an explicit flag — is deferred, and the flag is the
+point: enrolment quietly reinstating whatever a mistyped address happened to match
+among the withdrawn is how somebody gets a credential nobody meant to issue.
+
 **The schema changed under a running deployment.** `sql/accounts.sql` is
 idempotent and carries the `alter`, but an enrolment run against a branch where it
 has not been applied fails on a missing column. That is in the change's tasks as

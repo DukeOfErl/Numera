@@ -246,6 +246,50 @@ returning email, openrouter_key_hash
 """
 
 
+#: Read only to choose a sentence, never to decide anything. The insert has
+#: already been refused by the time this runs.
+_DISABLED = """
+select disabled from {table} where lower(email) = lower(:email)
+"""
+
+#: What a duplicate says when the row it collided with has been withdrawn. The
+#: plain "already enrolled" is true there and reads as "this person has access",
+#: which is the opposite of the case -- and the operator's next step is different:
+#: there is nothing to reconsider, there is a row to clear.
+#:
+#: Re-enrolment is deliberately **not** offered here (ADR-1150): reinstating a
+#: withdrawn account is its own operation, and doing it as a side effect of
+#: `enrol` would hand a new credential to whoever a mistyped address happened to
+#: match among the withdrawn.
+WITHDRAWN_ALREADY = (
+    "{email} has a row here and it is withdrawn, so nothing was issued. The row is "
+    "kept on purpose -- the records it wrote stay attributed to it. To enrol this "
+    "address again, clear or re-admit the row by hand first; `sql/accounts.sql` has "
+    "both statements."
+)
+
+
+def _already_enrolled(engine, email: str, table: str) -> str:
+    """The sentence for a duplicate, which depends on the row it collided with.
+
+    A second read, after the insert has already been refused, and its only job is
+    the wording. Any failure here falls back to the shorter sentence rather than
+    raising: a diagnostic that masks the refusal it was meant to explain would
+    turn "already enrolled" into an unrelated database error.
+    """
+    from sqlalchemy import text
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(f"set local statement_timeout = {STATEMENT_TIMEOUT_MS}"))
+            row = conn.execute(text(_DISABLED.format(table=table)), {"email": email}).first()
+    except Exception:  # noqa: BLE001 - the refusal matters, the wording is a bonus
+        return f"{email} is already enrolled"
+    if row is not None and row.disabled:
+        return WITHDRAWN_ALREADY.format(email=email)
+    return f"{email} is already enrolled"
+
+
 def insert(
     engine,
     email: str,
@@ -303,5 +347,5 @@ def insert(
         # own, not the index's name, so it survives the index being renamed.
         if getattr(getattr(exc, "orig", None), "sqlstate", None) != _UNIQUE_VIOLATION:
             raise
-        raise AlreadyEnrolled(f"{email} is already enrolled") from exc
+        raise AlreadyEnrolled(_already_enrolled(engine, email, table)) from exc
     return Account(email=email, role=Role(role), openrouter_key=key or None)

@@ -61,6 +61,13 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **Enrolling an address that was withdrawn says so**, rather than "already
+  enrolled" — which is true of a withdrawn row and reads as though the person has
+  access. It names where the statements to clear or re-admit the row are.
+  Reinstating from the command is deferred deliberately: as a side effect of
+  enrolling, a mistyped address matching a withdrawn one would issue a credential
+  nobody meant to.
+
 - **`scinumbers-withdraw`, one command to end one account's access.** It disables
   the row and revokes the credential at OpenRouter, in that order — either alone
   leaves access open, since a key held in the clear and handed to a tester can be

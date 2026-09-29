@@ -273,6 +273,49 @@ def test_the_account_hands_over_its_identity_and_not_its_credential():
 # --- writing a row -------------------------------------------------------------
 
 
+class _DuplicateConn:
+    """Refuses the insert, then answers the select that chooses the wording.
+
+    Two behaviours in one double because the sequence is the thing under test:
+    the second read happens *after* a failed transaction, and a double that only
+    raised would leave the wording branch unexecuted.
+    """
+
+    def __init__(self, error, row=None, fail_on_select=None):
+        self.error = error
+        self.row = row
+        self.fail_on_select = fail_on_select
+        self.statements: list[str] = []
+
+    def execute(self, statement, params=None):
+        text_ = str(statement).lower()
+        self.statements.append(text_)
+        if "insert" in text_:
+            raise self.error
+        if "select" in text_:
+            if self.fail_on_select is not None:
+                raise self.fail_on_select
+            return _Result(self.row)
+        return None
+
+
+class _DuplicateEngine:
+    def __init__(self, error, row=None, fail_on_select=None):
+        self.conn = _DuplicateConn(error, row, fail_on_select)
+
+    def begin(self):
+        conn = self.conn
+
+        class _Ctx:
+            def __enter__(self):
+                return conn
+
+            def __exit__(self, *exc):
+                return False
+
+        return _Ctx()
+
+
 class _WriteConn:
     """Records what was executed, and fails on the insert where told to.
 
@@ -564,3 +607,40 @@ def test_disabling_is_unconditional_so_a_hand_disabled_row_still_yields_its_hand
     engine = _DisableEngine(_withdrawn_row())
     assert disable(engine, "tester@example.org").key_hash == "hash-abc"
     assert "not disabled" not in " ".join(engine.conn.statements).lower()
+
+
+# --- which duplicate it is ----------------------------------------------------------
+
+
+def test_a_duplicate_of_a_withdrawn_row_reads_as_withdrawn_not_as_active():
+    """ "Already enrolled" is true of a withdrawn row and reads as "this person has
+    access", which is the opposite. The operator's next step differs too: there is
+    nothing to reconsider, there is a row to clear."""
+    engine = _DuplicateEngine(_integrity_error("duplicate key"), row=SimpleNamespace(disabled=True))
+    with pytest.raises(AlreadyEnrolled) as refused:
+        insert(engine, "gone@example.org", Role.STUDENT, "sk-new", "hash-new")
+    said = str(refused.value)
+    assert "withdrawn" in said
+    assert "sql/accounts.sql" in said, "the operator is told it is refused and not what to do"
+
+
+def test_a_duplicate_of_a_live_row_still_says_already_enrolled():
+    """The negative case varies the dimension the rule reads -- the `disabled`
+    flag on the row it collided with -- rather than the shape of the failure."""
+    engine = _DuplicateEngine(
+        _integrity_error("duplicate key"), row=SimpleNamespace(disabled=False)
+    )
+    with pytest.raises(AlreadyEnrolled) as refused:
+        insert(engine, "live@example.org", Role.STUDENT, "sk-new", "hash-new")
+    assert str(refused.value) == "live@example.org is already enrolled"
+
+
+def test_the_wording_read_never_masks_the_refusal_it_explains():
+    """A diagnostic that raises would turn "already enrolled" into an unrelated
+    database error, and the operator would go looking for an outage."""
+    engine = _DuplicateEngine(
+        _integrity_error("duplicate key"), fail_on_select=ConnectionError("no route to host")
+    )
+    with pytest.raises(AlreadyEnrolled) as refused:
+        insert(engine, "live@example.org", Role.STUDENT, "sk-new", "hash-new")
+    assert "already enrolled" in str(refused.value)
