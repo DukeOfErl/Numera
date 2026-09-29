@@ -50,8 +50,19 @@ The first is strictly better, and disabling first also yields the handle from th
 same statement, so no window exists in which the row has been read and the next
 step is not yet decided.
 
-A row carrying no handle — the accounts enrolled before this column — is disabled
-and then reported as unwithdrawable, naming the dashboard. Half the job done and
+**A withdrawal reports only what it did.** Three states look alike from the
+outside and are not: an account with a credential that was revoked, one whose
+credential *was already gone* (the command run twice, or the key deleted at the
+dashboard first), and one that never had a credential at all. Reporting the
+second as a live key sends the operator hunting something that does not exist,
+and the third as a live key sends them hunting something that never existed —
+both are false alarms about the one thing this command has to be trusted about.
+So a 404 from the revoke is success, and whether the row ever held a key is read
+from the row (`openrouter_key is not null`) rather than inferred from the missing
+handle, which both the second and third states share.
+
+A row carrying a key and no handle — the accounts enrolled before this column — is
+disabled and then reported as unwithdrawable, naming the dashboard. Half the job done and
 the other half named is the honest outcome; claiming a withdrawal that did not
 happen is the one thing worse than refusing.
 

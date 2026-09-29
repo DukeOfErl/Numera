@@ -792,7 +792,9 @@ def withdrawing(monkeypatch):
 def test_withdrawing_disables_the_row_and_revokes_the_credential(withdrawing):
     engine = withdrawing()
     opener = _Opener()
-    assert withdraw(engine, "mgmt", "tester@example.org", opener=opener) == "tester@example.org"
+    assert (
+        withdraw(engine, "mgmt", "tester@example.org", opener=opener).email == "tester@example.org"
+    )
     assert engine.disabled == ["tester@example.org"]
     assert opener.methods() == ["DELETE"]
     assert HASH in opener.calls[0][1], "some other credential was revoked"
@@ -850,3 +852,65 @@ def test_the_command_refuses_without_a_branch(capsys):
 def test_the_command_refuses_an_address_nothing_could_match(capsys):
     assert withdraw_main(["new user@example.org", "--branch", "alpha"]) == 1
     assert "new user@example.org" in capsys.readouterr().err
+
+
+def test_a_credential_already_gone_is_a_finished_withdrawal_not_a_live_key(withdrawing):
+    """A withdrawal run twice, or a key deleted at the dashboard first. The end
+    state is the one asked for, and reporting a live credential would send the
+    operator hunting a key that does not exist -- a false alarm about the one
+    thing this command exists to be trusted about."""
+    engine = withdrawing()
+    opener = _Opener(fail={"DELETE": urllib.error.HTTPError("u", 404, "Not Found", {}, None)})
+    assert withdraw(engine, "mgmt", "tester@example.org", opener=opener).email
+    assert engine.disabled == ["tester@example.org"]
+
+
+def test_another_status_is_still_a_credential_left_behind(withdrawing):
+    """The negative case varies the dimension the rule reads -- the status -- on
+    an otherwise identical failure. A predicate that treated every HTTPError as
+    "already gone" would report success over a 500 and leave a live key."""
+    engine = withdrawing()
+    opener = _Opener(fail={"DELETE": urllib.error.HTTPError("u", 500, "boom", {}, None)})
+    with pytest.raises(CredentialNotWithdrawn):
+        withdraw(engine, "mgmt", "tester@example.org", opener=opener)
+
+
+def test_an_account_that_never_had_a_credential_withdraws_cleanly(withdrawing):
+    """Enrolling without a key is a state the system supports, so withdrawing one
+    is not a partial failure. It was reported as one, telling the operator to go
+    and delete a key that was never issued."""
+    engine = withdrawing(withdrawn=accounts.Withdrawn("keyless@example.org", None, has_key=False))
+    opener = _Opener()
+    assert withdraw(engine, "mgmt", "keyless@example.org", opener=opener).has_key is False
+    assert opener.calls == [], "a credential that never existed was revoked"
+
+
+def test_the_missing_credential_message_names_the_command_being_run(capsys, monkeypatch):
+    """`_open_branch` is shared, so its sentence cannot be written for one of its
+    two callers -- the same defect as NO_BRANCH, one message further down."""
+    monkeypatch.delenv("OPENROUTER_MANAGEMENT_KEY", raising=False)
+    monkeypatch.delenv("NEON_API_KEY", raising=False)
+    monkeypatch.delenv("NEON_PROJECT_ID", raising=False)
+    assert withdraw_main(["tester@example.org", "--branch", "alpha"]) == 2
+    assert "withdrawing" in capsys.readouterr().err
+
+
+@pytest.fixture
+def engine_with_error(monkeypatch):
+    engine = _Engine(error=RuntimeError('column "openrouter_key_hash" does not exist'))
+    monkeypatch.setattr(accounts, "insert", lambda e, *a, **k: (_ for _ in ()).throw(e.error))
+    monkeypatch.setattr(
+        enrol_mod.accounts, "insert", lambda e, *a, **k: (_ for _ in ()).throw(e.error)
+    )
+    return engine
+
+
+def test_a_failed_insert_names_what_refused_it(engine_with_error):
+    """The commonest failure here is a branch where `sql/accounts.sql` has not
+    been re-run, so the insert names a column that is not there. Without the
+    cause the operator sees an unexplained refusal and every retry mints and
+    revokes another key while saying exactly the same thing."""
+    opener = _Opener({"POST https://openrouter.ai/api/v1/keys": _minted()})
+    with pytest.raises(NothingEnrolled) as refused:
+        enrol(engine_with_error, "mgmt", "new@example.org", Role.SCIENTIST, 5, opener=opener)
+    assert 'column "openrouter_key_hash" does not exist' in str(refused.value)

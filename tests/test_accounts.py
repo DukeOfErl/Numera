@@ -561,8 +561,8 @@ class _DisableEngine:
         return _Ctx()
 
 
-def _withdrawn_row(email="tester@example.org", key_hash="hash-abc"):
-    return SimpleNamespace(email=email, openrouter_key_hash=key_hash)
+def _withdrawn_row(email="tester@example.org", key_hash="hash-abc", has_key=True):
+    return SimpleNamespace(email=email, openrouter_key_hash=key_hash, has_key=has_key)
 
 
 def test_disabling_returns_the_handle_that_can_withdraw_the_credential():
@@ -590,6 +590,20 @@ def test_an_account_with_no_handle_comes_back_disabled_and_unwithdrawable():
     withdrawn = disable(_DisableEngine(_withdrawn_row(key_hash=None)), "old@example.org")
     assert withdrawn is not None
     assert withdrawn.key_hash is None
+    assert withdrawn.has_key, "a key it cannot name is still a key somebody holds"
+
+
+def test_an_account_that_never_had_a_credential_says_so_from_the_row():
+    """The discriminator between "cannot revoke it" and "there is nothing to
+    revoke" is in the same row, so it is read rather than guessed -- and guessing
+    is what told operators to delete keys that were never issued."""
+    engine = _DisableEngine(_withdrawn_row(key_hash=None, has_key=False))
+    withdrawn = disable(engine, "keyless@example.org")
+    assert withdrawn.key_hash is None
+    assert not withdrawn.has_key
+    assert "openrouter_key is not null" in " ".join(engine.conn.statements), (
+        "the flag has to come off the row, not off the missing handle"
+    )
 
 
 def test_the_address_is_matched_without_regard_to_case_here_too():

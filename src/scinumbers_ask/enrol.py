@@ -296,7 +296,14 @@ def enrol(
             ) from exc
         if isinstance(exc, AlreadyEnrolled):
             raise
-        raise NothingEnrolled(f"{email} was not enrolled; its credential was withdrawn") from exc
+        # `({exc})`, like `KeyLeftBehind` above. Without it the commonest failure
+        # here -- a branch where `sql/accounts.sql` has not been re-run, so the
+        # insert names a column that is not there -- reads as an unexplained
+        # refusal, and every retry mints and revokes another key while saying the
+        # same thing. The cause is the only part the operator can act on.
+        raise NothingEnrolled(
+            f"{email} was not enrolled; its credential was withdrawn ({exc})"
+        ) from exc
 
 
 def withdraw(
@@ -321,27 +328,45 @@ def withdraw(
     it at the dashboard. The unsafe inverse -- a key withdrawn from an account
     still admitted -- cannot happen.
 
-    Returns the address as the row spelled it.
+    Returns what the row held, so the caller can say which halves it did.
     """
     withdrawn = accounts.disable(engine, email)
     if withdrawn is None:
         raise NotEnrolled(f"{email} has no row here; check the address and the branch")
+    if not withdrawn.has_key:
+        # A finished withdrawal, not a partial one: an account enrolled with no
+        # credential has none to revoke. Told apart from the case below by the
+        # row rather than by the missing handle, which both cases share -- the
+        # guess sent operators to delete keys that were never issued.
+        return withdrawn
     if not withdrawn.key_hash:
         raise CredentialNotWithdrawn(
             f"{withdrawn.email} is disabled, but this row carries no handle for its "
-            "credential -- it was enrolled before the handle was stored, or it never "
-            "had one. If it has a key, delete it at openrouter.ai/settings/keys, where "
-            "it is named after the address."
+            "credential, so nothing here can revoke it -- it was enrolled before the "
+            "handle was stored. Delete the key at openrouter.ai/settings/keys, where it "
+            "is named after the address."
         )
     try:
         revoke(management_key, withdrawn.key_hash, opener=opener)
+    except urllib.error.HTTPError as refused:
+        # Already gone: a withdrawal run twice, or a key deleted at the dashboard
+        # first. The end state is the one asked for, and reporting a live
+        # credential here would send the operator hunting a key that does not
+        # exist -- a false alarm about the one thing this command exists to be
+        # trusted about.
+        if refused.code != 404:
+            raise CredentialNotWithdrawn(_not_withdrawn(withdrawn, refused)) from refused
     except Exception as exc:  # noqa: BLE001 - reported, never swallowed
-        raise CredentialNotWithdrawn(
-            f"{withdrawn.email} is disabled, but its credential {withdrawn.key_hash} was "
-            f"not withdrawn ({exc}). Revoke it at openrouter.ai/settings/keys; until it "
-            "is, it can be spent without this app."
-        ) from exc
-    return withdrawn.email
+        raise CredentialNotWithdrawn(_not_withdrawn(withdrawn, exc)) from exc
+    return withdrawn
+
+
+def _not_withdrawn(withdrawn, exc: BaseException) -> str:
+    return (
+        f"{withdrawn.email} is disabled, but its credential {withdrawn.key_hash} was not "
+        f"withdrawn ({exc}). Revoke it at openrouter.ai/settings/keys; until it is, it "
+        "can be spent without this app."
+    )
 
 
 # --- the command ------------------------------------------------------------------
@@ -412,7 +437,7 @@ def _withdraw_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _open_branch(args) -> tuple[object | None, int]:
+def _open_branch(args, doing: str = "enrolling anyone") -> tuple[object | None, int]:
     """The engine for `--branch`, or `None` and an exit code, having said why.
 
     Everything both commands must get right before either touches an account: the
@@ -429,7 +454,10 @@ def _open_branch(args) -> tuple[object | None, int]:
         if not os.environ.get(name)
     ]
     if missing:
-        print(f"set {' and '.join(missing)} before enrolling anyone", file=sys.stderr)
+        # The verb comes from the caller for the same reason `NO_BRANCH` names both
+        # mistakes: a message written for one of two callers is wrong for the
+        # other, and reads as being about somebody else's command.
+        print(f"set {' and '.join(missing)} before {doing}", file=sys.stderr)
         return None, 2
     try:
         branch = neon.branch_id(
@@ -461,17 +489,21 @@ def withdraw_main(argv: list[str] | None = None) -> int:
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 1
-    engine, code = _open_branch(args)
+    engine, code = _open_branch(args, doing="withdrawing anyone")
     if engine is None:
         return code
     try:
-        email = withdraw(engine, os.environ[MANAGEMENT_KEY_ENV], args.email)
+        withdrawn = withdraw(engine, os.environ[MANAGEMENT_KEY_ENV], args.email)
     except Exception as exc:  # noqa: BLE001 - every refusal already says what it is
         print(str(exc), file=sys.stderr)
         return 1
     finally:
         engine.dispose()
-    print(f"{email} is disabled in {args.branch} and its credential is revoked")
+    # Two facts, and the second is not always one: an account enrolled with no
+    # credential is fully withdrawn by the first alone, and saying "its credential
+    # is revoked" there would be a claim about something that never existed.
+    credential = "its credential is revoked" if withdrawn.has_key else "it had no credential"
+    print(f"{withdrawn.email} is disabled in {args.branch} and {credential}")
     return 0
 
 

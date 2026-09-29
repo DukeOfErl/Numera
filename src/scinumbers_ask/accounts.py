@@ -181,16 +181,21 @@ def lookup(engine, email: str, *, table: str = DEFAULT_TABLE) -> Account | None:
 
 @dataclass(frozen=True)
 class Withdrawn:
-    """A row that has just been disabled, and the handle to its credential.
+    """A row that has just been disabled, the handle to its credential, and
+    whether it had one at all.
 
-    `key_hash` is `None` where the account had no credential, and where it was
-    enrolled before the hash was stored -- two different situations that look the
-    same from here, which is why the caller reports both as "withdraw the key by
-    hand" rather than claiming to know which.
+    `has_key` is the discriminator, and it is read from the row rather than
+    inferred. A missing `key_hash` means two unrelated things -- an account
+    enrolled with no credential, and one enrolled before the handle was stored --
+    and the caller's answer differs completely: the first is a finished
+    withdrawal, the second leaves a live key for a person to delete. Guessing
+    between them told operators to go and revoke credentials that were never
+    issued. The evidence was in the same row all along.
     """
 
     email: str
     key_hash: str | None
+    has_key: bool = True
 
 
 def disable(engine, email: str, *, table: str = DEFAULT_TABLE) -> Withdrawn | None:
@@ -213,7 +218,11 @@ def disable(engine, email: str, *, table: str = DEFAULT_TABLE) -> Withdrawn | No
         row = conn.execute(text(_DISABLE.format(table=table)), {"email": email}).first()
     if row is None:
         return None
-    return Withdrawn(email=row.email, key_hash=row.openrouter_key_hash)
+    return Withdrawn(
+        email=row.email,
+        key_hash=row.openrouter_key_hash,
+        has_key=bool(row.has_key),
+    )
 
 
 #: Both constraints on the address mean the same thing to an operator. The
@@ -238,11 +247,12 @@ values (:email, :role, :key, :key_hash)
 #: key was never revoked is exactly the case a withdrawal command exists for, and
 #: a `where` that skipped it would report "no such account" for a row plainly
 #: there. Running it twice is harmless -- the second `update` sets what is already
-#: set -- and the revoke that follows meets its own 404.
+#: set, and `enrol.withdraw` reads the 404 from the revoke that follows as "already
+#: gone" rather than as a credential left behind.
 _DISABLE = """
 update {table} set disabled = true
 where lower(email) = lower(:email)
-returning email, openrouter_key_hash
+returning email, openrouter_key_hash, openrouter_key is not null as has_key
 """
 
 
@@ -262,18 +272,20 @@ select disabled from {table} where lower(email) = lower(:email)
 #: prompt: the operator wants the state and the next step, and the reasoning is
 #: in ADR-1150 where someone can go looking for it.
 #:
-#: "key revoked" is what `scinumbers-withdraw` does and not something this row
-#: records -- a row disabled by hand, or one whose revoke was refused, says the
-#: same thing here. Kept because the common case is the command, and because the
-#: operator's next step is the same either way; if it ever misleads, the honest
-#: form is "withdrawn" with nothing in the brackets.
+#: It says "disabled" and not "disabled and key revoked", because `disabled` is
+#: what the row records and the revoke is not. The case is not hypothetical:
+#: `_DISABLE` is unconditional precisely because rows get disabled by hand with a
+#: live key, and `sql/accounts.sql` still documents that bare `update`. Such a row
+#: would have been reported as having a revoked credential while the credential
+#: was live and spendable outside the app -- which is the mistake ADR-1150 exists
+#: to prevent, made by the sentence announcing the prevention.
 #:
 #: Re-enrolment is deliberately **not** offered here (ADR-1150): reinstating a
 #: withdrawn account is its own operation, and doing it as a side effect of
 #: `enrol` would hand a new credential to whoever a mistyped address happened to
 #: match among the withdrawn.
 WITHDRAWN_ALREADY = (
-    "{email} is an existing account, but withdrawn (disabled and key revoked). "
+    "{email} is an existing account, but withdrawn (disabled). "
     "To re-enrol, delete the account or add a key by hand; sql/accounts.sql has both."
 )
 
