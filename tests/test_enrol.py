@@ -23,14 +23,18 @@ from scinumbers_ask import accounts, neon
 from scinumbers_ask import enrol as enrol_mod
 from scinumbers_ask.accounts import Account, AlreadyEnrolled
 from scinumbers_ask.enrol import (
+    CredentialNotWithdrawn,
     KeyLeftBehind,
     MintFailed,
+    NotEnrolled,
     NothingEnrolled,
     Uncapped,
     enrol,
     main,
     mint,
     revoke,
+    withdraw,
+    withdraw_main,
 )
 from scinumbers_ask.permissions import Role
 
@@ -124,10 +128,10 @@ class _Engine:
         self.error = error
         self.inserted: list[tuple] = []
 
-    def insert(self, email, role, key):
+    def insert(self, email, role, key, key_hash=None):
         if self.error is not None:
             raise self.error
-        self.inserted.append((email, role, key))
+        self.inserted.append((email, role, key, key_hash))
         return Account(email=email, role=role, openrouter_key=key)
 
 
@@ -135,8 +139,8 @@ class _Engine:
 def engine(monkeypatch):
     built = _Engine()
 
-    def insert(engine_, email, role, key, **kwargs):
-        return engine_.insert(email, role, key)
+    def insert(engine_, email, role, key, key_hash=None, **kwargs):
+        return engine_.insert(email, role, key, key_hash)
 
     monkeypatch.setattr(accounts, "insert", insert)
     monkeypatch.setattr(enrol_mod.accounts, "insert", insert)
@@ -248,7 +252,9 @@ def test_enrolling_mints_a_capped_key_and_records_the_account(engine):
     opener = _Opener({"POST https://openrouter.ai/api/v1/keys": _minted()})
     account = enrol(engine, "mgmt", "new@example.org", Role.SCIENTIST, 5, opener=opener)
     assert account.openrouter_key == KEY
-    assert engine.inserted == [("new@example.org", Role.SCIENTIST, KEY)]
+    assert engine.inserted == [("new@example.org", Role.SCIENTIST, KEY, HASH)], (
+        "the handle is stored beside the key, and it is the only thing that can withdraw it"
+    )
     (body,) = opener.bodies
     assert body == {"name": "new@example.org", "limit": 5, "limit_reset": "monthly"}
     assert "DELETE" not in opener.methods(), "nothing to undo on the path that worked"
@@ -743,3 +749,104 @@ def test_what_the_command_prints_carries_no_credential(monkeypatch, capsys):
     # changed fixture cannot quietly make this pass.
     assert KEY not in said and HASH not in said
     assert "postgresql" not in said, "the URL carries the password"
+
+
+# --- withdrawing ---------------------------------------------------------------------
+
+
+class _WithdrawEngine:
+    """Disables, and hands back what the row held. Not a database."""
+
+    def __init__(self, withdrawn=..., error=None):
+        self.withdrawn = (
+            accounts.Withdrawn("tester@example.org", HASH) if withdrawn is ... else withdrawn
+        )
+        self.error = error
+        self.disabled: list[str] = []
+
+    def disable(self, email):
+        if self.error is not None:
+            raise self.error
+        self.disabled.append(email)
+        return self.withdrawn
+
+    def dispose(self):
+        pass
+
+
+@pytest.fixture
+def withdrawing(monkeypatch):
+    def built(**kwargs):
+        engine = _WithdrawEngine(**kwargs)
+        monkeypatch.setattr(
+            accounts, "disable", lambda engine_, email, **kw: engine_.disable(email)
+        )
+        monkeypatch.setattr(
+            enrol_mod.accounts, "disable", lambda engine_, email, **kw: engine_.disable(email)
+        )
+        return engine
+
+    return built
+
+
+def test_withdrawing_disables_the_row_and_revokes_the_credential(withdrawing):
+    engine = withdrawing()
+    opener = _Opener()
+    assert withdraw(engine, "mgmt", "tester@example.org", opener=opener) == "tester@example.org"
+    assert engine.disabled == ["tester@example.org"]
+    assert opener.methods() == ["DELETE"]
+    assert HASH in opener.calls[0][1], "some other credential was revoked"
+
+
+def test_an_account_that_is_not_there_withdraws_nothing(withdrawing):
+    """Nothing is revoked, because nothing names a credential -- and the sentence
+    has to send the operator to the table rather than to OpenRouter."""
+    opener = _Opener()
+    with pytest.raises(NotEnrolled) as refused:
+        withdraw(withdrawing(withdrawn=None), "mgmt", "nobody@example.org", opener=opener)
+    assert "branch" in str(refused.value), "the commonest cause is not named"
+    assert opener.calls == []
+
+
+def test_a_row_with_no_handle_is_disabled_and_said_to_be_unwithdrawable(withdrawing):
+    """Enrolled before the handle was stored. The reader is refused from now on,
+    which is half the job, and the operator is told the other half is theirs."""
+    engine = withdrawing(withdrawn=accounts.Withdrawn("old@example.org", None))
+    opener = _Opener()
+    with pytest.raises(CredentialNotWithdrawn) as refused:
+        withdraw(engine, "mgmt", "old@example.org", opener=opener)
+    assert engine.disabled == ["old@example.org"], "the row was left admitting its reader"
+    assert "openrouter.ai" in str(refused.value)
+    assert opener.calls == []
+
+
+def test_a_refused_revoke_leaves_the_account_disabled_and_names_the_key(withdrawing):
+    """The order is the decision: the state left behind is a refused account whose
+    key a person must revoke, never a live account whose key is gone."""
+    engine = withdrawing()
+    opener = _Opener(fail={"DELETE": urllib.error.HTTPError("u", 500, "boom", {}, None)})
+    with pytest.raises(CredentialNotWithdrawn) as refused:
+        withdraw(engine, "mgmt", "tester@example.org", opener=opener)
+    assert engine.disabled == ["tester@example.org"]
+    assert HASH in str(refused.value), "the operator cannot revoke what is not named"
+
+
+def test_the_revoke_presents_the_management_key(withdrawing):
+    """The double refuses an unauthenticated call, so a mutant dropping the key
+    fails here rather than passing on the shape of the request."""
+    opener = _Opener()
+    withdraw(withdrawing(), "mgmt-secret", "tester@example.org", opener=opener)
+    assert opener.authorisations() == ["Bearer mgmt-secret"]
+
+
+def test_the_command_refuses_without_a_branch(capsys):
+    """The same refusal as enrolling, for the same reason read backwards:
+    withdrawing from the wrong branch reports success while the account it was
+    meant to refuse goes on working."""
+    assert withdraw_main(["tester@example.org"]) == 2
+    assert "branch" in capsys.readouterr().err
+
+
+def test_the_command_refuses_an_address_nothing_could_match(capsys):
+    assert withdraw_main(["new user@example.org", "--branch", "alpha"]) == 1
+    assert "new user@example.org" in capsys.readouterr().err

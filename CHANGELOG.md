@@ -61,6 +61,17 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **`scinumbers-withdraw`, one command to end one account's access.** It disables
+  the row and revokes the credential at OpenRouter, in that order — either alone
+  leaves access open, since a key held in the clear and handed to a tester can be
+  spent without the app, and a revoked key under an admitted account reads as the
+  app being broken. The row is kept rather than deleted, so the trail rows that
+  account wrote keep their attribution. This needed a new column: OpenRouter
+  deletes a key by a handle returned once, at creation, which enrolment used for
+  its compensating revoke and then discarded
+  ([ADR-1150](docs/decisions/1150-withdrawing-an-account-keeps-the-row.md)).
+
+
 - **The page says what is kept about a reader, in full and in one place.** The side
   panel's one-line note gains a collapsed statement beside it: what is recorded,
   what it is used for, which services it passes through, how long it is kept, and

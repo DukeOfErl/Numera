@@ -20,6 +20,7 @@ from scinumbers_ask.accounts import (
     AlreadyEnrolled,
     EnrolmentUnavailable,
     UnusableAddress,
+    disable,
     insert,
     lookup,
     usable,
@@ -329,10 +330,15 @@ def _integrity_error(message: str, sqlstate: str | None = "23505"):
 
 def test_insert_writes_the_row_and_returns_the_account():
     engine = _WriteEngine()
-    account = insert(engine, "New@example.org", Role.SCIENTIST, "sk-new")
+    account = insert(engine, "New@example.org", Role.SCIENTIST, "sk-new", "hash-new")
     assert account == Account(email="New@example.org", role=Role.SCIENTIST, openrouter_key="sk-new")
     (params,) = engine.conn.params
-    assert params == {"email": "New@example.org", "role": "scientist", "key": "sk-new"}
+    assert params == {
+        "email": "New@example.org",
+        "role": "scientist",
+        "key": "sk-new",
+        "key_hash": "hash-new",
+    }
     assert any("statement_timeout" in s for s in engine.conn.statements)
     assert "New@example.org" in account.email, "the operator's own spelling is kept"
 
@@ -475,3 +481,86 @@ def test_a_claim_that_cannot_be_matched_is_not_enrolled_rather_than_an_error():
     engine = _Engine(_row())
     assert lookup(engine, "not an address") is None
     assert engine.conns == [], "the database was asked about an address it cannot hold"
+
+
+# --- withdrawing one account --------------------------------------------------------
+
+
+class _DisableConn:
+    """Answers the `update ... returning` with the row it was given, or none."""
+
+    def __init__(self, row):
+        self.row = row
+        self.statements: list[str] = []
+        self.params: list[dict] = []
+
+    def execute(self, statement, params=None):
+        self.statements.append(str(statement))
+        if params is not None:
+            self.params.append(dict(params))
+        return _Result(self.row if "update" in str(statement).lower() else None)
+
+
+class _DisableEngine:
+    def __init__(self, row=None):
+        self.conn = _DisableConn(row)
+
+    def begin(self):
+        conn = self.conn
+
+        class _Ctx:
+            def __enter__(self):
+                return conn
+
+            def __exit__(self, *exc):
+                return False
+
+        return _Ctx()
+
+
+def _withdrawn_row(email="tester@example.org", key_hash="hash-abc"):
+    return SimpleNamespace(email=email, openrouter_key_hash=key_hash)
+
+
+def test_disabling_returns_the_handle_that_can_withdraw_the_credential():
+    """One statement, so the row cannot be read and then found changed -- and the
+    handle has to come back from it, because nothing else in the system knows it."""
+    engine = _DisableEngine(_withdrawn_row())
+    withdrawn = disable(engine, "tester@example.org")
+    assert withdrawn.email == "tester@example.org"
+    assert withdrawn.key_hash == "hash-abc"
+    statement = " ".join(engine.conn.statements).lower()
+    assert "disabled = true" in statement and "returning" in statement
+    assert any("statement_timeout" in s for s in engine.conn.statements)
+
+
+def test_disabling_an_account_that_is_not_there_is_none():
+    """Most often the address is right and the branch is wrong, so the caller has
+    to be able to say that rather than report a withdrawal that did not happen."""
+    assert disable(_DisableEngine(None), "nobody@example.org") is None
+
+
+def test_an_account_with_no_handle_comes_back_disabled_and_unwithdrawable():
+    """A row enrolled before the handle was stored. The two halves are separable
+    on purpose: refusing the reader works, revoking their key does not, and the
+    caller must be able to tell them apart to say so."""
+    withdrawn = disable(_DisableEngine(_withdrawn_row(key_hash=None)), "old@example.org")
+    assert withdrawn is not None
+    assert withdrawn.key_hash is None
+
+
+def test_the_address_is_matched_without_regard_to_case_here_too():
+    engine = _DisableEngine(_withdrawn_row())
+    disable(engine, "Tester@Example.org")
+    assert "lower(email) = lower(" in " ".join(engine.conn.statements).lower()
+    (params,) = engine.conn.params
+    assert params == {"email": "Tester@Example.org"}
+
+
+def test_disabling_is_unconditional_so_a_hand_disabled_row_still_yields_its_handle():
+    """The case a withdrawal command exists for: an account someone disabled by
+    hand whose key was never revoked. A `where ... and not disabled` would report
+    "no such account" for a row plainly there, and the live key would stay live."""
+    engine = _DisableEngine(_withdrawn_row())
+    assert disable(engine, "tester@example.org").key_hash == "hash-abc"
+    assert "not disabled" not in " ".join(engine.conn.statements).lower()

@@ -453,8 +453,31 @@ gates it. The operator's steps, in order:
    ```
 
    To rehearse against a real database without touching the deployment, enrol a
-   throwaway address into `dev` with a one-cent cap, then delete the row and
-   revoke the key.
+   throwaway address into `dev` with a one-cent cap, then withdraw it.
+
+5. **One command to withdraw one**, taking the same three variables and the same
+   required `--branch`:
+
+   ```bash
+   scinumbers-withdraw maria@example.org --branch alpha
+   ```
+
+   It disables the row and revokes the credential, **in that order**. Either alone
+   leaves access open: a refused account can still spend its key, which is held in
+   the clear and was given to the person, and a revoked key under an account still
+   admitted reads to that person as the app being broken. If the revoke fails, the
+   account stays refused and the command names the key so you can revoke it at
+   `openrouter.ai/settings/keys`
+   ([ADR-1150](docs/decisions/1150-withdrawing-an-account-keeps-the-row.md)).
+
+   **The row is kept, disabled.** The trail rows that account wrote keep their
+   attribution, and the table is how you see who once had access.
+
+   **Accounts enrolled before September 2026 have no handle stored**, so they
+   withdraw only as far as being refused; the command says so, and their keys come
+   off at the dashboard, where each is named after its address. Run
+   `sql/accounts.sql` against every branch before the next enrolment — it is
+   idempotent and adds the column this depends on.
 
    **If either credential is refused, the command says which and what to do**,
    rather than passing on `HTTP Error 401`. An expiring key is a reasonable thing

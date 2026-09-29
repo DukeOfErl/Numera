@@ -88,6 +88,26 @@ class NothingEnrolled(RuntimeError):
     """The account could not be recorded. The credential has been withdrawn."""
 
 
+class NotEnrolled(RuntimeError):
+    """No row for that address, so nothing was withdrawn.
+
+    Its own class because the operator's next move is to look at the table rather
+    than at OpenRouter -- most often the address is right and the *branch* is
+    wrong, which is the same mistake `NO_BRANCH` exists to stop on the way in.
+    """
+
+
+class CredentialNotWithdrawn(RuntimeError):
+    """The account is disabled and its credential is not.
+
+    Raised where the row carries no handle -- an account enrolled before the hash
+    was stored, or one that never had a credential -- and where the provider
+    refused the revoke. Both leave the same work for a person, so both say so
+    loudly: the reader is already refused by the app, but a key in the clear in
+    the hands of whoever holds it is spendable without the app.
+    """
+
+
 class KeyLeftBehind(RuntimeError):
     """The account could not be recorded *and* the credential could not be
     withdrawn. Names the key so the operator can revoke it by hand -- this is the
@@ -265,7 +285,7 @@ def enrol(
     email = accounts.usable(email)
     minted = mint(management_key, name=email, limit_usd=limit_usd, opener=opener)
     try:
-        return accounts.insert(engine, email, role, minted.key)
+        return accounts.insert(engine, email, role, minted.key, minted.hash)
     except Exception as exc:
         try:
             revoke(management_key, minted.hash, opener=opener)
@@ -277,6 +297,51 @@ def enrol(
         if isinstance(exc, AlreadyEnrolled):
             raise
         raise NothingEnrolled(f"{email} was not enrolled; its credential was withdrawn") from exc
+
+
+def withdraw(
+    engine,
+    management_key: str,
+    email: str,
+    *,
+    opener=urllib.request.urlopen,
+) -> str:
+    """Refuse an account from now on, and revoke the credential it was funded by.
+
+    **The row is disabled first, and that order is the decision.** Disabling is
+    the half that cannot fail usefully -- it is one statement against a database
+    the operator is already connected to -- and it is also the half that needs the
+    handle, which comes back from the same statement. Revoking first would mean
+    reading the handle, revoking, and then discovering the row cannot be written:
+    a live account whose credential is gone, which reads to the tester as the app
+    being broken rather than as access ending.
+
+    The state left behind when the second half fails is the safe one: the account
+    is refused, and `CredentialNotWithdrawn` names the key so a person can revoke
+    it at the dashboard. The unsafe inverse -- a key withdrawn from an account
+    still admitted -- cannot happen.
+
+    Returns the address as the row spelled it.
+    """
+    withdrawn = accounts.disable(engine, email)
+    if withdrawn is None:
+        raise NotEnrolled(f"{email} has no row here; check the address and the branch")
+    if not withdrawn.key_hash:
+        raise CredentialNotWithdrawn(
+            f"{withdrawn.email} is disabled, but this row carries no handle for its "
+            "credential -- it was enrolled before the handle was stored, or it never "
+            "had one. If it has a key, delete it at openrouter.ai/settings/keys, where "
+            "it is named after the address."
+        )
+    try:
+        revoke(management_key, withdrawn.key_hash, opener=opener)
+    except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+        raise CredentialNotWithdrawn(
+            f"{withdrawn.email} is disabled, but its credential {withdrawn.key_hash} was "
+            f"not withdrawn ({exc}). Revoke it at openrouter.ai/settings/keys; until it "
+            "is, it can be spent without this app."
+        ) from exc
+    return withdrawn.email
 
 
 # --- the command ------------------------------------------------------------------
@@ -294,14 +359,16 @@ NO_BRANCH = (
 )
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="scinumbers-enrol",
-        description="Issue a capped credential and enrol one account.",
-    )
-    parser.add_argument("email")
-    parser.add_argument("role", choices=[r.value for r in Role])
-    parser.add_argument("--limit-usd", type=float, required=True, help="monthly cap, in dollars")
+def _branch_arguments(parser: argparse.ArgumentParser) -> None:
+    """The three arguments that name a database, shared by both commands.
+
+    Shared because the `--branch` refusal is the one mistake in this module whose
+    symptom appears somewhere else entirely, and two copies of it would be one
+    copy that gets improved. Enrolling into the wrong branch tells a tester they
+    are not enrolled while the operator looks at their row; withdrawing from the
+    wrong branch reports "no row here" while the account it was meant to refuse
+    goes on working.
+    """
     # Required and with no default, deliberately: see NO_BRANCH. argparse's own
     # "the following arguments are required" says nothing about why, and this is
     # the one mistake whose symptom appears somewhere else entirely -- the tester
@@ -316,15 +383,41 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--database", default=neon.DEFAULT_DATABASE)
     parser.add_argument("--role-name", default=neon.DEFAULT_ROLE, help="Neon database role")
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="scinumbers-enrol",
+        description="Issue a capped credential and enrol one account.",
+    )
+    parser.add_argument("email")
+    parser.add_argument("role", choices=[r.value for r in Role])
+    parser.add_argument("--limit-usd", type=float, required=True, help="monthly cap, in dollars")
+    _branch_arguments(parser)
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    """`scinumbers-enrol`. Refusals come back as one sentence and a non-zero exit."""
-    args = _parser().parse_args(argv)
+def _withdraw_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="scinumbers-withdraw",
+        description="Refuse one account from now on and revoke its credential.",
+    )
+    parser.add_argument("email")
+    _branch_arguments(parser)
+    return parser
+
+
+def _open_branch(args) -> tuple[object | None, int]:
+    """The engine for `--branch`, or `None` and an exit code, having said why.
+
+    Everything both commands must get right before either touches an account: the
+    branch is named, the three credentials are set, and the branch resolves. All
+    of it happens before anything is minted, written or revoked, so a typo costs
+    no live call at either provider.
+    """
     if not args.branch:
         print(NO_BRANCH, file=sys.stderr)
-        return 2
+        return None, 2
     missing = [
         name
         for name in (MANAGEMENT_KEY_ENV, NEON_API_KEY_ENV, NEON_PROJECT_ENV)
@@ -332,8 +425,54 @@ def main(argv: list[str] | None = None) -> int:
     ]
     if missing:
         print(f"set {' and '.join(missing)} before enrolling anyone", file=sys.stderr)
-        return 2
+        return None, 2
+    try:
+        branch = neon.branch_id(
+            os.environ[NEON_API_KEY_ENV], os.environ[NEON_PROJECT_ENV], args.branch
+        )
+        url = neon.connection_url(
+            os.environ[NEON_API_KEY_ENV],
+            os.environ[NEON_PROJECT_ENV],
+            branch,
+            database=args.database,
+            role=args.role_name,
+        )
+    except Exception as exc:  # noqa: BLE001 - one sentence for the operator
+        print(str(exc), file=sys.stderr)
+        return None, 1
+    return trail_store.engine_from_url(url), 0
 
+
+def withdraw_main(argv: list[str] | None = None) -> int:
+    """`scinumbers-withdraw`. One address, one branch, and no undo.
+
+    Says what happened rather than that it happened: "disabled and its credential
+    revoked" is two facts, and every refusal here leaves one of them true and the
+    other not.
+    """
+    args = _withdraw_parser().parse_args(argv)
+    try:
+        accounts.usable(args.email)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    engine, code = _open_branch(args)
+    if engine is None:
+        return code
+    try:
+        email = withdraw(engine, os.environ[MANAGEMENT_KEY_ENV], args.email)
+    except Exception as exc:  # noqa: BLE001 - every refusal already says what it is
+        print(str(exc), file=sys.stderr)
+        return 1
+    finally:
+        engine.dispose()
+    print(f"{email} is disabled in {args.branch} and its credential is revoked")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """`scinumbers-enrol`. Refusals come back as one sentence and a non-zero exit."""
+    args = _parser().parse_args(argv)
     try:
         # Before the branch is resolved, so a mistyped cap costs no live call.
         # `enrol` checks both again; this is the same rule read twice, not a
@@ -344,19 +483,9 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return 1
 
-    api_key = os.environ[NEON_API_KEY_ENV]
-    project = os.environ[NEON_PROJECT_ENV]
-    try:
-        # Resolved before anything is minted, so a mistyped branch costs nothing.
-        branch = neon.branch_id(api_key, project, args.branch)
-        url = neon.connection_url(
-            api_key, project, branch, database=args.database, role=args.role_name
-        )
-    except Exception as exc:  # noqa: BLE001 - one sentence for the operator
-        print(str(exc), file=sys.stderr)
-        return 1
-
-    engine = trail_store.engine_from_url(url)
+    engine, code = _open_branch(args)
+    if engine is None:
+        return code
     try:
         account = enrol(
             engine,

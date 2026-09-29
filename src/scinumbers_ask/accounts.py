@@ -179,6 +179,43 @@ def lookup(engine, email: str, *, table: str = DEFAULT_TABLE) -> Account | None:
     return Account(email=row.email, role=role, openrouter_key=row.openrouter_key or None)
 
 
+@dataclass(frozen=True)
+class Withdrawn:
+    """A row that has just been disabled, and the handle to its credential.
+
+    `key_hash` is `None` where the account had no credential, and where it was
+    enrolled before the hash was stored -- two different situations that look the
+    same from here, which is why the caller reports both as "withdraw the key by
+    hand" rather than claiming to know which.
+    """
+
+    email: str
+    key_hash: str | None
+
+
+def disable(engine, email: str, *, table: str = DEFAULT_TABLE) -> Withdrawn | None:
+    """Refuse this account from now on, and hand back the handle to its credential.
+
+    `None` where there is no such row. Disabling rather than deleting: the trail
+    rows the account wrote keep their attribution, and a table that still lists a
+    withdrawn account is how an operator sees who once had access.
+
+    One statement, so the row cannot be read and then found changed. **It does not
+    revoke anything** -- the credential lives at another provider and this module
+    reaches no network. `enrol.withdraw` is the operation that does both, in the
+    order that leaves the safe state behind when the second half fails.
+    """
+    from sqlalchemy import text
+
+    email = usable(email)
+    with engine.begin() as conn:
+        conn.execute(text(f"set local statement_timeout = {STATEMENT_TIMEOUT_MS}"))
+        row = conn.execute(text(_DISABLE.format(table=table)), {"email": email}).first()
+    if row is None:
+        return None
+    return Withdrawn(email=row.email, key_hash=row.openrouter_key_hash)
+
+
 #: Both constraints on the address mean the same thing to an operator. The
 #: primary key catches an exact repeat, `accounts_email_lower` catches one that
 #: differs only in case, and which fires is not a distinction anybody enrolling a
@@ -190,12 +227,34 @@ def lookup(engine, email: str, *, table: str = DEFAULT_TABLE) -> Account | None:
 _UNIQUE_VIOLATION = "23505"
 
 _INSERT = """
-insert into {table} (email, role, openrouter_key)
-values (:email, :role, :key)
+insert into {table} (email, role, openrouter_key, openrouter_key_hash)
+values (:email, :role, :key, :key_hash)
+"""
+
+#: Disabling and reading the handle in one statement, so no window exists in which
+#: the row is readable and the operator's next step is not yet decided.
+#:
+#: Unconditional rather than `and not disabled`: an account disabled by hand whose
+#: key was never revoked is exactly the case a withdrawal command exists for, and
+#: a `where` that skipped it would report "no such account" for a row plainly
+#: there. Running it twice is harmless -- the second `update` sets what is already
+#: set -- and the revoke that follows meets its own 404.
+_DISABLE = """
+update {table} set disabled = true
+where lower(email) = lower(:email)
+returning email, openrouter_key_hash
 """
 
 
-def insert(engine, email: str, role: Role, key: str, *, table: str = DEFAULT_TABLE) -> Account:
+def insert(
+    engine,
+    email: str,
+    role: Role,
+    key: str,
+    key_hash: str | None = None,
+    *,
+    table: str = DEFAULT_TABLE,
+) -> Account:
     """Enrol one account. Raises `AlreadyEnrolled` if the address already has a row.
 
     The row's own spelling of the address is what goes in, unfolded but
@@ -207,6 +266,13 @@ def insert(engine, email: str, role: Role, key: str, *, table: str = DEFAULT_TAB
     raises as itself -- an unreachable database, a missing table and a refused
     password are all things the operator has to see, and this is a command they
     are watching rather than a page they are reading.
+
+    `key_hash` is OpenRouter's handle for the credential, and storing it is what
+    makes the account withdrawable: the Management API deletes a key by its hash,
+    which is returned once, at creation. It is optional because this module is
+    older than the column and because an account may be enrolled with no
+    credential at all -- a row with a key and no hash is one only the OpenRouter
+    dashboard can withdraw, and `withdraw` says so rather than guessing.
 
     Under the trail store's statement timeout, so a hung database refuses in two
     seconds rather than never.
@@ -220,7 +286,12 @@ def insert(engine, email: str, role: Role, key: str, *, table: str = DEFAULT_TAB
             conn.execute(text(f"set local statement_timeout = {STATEMENT_TIMEOUT_MS}"))
             conn.execute(
                 text(_INSERT.format(table=table)),
-                {"email": email, "role": Role(role).value, "key": key},
+                {
+                    "email": email,
+                    "role": Role(role).value,
+                    "key": key,
+                    "key_hash": key_hash,
+                },
             )
     except IntegrityError as exc:
         # Narrowed to SQLSTATE 23505, unique_violation. Every `IntegrityError`
