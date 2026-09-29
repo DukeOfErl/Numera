@@ -72,9 +72,11 @@ PRIVACY_CONTACT = "yoavpol@gmail.com"
 #: take a consent screen out of testing, and the app's own address is the one the
 #: consent screen points at (ADR-1100).
 #:
-#: **It must be readable without signing in**, which is why it is drawn on the
-#: door as well as in the panel: the app's own address is what the consent screen
-#: links to, and a visitor following that link is by definition not signed in.
+#: **It must be readable without signing in**, which is what decides where it is
+#: drawn: the app's own address is what the consent screen links to, and a visitor
+#: following that link is by definition not signed in. So it is on the doors --
+#: every one of them -- and not in the side panel, where it would sit among the
+#: controls a reader came for.
 #:
 #: Every service named here is one this app actually hands something to, and the
 #: list is the part that dates fastest -- a new sink means a line here, in the

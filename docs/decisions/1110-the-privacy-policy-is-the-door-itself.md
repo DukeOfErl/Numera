@@ -47,11 +47,16 @@ already had their address recorded by the attempt, so the moment they are told
 "no" is the moment "what do you keep about me" is most reasonable — and that door
 is the one with nobody on it to ask.
 
-**Collapsed, and drawn in both places.** Offered rather than imposed: a notice a
-reader must dismiss to proceed is a notice that gets dismissed. Both places
-because neither audience can reach the other's copy — a visitor following the
-consent screen's link is not signed in and sees only the door, and a reader who
-signed in weeks ago never meets the door again.
+**Collapsed, and on the doors only.** Offered rather than imposed: a notice a
+reader must dismiss to proceed is a notice that gets dismissed.
+
+It was drawn in the side panel as well for one release, on the reasoning that a
+reader who signed in weeks ago never meets the door again. That is true, and it
+was outweighed: the panel is where a reader works, and a standing legal expander
+among the controls is furniture. What the obligation actually requires is that
+the statement be reachable *before* anyone signs in — which is exactly the door,
+and the door is the address the consent screen points at. The cost is real and
+accepted: a signed-in reader has no route to it without signing out.
 
 The contact address in the text is a deliberate publication, which is why it is
 its own constant rather than a word in a paragraph.

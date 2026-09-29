@@ -79,14 +79,13 @@ any release; `1.0.0` when it stabilizes.
   ([ADR-1150](docs/decisions/1150-withdrawing-an-account-keeps-the-row.md)).
 
 
-- **The page says what is kept about a reader, in full and in one place.** The side
-  panel's one-line note gains a collapsed statement beside it: what is recorded,
-  what it is used for, which services it passes through, how long it is kept, and
-  where to write to see it or have it deleted. The same statement is drawn under
-  **every** door, so a visitor who has not signed in — and a reader who was refused,
-  whose address the attempt already recorded — can read it too. It is served by the
-  app at its own address rather than by a second host, because the door was always
-  the public page
+- **The page says what is kept about a reader, in full.** Every door carries a
+  collapsed statement: what is recorded, what it is used for, which services it
+  passes through, how long it is kept, and where to write to see it or have it
+  deleted. **Every** door, so a visitor who has not signed in — and a reader who was
+  refused, whose address the attempt already recorded — can read it. Not the side
+  panel, which is where a reader works. It is served by the app at its own address
+  rather than by a second host, because the door was always the public page
   ([ADR-1110](docs/decisions/1110-the-privacy-policy-is-the-door-itself.md)).
 
 - **A successful sign-in is recorded.** The trail held only refusals at the door, so

@@ -512,7 +512,7 @@ COVERED: dict[str, tuple[str, ...]] = {
         # state this file exists to make visible.
         "test_web_driver_identity.py::test_the_policy_is_readable_without_signing_in",
         "test_web_driver_identity.py::test_the_policy_is_offered_rather_than_imposed",
-        "test_web_driver_identity.py::test_a_signed_in_reader_can_still_find_it",
+        "test_web_driver_identity.py::test_the_panel_does_not_carry_it",
         "test_web_driver_identity.py::test_a_refused_reader_is_told_what_was_kept_about_them",
         "test_web_driver_session_cap.py::"
         "test_the_turned_away_visitor_can_still_read_what_is_kept_about_them",
