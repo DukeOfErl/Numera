@@ -957,11 +957,12 @@ def _sign_out(conversation_id: str, tab_id: str | None = None) -> None:
 def draw_privacy() -> None:
     """What is kept about a reader, collapsed.
 
-    Drawn on the door *and* in the panel, because the two audiences are different
-    and neither can reach the other's copy: a visitor who follows the consent
-    screen's link is not signed in and sees only the door, and a reader who signed
-    in weeks ago never sees the door again. One expander, two call sites, one
-    sentence in `messages.py`.
+    **On the doors and nowhere else.** It was drawn in the side panel too, on the
+    reasoning that a reader who signed in weeks ago never meets the door again --
+    which is true, and was outweighed: the panel is where a reader works, and a
+    standing legal expander among the controls is furniture. What the obligation
+    actually requires is that the statement be reachable *before* anyone signs in,
+    and that is the door, which is also the address the consent screen points at.
 
     A caption rather than markdown, like the two shorter notes it extends -- and,
     incidentally, out of `at.markdown`, which the door's "nothing else is drawn"

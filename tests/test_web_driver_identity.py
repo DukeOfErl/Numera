@@ -1490,11 +1490,13 @@ def test_the_policy_is_offered_rather_than_imposed(page):
     assert not at.expander[0].proto.expanded
 
 
-def test_a_signed_in_reader_can_still_find_it(page):
-    """The door is seen once. A reader who signed in weeks ago never meets it
-    again, and the address the policy is published at is this same page."""
+def test_the_panel_does_not_carry_it(page):
+    """Drawn in the side panel for one release, and withdrawn: the panel is where
+    a reader works, and a standing legal expander among the controls is furniture.
+    The obligation is that it be reachable *before* anyone signs in, which is the
+    door -- and the door is also the address the consent screen points at."""
     at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
-    assert messages.PRIVACY_HEADING in [e.label for e in at.sidebar.expander]
+    assert messages.PRIVACY_HEADING not in [e.label for e in at.sidebar.expander]
 
 
 def test_a_refused_reader_is_told_what_was_kept_about_them(page):

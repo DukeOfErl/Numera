@@ -273,7 +273,7 @@ withdrawn Google sign-in altogether. Auth0 provides one by default using *its ow
 development keys*, which are rate-limited and show their own consent warning, so put
 the Google client you already own into that connection.
 
-**Every door carries the privacy policy**, collapsed, and so does the side panel:
+**Every door carries the privacy policy**, collapsed — and only the doors:
 what is recorded, where it is kept (the database *and* the app's own filesystem),
 which services it passes through, how long it is kept, and where to write to see it
 or have it deleted. It is under the refusals too — including the session cap, which
