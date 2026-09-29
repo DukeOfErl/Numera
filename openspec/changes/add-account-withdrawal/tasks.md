@@ -31,11 +31,11 @@ delete.
       obligation to record what makes it possible.
 - [x] 3.2 ADR-1150.
 - [x] 3.3 README, CHANGELOG, the CLAUDE.md module table.
-- [ ] 3.4 Full suite and ruff; then the merge on approval.
+- [x] 3.4 Full suite and ruff; then the merge on approval.
 
 ## 4. What the operator must do
 
-- [ ] 4.1 (operator) **Run `sql/accounts.sql` against every branch** — `alpha` and
+- [x] 4.1 (operator) **Run `sql/accounts.sql` against every branch** — `alpha` and
       `dev` — before the next enrolment. The insert now names a column that older
       databases do not have, and the statement is idempotent.
 - [ ] 4.2 (operator) The seven accounts enrolled before this have no handle. They
