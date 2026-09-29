@@ -23,6 +23,30 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **The privacy policy now names every store and every recipient.** It said the
+  material is kept in a hosted Postgres database, while the conversation's own
+  checkpoints and the trail's log file sit on the app's filesystem — so a reader
+  exercising the deletion right it grants would have had their database rows
+  removed and those files left. Its list of services named the four the code calls
+  by name and missed the three it does not: the host (Streamlit Community Cloud),
+  the provider behind the provider (Google, which Auth0 federates sign-in to), and
+  those two files. Google was the omission that mattered most, being the party whose
+  consent screen the policy exists to satisfy.
+
+- **The policy is reachable from the session-cap page too.** That page refuses a
+  reader *after* their sign-in has been recorded, and it was the one door with no
+  statement on it.
+
+- **A sign-in button's label follows the number of buttons**, rather than being
+  written for today's arrangement. Auth0's label had been shortened to "Sign in" in
+  place, which made the promise that restoring the Google button is one tuple false:
+  it would have drawn "Sign in with Google" beside an unqualified "Sign in".
+
+- **A provider configured without its `client_id` is reported.** Half a credential
+  in the secrets box is invisible to `providers()`, so the door widened back to the
+  withdrawn Google button with nothing said in the app or the trail. It still widens
+  — a door with no button is never right — but the operator is now told.
+
 - **An address that nothing could ever match can no longer be enrolled.** A
   trailing newline off a heredoc, or spaces off a pasted line, went into the
   accounts table verbatim — producing an account that exists, is enabled, looks
@@ -37,14 +61,31 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
-- **The page says what is kept about a reader, in full and in one place.** The side
-  panel's one-line note gains a collapsed statement beside it: what is recorded,
-  what it is used for, which services it passes through, how long it is kept, and
-  where to write to see it or have it deleted. The same statement is drawn under
-  **every** door, so a visitor who has not signed in — and a reader who was refused,
-  whose address the attempt already recorded — can read it too. It is served by the
-  app at its own address rather than by a second host, because the door was always
-  the public page
+- **Enrolling an address that was withdrawn says so**, rather than "already
+  enrolled" — which is true of a withdrawn row and reads as though the person has
+  access. It names the state and the next step, in one line.
+  Reinstating from the command is deferred deliberately: as a side effect of
+  enrolling, a mistyped address matching a withdrawn one would issue a credential
+  nobody meant to.
+
+- **`scinumbers-withdraw`, one command to end one account's access.** It disables
+  the row and revokes the credential at OpenRouter, in that order — either alone
+  leaves access open, since a key held in the clear and handed to a tester can be
+  spent without the app, and a revoked key under an admitted account reads as the
+  app being broken. The row is kept rather than deleted, so the trail rows that
+  account wrote keep their attribution. This needed a new column: OpenRouter
+  deletes a key by a handle returned once, at creation, which enrolment used for
+  its compensating revoke and then discarded
+  ([ADR-1150](docs/decisions/1150-withdrawing-an-account-keeps-the-row.md)).
+
+
+- **The page says what is kept about a reader, in full.** Every door carries a
+  collapsed statement: what is recorded, what it is used for, which services it
+  passes through, how long it is kept, and where to write to see it or have it
+  deleted. **Every** door, so a visitor who has not signed in — and a reader who was
+  refused, whose address the attempt already recorded — can read it. Not the side
+  panel, which is where a reader works. It is served by the app at its own address
+  rather than by a second host, because the door was always the public page
   ([ADR-1110](docs/decisions/1110-the-privacy-policy-is-the-door-itself.md)).
 
 - **A successful sign-in is recorded.** The trail held only refusals at the door, so

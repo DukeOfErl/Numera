@@ -72,13 +72,22 @@ PRIVACY_CONTACT = "yoavpol@gmail.com"
 #: take a consent screen out of testing, and the app's own address is the one the
 #: consent screen points at (ADR-1100).
 #:
-#: **It must be readable without signing in**, which is why it is drawn on the
-#: door as well as in the panel: the app's own address is what the consent screen
-#: links to, and a visitor following that link is by definition not signed in.
+#: **It must be readable without signing in**, which is what decides where it is
+#: drawn: the app's own address is what the consent screen links to, and a visitor
+#: following that link is by definition not signed in. So it is on the doors --
+#: every one of them -- and not in the side panel, where it would sit among the
+#: controls a reader came for.
 #:
-#: Every service named here is one this app actually hands something to. Naming
-#: them is the part a reader cannot discover for themselves, and the part that
-#: dates fastest -- a new sink means a line here, in the same change.
+#: Every service named here is one this app actually hands something to, and the
+#: list is the part that dates fastest -- a new sink means a line here, in the
+#: same change. The first draft named four and missed three, which is the failure
+#: this note exists to stop: the *host* (everything runs on Streamlit Community
+#: Cloud), the provider **behind** the provider (Auth0 federates to Google, so a
+#: reader signing in with Google is handing Google the request), and the stores
+#: that are not the database (the conversation's own checkpoints and the trail's
+#: log file, both on the app's filesystem). A recipient omitted because it is
+#: infrastructure rather than a service is still a recipient, and the one a
+#: reader is most likely to care about was the one missing.
 PRIVACY_HEADING = "Privacy Policy"
 PRIVACY = f"""SciNumbers Ask is a research prototype, run by one person and offered by
 invitation. Using it means the following is recorded.
@@ -90,13 +99,17 @@ invitation. Using it means the following is recorded.
 - **Timestamps, and identifiers for the session and for each question**, so one
   conversation can be told from another.
 
-This is kept in a hosted Postgres database, and is used to run the app, to keep it
-inside the developer's budget, and to find where its answers go wrong. Your questions,
-and the corpus entries looked up for them, are sent to a model provider to be answered.
+This is kept in a hosted Postgres database, and also in files on the machine the app
+runs on: the conversation itself, so that reopening it works, and a log of the same
+records. It is used to run the app, to keep it inside the developer's budget, and to
+find where its answers go wrong. Your questions, and the corpus entries looked up for
+them, are sent to a model provider to be answered.
 
-What it passes through: Auth0 (sign-in), Neon (the database), and OpenRouter with the
-model provider it routes to; where tracing is switched on, Langfuse receives the same
-material. Nothing is sold, and nothing is shared beyond those.
+What it passes through: **Streamlit Community Cloud**, which hosts the app and so
+handles all of the above; **Auth0** for sign-in, and **Google** where you sign in with
+a Google account; **Neon**, which holds the database; **OpenRouter** and the model
+provider it routes your question to; and, where tracing is switched on, **Langfuse**.
+Nothing is sold, and nothing is shared beyond those.
 
 Records are kept for as long as the prototype runs. To see what is held about you, or
 to have it deleted, email {PRIVACY_CONTACT}."""
@@ -116,6 +129,17 @@ SIGN_IN_NEEDED = "Use of this app is by invitation only since you are using the 
 #: row here. A name with no row gets "Sign in with <name>" rather than a
 #: KeyError: an operator who adds `[auth.okta]` should meet a plain button, not a
 #: blank page.
+#: **A lone button says "Sign in"; two or more say what tells them apart.** The
+#: rule is on the count rather than on the provider, because the reason is: a
+#: label names a method to distinguish it from the method beside it, and with one
+#: button there is nothing to distinguish -- naming the method then invites the
+#: question of what the others are. Written as a per-provider exception first
+#: ("auth0" alone was shortened), which made `OFFERED_PROVIDERS` a lie: restoring
+#: the Google button would have drawn "Sign in with Google" beside a bare "Sign
+#: in", reintroducing the ambiguity ADR-1100 removed. The promise that restoring
+#: is one tuple is true only if the labels follow the count by themselves.
+SIGN_IN_ALONE = "Sign in"
+
 SIGN_IN_LABELS = {
     "default": "Sign in with Google",
     # `google` as a *named* provider, which is how the Google client is written
@@ -123,16 +147,17 @@ SIGN_IN_LABELS = {
     # it out of `[auth]`'s own keys into `[auth.google]` is a secrets change and
     # nothing else -- the same label, reached by the other route.
     "google": "Sign in with Google",
-    # Just "Sign in", because it is the only button on the door. "Sign in with
-    # email" distinguished it from the Google button beside it, and that button is
-    # gone (ADR-1100); naming the method now invites the question of what the other
-    # methods are, when the provider's own page answers it.
-    "auth0": "Sign in",
+    # What it says when it is *not* alone: "with email" is what distinguishes it
+    # from the Google button. Today it is alone (ADR-1100) and says "Sign in", by
+    # the rule above rather than by a second entry here.
+    "auth0": "Sign in with email",
 }
 
 
-def sign_in_label(provider: str) -> str:
-    """The button's words for one provider."""
+def sign_in_label(provider: str, *, alone: bool = False) -> str:
+    """The button's words for one provider, given whether it is the only one."""
+    if alone:
+        return SIGN_IN_ALONE
     return SIGN_IN_LABELS.get(provider, f"Sign in with {provider}")
 
 

@@ -47,14 +47,31 @@ already had their address recorded by the attempt, so the moment they are told
 "no" is the moment "what do you keep about me" is most reasonable — and that door
 is the one with nobody on it to ask.
 
-**Collapsed, and drawn in both places.** Offered rather than imposed: a notice a
-reader must dismiss to proceed is a notice that gets dismissed. Both places
-because neither audience can reach the other's copy — a visitor following the
-consent screen's link is not signed in and sees only the door, and a reader who
-signed in weeks ago never meets the door again.
+**Collapsed, and on the doors only.** Offered rather than imposed: a notice a
+reader must dismiss to proceed is a notice that gets dismissed.
+
+It was drawn in the side panel as well for one release, on the reasoning that a
+reader who signed in weeks ago never meets the door again. That is true, and it
+was outweighed: the panel is where a reader works, and a standing legal expander
+among the controls is furniture. What the obligation actually requires is that
+the statement be reachable *before* anyone signs in — which is exactly the door,
+and the door is the address the consent screen points at. The cost is real and
+accepted: a signed-in reader has no route to it without signing out.
 
 The contact address in the text is a deliberate publication, which is why it is
 its own constant rather than a word in a paragraph.
+
+**Naming what receives the material is the part that was got wrong first**, and
+it is worth recording how. The first draft named Auth0, Neon, OpenRouter and
+Langfuse — four services the code calls explicitly — and missed three that it does
+not: the **host** (everything runs on Streamlit Community Cloud), the provider
+**behind** a provider (Auth0 federates to Google, so a reader signing in with a
+Google account is handing Google the request), and the **stores that are not the
+database** (the conversation's own sqlite checkpoints and the trail's log file,
+both on the app's filesystem). The pattern is that a recipient reached by calling
+an API gets named and one reached by running at all does not — and the omission
+that mattered most was Google, the party whose consent screen this document exists
+to satisfy.
 
 ## Trade-off accepted
 

@@ -258,17 +258,26 @@ necessarily each one it has configured: `web.OFFERED_PROVIDERS` names them, and 
 currently names Auth0 alone. The Google client stays configured and every line of the multi-provider
 machinery stays with it, because Auth0 signs a reader in with their Google account
 anyway — so the second button was two routes to one thing. Restoring it is that
-tuple ([ADR-1100](docs/decisions/1100-one-way-in-with-the-others-kept.md)).
+tuple ([ADR-1100](docs/decisions/1100-one-way-in-with-the-others-kept.md)): the
+labels follow the button count by themselves, so a lone button says "Sign in" and
+two or more say what tells them apart.
+
+**A provider left half-configured is reported rather than silently dropped.** A
+sub-table with no `client_id` — a rotation in the secrets box that wrote the secret
+and not the id — is invisible to `providers()`, so the door would widen back to the
+withdrawn button with nothing said. It still widens, because a door with no button
+is never right, but the operator gets a line on stderr naming the section.
 
 **If you withdraw the Google button, enable Auth0's Google connection**, or you have
 withdrawn Google sign-in altogether. Auth0 provides one by default using *its own
 development keys*, which are rate-limited and show their own consent warning, so put
 the Google client you already own into that connection.
 
-**Every door carries the privacy policy**, collapsed, and so does the side panel:
-what is recorded, what it is used for, which services it passes through, how long it
-is kept, and where to write to see it or have it deleted. It is under the refusals
-too — an attempt records an address whether or not it is admitted — and it is
+**Every door carries the privacy policy**, collapsed — and only the doors:
+what is recorded, where it is kept (the database *and* the app's own filesystem),
+which services it passes through, how long it is kept, and where to write to see it
+or have it deleted. It is under the refusals too — including the session cap, which
+turns a reader away *after* recording their sign-in — and it is
 readable without signing in, which is what lets the app's own address be the one
 Google's consent screen points at
 ([ADR-1110](docs/decisions/1110-the-privacy-policy-is-the-door-itself.md)).
@@ -440,12 +449,38 @@ gates it. The operator's steps, in order:
 
    ```bash
    scinumbers-enrol maria@example.org scientist --limit-usd 5
-   # -> no branch named. The row has to land in the branch the deployed app reads...
+   # -> no branch named. The account has to be acted on in the branch the deployed app reads...
    ```
 
    To rehearse against a real database without touching the deployment, enrol a
-   throwaway address into `dev` with a one-cent cap, then delete the row and
-   revoke the key.
+   throwaway address into `dev` with a one-cent cap, then withdraw it.
+
+5. **One command to withdraw one**, taking the same three variables and the same
+   required `--branch`. It is a *new* console script, so after pulling this change
+   run `uv sync --extra ask` (or `uv pip install -e . --no-deps`) before reaching
+   for it — entry points are written when the package is installed, and an
+   existing environment has no idea a command was added:
+
+   ```bash
+   scinumbers-withdraw maria@example.org --branch alpha
+   ```
+
+   It disables the row and revokes the credential, **in that order**. Either alone
+   leaves access open: a refused account can still spend its key, which is held in
+   the clear and was given to the person, and a revoked key under an account still
+   admitted reads to that person as the app being broken. If the revoke fails, the
+   account stays refused and the command names the key so you can revoke it at
+   `openrouter.ai/settings/keys`
+   ([ADR-1150](docs/decisions/1150-withdrawing-an-account-keeps-the-row.md)).
+
+   **The row is kept, disabled.** The trail rows that account wrote keep their
+   attribution, and the table is how you see who once had access.
+
+   **Accounts enrolled before September 2026 have no handle stored**, so they
+   withdraw only as far as being refused; the command says so, and their keys come
+   off at the dashboard, where each is named after its address. Run
+   `sql/accounts.sql` against every branch before the next enrolment — it is
+   idempotent and adds the column this depends on.
 
    **If either credential is refused, the command says which and what to do**,
    rather than passing on `HTTP Error 401`. An expiring key is a reasonable thing

@@ -179,6 +179,52 @@ def lookup(engine, email: str, *, table: str = DEFAULT_TABLE) -> Account | None:
     return Account(email=row.email, role=role, openrouter_key=row.openrouter_key or None)
 
 
+@dataclass(frozen=True)
+class Withdrawn:
+    """A row that has just been disabled, the handle to its credential, and
+    whether it had one at all.
+
+    `has_key` is the discriminator, and it is read from the row rather than
+    inferred. A missing `key_hash` means two unrelated things -- an account
+    enrolled with no credential, and one enrolled before the handle was stored --
+    and the caller's answer differs completely: the first is a finished
+    withdrawal, the second leaves a live key for a person to delete. Guessing
+    between them told operators to go and revoke credentials that were never
+    issued. The evidence was in the same row all along.
+    """
+
+    email: str
+    key_hash: str | None
+    has_key: bool = True
+
+
+def disable(engine, email: str, *, table: str = DEFAULT_TABLE) -> Withdrawn | None:
+    """Refuse this account from now on, and hand back the handle to its credential.
+
+    `None` where there is no such row. Disabling rather than deleting: the trail
+    rows the account wrote keep their attribution, and a table that still lists a
+    withdrawn account is how an operator sees who once had access.
+
+    One statement, so the row cannot be read and then found changed. **It does not
+    revoke anything** -- the credential lives at another provider and this module
+    reaches no network. `enrol.withdraw` is the operation that does both, in the
+    order that leaves the safe state behind when the second half fails.
+    """
+    from sqlalchemy import text
+
+    email = usable(email)
+    with engine.begin() as conn:
+        conn.execute(text(f"set local statement_timeout = {STATEMENT_TIMEOUT_MS}"))
+        row = conn.execute(text(_DISABLE.format(table=table)), {"email": email}).first()
+    if row is None:
+        return None
+    return Withdrawn(
+        email=row.email,
+        key_hash=row.openrouter_key_hash,
+        has_key=bool(row.has_key),
+    )
+
+
 #: Both constraints on the address mean the same thing to an operator. The
 #: primary key catches an exact repeat, `accounts_email_lower` catches one that
 #: differs only in case, and which fires is not a distinction anybody enrolling a
@@ -190,12 +236,90 @@ def lookup(engine, email: str, *, table: str = DEFAULT_TABLE) -> Account | None:
 _UNIQUE_VIOLATION = "23505"
 
 _INSERT = """
-insert into {table} (email, role, openrouter_key)
-values (:email, :role, :key)
+insert into {table} (email, role, openrouter_key, openrouter_key_hash)
+values (:email, :role, :key, :key_hash)
+"""
+
+#: Disabling and reading the handle in one statement, so no window exists in which
+#: the row is readable and the operator's next step is not yet decided.
+#:
+#: Unconditional rather than `and not disabled`: an account disabled by hand whose
+#: key was never revoked is exactly the case a withdrawal command exists for, and
+#: a `where` that skipped it would report "no such account" for a row plainly
+#: there. Running it twice is harmless -- the second `update` sets what is already
+#: set, and `enrol.withdraw` reads the 404 from the revoke that follows as "already
+#: gone" rather than as a credential left behind.
+_DISABLE = """
+update {table} set disabled = true
+where lower(email) = lower(:email)
+returning email, openrouter_key_hash, openrouter_key is not null as has_key
 """
 
 
-def insert(engine, email: str, role: Role, key: str, *, table: str = DEFAULT_TABLE) -> Account:
+#: Read only to choose a sentence, never to decide anything. The insert has
+#: already been refused by the time this runs.
+_DISABLED = """
+select disabled from {table} where lower(email) = lower(:email)
+"""
+
+#: What a duplicate says when the row it collided with has been withdrawn. The
+#: plain "already enrolled" is true there and reads as "this person has access",
+#: which is the opposite of the case -- and the operator's next step is different:
+#: there is nothing to reconsider, there is a row to clear.
+#:
+#: Rewritten once, shorter. The first version explained *why* the row is kept
+#: before saying what to do, which is the wrong order for something read at a
+#: prompt: the operator wants the state and the next step, and the reasoning is
+#: in ADR-1150 where someone can go looking for it.
+#:
+#: It says "disabled" and not "disabled and key revoked", because `disabled` is
+#: what the row records and the revoke is not. The case is not hypothetical:
+#: `_DISABLE` is unconditional precisely because rows get disabled by hand with a
+#: live key, and `sql/accounts.sql` still documents that bare `update`. Such a row
+#: would have been reported as having a revoked credential while the credential
+#: was live and spendable outside the app -- which is the mistake ADR-1150 exists
+#: to prevent, made by the sentence announcing the prevention.
+#:
+#: Re-enrolment is deliberately **not** offered here (ADR-1150): reinstating a
+#: withdrawn account is its own operation, and doing it as a side effect of
+#: `enrol` would hand a new credential to whoever a mistyped address happened to
+#: match among the withdrawn.
+WITHDRAWN_ALREADY = (
+    "{email} is an existing account, but withdrawn (disabled). "
+    "To re-enrol, delete the account or add a key by hand; sql/accounts.sql has both."
+)
+
+
+def _already_enrolled(engine, email: str, table: str) -> str:
+    """The sentence for a duplicate, which depends on the row it collided with.
+
+    A second read, after the insert has already been refused, and its only job is
+    the wording. Any failure here falls back to the shorter sentence rather than
+    raising: a diagnostic that masks the refusal it was meant to explain would
+    turn "already enrolled" into an unrelated database error.
+    """
+    from sqlalchemy import text
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(f"set local statement_timeout = {STATEMENT_TIMEOUT_MS}"))
+            row = conn.execute(text(_DISABLED.format(table=table)), {"email": email}).first()
+    except Exception:  # noqa: BLE001 - the refusal matters, the wording is a bonus
+        return f"{email} is already enrolled"
+    if row is not None and row.disabled:
+        return WITHDRAWN_ALREADY.format(email=email)
+    return f"{email} is already enrolled"
+
+
+def insert(
+    engine,
+    email: str,
+    role: Role,
+    key: str,
+    key_hash: str | None = None,
+    *,
+    table: str = DEFAULT_TABLE,
+) -> Account:
     """Enrol one account. Raises `AlreadyEnrolled` if the address already has a row.
 
     The row's own spelling of the address is what goes in, unfolded but
@@ -207,6 +331,13 @@ def insert(engine, email: str, role: Role, key: str, *, table: str = DEFAULT_TAB
     raises as itself -- an unreachable database, a missing table and a refused
     password are all things the operator has to see, and this is a command they
     are watching rather than a page they are reading.
+
+    `key_hash` is OpenRouter's handle for the credential, and storing it is what
+    makes the account withdrawable: the Management API deletes a key by its hash,
+    which is returned once, at creation. It is optional because this module is
+    older than the column and because an account may be enrolled with no
+    credential at all -- a row with a key and no hash is one only the OpenRouter
+    dashboard can withdraw, and `withdraw` says so rather than guessing.
 
     Under the trail store's statement timeout, so a hung database refuses in two
     seconds rather than never.
@@ -220,7 +351,12 @@ def insert(engine, email: str, role: Role, key: str, *, table: str = DEFAULT_TAB
             conn.execute(text(f"set local statement_timeout = {STATEMENT_TIMEOUT_MS}"))
             conn.execute(
                 text(_INSERT.format(table=table)),
-                {"email": email, "role": Role(role).value, "key": key},
+                {
+                    "email": email,
+                    "role": Role(role).value,
+                    "key": key,
+                    "key_hash": key_hash,
+                },
             )
     except IntegrityError as exc:
         # Narrowed to SQLSTATE 23505, unique_violation. Every `IntegrityError`
@@ -232,5 +368,5 @@ def insert(engine, email: str, role: Role, key: str, *, table: str = DEFAULT_TAB
         # own, not the index's name, so it survives the index being renamed.
         if getattr(getattr(exc, "orig", None), "sqlstate", None) != _UNIQUE_VIOLATION:
             raise
-        raise AlreadyEnrolled(f"{email} is already enrolled") from exc
+        raise AlreadyEnrolled(_already_enrolled(engine, email, table)) from exc
     return Account(email=email, role=Role(role), openrouter_key=key or None)

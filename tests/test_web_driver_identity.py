@@ -168,7 +168,7 @@ def test_a_visitor_who_is_not_signed_in_is_offered_sign_in_and_nothing_else(page
     assert not at.chat_message, "a conversation was drawn"
     drawn = [m.value for m in at.markdown]
     assert all("bn-title" in text or "<style>" in text for text in drawn), drawn
-    assert [b.label for b in at.button] == ["Sign in with Google"]
+    assert [b.label for b in at.button] == ["Sign in"], "a lone button names no method"
     assert caught.events() == [], "a record was written for a visitor who asked nothing"
 
 
@@ -300,6 +300,29 @@ def test_what_is_configured_is_unchanged_by_what_is_offered(monkeypatch):
     assert web.offered_providers() == ["default", "auth0"], "the Google button is one tuple away"
 
 
+def test_a_provider_configured_without_its_client_id_is_reported(monkeypatch, capsys):
+    """Half a credential -- a rotation in the deployment's secrets box that wrote
+    `client_secret` and dropped `client_id` -- is invisible to `providers()`. The
+    door still widens, because a door with no button is never right; what changes
+    is that the operator is told, instead of the Google button ADR-1100 withdrew
+    coming back with nothing said anywhere."""
+    section = {"client_id": "g", "auth0": {"client_secret": "half"}}
+    monkeypatch.setattr(web.st, "secrets", {"auth": section})
+    assert web.offered_providers() == ["default"], "the widening still has to happen"
+    said = capsys.readouterr().err
+    assert "auth0" in said and "client_id" in said, said
+
+
+def test_a_provider_that_is_simply_absent_is_not_reported(monkeypatch, capsys):
+    """The negative case varies the dimension the rule reads -- whether the
+    sub-table is *there* -- rather than only the outcome. A developer's machine
+    with the Google client and no Auth0 section widens for a good reason, and a
+    warning on every rerun there would be a warning nobody reads anywhere."""
+    monkeypatch.setattr(web.st, "secrets", {"auth": {"client_id": "g"}})
+    assert web.offered_providers() == ["default"]
+    assert capsys.readouterr().err == "", "an absent provider was reported as misconfigured"
+
+
 def test_the_default_provider_is_signed_in_to_with_no_argument(page, monkeypatch):
     """`st.login()` and `st.login("default")` are different calls: the no-argument
     form means the credentials in `[auth]` itself, and Streamlit resolves the name
@@ -314,7 +337,7 @@ def test_the_default_provider_is_signed_in_to_with_no_argument(page, monkeypatch
     monkeypatch.setattr(web.st, "login", lambda *args: asked.append(args))
 
     only_google = page(auth=True, email=None, auth_section={"client_id": "g"}).run()
-    assert [b.label for b in only_google.button] == ["Sign in with Google"], (
+    assert [b.label for b in only_google.button] == ["Sign in"], (
         "nothing offered leaves a door with no button, which is never right"
     )
     only_google.button[0].click().run()
@@ -332,7 +355,7 @@ def test_auth_with_no_credentials_still_offers_the_default_button(page):
     control and no clue. The visitor is stuck either way, so the tie goes to the
     person who can fix it."""
     at = page(auth=True, email=None, auth_section={"redirect_uri": "x", "cookie_secret": "y"}).run()
-    assert [b.label for b in at.button] == ["Sign in with Google"]
+    assert [b.label for b in at.button] == ["Sign in"]
 
 
 def test_buttons_keep_secrets_order_where_more_than_one_is_drawn(page):
@@ -357,7 +380,17 @@ def test_buttons_keep_secrets_order_where_more_than_one_is_drawn(page):
 def test_a_provider_with_no_label_still_gets_a_button(page):
     """An operator adding `[auth.okta]` meets a plain button, not a KeyError."""
     at = page(auth=True, email=None, auth_section={"okta": {"client_id": "o"}}).run()
-    assert [b.label for b in at.button] == ["Sign in with okta"]
+    assert [b.label for b in at.button] == ["Sign in"], "alone, so it names no method"
+    # Neither of these is offered, so both are drawn by the widening path -- the
+    # only way to get two buttons while `OFFERED_PROVIDERS` names one provider.
+    two = page(
+        auth=True,
+        email=None,
+        auth_section={"okta": {"client_id": "o"}, "google": {"client_id": "g"}},
+    ).run()
+    assert "Sign in with okta" in [b.label for b in two.button], (
+        "an unlabelled provider beside another has to say which one it is"
+    )
 
 
 # --- a verified address, or none ---------------------------------------------------
@@ -1457,11 +1490,13 @@ def test_the_policy_is_offered_rather_than_imposed(page):
     assert not at.expander[0].proto.expanded
 
 
-def test_a_signed_in_reader_can_still_find_it(page):
-    """The door is seen once. A reader who signed in weeks ago never meets it
-    again, and the address the policy is published at is this same page."""
+def test_the_panel_does_not_carry_it(page):
+    """Drawn in the side panel for one release, and withdrawn: the panel is where
+    a reader works, and a standing legal expander among the controls is furniture.
+    The obligation is that it be reachable *before* anyone signs in, which is the
+    door -- and the door is also the address the consent screen points at."""
     at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
-    assert messages.PRIVACY_HEADING in [e.label for e in at.sidebar.expander]
+    assert messages.PRIVACY_HEADING not in [e.label for e in at.sidebar.expander]
 
 
 def test_a_refused_reader_is_told_what_was_kept_about_them(page):

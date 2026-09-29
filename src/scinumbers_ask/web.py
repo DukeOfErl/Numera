@@ -473,7 +473,11 @@ PROVIDER_KEY = "client_id"
 #: Auth0 signs a reader in with their Google account anyway and two buttons for one
 #: account was a choice nobody needed to make (ADR-1100).
 #:
-#: Restoring the Google button is this tuple, and nothing else.
+#: Restoring the Google button is this tuple, and nothing else -- which is true
+#: only because the labels follow the button *count* rather than being written for
+#: today's arrangement (`messages.SIGN_IN_ALONE`). Shortening Auth0's label by hand
+#: made this promise false for one release: restoring would have drawn "Sign in
+#: with Google" beside a bare "Sign in".
 OFFERED_PROVIDERS = ("auth0",)
 
 #: The unnamed provider: `st.login()` with no argument, whose credentials sit
@@ -481,6 +485,47 @@ OFFERED_PROVIDERS = ("auth0",)
 #: Streamlit resolves a name against a sub-table, and a sub-table called
 #: `default` is a different thing from the section's own credentials.
 DEFAULT_PROVIDER = "default"
+
+
+def _auth_section() -> Mapping | None:
+    """`[auth]` as a mapping, or None where there is no usable section.
+
+    Its own function because two rules read it and they must not disagree about
+    what "no section" means: `providers` asks which providers are complete, and
+    `offered_providers` asks whether an incomplete one is nonetheless *there*.
+    """
+    try:
+        section = st.secrets["auth"]
+    except KeyError:
+        # A secrets file that exists and has no `[auth]`. Streamlit raises a
+        # plain KeyError here, which `_is_not_configured` does not and should not
+        # match -- it is not one of Streamlit's own error types, and widening
+        # that predicate would make it answer "not configured" to any missing
+        # key anywhere.
+        return None
+    except Exception as exc:  # noqa: BLE001 - narrowed by `_is_not_configured`
+        if _is_not_configured(exc):
+            return None
+        raise
+    return section if isinstance(section, Mapping) else None
+
+
+def _offered_but_incomplete(configured: list[str]) -> list[str]:
+    """Offered providers that are present in `[auth]` yet were not counted.
+
+    A sub-table with no `client_id` is invisible to `providers`, which is right
+    for deciding what can be drawn and wrong for deciding what the operator
+    meant. Without this distinction, `[auth.auth0]` left carrying only a
+    `client_secret` -- a rotation half-finished in the deployment's secrets box --
+    looks exactly like a machine where Auth0 was never configured, and the door
+    silently widens back to the Google button ADR-1100 withdrew.
+    """
+    section = _auth_section() or {}
+    return [
+        name
+        for name in OFFERED_PROVIDERS
+        if name not in configured and isinstance(section.get(name), Mapping)
+    ]
 
 
 def providers() -> list[str]:
@@ -500,20 +545,8 @@ def providers() -> list[str]:
     A deployment with no `[auth]`, in a secrets file or out of it, gets an empty
     list and never reaches a button.
     """
-    try:
-        section = st.secrets["auth"]
-    except KeyError:
-        # A secrets file that exists and has no `[auth]`. Streamlit raises a
-        # plain KeyError here, which `_is_not_configured` does not and should not
-        # match -- it is not one of Streamlit's own error types, and widening
-        # that predicate would make it answer "not configured" to any missing
-        # key anywhere.
-        return []
-    except Exception as exc:  # noqa: BLE001 - narrowed by `_is_not_configured`
-        if _is_not_configured(exc):
-            return []
-        raise
-    if not isinstance(section, Mapping):
+    section = _auth_section()
+    if section is None:
         return []
     found = [DEFAULT_PROVIDER] if PROVIDER_KEY in section else []
     found += [
@@ -537,6 +570,16 @@ def offered_providers() -> list[str]:
     """
     configured = providers()
     offered = [name for name in configured if name in OFFERED_PROVIDERS]
+    if not offered:
+        # The widening still happens -- a door with no button is never the right
+        # answer -- but it stops being silent. Half a credential is the operator's
+        # mistake and only the operator can fix it, so it goes where they look.
+        for name in _offered_but_incomplete(configured):
+            trail_store.complain(
+                f"[auth.{name}] is configured without {PROVIDER_KEY}, so it cannot be "
+                f"offered and the door has widened to {configured or [DEFAULT_PROVIDER]}",
+                KeyError(PROVIDER_KEY),
+            )
     return offered or configured or [DEFAULT_PROVIDER]
 
 
@@ -914,11 +957,12 @@ def _sign_out(conversation_id: str, tab_id: str | None = None) -> None:
 def draw_privacy() -> None:
     """What is kept about a reader, collapsed.
 
-    Drawn on the door *and* in the panel, because the two audiences are different
-    and neither can reach the other's copy: a visitor who follows the consent
-    screen's link is not signed in and sees only the door, and a reader who signed
-    in weeks ago never sees the door again. One expander, two call sites, one
-    sentence in `messages.py`.
+    **On the doors and nowhere else.** It was drawn in the side panel too, on the
+    reasoning that a reader who signed in weeks ago never meets the door again --
+    which is true, and was outweighed: the panel is where a reader works, and a
+    standing legal expander among the controls is furniture. What the obligation
+    actually requires is that the statement be reachable *before* anyone signs in,
+    and that is the door, which is also the address the consent screen points at.
 
     A caption rather than markdown, like the two shorter notes it extends -- and,
     incidentally, out of `at.markdown`, which the door's "nothing else is drawn"
@@ -934,7 +978,8 @@ def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None =
     draw_title()
     if admission.door is Door.SIGN_IN:
         st.info(as_text(messages.SIGN_IN_NEEDED), icon=":material/login:")
-        for provider in offered_providers():
+        offered = offered_providers()
+        for provider in offered:
             # `st.login()` and `st.login("name")` are different calls: the
             # no-argument form means the credentials in `[auth]` itself, and
             # passing "default" is not a synonym for it.
@@ -945,7 +990,7 @@ def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None =
                 # secrets, and a `$` there would open inline mathematics and eat
                 # the rest of the label. The literal labels do not need it; the
                 # rule is on the call, not on today's values.
-                as_text(messages.sign_in_label(provider)),
+                as_text(messages.sign_in_label(provider, alone=len(offered) == 1)),
                 key=f"sign-in-{provider}",
                 on_click=st.login,
                 args=args,
@@ -1414,6 +1459,12 @@ def draw_try_later() -> None:
     also bounds the OAuth round trips. The caller stops the script after this."""
     draw_title()
     st.warning(as_text(messages.TRY_LATER), icon=":material/hourglass_top:")
+    # This is a door too, and it was the one door without the statement on it.
+    # `admit` has already run and recorded the sign-in by the time the cap
+    # refuses, so the reader's address is kept and the page that turns them away
+    # was the one page from which they could not read what is kept -- which is
+    # the case ADR-1110 argues is when asking matters most.
+    draw_privacy()
 
 
 # --- the dev panel: a third sink on the same logger ---------------------------------
