@@ -75,6 +75,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-hosted-tracing` | `1000`–`1040` — clear of `0880`–`0940`, spent on other branches |
 | `add-one-way-in` | `1100`–`1140` — `1100`, `1110` written; archived 2026-09-29 |
 | `add-account-withdrawal` | `1150`–`1190` — `1150` written; archived 2026-09-29 |
+| `add-door-demo` | `1200`–`1240` — `1200`, `1210` written |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets
@@ -178,6 +179,7 @@ core, and a test there refuses a name with no file behind it.
 | `accounts.py` | `lookup(engine, email)` and `insert(...)`: enrolment off one row, **fails closed** — the deliberate inverse of `trail_store` (ADR-0780). Both here so the case-folding rule has one home |
 | `enrol.py` | The two commands that open and close an account: `scinumbers-enrol` mints a capped key and inserts the row, withdrawing the key if the row cannot be written (ADR-0900); `scinumbers-withdraw` disables the row and revokes the key, in that order, so a partial failure leaves a refused account rather than a live one (ADR-1150). A harness module |
 | `pending.py` | The daily check (`scinumbers-pending`): who is **still** stuck at the door, read out of the trail. Resolution is derived from `user_email` and `signin.refused` rather than tracked, so no state is added. **Silent when nobody is stuck** — the contract a cron line rests on. A harness module |
+| `door_demo.py` | The sign-in door's recorded examples: real answers, verbatim, from `door_demo.json`, typed and streamed in an iframe. **Presentation**; committed under ADR-1200, real by ADR-1210 |
 | `neon.py` | Neon's control plane: a branch's *name* to its connection URL, so no database url is kept on disk |
 
 **`ask` wraps `_ask`, and the wrapper is where the records are written.** The

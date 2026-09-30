@@ -46,6 +46,7 @@ from . import (
     accounts,
     allowance,
     bionumbers,
+    door_demo,
     entries_table,
     feedback,
     hosted_trace,
@@ -972,9 +973,23 @@ def draw_privacy() -> None:
         st.caption(as_text(messages.PRIVACY))
 
 
+def draw_examples() -> None:
+    """Recorded questions and their real answers, played on a loop (ADR-1210).
+
+    On the sign-in door only. A refused reader is being told something they have to
+    act on, and a moving example beside that sentence competes with it.
+
+    `st.iframe` runs the frame's scripts with same-origin access, which is why
+    Streamlit warns against handing it model output: `door_demo.page` escapes every
+    answer before it becomes markup, and the answers are committed, not fetched.
+    """
+    st.iframe(door_demo.page(), height=door_demo.HEIGHT)
+
+
 def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None = None) -> None:
     """What a visitor sees instead of the page. Sign-in and nothing else, or the
-    one sentence that says why not. The caller stops the script after this."""
+    one sentence that says why not -- and, on the sign-in door, recorded examples
+    of what lies behind it. The caller stops the script after this."""
     draw_title()
     if admission.door is Door.SIGN_IN:
         st.info(as_text(messages.SIGN_IN_NEEDED), icon=":material/login:")
@@ -996,6 +1011,7 @@ def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None =
                 args=args,
                 icon=":material/login:",
             )
+        draw_examples()
     elif admission.door is Door.UNVERIFIED:
         st.error(as_text(messages.UNVERIFIED), icon=":material/mark_email_unread:")
         # Back through the same provider rather than out and in again. The claim
