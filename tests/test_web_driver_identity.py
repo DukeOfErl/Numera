@@ -188,7 +188,7 @@ def test_the_sign_in_door_plays_the_recorded_examples_and_nothing_live(page, cau
     at = page(auth=True, email=None).run()
     frames = _examples(at)
     assert len(frames) == 1, "the door should play its examples once"
-    assert '<div class="title">Demo</div>' in frames[0].proto.srcdoc
+    assert '<div class="title">What can SciNumbers do?</div>' in frames[0].proto.srcdoc
     assert not at.chat_input, "a question could be asked"
     assert page.built == [], "an agent was built for a visitor who has not signed in"
     assert caught.events() == []

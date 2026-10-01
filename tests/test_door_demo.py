@@ -119,13 +119,13 @@ def test_rendering_escapes_everything_it_does_not_draw():
     assert "&lt;script&gt;" in html and "&amp;" in html
 
 
-def test_the_page_is_titled_demo_and_carries_every_question():
+def test_the_page_is_titled_as_a_demo_and_carries_every_question():
     """Titled as a demo, outside the frame's box: the answers are shortened, so the
     page no longer claims each is a model's answer as given (ADR-1220)."""
     page = door_demo.page()
     for scenario in door_demo.scenarios():
         assert json.dumps(scenario.asked)[1:-1] in page or scenario.asked in page
-    assert '<div class="title">Demo</div>' in page
+    assert '<div class="title">What can SciNumbers do?</div>' in page
     assert "a real answer from" not in page
 
 

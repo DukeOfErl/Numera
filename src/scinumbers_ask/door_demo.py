@@ -27,8 +27,10 @@ from importlib import resources
 
 #: The frame's height in CSS pixels. Fixed rather than Streamlit's `"content"`,
 #: because the content grows as the answer streams and a frame that grew with it
-#: would push the privacy note down the page on every example.
-HEIGHT = 520
+#: would push the privacy note down the page on every example. 440 fits both
+#: examples whole at a laptop's width under the wide layout (case 1 needs 439 at
+#: 1150px, measured in Chromium); a narrower window scrolls.
+HEIGHT = 440
 
 
 @dataclass(frozen=True)
@@ -257,6 +259,9 @@ body { display: flex; flex-direction: column; gap: 6px; }
   border-radius: 10px; padding: 10px 12px; min-height: 44px; }
 .typing { flex: 1; white-space: pre-wrap; }
 .typing.empty::before { content: "Ask a question"; color: var(--muted); }
+.typing.busy::before { content: "\\25CF"; font-size: 15px; color: var(--text);
+  animation: blink 1s infinite; }
+.input.busy .caret { visibility: hidden; }
 .caret { width: 1.5px; height: 18px; background: var(--text);
   animation: blink 1s steps(1) infinite; }
 .send { color: var(--muted); font-size: 16px; }
@@ -265,7 +270,7 @@ body { display: flex; flex-direction: column; gap: 6px; }
 }
 </style></head>
 <body>
-<div class="title">Demo</div>
+<div class="title">What can SciNumbers do?</div>
 <div class="demo" id="demo" role="region"
      aria-label="A demonstration of a question and its answer">
   <div class="thread" id="thread">
@@ -314,6 +319,14 @@ function setTyping(text) {
   $("typing").classList.toggle("empty", text === "");
 }
 
+// A dot pulsing in the input while the answer is written, so the frame never looks
+// stuck mid-answer or finished before it is.
+function setBusy(busy) {
+  $("typing").classList.toggle("busy", busy);
+  $("typing").classList.toggle("empty", !busy && $("typing").textContent === "");
+  document.querySelector(".input").classList.toggle("busy", busy);
+}
+
 function reset(example) {
   $("user").hidden = true;
   $("bot").hidden = true;
@@ -321,6 +334,7 @@ function reset(example) {
   $("thread").scrollTop = 0;
   following = true;
   setTyping("");
+  setBusy(false);
 }
 
 function showWhole(example) {
@@ -381,10 +395,12 @@ async function play(example) {
   $("asked").textContent = example.asked;
   $("user").hidden = false;
   setTyping("");
+  setBusy(true);
   $("answer").innerHTML = '<span class="dots"><span></span><span></span><span></span></span>';
   $("bot").hidden = false;
   await sleep(1000);
   await stream(example);
+  setBusy(false);
   await hold(3500);
   $("demo").classList.add("fading");
   await sleep(600);

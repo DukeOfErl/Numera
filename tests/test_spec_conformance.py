@@ -411,7 +411,7 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_door_demo.py::"
         "test_every_scenario_types_exactly_the_question_its_answer_was_recorded_for",
         "test_door_demo.py::test_every_scenario_says_which_model_answered_and_when",
-        "test_door_demo.py::test_the_page_is_titled_demo_and_carries_every_question",
+        "test_door_demo.py::test_the_page_is_titled_as_a_demo_and_carries_every_question",
         "test_door_demo.py::test_every_shortened_answer_says_what_was_changed",
         "test_door_demo.py::test_the_page_stands_still_for_a_reader_who_asked_for_less_motion",
     ),

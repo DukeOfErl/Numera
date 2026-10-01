@@ -104,7 +104,7 @@ the examples without animation.
 
 #### Scenario: A visitor at the sign-in door sees the demo
 - **WHEN** identity is configured and a visitor has not signed in
-- **THEN** the door plays a question and its answer under the title "Demo"
+- **THEN** the door plays a question and its answer under a heading that presents it as a demonstration of the app
 - **AND** no question can be asked and no record is written
 
 #### Scenario: A shortened answer says what was changed

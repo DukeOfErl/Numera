@@ -41,6 +41,11 @@ holds it for as long as the reader wants.
 
 ADR-1210's refusal of a model-drawn chart stands unchanged.
 
+**Revised the same day.** The heading became "What can SciNumbers do?", which
+still presents the frame as a demonstration and names no model. Case 2's closing
+sentence now explains why the ~60× rule of thumb lies outside ~6–50×, instead of
+restating ~60× next to a range that excludes it.
+
 ## Trade-off accepted
 
 The door no longer promises that what it shows is exactly what the model said.
