@@ -403,7 +403,7 @@ COVERED: dict[str, tuple[str, ...]] = {
     # The animation is not asserted: typing, erasing, streaming and reduced motion
     # were driven in headless Chromium and looked at. The reduced-motion test below
     # only proves the page carries the rule, not that a browser honours it.
-    "The sign-in door may play recorded examples, and they are real and say so": (
+    "The sign-in door may play a demo drawn from real answers": (
         "test_web_driver_identity.py::"
         "test_the_sign_in_door_plays_the_recorded_examples_and_nothing_live",
         "test_web_driver_identity.py::test_a_door_that_refuses_plays_no_examples",
@@ -411,7 +411,8 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_door_demo.py::"
         "test_every_scenario_types_exactly_the_question_its_answer_was_recorded_for",
         "test_door_demo.py::test_every_scenario_says_which_model_answered_and_when",
-        "test_door_demo.py::test_the_page_carries_every_scenario_and_its_provenance",
+        "test_door_demo.py::test_the_page_is_titled_demo_and_carries_every_question",
+        "test_door_demo.py::test_every_shortened_answer_says_what_was_changed",
         "test_door_demo.py::test_the_page_stands_still_for_a_reader_who_asked_for_less_motion",
     ),
     "The operator can see who is stuck at the door, and only who is still stuck": (

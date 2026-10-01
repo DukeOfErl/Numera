@@ -197,7 +197,7 @@ Not part of the multi-user push; listed so the board is complete.
 | `add-answer-evaluation` | 23/43 — the evaluation harness and its judged layer |
 | `add-provider-limit-ending` | 29/31 |
 | `add-answer-shape` | 0/10 — an answer leads with its quantitative conclusion |
-| `add-door-demo` | built — the sign-in door plays two recorded examples (ADR-1210) |
+| `add-door-demo` | built — the sign-in door plays a two-example demo (ADR-1210, ADR-1220) |
 | _app-drawn charts_ | not proposed — the agent returns numbers and the application draws the chart. A model-drawn text chart misplaced every bar on its own axis (ADR-1210); the door's third example waits on this |
 
 ---

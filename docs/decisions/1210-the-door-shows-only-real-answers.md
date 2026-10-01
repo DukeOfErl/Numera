@@ -1,6 +1,6 @@
 # ADR-1210: The door shows only real answers, verbatim, and no chart the model drew
 
-- **Status:** accepted
+- **Status:** accepted; amended by ADR-1220 (answers shortened, titled "Demo")
 - **Date:** 2026-09-30
 - **Pull request:** _pending — `feat/door-demo`_
 

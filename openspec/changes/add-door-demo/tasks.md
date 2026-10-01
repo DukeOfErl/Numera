@@ -18,5 +18,7 @@ ADR block: `1200`–`1240` (see the allocation table in `CLAUDE.md`).
 
 - [x] 3.1 Spec delta and conformance mapping
 - [x] 3.2 ADR-1200, ADR-1210
+- [x] 3.5 Shorten both answers as Yoav asked, record the edits, title the frame "Demo",
+  shorten the pause (ADR-1220)
 - [x] 3.3 README, CHANGELOG, CLAUDE.md, roadmap
 - [ ] 3.4 After merge: bring the deploy branch level, so the door reads the same there

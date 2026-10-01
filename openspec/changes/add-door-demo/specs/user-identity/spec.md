@@ -81,17 +81,19 @@ whose questions are being recorded against the wrong name.
 
 ## ADDED Requirements
 
-### Requirement: The sign-in door may play recorded examples, and they are real and say so
+### Requirement: The sign-in door may play a demo drawn from real answers
 
 Where identity is configured, the sign-in door MAY play examples of a question being
 asked and answered, so that a visitor can see what lies behind the door before
 signing in.
 
-Each example SHALL be a question actually put to the agent and the answer it
-actually gave, unedited. It SHALL be labelled as recorded and SHALL name the model
-that answered and the date it did. However the question is typed, including words
-taken back and retyped, the text it ends on SHALL be the question the answer was
-recorded for.
+Each example SHALL be a question actually put to the agent and the answer it gave.
+The answer MAY be shortened for the door. Every figure it keeps SHALL be one the
+corpus holds, any computed figure SHALL be recomputed from the figures kept, and
+every edit SHALL be recorded beside the example where it can be traced to its run.
+The examples SHALL be titled as a demo. However the question is typed, including
+words taken back and retyped, the text it ends on SHALL be the question the answer
+was recorded for.
 
 The examples SHALL accept nothing from the visitor: there is no input a question
 could go through, and nothing a visitor does to them reaches the agent or writes a
@@ -100,11 +102,14 @@ account, whose sentence is what that reader needs, and not to a reader who has
 signed in. A visitor who has asked their browser for reduced motion SHALL be shown
 the examples without animation.
 
-#### Scenario: A visitor at the sign-in door sees a recorded example
+#### Scenario: A visitor at the sign-in door sees the demo
 - **WHEN** identity is configured and a visitor has not signed in
-- **THEN** the door plays a recorded question and its answer
-- **AND** the example says it is recorded, which model answered, and when
+- **THEN** the door plays a question and its answer under the title "Demo"
 - **AND** no question can be asked and no record is written
+
+#### Scenario: A shortened answer says what was changed
+- **WHEN** an example's answer differs from the one its run recorded
+- **THEN** what was cut, reworded or recomputed is recorded beside the example
 
 #### Scenario: The typed question is the one that was answered
 - **WHEN** an example types a question, takes words back and types others

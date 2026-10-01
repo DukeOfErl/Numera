@@ -4,7 +4,8 @@
 the answers are text recorded from real runs and committed beside this module
 (`door_demo.json`), under the bounded exception ADR-1200 makes to ADR-0170.
 
-Every example is a real question and the real answer it got, verbatim (ADR-1210).
+Every example is a real question and the real answer it got (ADR-1210), shortened
+for the door where Yoav asked, with each edit recorded beside it (ADR-1220).
 The keystrokes are theatre -- a question typed, words taken back, others typed in
 their place -- and `typed` is what holds them to the record: the text they end on
 must be the question the answer was recorded for, or the door shows an answer to
@@ -18,7 +19,6 @@ count to delete, and finished HTML to reveal.
 
 from __future__ import annotations
 
-import datetime
 import html
 import json
 import re
@@ -61,6 +61,9 @@ class Scenario:
     recorded: str
     #: Where the answer was taken from, so it can be traced back to its run.
     source: str
+    #: What the door shows that the run did not: every cut and every reworded
+    #: sentence, with any recomputed figure and how it was recomputed (ADR-1220).
+    edits: str
 
 
 def _step(raw: dict) -> Step:
@@ -192,11 +195,6 @@ def render(markdown: str) -> str:
 # --- the page ------------------------------------------------------------------
 
 
-def _label(scenario: Scenario) -> str:
-    day = datetime.date.fromisoformat(scenario.recorded)
-    return f"Recorded example · a real answer from {scenario.model}, {day.day} {day:%b %Y}"
-
-
 def page(examples: tuple[Scenario, ...] | None = None) -> str:
     """The whole frame: markup, style, the examples as data, and the program."""
     examples = scenarios() if examples is None else examples
@@ -205,7 +203,6 @@ def page(examples: tuple[Scenario, ...] | None = None) -> str:
             "asked": s.asked,
             "keys": keystrokes(s.steps),
             "answer": render(s.answer),
-            "label": _label(s),
         }
         for s in examples
     ]
@@ -231,11 +228,12 @@ _PAGE = """<!doctype html>
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   font: 15px/1.55 "Source Sans Pro", "Source Sans 3", system-ui, sans-serif; }
-.demo { height: 100%; display: flex; flex-direction: column; gap: 10px;
+body { display: flex; flex-direction: column; gap: 6px; }
+.title { font-size: 17px; font-weight: 600; }
+.demo { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px;
   border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px;
   transition: opacity .5s; }
 .demo.fading { opacity: 0; }
-.label { font-size: 12.5px; color: var(--muted); }
 .thread { flex: 1; overflow-y: auto; scrollbar-width: thin; display: flex;
   flex-direction: column; gap: 12px; }
 .msg { display: flex; gap: 10px; align-items: flex-start; }
@@ -267,9 +265,9 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 }
 </style></head>
 <body>
+<div class="title">Demo</div>
 <div class="demo" id="demo" role="region"
-     aria-label="A recorded example of a question and its answer">
-  <div class="label" id="label"></div>
+     aria-label="A demonstration of a question and its answer">
   <div class="thread" id="thread">
     <div class="msg user" id="user" hidden>
       <div class="avatar" aria-hidden="true">
@@ -317,7 +315,6 @@ function setTyping(text) {
 }
 
 function reset(example) {
-  $("label").textContent = example.label;
   $("user").hidden = true;
   $("bot").hidden = true;
   $("answer").innerHTML = "";
@@ -379,16 +376,16 @@ async function stream(example) {
 
 async function play(example) {
   reset(example);
-  await sleep(600);
+  await sleep(250);
   await type(example);
   $("asked").textContent = example.asked;
   $("user").hidden = false;
   setTyping("");
   $("answer").innerHTML = '<span class="dots"><span></span><span></span><span></span></span>';
   $("bot").hidden = false;
-  await sleep(1400);
+  await sleep(1000);
   await stream(example);
-  await hold(9000);
+  await hold(3500);
   $("demo").classList.add("fading");
   await sleep(600);
   $("demo").classList.remove("fading");
@@ -398,7 +395,7 @@ async function play(example) {
   for (let i = 0; ; i = (i + 1) % examples.length) {
     if (still) {
       showWhole(examples[i]);
-      await hold(15000);
+      await hold(10000);
     } else {
       await play(examples[i]);
     }

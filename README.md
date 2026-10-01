@@ -253,10 +253,10 @@ in and be enrolled before anything is drawn.** Signed in but not enrolled is
 refused with one sentence and recorded, so the operator can enrol someone who
 tried.
 
-**The sign-in door plays recorded examples** under the button: a question typed out
-and a real answer streamed back, on a loop. Each is a question actually put to the
-agent and its answer verbatim, labelled with the model and the date (ADR-1210), and
-they live in `src/scinumbers_ask/door_demo.json` (ADR-1200). Pointing at the frame
+**The sign-in door plays a demo** under the button: a question typed out and an
+answer streamed back, on a loop. Each is a question actually put to the agent and its
+answer (ADR-1210), shortened for the door with every edit recorded beside it
+(ADR-1220), in `src/scinumbers_ask/door_demo.json` (ADR-1200). Pointing at the frame
 pauses it; a browser set to reduced motion shows each example whole.
 
 **The door draws a button for each provider the deployment *offers*,** which is not

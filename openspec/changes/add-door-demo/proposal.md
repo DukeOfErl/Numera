@@ -10,9 +10,10 @@ whether it is worth signing in from exactly that page.
   into a mock input, sends it, and streams the answer back. The first types "What
   is the number of ribosomes in an e.coli cell?", takes back its last three words,
   and completes it as a comparison with budding yeast.
-- **Every example is real.** It is a question actually put to the agent and its
-  answer, verbatim, labelled as recorded with the model and the date (ADR-1210). A
-  test holds the typed text to the question that was answered.
+- **Every example starts from a real run.** It is a question actually put to the
+  agent and its answer (ADR-1210), shortened for the door with each edit recorded
+  beside it, under the title "Demo" (ADR-1220). A test holds the typed text to the
+  question that was answered.
 - **Two examples, not three.** A third, a distribution drawn as a text chart, was
   tried live twice and rejected on evidence: the model miscounted, then misplaced
   every bar on its own axis. It waits for application-drawn charts (roadmap).
@@ -33,8 +34,7 @@ None.
   from the provider"*: the recorded examples become the one exception to "sign-in
   and nothing else", and the exception is narrow: nothing is produced for the
   visitor.
-- `user-identity`: a new requirement, *"The sign-in door may play recorded
-  examples, and they are real and say so"*.
+- `user-identity`: a new requirement, *"The sign-in door may play a demo drawn from real answers"*.
 
 ## Impact
 
