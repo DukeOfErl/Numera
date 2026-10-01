@@ -172,6 +172,49 @@ def test_a_visitor_who_is_not_signed_in_is_offered_sign_in_and_nothing_else(page
     assert caught.events() == [], "a record was written for a visitor who asked nothing"
 
 
+# --- the recorded examples on the door ----------------------------------------
+
+
+def _examples(at: AppTest) -> list:
+    """The door's recorded examples, which `st.iframe` draws as an element AppTest
+    does not model -- read from 1.61.1, where it arrives as an `iframe` proto."""
+    return list(at.get("iframe"))
+
+
+def test_the_sign_in_door_plays_the_recorded_examples_and_nothing_live(page, caught):
+    """The examples are the one exception to "sign-in and nothing else", and the
+    exception is narrow: recorded answers in a frame, with no input a question could
+    go through and no agent built to answer one."""
+    at = page(auth=True, email=None).run()
+    frames = _examples(at)
+    assert len(frames) == 1, "the door should play its examples once"
+    assert '<div class="title">What can SciNumbers do?</div>' in frames[0].proto.srcdoc
+    assert not at.chat_input, "a question could be asked"
+    assert page.built == [], "an agent was built for a visitor who has not signed in"
+    assert caught.events() == []
+
+
+def test_a_door_that_refuses_plays_no_examples(page):
+    """A refused reader is being told something they need to act on; an animation
+    beside that sentence competes with it."""
+    unverified = page(
+        auth=True,
+        email="unverified@example.org",
+        enrolled={"unverified@example.org": TESTER},
+        claims={"email_verified": False},
+    ).run()
+    stranger = page(auth=True, email="stranger@example.org", enrolled={}).run()
+    assert _examples(unverified) == []
+    assert _examples(stranger) == []
+
+
+def test_a_signed_in_reader_does_not_see_the_examples(page, caught):
+    # `caught` for its teardown: admitting an account enters the module-level
+    # registry, and a later test asserts that registry is empty.
+    at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
+    assert _examples(at) == []
+
+
 # --- more than one way in ---------------------------------------------------------
 
 

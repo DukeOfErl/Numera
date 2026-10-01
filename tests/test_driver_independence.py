@@ -65,6 +65,10 @@ PRESENTATION = ADAPTERS | {
     "feedback",
     "allowance",
     "hosted",
+    # The door's recorded examples: text and markup a visitor sees, never read by
+    # the agent. Presentation by what it is, and placed here so it is not
+    # counted as core by subtraction.
+    "door_demo",
 }
 
 AGENT_CORE = sorted(

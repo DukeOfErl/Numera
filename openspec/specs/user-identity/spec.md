@@ -15,8 +15,11 @@ record of a question is written, because there is none. Who a reader is SHALL be
 the account the identity provider asserts — the system does not ask for a name,
 an email or a password of its own, and it accepts no credential from the reader.
 
-More than one identity provider MAY be offered, and the visitor SHALL be offered
-each configured provider as its own way in. An account SHALL be the same account
+More than one identity provider MAY be configured, and which of them a visitor is
+offered SHALL be the deployment's to decide — a provider may be configured and not
+offered, so that it can be restored without being re-established. A visitor SHALL
+always be offered at least one way in: a door with no way through it is a refusal
+that names no reason and admits no appeal. An account SHALL be the same account
 whichever provider asserted it: the address is the identity, and a reader who
 signs in through a second provider continues as the reader they were.
 
@@ -50,11 +53,16 @@ whose questions are being recorded against the wrong name.
 - **AND** the next visit begins at sign-in
 
 #### Scenario: Two providers are configured
-- **WHEN** identity is configured with two providers and a visitor has not signed in
-- **THEN** the page offers each provider as its own way in
+- **WHEN** identity is configured with two providers and the deployment offers one of them
+- **THEN** the page offers that one and not the other
+- **AND** the provider that is not offered remains configured
+
+#### Scenario: Nothing configured is offered
+- **WHEN** identity is configured and none of its providers is one the deployment offers
+- **THEN** the page offers every configured provider rather than none
 
 #### Scenario: One provider is configured
-- **WHEN** identity is configured with one provider
+- **WHEN** identity is configured with one provider, and it is offered
 - **THEN** the page offers that one way in and no other
 
 #### Scenario: The same address arrives through a second provider
@@ -271,19 +279,24 @@ changed later SHALL NOT change records already written: a judgement's weight is
 the weight it carried when given.
 
 The interface SHALL state that what passes through the app is recorded, and why.
-It SHALL NOT be obliged to enumerate the fields. A standing side-panel notice is
-what a prototype used by invited testers needs, and one long enough to list the
-question, the answer, the entries, the account and the role is one a reader stops
-finishing — which tells them nothing while appearing to tell them everything. The
-fuller statement, shown once before use where a person will actually read it, is
-deferred until there are users rather than testers; `docs/roadmap.md` records it
-as deferred with the condition that reopens it.
+A standing side-panel notice carries the short form; it SHALL NOT be obliged to
+enumerate the fields, because one long enough to list the question, the answer,
+the entries, the account and the role is one a reader stops finishing — which
+tells them nothing while appearing to tell them everything.
+
+The interface SHALL also carry the full statement: what is recorded, what it is
+used for, which services it passes through, and how long it is kept. It SHALL be
+offered rather than imposed — a reader who wants it can open it, and a reader who
+does not is not made to scroll past it — and it SHALL be readable **without
+signing in**, because a visitor sent to it by a sign-in provider's consent screen
+has not signed in and cannot be made to.
 
 Every record about a person SHALL be attributable to that person, so that
-deleting what is kept about them is possible. The request path for deletion, and
-any retention limit, are deferred: there is nobody yet to request either, and a
-rule written before its first case is a rule written for the wrong case. Deferred
-is not unmentioned; when either is decided it lands here.
+deleting what is kept about them is possible, and the full statement SHALL name
+how to ask for that. A retention limit is deferred: there is nobody yet whose
+records are old enough for one to bind, and a rule written before its first case
+is a rule written for the wrong case. Deferred is not unmentioned; when it is
+decided it lands here.
 
 #### Scenario: A signed-in reader's records carry their identity
 - **WHEN** an enrolled account asks a question and rates the answer
@@ -300,6 +313,19 @@ is not unmentioned; when either is decided it lands here.
 #### Scenario: A person's records can be found
 - **WHEN** the operator looks for everything kept about one account
 - **THEN** every record about that account is found by the account alone
+
+#### Scenario: A visitor who has not signed in reads what would be kept
+- **WHEN** a visitor who is not signed in views the page
+- **THEN** the full statement is reachable from that page
+- **AND** it is closed until the visitor opens it
+
+#### Scenario: A reader who is refused reads it too
+- **WHEN** an account is refused at the door
+- **THEN** the full statement is reachable from the page that refuses it
+
+#### Scenario: A reader asks for what is kept about them to be deleted
+- **WHEN** a reader reads the full statement
+- **THEN** it names where to write to see what is held, or to have it deleted
 
 ### Requirement: A deployment with no identity configured behaves as before
 
@@ -378,6 +404,11 @@ be recorded after the credential was issued, the credential SHALL be withdrawn,
 so that a failed enrolment leaves no credential behind that nothing refers to;
 if it cannot be withdrawn, the operator SHALL be told which one.
 
+It SHALL record whatever is needed to withdraw that credential later. A
+deployment that holds a credential it cannot revoke through any interface of its
+own has no way to end access except by hand, and the thing needed is available
+only at the moment of issue.
+
 What it reports back SHALL name the account and its role and SHALL NOT show the
 credential: the credential is looked up by the system and seen by nobody.
 
@@ -386,6 +417,11 @@ credential: the credential is looked up by the system and seen by nobody.
 - **THEN** a credential capped at that amount, renewing monthly, is issued to that account
 - **AND** the account is recorded with it
 - **AND** the account's next sign-in proceeds with that role
+
+#### Scenario: What is needed to withdraw the credential is kept
+- **WHEN** an enrolment succeeds
+- **THEN** what is recorded is enough to revoke that credential later
+- **AND** it is not the credential itself
 
 #### Scenario: No environment is named
 - **WHEN** the operator enrols an address without naming the environment
@@ -475,4 +511,62 @@ nothing SHALL be refused rather than answered with silence.
 #### Scenario: A span that can match nothing
 - **WHEN** the operator asks over a span that cannot include anything
 - **THEN** the request is refused rather than answered with silence
+
+### Requirement: Withdrawing an account is one operator action, and it ends both halves of access
+
+Withdrawing an account SHALL be one operator action outside the application,
+given the address and the environment. It SHALL refuse the account from then on
+**and** revoke the credential it was funded by: either alone leaves access open.
+An account refused with a live credential can still spend it, because the
+credential is held in the clear and was given to the person; a credential revoked
+under an account still admitted reads to that person as the application being
+broken rather than as access ending.
+
+The environment SHALL be named every time, with no default, refused as an
+enrolment with none is: withdrawing from the wrong environment reports success
+while the account it was meant to refuse goes on working.
+
+The account's records SHALL survive its withdrawal, attributed as they were. What
+a person wrote is not undone by their access ending, and an operator SHALL still
+be able to see that the account existed and what it held.
+
+Where the two halves cannot both be done, **the account SHALL be refused and the
+operator told the credential was not withdrawn**, naming it so a person can. The
+order is not incidental: the state left behind by a partial withdrawal is the one
+the system chooses, and a refused account with a live credential is recoverable
+by hand while an admitted account with none is a person meeting an error they
+cannot act on.
+
+Withdrawing an account that is not there SHALL be refused, saying so, rather than
+reported as a withdrawal.
+
+#### Scenario: An account is withdrawn
+- **WHEN** the operator withdraws an enrolled address in the environment it was enrolled into
+- **THEN** the account is refused from then on
+- **AND** its credential is revoked
+- **AND** what it reports names both
+
+#### Scenario: The records it wrote survive
+- **WHEN** an account that has asked questions is withdrawn
+- **THEN** the records it wrote keep the account and role they carried
+
+#### Scenario: No environment is named
+- **WHEN** the operator withdraws an address without naming the environment
+- **THEN** nothing is refused and nothing is revoked
+- **AND** the refusal says no environment is assumed and one has to be named
+
+#### Scenario: The address is not enrolled here
+- **WHEN** the operator withdraws an address that has no row in that environment
+- **THEN** nothing is revoked
+- **AND** the refusal says there is no such account there
+
+#### Scenario: The credential cannot be revoked
+- **WHEN** the account is refused and its credential cannot be revoked
+- **THEN** the account stays refused
+- **AND** the operator is told which credential is still live
+
+#### Scenario: The account carries nothing that can revoke its credential
+- **WHEN** an account recorded before withdrawal was possible is withdrawn
+- **THEN** the account is refused from then on
+- **AND** the operator is told the credential has to be revoked by hand
 

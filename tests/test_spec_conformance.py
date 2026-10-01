@@ -396,6 +396,24 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_web_driver_identity.py::test_the_unverified_door_is_not_held_across_reruns",
         "test_web_driver_identity.py::"
         "test_the_same_address_through_a_second_provider_is_the_same_reader",
+        # `add-door-demo`: the recorded examples are the one exception.
+        "test_web_driver_identity.py::"
+        "test_the_sign_in_door_plays_the_recorded_examples_and_nothing_live",
+    ),
+    # The animation is not asserted: typing, erasing, streaming and reduced motion
+    # were driven in headless Chromium and looked at. The reduced-motion test below
+    # only proves the page carries the rule, not that a browser honours it.
+    "The sign-in door may play a demo drawn from real answers": (
+        "test_web_driver_identity.py::"
+        "test_the_sign_in_door_plays_the_recorded_examples_and_nothing_live",
+        "test_web_driver_identity.py::test_a_door_that_refuses_plays_no_examples",
+        "test_web_driver_identity.py::test_a_signed_in_reader_does_not_see_the_examples",
+        "test_door_demo.py::"
+        "test_every_scenario_types_exactly_the_question_its_answer_was_recorded_for",
+        "test_door_demo.py::test_every_scenario_says_which_model_answered_and_when",
+        "test_door_demo.py::test_the_page_is_titled_as_a_demo_and_carries_every_question",
+        "test_door_demo.py::test_every_shortened_answer_says_what_was_changed",
+        "test_door_demo.py::test_the_page_stands_still_for_a_reader_who_asked_for_less_motion",
     ),
     "The operator can see who is stuck at the door, and only who is still stuck": (
         "test_pending.py::test_nothing_waiting_prints_nothing_at_all",
