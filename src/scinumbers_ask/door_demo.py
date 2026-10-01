@@ -261,8 +261,10 @@ body { display: flex; flex-direction: column; gap: 6px; }
    left edge when nothing is, before the placeholder, as in a real input. */
 .field { flex: 1; min-width: 0; white-space: pre-wrap; }
 .caret { display: inline-block; width: 3px; height: 1.2em; margin: 0 2px 0 1px;
-  vertical-align: text-bottom; border-radius: 1px; background: var(--text);
-  animation: blink 1s steps(1) infinite; }
+  vertical-align: text-bottom; border-radius: 1px; background: var(--text); }
+/* Steady while a question is typed and its answer written; blinking only once the
+   answer is complete, which is what tells a visitor the next one is coming. */
+.caret.waiting { animation: blink 1s steps(1) infinite; }
 .placeholder { color: var(--muted); }
 .send { color: var(--muted); font-size: 16px; }
 @media (prefers-reduced-motion: reduce) {
@@ -301,19 +303,15 @@ const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 const jitter = (low, high) => low + Math.random() * (high - low);
 
-// A reader who points at the frame is reading it: the loop waits for them, and a
-// reader who scrolls up is not dragged back down by the stream.
-let reading = false;
+// From the last character of an answer to the next question replacing it. Fixed:
+// a pause that waited on the pointer made the gap anything from 4 s to 20 s.
+const PAUSE = 7000;
+const FADE = 600;
+
+// A reader who scrolls up is not dragged back down by the stream.
 let following = true;
-$("demo").addEventListener("pointerenter", () => (reading = true));
-$("demo").addEventListener("pointerleave", () => (reading = false));
 $("thread").addEventListener("wheel", () => (following = false));
 $("thread").addEventListener("touchmove", () => (following = false));
-
-async function hold(ms) {
-  const until = Date.now() + ms;
-  while (Date.now() < until || reading) await sleep(200);
-}
 
 function setTyping(text) {
   $("typing").textContent = text;
@@ -327,6 +325,8 @@ function reset(example) {
   $("thread").scrollTop = 0;
   following = true;
   setTyping("");
+  document.querySelector(".caret").classList.remove("waiting");
+  $("demo").classList.remove("fading");
 }
 
 function showWhole(example) {
@@ -391,17 +391,17 @@ async function play(example) {
   $("bot").hidden = false;
   await sleep(1000);
   await stream(example);
-  await hold(3500);
+  document.querySelector(".caret").classList.add("waiting");
+  await sleep(PAUSE - FADE);
   $("demo").classList.add("fading");
-  await sleep(600);
-  $("demo").classList.remove("fading");
+  await sleep(FADE);
 }
 
 (async () => {
   for (let i = 0; ; i = (i + 1) % examples.length) {
     if (still) {
       showWhole(examples[i]);
-      await hold(10000);
+      await sleep(10000);
     } else {
       await play(examples[i]);
     }

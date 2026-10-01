@@ -19,8 +19,9 @@ whether it is worth signing in from exactly that page.
   every bar on its own axis. It waits for application-drawn charts (roadmap).
 - **The examples are committed**, a bounded exception to ADR-0170 (ADR-1200).
 - Only on the sign-in door: not on a door that refuses an account, and not after
-  sign-in. Reduced motion shows each example whole. Pointing at the frame pauses
-  the loop, and the frame scrolls.
+  sign-in. Reduced motion shows each example whole. A finished answer stays up for
+  a fixed 7 s, the caret blinking, before the next question replaces it, and the
+  frame scrolls.
 
 ## Capabilities
 
@@ -47,5 +48,6 @@ deprecated `st.components.v1.html`.
 `door_demo` joins `PRESENTATION` in `test_driver_independence.py`.
 
 **Not tested by the suite.** The animation itself: typing, erasing, streaming, the
-pause while pointed at, reduced motion, dark mode and phone width. All of it was
-driven in headless Chromium, with a no-hover baseline for the pause, and looked at.
+7 s pause, the caret, reduced motion, dark mode and phone width. All of it was
+driven in headless Chromium and looked at; the pause was timed on the page's own
+clock with the pointer resting on the frame (7.00 s, three transitions).

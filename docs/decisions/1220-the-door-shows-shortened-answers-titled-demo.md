@@ -36,8 +36,11 @@ answer from <model>" would claim more than the page shows. The provenance moves 
 the data (`model`, `recorded`, `source`, `edits`), where it can be traced and is not
 asserted to the visitor.
 
-**The pause after an answer is 3.5 s**, down from 9. Pointing at the frame still
-holds it for as long as the reader wants.
+**The pause after an answer is a fixed 7 s**, from the last character painted to
+the next question replacing it, with the caret blinking only during that pause.
+It was first 9 s, then 3.5 s plus a hold for as long as the pointer rested on the
+frame. That hold made the gap anything from about 4 s to 20 s depending on where a
+visitor's mouse happened to be, which read as a broken demo, so it was removed.
 
 ADR-1210's refusal of a model-drawn chart stands unchanged.
 
