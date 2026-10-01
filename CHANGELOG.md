@@ -61,6 +61,17 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **The sign-in door shows what is behind it.** Under the button, an example
+  plays on a loop: a question is typed into a mock input letter by letter, and a
+  real answer streams back. The first example takes back the last three words of
+  its question and retypes them as a comparison with budding yeast. It is headed
+  "What can SciNumbers do?". Each finished answer stays up for 7 s with the caret
+  blinking, so a visitor can see the next question is coming. Every example is a
+  question actually put to the agent and its answer, shortened for the door with
+  every edit recorded beside it. Reduced motion shows each example whole. Two examples for now; a
+  third, a distribution as a text chart, was rejected after the model drew every bar
+  in the wrong place (ADR-1200, ADR-1210, ADR-1220).
+
 - **Enrolling an address that was withdrawn says so**, rather than "already
   enrolled" — which is true of a withdrawn row and reads as though the person has
   access. It names the state and the next step, in one line.

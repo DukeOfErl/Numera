@@ -53,7 +53,17 @@ ADAPTERS = DRIVERS | HARNESS
 # `autobuild` joins them: it decides whether to build a corpus, which is a driver's
 # policy and not the agent's, and it is the one module allowed to import the
 # ingester. Putting it on this side is what keeps that dependency out of the core.
-PRESENTATION = ADAPTERS | {"messages", "entries_table", "autobuild", "feedback", "allowance"}
+PRESENTATION = ADAPTERS | {
+    "messages",
+    "entries_table",
+    "autobuild",
+    "feedback",
+    "allowance",
+    # The door's recorded examples: text and markup a visitor sees, never read by
+    # the agent. Presentation by what it is, and placed here so it is not
+    # counted as core by subtraction.
+    "door_demo",
+}
 
 AGENT_CORE = sorted(
     path.stem
