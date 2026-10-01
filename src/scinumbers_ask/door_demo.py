@@ -257,13 +257,13 @@ body { display: flex; flex-direction: column; gap: 6px; }
 @keyframes blink { 50% { opacity: .2; } }
 .input { display: flex; align-items: center; gap: 8px; background: var(--panel);
   border-radius: 10px; padding: 10px 12px; min-height: 44px; }
-.typing { flex: 1; white-space: pre-wrap; }
-.typing.empty::before { content: "Ask a question"; color: var(--muted); }
-.typing.busy::before { content: "\\25CF"; font-size: 15px; color: var(--text);
-  animation: blink 1s infinite; }
-.input.busy .caret { visibility: hidden; }
-.caret { width: 1.5px; height: 18px; background: var(--text);
+/* Inline flow, so the caret sits right after the last character typed -- at the
+   left edge when nothing is, before the placeholder, as in a real input. */
+.field { flex: 1; min-width: 0; white-space: pre-wrap; }
+.caret { display: inline-block; width: 3px; height: 1.2em; margin: 0 2px 0 1px;
+  vertical-align: text-bottom; border-radius: 1px; background: var(--text);
   animation: blink 1s steps(1) infinite; }
+.placeholder { color: var(--muted); }
 .send { color: var(--muted); font-size: 16px; }
 @media (prefers-reduced-motion: reduce) {
   .demo, .dots span, .caret { transition: none; animation: none; }
@@ -288,7 +288,8 @@ body { display: flex; flex-direction: column; gap: 6px; }
     </div>
   </div>
   <div class="input" aria-hidden="true">
-    <span class="typing empty" id="typing"></span><span class="caret"></span>
+    <div class="field"><span id="typing"></span><span class="caret"></span><span
+      class="placeholder" id="placeholder">Ask a question</span></div>
     <span class="send">&#10148;</span>
   </div>
 </div>
@@ -316,15 +317,7 @@ async function hold(ms) {
 
 function setTyping(text) {
   $("typing").textContent = text;
-  $("typing").classList.toggle("empty", text === "");
-}
-
-// A dot pulsing in the input while the answer is written, so the frame never looks
-// stuck mid-answer or finished before it is.
-function setBusy(busy) {
-  $("typing").classList.toggle("busy", busy);
-  $("typing").classList.toggle("empty", !busy && $("typing").textContent === "");
-  document.querySelector(".input").classList.toggle("busy", busy);
+  $("placeholder").hidden = text !== "";
 }
 
 function reset(example) {
@@ -334,7 +327,6 @@ function reset(example) {
   $("thread").scrollTop = 0;
   following = true;
   setTyping("");
-  setBusy(false);
 }
 
 function showWhole(example) {
@@ -395,12 +387,10 @@ async function play(example) {
   $("asked").textContent = example.asked;
   $("user").hidden = false;
   setTyping("");
-  setBusy(true);
   $("answer").innerHTML = '<span class="dots"><span></span><span></span><span></span></span>';
   $("bot").hidden = false;
   await sleep(1000);
   await stream(example);
-  setBusy(false);
   await hold(3500);
   $("demo").classList.add("fading");
   await sleep(600);

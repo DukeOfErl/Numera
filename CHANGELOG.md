@@ -65,8 +65,8 @@ any release; `1.0.0` when it stabilizes.
   plays on a loop: a question is typed into a mock input letter by letter, and a
   real answer streams back. The first example takes back the last three words of
   its question and retypes them as a comparison with budding yeast. It is headed
-  "What can SciNumbers do?", and a dot pulses in the input while an answer is being
-  written. Every example is a question actually put to the agent and its answer,
+  "What can SciNumbers do?", and a caret blinks in the input between examples. Every
+  example is a question actually put to the agent and its answer,
   shortened for the door with every edit recorded beside it. Pointing at the frame
   pauses it, and reduced motion shows each example whole. Two examples for now; a
   third, a distribution as a text chart, was rejected after the model drew every bar
