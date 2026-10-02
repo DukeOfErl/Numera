@@ -1379,25 +1379,70 @@ COVERED.update(
 )
 
 
-#: `add-monitor-dashboard`'s requirements, recorded as gaps while the change is
-#: being built so the suite stays green between its task groups. Task 5.1 moves
-#: each into `COVERED` and this tuple must be empty when the change archives.
-AWAITING_THE_MONITOR = (
-    "The view reads the trail and who is enrolled, never a credential, and changes nothing",
-    "The view runs on the operator's machine and names the branch it reads",
-    "Use, cost and endings are shown for a chosen period, with every rate beside its count",
-    "A question's ending is what the trail recorded, and an ending the view cannot identify "
-    "is never counted as an answer",
-    "Readers' judgements are shown grouped by what produced the answer",
-    "The view shows who is waiting at the door",
-    "The view shows whether the recording itself is working",
-    "A question can be followed to its hosted trace without contacting the tracer",
-    "Leaving the view open does not keep the database awake",
+# `operator-monitoring` (add-monitor-dashboard). "Another machine connects" is
+# asserted as the address handed to Streamlit, not by a connection attempt. The
+# grants are asserted live (`-m network`), with the owner as the canary.
+COVERED.update(
+    {
+        "The view reads the trail and who is enrolled, never a credential, and changes nothing": (
+            "test_monitor_role_live.py::test_the_monitor_is_refused",
+            "test_monitor_role_live.py::test_the_owner_is_not_refused_the_probe",
+            "test_monitor_role_live.py::test_the_monitor_can_read_what_the_view_needs",
+            "test_monitor_connection.py::test_nothing_is_granted_wholesale",
+            "test_monitor_connection.py::test_the_owner_s_url_is_never_asked_for",
+        ),
+        "The view runs on the operator's machine and names the branch it reads": (
+            "test_monitor_cli.py::test_no_branch_starts_nothing_and_says_one_must_be_named",
+            "test_monitor_cli.py::test_a_branch_starts_streamlit_on_the_app_bound_to_localhost",
+            "test_monitor_app.py::test_every_row_renders_and_names_the_branch",
+            "test_monitor_app.py::test_without_a_branch_the_page_refuses",
+        ),
+        "Use, cost and endings are shown for a chosen period, with every rate beside its count": (
+            "test_monitor_figures.py::test_health_counts_questions_testers_and_endings_each_with_its_denominator",
+            "test_monitor_figures.py::test_spend_counts_every_model_call_not_only_answered_questions",
+            "test_monitor_figures.py::test_a_quiet_period_says_so",
+            "test_monitor_app.py::test_a_rate_is_shown_with_its_count",
+            "test_monitor_app.py::test_a_quiet_period_says_so",
+        ),
+        "A question's ending is what the trail recorded, and an ending the view cannot identify "
+        "is never counted as an answer": (
+            "test_monitor_figures.py::test_asked_and_answered_is_answered",
+            "test_monitor_figures.py::test_records_after_the_ending_do_not_change_it",
+            "test_monitor_figures.py::test_asked_and_never_ended_is_unidentified_and_names_its_last_event",
+            "test_monitor_figures.py::test_an_unknown_last_event_is_unidentified_not_answered",
+            "test_monitor_figures.py::test_a_reason_outside_the_event_s_set_is_unidentified",
+            "test_monitor_figures.py::test_the_map_covers_every_end_reason_and_nothing_else",
+            "test_monitor_figures.py::test_every_mapped_event_is_one_the_application_records",
+        ),
+        "Readers' judgements are shown grouped by what produced the answer": (
+            "test_monitor_figures.py::test_verdicts_are_grouped_by_run_label_each_with_its_count",
+            "test_monitor_figures.py::test_a_verdict_with_no_reader_is_counted_and_shown_as_unattributed",
+            "test_monitor_figures.py::test_comments_carry_the_question_and_answer_they_are_about",
+            "test_monitor_figures.py::test_ungrounded_and_unsupported_are_shares_of_the_questions_given_an_answer",
+        ),
+        "The view shows who is waiting at the door": (
+            "test_pending_live.py::test_an_enrolled_account_leaves_the_queue_even_if_it_never_returns",
+            "test_pending_live.py::test_the_enrolment_queue_reports_everyone_with_no_row",
+            "test_monitor_queries_live.py::test_the_door_rule_runs_under_the_monitor_s_role",
+        ),
+        "The view shows whether the recording itself is working": (
+            "test_monitor_figures.py::test_recording_reports_the_last_row_and_tracer_trouble_by_name",
+            "test_monitor_figures.py::test_a_cold_write_is_timed_by_the_row_after_it",
+        ),
+        "A question can be followed to its hosted trace without contacting the tracer": (
+            "test_monitor_links.py::test_a_recent_question_links_to_its_derived_trace",
+            "test_monitor_links.py::test_a_question_older_than_the_window_gets_no_link",
+            "test_monitor_app.py::test_the_page_makes_no_network_request_through_every_part",
+        ),
+        "Leaving the view open does not keep the database awake": (
+            "test_monitor_app.py::test_reruns_reuse_the_read_and_only_refresh_reads_again",
+            "test_monitor_app.py::test_nothing_on_the_page_runs_on_a_timer",
+        ),
+    }
 )
 
 
 UNMAPPED: dict[str, str] = {
-    **dict.fromkeys(AWAITING_THE_MONITOR, "add-monitor-dashboard in progress -- task 5.1"),
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),

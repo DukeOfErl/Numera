@@ -56,7 +56,7 @@ repository. The implementer's job is to leave the instructions right.
       refused; `create table` is refused. **Canary first:** the same test parametrised over the owner role
       must fail on the refusals, and the test says so. A test that passes
       for both roles proves nothing.
-- [ ] 1.5 Write ADR-1310.
+- [x] 1.5 Write ADR-1310.
 
 ## 2. Package and entry point
 
@@ -75,7 +75,7 @@ repository. The implementer's job is to leave the instructions right.
       `scinumbers_ask` only `neon` and `hosted_trace`; no `scinumbers_ask` module
       imports `scinumbers_monitor`; within the package, only `app` imports
       Streamlit. Reuse `test_driver_independence`'s import reader, don't copy it.
-- [ ] 2.4 Write ADR-1300.
+- [x] 2.4 Write ADR-1300.
 
 ## 3. Queries and figures
 
@@ -125,11 +125,11 @@ repository. The implementer's job is to leave the instructions right.
       and exercise every row and the drill-down.
 - [ ] 4.5 Run it against `dev` and look at it (run skill). Check the quiet-period
       wording, rates with counts, and the branch name on every row.
-- [ ] 4.6 Write ADR-1320.
+- [x] 4.6 Write ADR-1320.
 
 ## 5. Spec conformance
 
-- [ ] 5.1 `tests/test_spec_conformance.py`: map each `operator-monitoring`
+- [x] 5.1 `tests/test_spec_conformance.py`: map each `operator-monitoring`
       requirement to the tests above. Record any gap explicitly (for example,
       "another machine connects" is asserted by the argv test, not by a
       connection attempt — say so).

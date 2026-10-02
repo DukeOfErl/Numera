@@ -138,3 +138,29 @@ def test_missing_settings_are_named_on_the_page(offline, monkeypatch):
     monkeypatch.setattr(connection, "resolve", missing)
     at = _run(monkeypatch, branch="beta")
     assert any("SCINUMBERS_MONITOR_DB_PASSWORD" in e.value for e in at.error)
+
+
+def test_reruns_reuse_the_read_and_only_refresh_reads_again(offline, monkeypatch):
+    """Leaving the view open does not keep the database awake: an interaction
+    reruns the script, and that rerun must not query. Refresh must."""
+    calls = []
+    rows = offline["rows"]
+
+    def counted(engine, since, until):
+        calls.append(since)
+        return rows
+
+    monkeypatch.setattr(queries, "period_rows", counted)
+    at = _run(monkeypatch)
+    at.run()
+    at.run()
+    assert len(calls) == 1
+    next(b for b in at.button if b.label == "Refresh").click().run()
+    assert len(calls) == 2
+
+
+def test_nothing_on_the_page_runs_on_a_timer():
+    """A fragment with `run_every`, or an auto-refresh component, would poll."""
+    source = APP.read_text()
+    assert "run_every" not in source
+    assert "autorefresh" not in source
