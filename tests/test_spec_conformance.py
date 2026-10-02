@@ -1379,7 +1379,25 @@ COVERED.update(
 )
 
 
+#: `add-monitor-dashboard`'s requirements, recorded as gaps while the change is
+#: being built so the suite stays green between its task groups. Task 5.1 moves
+#: each into `COVERED` and this tuple must be empty when the change archives.
+AWAITING_THE_MONITOR = (
+    "The view reads the trail and nothing else, and changes nothing",
+    "The view runs on the operator's machine and names the branch it reads",
+    "Use, cost and endings are shown for a chosen period, with every rate beside its count",
+    "A question's ending is what the trail recorded, and an ending the view cannot identify "
+    "is never counted as an answer",
+    "Readers' judgements are shown grouped by what produced the answer",
+    "The view shows who is waiting at the door",
+    "The view shows whether the recording itself is working",
+    "A question can be followed to its hosted trace without contacting the tracer",
+    "Leaving the view open does not keep the database awake",
+)
+
+
 UNMAPPED: dict[str, str] = {
+    **dict.fromkeys(AWAITING_THE_MONITOR, "add-monitor-dashboard in progress -- task 5.1"),
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),

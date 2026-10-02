@@ -27,7 +27,7 @@ repository. The implementer's job is to leave the instructions right.
 
 ## 0. Allocation
 
-- [ ] 0.1 CLAUDE.md: add `add-monitor-dashboard` | `1300`–`1340` to the ADR
+- [x] 0.1 CLAUDE.md: add `add-monitor-dashboard` | `1300`–`1340` to the ADR
       table. Write ADR stubs `1300`, `1310`, `1320` from the template and commit
       them first.
 
