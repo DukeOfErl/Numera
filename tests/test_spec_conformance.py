@@ -443,6 +443,15 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_first_use_live.py::test_the_grants_alone_refuse_a_write_even_if_the_transaction_is_made_writable",
         "test_first_use_live.py::test_the_role_cannot_read_another_table",
     ),
+    "A new reader's arrival reaches the operator on a schedule, "
+    "with no mail account of their own": (
+        "test_scheduled_workflows.py::test_it_runs_every_hour_and_not_on_keepalives_minute",
+        "test_scheduled_workflows.py::test_a_report_becomes_a_comment_on_the_one_standing_issue",
+        "test_scheduled_workflows.py::test_the_first_report_opens_the_standing_issue",
+        "test_scheduled_workflows.py::test_a_run_with_nobody_new_delivers_nothing",
+        "test_scheduled_workflows.py::test_the_only_secret_is_the_read_only_url_and_no_mail_credential_exists",
+        "test_first_use.py::test_a_first_sign_in_is_reported_as_a_sign_in_and_not_as_a_question",
+    ),
     "The operator can see who is stuck at the door, and only who is still stuck": (
         "test_pending.py::test_nothing_waiting_prints_nothing_at_all",
         "test_pending.py::test_a_request_for_the_email_is_reported_with_what_to_do",
@@ -962,12 +971,6 @@ COVERED.update(
 
 
 UNMAPPED: dict[str, str] = {
-    # Lands with the workflow, group 3 of add-first-use-notice; the entry leaves this
-    # list in the same change as the test that asserts it.
-    "A new reader's arrival reaches the operator on a schedule, "
-    "with no mail account of their own": (
-        "the workflow is group 3 of add-first-use-notice; not yet written"
-    ),
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),

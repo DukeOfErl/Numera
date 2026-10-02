@@ -20,9 +20,9 @@
 
 ## 3. The scheduled workflow and its failure path
 
-- [ ] 3.1 `.github/workflows/first-use.yml`: `23 * * * *`, `workflow_dispatch` with a `test` input, a `concurrency` group, `issues: write`; runs `uv run scinumbers-first-use` with the secret as `SCINUMBERS_TRAIL_READ_URL` and `--exclude` from the `FIRST_USE_EXCLUDE` variable; a non-empty report becomes a comment on the open `first use` issue (created if absent); empty report writes nothing; `test: true` posts one clearly-marked test line. Pin the runner to `ubuntu-24.04` as `keepalive.yml` does, and say why.
-- [ ] 3.2 Widen `keepalive-digest.yml` to a list of workflows (`keepalive.yml`, `first-use.yml`), name each in its report, retitle its standing issue `scheduled workflow problems`. Re-run the jq logic against fixtures for each case (healthy, failing, none ran) and show it can fail.
-- [ ] 3.3 Comment beside the line that prints reader addresses saying that it is safe only while the repository is private. ADR-1270 (delivery through a standing issue; digest widened because GitHub's failure mail is off) and ADR-1280 (addresses in an issue and a log; what making the repository public would publish).
+- [x] 3.1 `.github/workflows/first-use.yml`: `23 * * * *`, `workflow_dispatch` with a `test` input, a `concurrency` group, `issues: write`; runs `uv run scinumbers-first-use` with the secret as `SCINUMBERS_TRAIL_READ_URL` and `--exclude` from the `FIRST_USE_EXCLUDE` variable; a non-empty report becomes a comment on the open `first use` issue (created if absent); empty report writes nothing; `test: true` posts one clearly-marked test line. Pin the runner to `ubuntu-24.04` as `keepalive.yml` does, and say why.
+- [x] 3.2 Widen `keepalive-digest.yml` to a list of workflows (`keepalive.yml`, `first-use.yml`), name each in its report, retitle its standing issue `scheduled workflow problems`. Re-run the jq logic against fixtures for each case (healthy, failing, none ran) and show it can fail.
+- [x] 3.3 Comment beside the line that prints reader addresses saying that it is safe only while the repository is private. ADR-1270 (delivery through a standing issue; digest widened because GitHub's failure mail is off) and ADR-1280 (addresses in an issue and a log; what making the repository public would publish).
 
 ## 4. Prove the tests can fail (fault-seeding, over this module only)
 
