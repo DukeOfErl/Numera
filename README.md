@@ -709,6 +709,14 @@ On WSL, `cron` is not running by default (`sudo service cron start`, and see you
 distribution's notes on starting it at boot). Without it, run the command by hand;
 it costs one line and two seconds.
 
+**Keeping the deployed app awake.** Streamlit Community Cloud hibernates an app after
+12 hours without a visitor, and the first reader afterwards waits through a cold
+start. `.github/workflows/keepalive.yml` runs hourly and `bin/keepalive.py` visits the
+app in a headless browser, clicks the sleep screen's button if it is showing, and
+fails unless the door renders -- GitHub's failure mail is the notice. It needs no
+secrets. GitHub runs scheduled workflows from the default branch only, so it does
+nothing until it is on `main`.
+
 **Five roles exist — student, scientist, senior scientist, dev and admin — as
 foundations, built and tested now so that ratings can later be weighted by who
 gave them.** Today they differ in one visible thing: dev and admin get an extra
