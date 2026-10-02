@@ -97,7 +97,7 @@ repository. The implementer's job is to leave the instructions right.
 - [x] 3.5 `figures.py`: recording health (time of last row; `tracing.failed`,
       `tracing.unavailable` and `tracing.usage_unknown` counts; `prev_write_ms`
       for the first write after a gap of more than 10 minutes).
-- [ ] 3.6 `queries.py`: one `select` per row of the view, parameterised by
+- [x] 3.6 `queries.py`: one `select` per row of the view, parameterised by
       period, reading `trail` only.
 - [ ] 3.7 `tests/test_monitor_queries_live.py` (live, `dev`, read-only role):
       every statement in `queries.py` runs and returns the columns `figures.py`
@@ -109,7 +109,7 @@ repository. The implementer's job is to leave the instructions right.
 
 ## 4. The page
 
-- [ ] 4.1 `app.py`: header with the branch name and a period selector; rows for
+- [x] 4.1 `app.py`: header with the branch name and a period selector; rows for
       health, quality, door (via `pending.waiting`) and recording health; a
       recent-questions table. Every query goes through `st.cache_data(ttl=600)`
       keyed on branch and period. A **Refresh** button clears the cache. Nothing
@@ -118,9 +118,9 @@ repository. The implementer's job is to leave the instructions right.
       omitted past `TRACER_WINDOW_DAYS = 30`. Check the pattern by opening the
       link for a real traced question. Unit test: a question at 29 days gets a
       link and one at 31 days does not; the URL contains `trace_id_for`'s output.
-- [ ] 4.3 Question drill-down: selecting a row shows that question's whole
+- [x] 4.3 Question drill-down: selecting a row shows that question's whole
       trail in `at` order.
-- [ ] 4.4 Test that the page makes no request to Langfuse: run the app with
+- [x] 4.4 Test that the page makes no request to Langfuse: run the app with
       `streamlit.testing` and a network-refusing opener for the Langfuse host,
       and exercise every row and the drill-down.
 - [ ] 4.5 Run it against `dev` and look at it (run skill). Check the quiet-period
