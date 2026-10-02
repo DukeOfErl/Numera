@@ -141,5 +141,6 @@ workflow carries a comment saying so beside the line that prints them.
 
 ## Open Questions
 
-- Which Neon branch the deployment writes to (and so where the role is created) is the
-  operator's to say at step 1; it changes a URL, not the design.
+None that change the build. The deployment writes to the Neon branch **`alpha`**
+(stated by the operator, 2026-10-02), so the role is created there and the secret's
+URL names that branch; `dev` and `production` get neither.
