@@ -159,6 +159,9 @@ your `PATH`:
 | `numera-ask` | the terminal driver: ask a question, see the entries behind the answer |
 | `numera-enrol` | enrol one tester: mint a capped credential and record the account |
 | `numera-eval` | the evaluation harness: `check`, `run`, `report` |
+| `scinumbers-pending` | who is still stuck at the door, silent when nobody is |
+| `scinumbers-monitor` | the operator's view of the alpha, on this machine only |
+| `scinumbers-monitor-grant` | make or rotate the read-only role the view connects as |
 | `bionumbers-ingest` | build a corpus from the published export |
 | `numera-validator` | the validator prototype: `discover`, `harvest`, `extract`, `load`, `curate`, `status`, `simulate-review`, `upgrade-store` (see [The validator prototype](#the-validator-prototype-numera_validator)) |
 
@@ -752,6 +755,58 @@ that only reads.
 On WSL, `cron` is not running by default (`sudo service cron start`, and see your
 distribution's notes on starting it at boot). Without it, run the command by hand;
 it costs one line and two seconds.
+
+#### Watching the alpha: the monitor
+
+`scinumbers-monitor` is a page on your own machine that reads the trail and shows,
+for the last day, week or month: questions asked and by how many testers, how they
+ended, what they cost, what readers thought of the answers (by run label), who is
+waiting at the door, and whether the recording itself is working. Every rate is
+shown with the count it is a share of — with a handful of testers, "80% approved"
+from five ratings is not the same statement as from five hundred. Each question
+links to its Langfuse trace, and opening a row shows that question's whole trail.
+
+```bash
+# Once per branch, as the branch owner (NEON_API_KEY and NEON_PROJECT_ID set):
+scinumbers-monitor-grant --branch alpha        # prints the role's password, once
+
+export SCINUMBERS_MONITOR_DB_PASSWORD=...      # the password it printed
+export LANGFUSE_BASE_URL=https://cloud.langfuse.com
+export LANGFUSE_PROJECT_ID=...                 # from the Langfuse project's URL
+scinumbers-monitor --branch alpha              # opens on http://127.0.0.1:8501
+```
+
+**It connects as `scinumbers_monitor`, a role that can read the trail and, of the
+accounts table, only the address and whether it is disabled.** It cannot write, and
+it cannot read a tester's key. That limit is Postgres's, not the page's
+([ADR-1310](docs/decisions/1310-the-monitor-reads-through-a-role-that-can-read-the-trail-only.md)).
+The role is made in SQL by `scinumbers-monitor-grant` because a role made in Neon's
+console joins `neon_superuser` and can never be read-only. Running the command again
+rotates the password. The page takes the database host from Neon's API by branch
+name, so the owner's URL is never in it.
+
+**It is bound to 127.0.0.1 and has no sign-in of its own**, because it shows
+testers' addresses and comments. There is no default branch, for the same reason
+`scinumbers-pending` has none.
+
+**It does not poll.** Reads are cached for ten minutes and fetched again only when
+you press Refresh, so a tab left open lets Neon's compute suspend. Opening the page
+does wake it, which is worth knowing when you read the cold-start figures on the
+page itself.
+
+**Langfuse is linked, never queried**
+([ADR-1320](docs/decisions/1320-langfuse-is-linked-never-queried.md)). The Hobby
+plan allows 100 Metrics API requests a day and keeps 30 days of data; the trail is
+the record. What only Langfuse has — latency per model call, the span tree, the
+prompt as sent — is configured in Langfuse itself, once:
+
+- **Dashboards.** Keep the curated Latency, Cost and Usage dashboards. Add widgets
+  from the *observations* and *scores* views (new widgets can no longer use the
+  legacy traces view): p50/p95 latency of `ask` traces, tokens by model, and
+  `reader_verdict` over time.
+- **Alerts.** Hobby allows two. Proposed: p95 latency of `ask` traces, and a count
+  of error-level observations, each routed to email or a webhook. Revisit after a
+  week of traffic.
 
 **Keeping the deployed app awake.** Streamlit Community Cloud hibernates an app after
 12 hours without a visitor, and the first reader afterwards waits through a cold

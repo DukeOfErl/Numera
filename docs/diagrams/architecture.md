@@ -336,6 +336,44 @@ gap an exact-hour window would lose a reader in, and a repeat costs a line.
 ADR-1250. The job holds a role that can read one table (ADR-1260), and the report
 goes to a file and an issue, never the run's log (ADR-1280).*
 
+
+## 3e. What the operator's monitor may reach
+
+```mermaid
+flowchart LR
+    op((operator))
+    subgraph mon["scinumbers_monitor — on the operator's machine"]
+        app[app.py<br/>draws only]
+        fig[figures.py<br/>pure functions over rows]
+        q[queries.py]
+    end
+    subgraph ask["scinumbers_ask — four modules, nothing else"]
+        pend[pending.waiting<br/>the door rule]
+        neon[neon.endpoint_host]
+    end
+    pg[("Postgres, as scinumbers_monitor<br/>trail; accounts.email, .disabled")]
+    lf[("Langfuse")]
+
+    op -- "127.0.0.1" --> app
+    app --> fig
+    app --> q
+    app --> pend
+    q -- "select only" --> pg
+    pend -- "select only" --> pg
+    app -- "host by branch name,<br/>no credential" --> neon
+    app -. "a link the operator clicks,<br/>never a request" .-> lf
+```
+
+*Caption: what the monitor reads, and as whom. The role's grants are the limit, not
+the queries: it cannot write, and cannot read a key (ADR-1310). Nothing in
+`scinumbers_ask` imports the monitor (ADR-1300). Langfuse is a link, not a source
+(ADR-1320).*
+
+`hosted_trace.trace_id_for` and `trail_store`'s timeouts are the other two modules
+the monitor takes from `scinumbers_ask`. They are left off the drawing because they
+are a derivation and two constants, not a reach. `tests/test_monitor_boundaries.py`
+holds the list.
+
 ## 4. Ingestion: how the published export becomes a corpus
 
 *What happens when someone runs `bionumbers-ingest`?* A pipeline whose two ends are the only stages

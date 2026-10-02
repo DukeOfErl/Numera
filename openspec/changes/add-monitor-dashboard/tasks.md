@@ -142,21 +142,21 @@ repository. The implementer's job is to leave the instructions right.
       and `reader_verdict` over time.
 - [ ] 6.2 (operator) Configure the two Hobby alerts (design, Open Questions)
       with an email or webhook automation.
-- [ ] 6.3 Document 6.1–6.2 in the README's operator section, with the reason
+- [x] 6.3 Document 6.1–6.2 in the README's operator section, with the reason
       they live in Langfuse and not in the view.
 
 ## 7. Documentation and wrap-up
 
-- [ ] 7.1 README: what the view is, `scinumbers-monitor --branch alpha`, the
+- [x] 7.1 README: what the view is, `scinumbers-monitor --branch alpha`, the
       role script, the settings (`LANGFUSE_PROJECT_ID`, and the password
       variable if 1.1 needs it).
-- [ ] 7.2 `docs/diagrams/architecture.md`: the view as a reader of the trail
+- [x] 7.2 `docs/diagrams/architecture.md`: the view as a reader of the trail
       beside the app, the Langfuse link, and the role's reach (following
       `DIAGRAMS.md`).
-- [ ] 7.3 CLAUDE.md: a `scinumbers_monitor` paragraph and module table in the
+- [x] 7.3 CLAUDE.md: a `scinumbers_monitor` paragraph and module table in the
       Architecture section.
-- [ ] 7.4 CHANGELOG: an Added entry.
-- [ ] 7.5 `docs/roadmap.md`: reconcile WP4. "The usage-events table and its
+- [x] 7.4 CHANGELOG: an Added entry.
+- [x] 7.5 `docs/roadmap.md`: reconcile WP4. "The usage-events table and its
       queries" is met by reading the trail, unless that is decided otherwise;
       note the deferred `question.ended` record (design §4).
 - [ ] 7.6 (operator) Run `sql/monitor_role.sql` on `alpha`; open the view

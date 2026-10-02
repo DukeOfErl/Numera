@@ -120,6 +120,8 @@ Three work packages, three packages under `src/`, one dependency extra each, so 
 the same source tree: `bionumbers_ingest` (`ingest`), `numera_ask` (`ask`), `numera_validator`
 (`validator`). All three are here now; the validator is a prototype (ADR-1520) and is described in
 its own subsection below.
+A fourth package, `scinumbers_monitor`, is not a work package but a reader of the trail, on
+the `ask` extra (below).
 
 A fourth extra, `eval`, is **additive to `ask` rather than a package of its own**: the evaluation
 harness lives in `numera_ask` because it is an adapter over that agent, and the extra carries only
@@ -198,7 +200,7 @@ core, and a test there refuses a name with no file behind it.
 | `pending.py` | The daily check (`numera-pending`): who is **still** stuck at the door, read out of the trail. Resolution is derived from `user_email` and `signin.refused` rather than tracked, so no state is added. **Silent when nobody is stuck** — the contract a cron line rests on. A harness module |
 | `first_use.py` | The hourly check (`numera-first-use`): who was **just seen for the first time**, signing in or asking, read out of the trail with no state kept. Holds a **read-only database URL, never the Neon API key**, and sets its own transaction read-only. **Silent when nobody is new.** The window is computed by the workflow from the previous successful run. A harness module (ADR-1250, ADR-1260, ADR-1290) |
 | `door_demo.py` | The sign-in door's demo: real answers from `door_demo.json`, shortened with every edit recorded, typed and streamed in an iframe. **Presentation**; committed under ADR-1200, real by ADR-1210, shortened by ADR-1220. Its one chart is drawn by `bin/door-demo-chart`, not by the app (ADR-1230); citations are grey superscripts (ADR-1240) |
-| `neon.py` | Neon's control plane: a branch's *name* to its connection URL, so no database url is kept on disk |
+| `neon.py` | Neon's control plane: a branch's *name* to its connection URL, so no database url is kept on disk; `endpoint_host` gives the host alone, with no credential, for a caller holding its own role's password |
 
 **`ask` wraps `_ask`, and the wrapper is where the records are written.** The
 question, the answer and the evidence behind it are recorded as their events pass
@@ -237,6 +239,30 @@ all stock. The event stream is a generator, so a driver decides when to consume.
 batches several into one hop; `question_ceiling` and `run_budget` bound spend;
 `CONVERSATION_BOUND` bounds a session's tokens. Each is configured where it binds
 and reported when it is reached (ADR-0180).
+
+### `scinumbers_monitor` — the operator's view
+
+A **reader of the trail, not an adapter over the agent** (ADR-1300): its own
+package, so the single-Streamlit-importer rule in `scinumbers_ask` stands. It may
+take from `scinumbers_ask` only `neon`, `hosted_trace`, `pending` and `trail_store`;
+nothing there imports it; within it only `app` imports Streamlit —
+`tests/test_monitor_boundaries.py` holds all three. It reads as
+`scinumbers_monitor`, a role that can read `trail` and `accounts(email, disabled)`
+and nothing else (ADR-1310), and links to Langfuse without calling it (ADR-1320).
+
+| Module | Holds |
+|---|---|
+| `figures.py` | Every figure on the page, as pure functions over rows; `ENDING_EVENTS`, the map from ending event to end reason, kept complete by two tests |
+| `queries.py` | The reads: one `select` per period, one per question, the last row |
+| `app.py` | The page. Draws only; caches reads ten minutes; never polls |
+| `links.py` | A question's Langfuse trace URL, from its id alone |
+| `connection.py` | The role's URL: host from `neon.endpoint_host`, password from the environment |
+| `grant.py` | `scinumbers-monitor-grant`: makes the role in SQL, or rotates its password |
+| `cli.py` | `scinumbers-monitor`: refuses without `--branch`, binds Streamlit to 127.0.0.1 |
+
+**When `ask` gains or renames an ending event, update `ENDING_EVENTS`** — the
+suite fails until you do, and meanwhile those questions show as unidentified,
+never as answered.
 
 ### `numera_validator` — the validator prototype
 

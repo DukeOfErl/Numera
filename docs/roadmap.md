@@ -137,6 +137,14 @@ Depends on WP1 and WP3. **Split:** hosted tracing is built as `add-hosted-tracin
 on `feat/hosted-tracing` (Langfuse Cloud EU, ADR-1000–1020, 2026-09-25) and moves to
 Done at merge. The usage-events table is still to propose, as its own change.
 
+**Reading usage, built separately:** `add-monitor-dashboard` (`feat/monitor-dashboard`,
+ADR-1300–1320) shows use, cost, endings, verdicts and the door queue read straight
+from the trail, per account through `user_email`. That covers the "queries" half of
+the item below without a new table. **Open, not decided:** whether a separate
+usage-events table is still wanted once the monitor is in use. Also deferred there: a
+single `question.ended` record written by `ask`, which would replace the monitor's
+hand-kept map of ending events for new rows.
+
 **Both the tally table and a hosted tracer were agreed — they are not
 alternatives.** The table is the system of record; the tracer is a debugger.
 
