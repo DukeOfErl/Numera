@@ -102,7 +102,7 @@ repository. The implementer's job is to leave the instructions right.
 - [ ] 3.7 `tests/test_monitor_queries_live.py` (live, `dev`, read-only role):
       every statement in `queries.py` runs and returns the columns `figures.py`
       reads; `pending.waiting` runs under the read-only role.
-- [ ] 3.8 Seed the ending classification in a copy (fault-seeding skill): an
+- [x] 3.8 Seed the ending classification in a copy (fault-seeding skill): an
       off-by-one on "latest", an unmapped event counted as answered, the
       unidentified bucket merged into no-answer. Each must be caught by a named
       test. Record the result in the commit message.
