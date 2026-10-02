@@ -21,12 +21,18 @@ concurrency:
 
 jobs:
   keepalive:
-    runs-on: ubuntu-latest
+    # Not `ubuntu-latest`: it migrates to Ubuntu 26 from 2026-10-19, and
+    # `playwright install --with-deps` is only as good as Playwright's support for
+    # the distribution it lands on. A failing hourly check is the cost of finding
+    # that out by surprise. Move deliberately, with a manual run first.
+    runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.0.1
-      - run: uvx --from playwright playwright install --with-deps chromium
-      # Fails -- and so mails the repository owner -- when the app is asleep and
-      # will not wake, or is up and not drawing the door.
+      # From the script's own environment, so the browser matches the pinned
+      # Playwright the check then runs under.
+      - run: uv run bin/keepalive.py --install-browser
+      # Fails when the app is asleep and will not wake, or is up and not drawing
+      # the door. The notice is `keepalive-digest`, not a mail per failed run.
       - run: uv run bin/keepalive.py https://scinumbers.streamlit.app
