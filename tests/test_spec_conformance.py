@@ -415,6 +415,34 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_door_demo.py::test_every_shortened_answer_says_what_was_changed",
         "test_door_demo.py::test_the_page_stands_still_for_a_reader_who_asked_for_less_motion",
     ),
+    "The operator is told when a reader is first seen, once for signing in and once for asking": (
+        "test_first_use.py::test_nobody_new_prints_nothing_at_all",
+        "test_first_use.py::test_a_first_sign_in_is_reported_as_a_sign_in_and_not_as_a_question",
+        "test_first_use.py::test_a_first_question_is_reported_as_a_question_and_not_as_a_sign_in",
+        "test_first_use.py::test_both_firsts_for_one_reader_are_one_message_about_one_person",
+        "test_first_use.py::test_an_excluded_address_is_not_reported_whatever_its_case",
+        "test_first_use.py::test_everyone_excluded_is_silence_not_an_empty_report",
+        "test_first_use.py::test_asking_writes_nothing_and_says_so_to_the_database",
+        "test_first_use.py::test_the_default_window_is_longer_than_an_hourly_schedule",
+        "test_first_use.py::test_a_trail_that_cannot_be_read_says_so_and_fails",
+        "test_first_use.py::test_a_window_that_can_match_nothing_is_refused",
+        # "First" is a `having min(at) > ...` over a case-folded address; only a real
+        # database can assert it.
+        "test_first_use_live.py::test_a_first_sign_in_inside_the_window_is_reported",
+        "test_first_use_live.py::test_a_first_question_inside_the_window_is_reported",
+        "test_first_use_live.py::test_both_firsts_in_one_window_come_back_as_one_row",
+        "test_first_use_live.py::test_a_sign_in_that_is_not_the_first_is_not_reported",
+        "test_first_use_live.py::test_a_returning_reader_asking_for_the_first_time_is_reported_for_asking_only",
+        "test_first_use_live.py::test_one_address_in_two_spellings_is_one_reader",
+        "test_first_use_live.py::test_an_excluded_address_is_dropped_whole",
+    ),
+    "Whatever asks on a schedule can read the records and change none of them": (
+        "test_first_use.py::test_it_does_not_reach_the_neon_control_plane",
+        "test_first_use_live.py::test_the_role_can_ask_the_question",
+        "test_first_use_live.py::test_the_role_cannot_change_anything",
+        "test_first_use_live.py::test_the_grants_alone_refuse_a_write_even_if_the_transaction_is_made_writable",
+        "test_first_use_live.py::test_the_role_cannot_read_another_table",
+    ),
     "The operator can see who is stuck at the door, and only who is still stuck": (
         "test_pending.py::test_nothing_waiting_prints_nothing_at_all",
         "test_pending.py::test_a_request_for_the_email_is_reported_with_what_to_do",
@@ -934,6 +962,12 @@ COVERED.update(
 
 
 UNMAPPED: dict[str, str] = {
+    # Lands with the workflow, group 3 of add-first-use-notice; the entry leaves this
+    # list in the same change as the test that asserts it.
+    "A new reader's arrival reaches the operator on a schedule, "
+    "with no mail account of their own": (
+        "the workflow is group 3 of add-first-use-notice; not yet written"
+    ),
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),

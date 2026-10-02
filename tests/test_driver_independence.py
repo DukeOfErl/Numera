@@ -48,6 +48,9 @@ HARNESS = {
     # The daily check. Runs from cron with nobody watching, so it may not reach
     # for a terminal or a browser either.
     "pending",
+    # The hourly first-use notice. Same reason as `pending`: it runs from a
+    # scheduler with nobody watching, so it may not need a terminal or a browser.
+    "first_use",
 }
 ADAPTERS = DRIVERS | HARNESS
 # `autobuild` joins them: it decides whether to build a corpus, which is a driver's

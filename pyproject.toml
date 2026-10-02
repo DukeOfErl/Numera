@@ -84,6 +84,7 @@ scinumbers-eval = "scinumbers_ask.eval_cli:main"
 scinumbers-enrol = "scinumbers_ask.enrol:main"
 scinumbers-withdraw = "scinumbers_ask.enrol:withdraw_main"
 scinumbers-pending = "scinumbers_ask.pending:main"
+scinumbers-first-use = "scinumbers_ask.first_use:main"
 
 [dependency-groups]
 dev = [
