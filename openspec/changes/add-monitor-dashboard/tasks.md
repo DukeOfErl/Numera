@@ -33,17 +33,22 @@ repository. The implementer's job is to leave the instructions right.
 
 ## 1. The read-only role
 
-- [ ] 1.1 Probe: does Neon's API (`GET /projects/{id}/connection_uri` with
-      `role_name`) return a URI for a role made in SQL? Answer it on `dev` with a
-      throwaway role, then drop the role. Record the answer, with the date, in
-      ADR-1310, and pick the password path from design §2 accordingly.
-- [ ] 1.2 `sql/monitor_role.sql`: idempotent create of `scinumbers_monitor`
-      (`LOGIN`, password from `psql -v`), `CONNECT`, `USAGE ON SCHEMA public`,
-      `SELECT ON trail`, `SELECT (email, disabled) ON accounts` and nothing
-      else of it, `default_transaction_read_only = on`, and a
-      role-level `statement_timeout`. No default privileges, no
-      `ALL TABLES`. A header comment says why, and how to run it per branch.
-- [ ] 1.3 (operator) Run it on `dev`.
+- [x] 1.1 ~~Probe whether Neon's API returns a URI for a role made in SQL.~~
+      Superseded: the view never asks for a URI. It takes the branch's host from
+      `neon.endpoint_host` (the endpoints API, which carries no credential) and
+      its own password from the environment, so the owner's URL is never in its
+      memory. Recorded in ADR-1310.
+- [x] 1.2 `scinumbers-monitor-grant --branch <name>` (`grant.py`), replacing
+      the planned `psql` script: `psql` is not installed on the operator's
+      machine. It runs as the branch owner via Neon's API, like
+      `scinumbers-enrol`, and creates the role if absent. It sets a fresh
+      generated password (printed once), and grants `SELECT ON trail` and
+      `SELECT (email, disabled) ON accounts` and nothing else, plus
+      `default_transaction_read_only = on` and a role `statement_timeout`. No
+      default privileges, no `ALL TABLES`. Offline tests in
+      `test_monitor_connection.py`.
+- [ ] 1.3 (operator) Run `scinumbers-monitor-grant --branch dev`; set
+      `SCINUMBERS_MONITOR_DB_PASSWORD`.
 - [ ] 1.4 `tests/test_monitor_role_live.py` (live marker, against `dev`):
       under `scinumbers_monitor`, `select` from `trail` succeeds; `insert` into
       `trail` is refused; `select email, disabled from accounts` succeeds;
@@ -55,17 +60,18 @@ repository. The implementer's job is to leave the instructions right.
 
 ## 2. Package and entry point
 
-- [ ] 2.1 `src/scinumbers_monitor/__init__.py` and `connection.py`: build the
-      read-only engine from a branch name, per the outcome of 1.1. Apply
+- [x] 2.1 `src/scinumbers_monitor/__init__.py` and `connection.py`: build the
+      read-only engine from a branch name (host from `neon.endpoint_host`,
+      password from `SCINUMBERS_MONITOR_DB_PASSWORD`). Apply
       `trail_store.CONNECT_TIMEOUT_S` and `POOL_RECYCLE_S` rather than new
       numbers.
-- [ ] 2.2 `cli.py` and the `scinumbers-monitor` console script in
+- [x] 2.2 `cli.py` and the `scinumbers-monitor` console script in
       `pyproject.toml`: refuse without `--branch`, with no default, using a
       sentence in `pending.NO_BRANCH`'s pattern. Exec `streamlit run app.py
       --server.address 127.0.0.1 --server.headless true`, passing the branch.
       Test: no branch → non-zero exit and the sentence; with a branch → the argv
       handed to the exec names the branch and binds to localhost (exec stubbed).
-- [ ] 2.3 `tests/test_monitor_boundaries.py`: `scinumbers_monitor` imports from
+- [x] 2.3 `tests/test_monitor_boundaries.py`: `scinumbers_monitor` imports from
       `scinumbers_ask` only `neon` and `hosted_trace`; no `scinumbers_ask` module
       imports `scinumbers_monitor`; within the package, only `app` imports
       Streamlit. Reuse `test_driver_independence`'s import reader, don't copy it.
@@ -73,22 +79,22 @@ repository. The implementer's job is to leave the instructions right.
 
 ## 3. Queries and figures
 
-- [ ] 3.1 `figures.py`: `ENDING_EVENTS: dict[str, frozenset[str]]` and
+- [x] 3.1 `figures.py`: `ENDING_EVENTS: dict[str, frozenset[str]]` and
       `classify(rows)` → each end reason / unidentified, with the last event
       named (design §4).
       Tests come from the spec scenarios. Expected values are written from the
       requirement, not taken from a run.
-- [ ] 3.2 Tests guarding the map: the union of its sets is exactly the
+- [x] 3.2 Tests guarding the map: the union of its sets is exactly the
       `EndReason` values; every key is a string literal somewhere in
       `src/scinumbers_ask/`.
-- [ ] 3.3 `figures.py`: health figures for a period (questions, distinct
+- [x] 3.3 `figures.py`: health figures for a period (questions, distinct
       testers, endings, spend total and per question, limit endings), each rate
       paired with its count; an empty period gives a value that says so, not
       zeros that look like data.
-- [ ] 3.4 `figures.py`: quality figures (verdicts by `run_label` with counts;
+- [x] 3.4 `figures.py`: quality figures (verdicts by `run_label` with counts;
       unattributed judgements counted, not dropped; ungrounded and unsupported
       citation counts; retrieved against cited).
-- [ ] 3.5 `figures.py`: recording health (time of last row; `tracing.failed`,
+- [x] 3.5 `figures.py`: recording health (time of last row; `tracing.failed`,
       `tracing.unavailable` and `tracing.usage_unknown` counts; `prev_write_ms`
       for the first write after a gap of more than 10 minutes).
 - [ ] 3.6 `queries.py`: one `select` per row of the view, parameterised by

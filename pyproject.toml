@@ -105,6 +105,8 @@ numera-enrol = "numera_ask.enrol:main"
 numera-withdraw = "numera_ask.enrol:withdraw_main"
 numera-pending = "numera_ask.pending:main"
 numera-first-use = "numera_ask.first_use:main"
+scinumbers-monitor = "scinumbers_monitor.cli:main"
+scinumbers-monitor-grant = "scinumbers_monitor.grant:main"
 
 [dependency-groups]
 dev = [

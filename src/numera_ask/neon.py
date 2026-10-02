@@ -147,3 +147,37 @@ def connection_url(
     if url.startswith("postgresql://"):
         url = "postgresql+psycopg://" + url[len("postgresql://") :]
     return url
+
+
+class NoEndpoint(RuntimeError):
+    """The branch has no single read-write compute to connect to."""
+
+
+def endpoint_host(
+    api_key: str,
+    project: str,
+    branch: str,
+    *,
+    pooled: bool = True,
+    opener=urllib.request.urlopen,
+) -> str:
+    """The host of a branch's read-write compute, with no credential attached.
+
+    For a caller that holds its own role's password and must not be handed the
+    owner's: `connection_url` returns a URL *with* a password, and the only one it
+    can return for a role made in SQL is not one Neon knows. A branch has exactly one
+    read-write endpoint; anything else is refused rather than guessed.
+
+    The pooled host is the endpoint id with `-pooler` appended -- Neon's documented
+    form, read from api-docs.neon.tech on 2026-10-02 -- and pooled is the default for
+    the reason `connection_url` gives.
+    """
+    payload = _get(f"/projects/{project}/branches/{branch}/endpoints", api_key, {}, opener)
+    found = [e for e in payload.get("endpoints") or [] if e.get("type") == "read_write"]
+    if len(found) != 1 or not found[0].get("host"):
+        raise NoEndpoint(f"branch {branch} has {len(found)} read-write endpoints, not one")
+    host = found[0]["host"]
+    if not pooled:
+        return host
+    endpoint, _, rest = host.partition(".")
+    return f"{endpoint}-pooler.{rest}"

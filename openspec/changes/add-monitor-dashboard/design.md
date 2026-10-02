@@ -64,14 +64,15 @@ either a second Streamlit importer there, breaking the single-importer test, or
 listing it as a driver, which it is not.
 
 As its own package, the dependency direction is plain: `scinumbers_monitor` may
-import from `scinumbers_ask`, and nothing there imports it. It takes only two
-things from there:
+import from `scinumbers_ask`, and nothing there imports it. It takes four things from there, and nothing else:
 
 - `neon`, to resolve a branch name. It imports only the standard library.
 - `hosted_trace.trace_id_for`, to derive a trace id. It is Langfuse's own
   `create_trace_id(seed=…)`, and a second copy of a derivation is one that drifts.
+- `pending.waiting`, the door rule (decision 5).
+- `trail_store`'s connect timeout and pool recycle, rather than new numbers.
 
-Both imports are stated in one place, and a test asserts the package imports
+The four are stated in one place, and a test asserts the package imports
 nothing else from `scinumbers_ask`. If the view reached for `agent` or `web`,
 that is the moment to stop and think.
 
