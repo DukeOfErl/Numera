@@ -50,7 +50,7 @@ None.
   run by the operator in Neon. `sql/` gains the script.
 - **CI:** one new scheduled workflow, one repository secret (the read-only URL).
   Scheduled workflows run from `main` only, and GitHub may delay or skip a tick.
-- **Privacy:** reader email addresses appear in an issue comment and in the Actions
-  log. Acceptable while the repository is private; recorded as an ADR because making
-  it public would publish them.
+- **Privacy:** reader email addresses appear in an issue comment (the command writes its
+  report to a file, so not in the Actions log). Acceptable while the repository is
+  private; recorded as an ADR because making it public would publish them.
 - **Docs:** README, CHANGELOG, `CLAUDE.md` module table, ADRs `1250`–`1290`.

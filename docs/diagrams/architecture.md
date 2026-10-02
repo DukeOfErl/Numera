@@ -294,6 +294,40 @@ naming its caller (ADR-0110). Its own modules are section 6. It carries one rule
 the interactive drivers do not — it may not reach for a terminal, or the thing
 meant to run unattended would need one.
 
+## 3d. What happens each hour when a reader may have just arrived
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Tick as GitHub schedule
+    participant Job as first-use.yml
+    participant Cmd as scinumbers-first-use
+    participant Trail as the trail (read-only role)
+    participant Issue as the "first use" issue
+    actor Operator
+    Tick->>Job: hourly, from main only
+    Job->>Cmd: the read-only URL, the excluded addresses
+    Cmd->>Trail: set transaction read only, then who was first seen in the window
+    Trail-->>Cmd: one row per reader, with each first
+    alt nobody new
+        Cmd-->>Job: nothing at all, exit 0
+        Note over Job,Issue: a quiet hour touches GitHub not at all
+    else somebody new
+        Cmd-->>Job: one line per reader, to a file
+        Job->>Issue: a comment on the one open issue
+        Issue-->>Operator: GitHub mails the owner
+    else the trail cannot be read
+        Cmd-->>Job: exit 1, said loudly
+        Note over Job,Operator: the daily digest reports the failed run
+    end
+```
+
+*Caption: the command keeps no state. "First" is read out of the trail each hour,
+which is why the window is longer than the interval: a tick that is delayed leaves a
+gap an exact-hour window would lose a reader in, and a repeat costs a line.
+ADR-1250. The job holds a role that can read one table (ADR-1260), and the report
+goes to a file and an issue, never the run's log (ADR-1280).*
+
 ## 4. Ingestion: how the published export becomes a corpus
 
 *What happens when someone runs `bionumbers-ingest`?* A pipeline whose two ends are the only stages

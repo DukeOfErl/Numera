@@ -68,12 +68,28 @@ first `signin.admitted` is **unstamped** cannot be attributed — the session id
 hash of the address and the link, so the address cannot be recovered from it — and is
 missed until they ask something. Two such rows exist, none recently.
 
-**What was verified.** The first-seen semantics were run against real Postgres: a
-first sign-in, a first question, both in one window (one row), a sign-in that is not
-the first (not reported), a returning reader asking for the first time (reported for
-asking only), one address in two spellings (one reader), records with no address,
-the window boundary, and other events (`tests/test_first_use_live.py`, 11 tests,
-run outside the sandbox because libpq cannot resolve hosts inside it). **Not yet
-verified:** that the tests can fail — the seeded defects of task 4.1 have not been
-run, so nothing here claims a particular mutant dies; and the numbers above come from
-the `secrets.toml` database, not from `alpha`, where the deployment writes.
+**What was verified.** The first-seen semantics were run against real Postgres
+(`tests/test_first_use_live.py`, 14 first-seen tests, run outside the sandbox because
+libpq cannot resolve hosts inside it): a first sign-in, a first question, both in one
+window (one row), a sign-in *and* a question that are not the first (not reported), a
+returning reader asking for the first time (reported for asking only), a new sign-in
+beside an old first question, one address in two spellings, records with no address,
+the window boundary for both kinds, and other events.
+
+Defects were then seeded into a copy of `first_use.py`, with a green baseline first
+(2026-10-02). **Offline, 8 of 8 caught**: case-sensitive exclusion, a report that
+always claims both firsts, a default window trimmed to an hour, the read-only setting
+dropped, a zero window clamped instead of refused, a swallowed read failure, a header
+printed on an empty report, exclusion applied to half a row. **In SQL, against the
+real database, 8 of 8 caught after one fix**: "first" dropped, `min` turned into
+`max`, no case-folding, empty addresses let through, the full outer join made inner,
+a wrong event for questions, and the window ignored for sign-ins or for questions.
+**The first run left one survivor — the window ignored for questions.** Every "not the
+first" case I had written was a sign-in, so a reader who had ever asked a question would
+have been reported every hour, and no test said otherwise. Three symmetric question
+tests were added and the mutant then died. The mapping above is therefore the one
+that was tested, not the one that was first written.
+
+**Not verified:** the numbers above come from the `secrets.toml` database, not from
+`alpha`, where the deployment writes; and the real distribution of delays between
+ticks, which sets whether 70 minutes is enough (task 6.4).

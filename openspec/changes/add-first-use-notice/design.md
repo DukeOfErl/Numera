@@ -106,9 +106,10 @@ The cron is `23 * * * *` — off the top of the hour and off keepalive's `:17`. 
 `concurrency` group keeps two ticks from overlapping. The excluded addresses come from
 a repository *variable* (`FIRST_USE_EXCLUDE`), not the workflow file.
 
-**6. Privacy, recorded as a decision.** The issue comment and the Actions log carry
-reader addresses. Both are visible to repository collaborators only while the repository
-is private; making it public publishes them. ADR in block `1250`–`1290`, and the
+**6. Privacy, recorded as a decision.** The issue comment carries reader addresses; the
+command writes its report to a file, so the Actions log does not. The issue is visible to
+repository collaborators only while the repository is private; making it public publishes
+them. ADR in block `1250`–`1290`, and the
 workflow carries a comment saying so beside the line that prints them.
 
 ## Risks / Trade-offs

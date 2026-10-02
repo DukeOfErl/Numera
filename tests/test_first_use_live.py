@@ -134,6 +134,28 @@ def test_a_sign_in_that_is_not_the_first_is_not_reported(engine, table):
     assert _seen(engine, table) == {}
 
 
+def test_a_question_that_is_not_the_first_is_not_reported(engine, table):
+    # The mirror of the sign-in case. It was missing, and a seeded defect found it:
+    # with the window dropped from the question side only, every reader who had ever
+    # asked anything was reported every hour, and all of the "not the first" cases
+    # here were sign-ins, so nothing noticed.
+    _write(engine, table, [(ASK, "back@example.org", 180), (ASK, "back@example.org", 10)])
+    assert _seen(engine, table) == {}
+
+
+def test_a_first_question_older_than_the_window_is_not_reported(engine, table):
+    _write(engine, table, [(ASK, "old@example.org", 120)])
+    assert _seen(engine, table, minutes=70) == {}
+    assert list(_seen(engine, table, minutes=180)) == ["old@example.org"]
+
+
+def test_a_new_sign_in_does_not_make_an_old_first_question_new(engine, table):
+    _write(engine, table, [(ASK, "old@example.org", 180), (SIGN_IN, "old@example.org", 10)])
+    seen = _seen(engine, table)
+    assert seen["old@example.org"].signed_in_at is not None
+    assert seen["old@example.org"].asked_at is None, "the question was not the first in this window"
+
+
 def test_a_returning_reader_asking_for_the_first_time_is_reported_for_asking_only(engine, table):
     _write(engine, table, [(SIGN_IN, "back@example.org", 180), (ASK, "back@example.org", 10)])
     seen = _seen(engine, table)

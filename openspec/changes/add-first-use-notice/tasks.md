@@ -26,14 +26,14 @@
 
 ## 4. Prove the tests can fail (fault-seeding, over this module only)
 
-- [ ] 4.1 Per the `fault-seeding` skill, seed into a **copy**, never the working tree: (a) drop the "no earlier event" predicate, (b) drop the lower-casing, (c) apply `--exclude` before instead of after combining so a combined reader splits, (d) report both firsts when only one is in the window. Establish a green baseline and a caught canary first; each mutant must fail exactly the test written for it. Record which survived and what that means.
+- [x] 4.1 Per the `fault-seeding` skill, seed into a **copy**, never the working tree: (a) drop the "no earlier event" predicate, (b) drop the lower-casing, (c) apply `--exclude` before instead of after combining so a combined reader splits, (d) report both firsts when only one is in the window. Establish a green baseline and a caught canary first; each mutant must fail exactly the test written for it. Record which survived and what that means.
 
 ## 5. Documentation, in this change
 
-- [ ] 5.1 README: what the notice is, the role and secret setup steps, the workflow, and the privacy note; keep the existing cron note for `pending` consistent with it.
-- [ ] 5.2 CHANGELOG `[Unreleased]` Added; `CLAUDE.md` module table row for `first_use.py` (a harness module; **silent when nobody is new**), and update the ADR block's "written" note.
-- [ ] 5.3 `docs/diagrams/architecture.md`: if it carries the operator/scheduled-job story, add this as one sequence diagram following `docs/diagrams/DIAGRAMS.md`; if it does not, say so in the commit rather than inventing a place for it.
-- [ ] 5.4 `openspec validate add-first-use-notice --strict`.
+- [x] 5.1 README: what the notice is, the role and secret setup steps, the workflow, and the privacy note; keep the existing cron note for `pending` consistent with it.
+- [x] 5.2 CHANGELOG `[Unreleased]` Added; `CLAUDE.md` module table row for `first_use.py` (a harness module; **silent when nobody is new**), and update the ADR block's "written" note.
+- [x] 5.3 `docs/diagrams/architecture.md`: if it carries the operator/scheduled-job story, add this as one sequence diagram following `docs/diagrams/DIAGRAMS.md`; if it does not, say so in the commit rather than inventing a place for it.
+- [x] 5.4 `openspec validate add-first-use-notice --strict`.
 
 ## 6. Roll out (operator steps, then verify)
 
