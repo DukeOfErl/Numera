@@ -39,15 +39,17 @@ repository. The implementer's job is to leave the instructions right.
       ADR-1310, and pick the password path from design §2 accordingly.
 - [ ] 1.2 `sql/monitor_role.sql`: idempotent create of `scinumbers_monitor`
       (`LOGIN`, password from `psql -v`), `CONNECT`, `USAGE ON SCHEMA public`,
-      `SELECT ON trail` only, `default_transaction_read_only = on`, and a
+      `SELECT ON trail`, `SELECT (email, disabled) ON accounts` and nothing
+      else of it, `default_transaction_read_only = on`, and a
       role-level `statement_timeout`. No default privileges, no
       `ALL TABLES`. A header comment says why, and how to run it per branch.
 - [ ] 1.3 (operator) Run it on `dev`.
 - [ ] 1.4 `tests/test_monitor_role_live.py` (live marker, against `dev`):
       under `scinumbers_monitor`, `select` from `trail` succeeds; `insert` into
-      `trail` is refused; `select` from `accounts` is refused; `create table` is
-      refused. **Canary first:** the same test parametrised over the owner role
-      must fail on the three refusals, and the test says so. A test that passes
+      `trail` is refused; `select email, disabled from accounts` succeeds;
+      `select openrouter_key from accounts` and `select * from accounts` are
+      refused; `create table` is refused. **Canary first:** the same test parametrised over the owner role
+      must fail on the refusals, and the test says so. A test that passes
       for both roles proves nothing.
 - [ ] 1.5 Write ADR-1310.
 
@@ -71,12 +73,13 @@ repository. The implementer's job is to leave the instructions right.
 
 ## 3. Queries and figures
 
-- [ ] 3.1 `figures.py`: `ENDINGS: dict[EndReason, str]` and `classify(rows)`
-      → answered / each other ending / unidentified, with the last event named.
+- [ ] 3.1 `figures.py`: `ENDING_EVENTS: dict[str, frozenset[str]]` and
+      `classify(rows)` → each end reason / unidentified, with the last event
+      named (design §4).
       Tests come from the spec scenarios. Expected values are written from the
       requirement, not taken from a run.
-- [ ] 3.2 Tests guarding the map: every `EndReason` has an entry; every mapped
-      event name appears as `record("<name>"` somewhere in
+- [ ] 3.2 Tests guarding the map: the union of its sets is exactly the
+      `EndReason` values; every key is a string literal somewhere in
       `src/scinumbers_ask/`.
 - [ ] 3.3 `figures.py`: health figures for a period (questions, distinct
       testers, endings, spend total and per question, limit endings), each rate

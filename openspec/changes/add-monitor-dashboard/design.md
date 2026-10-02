@@ -9,10 +9,8 @@ See proposal.md for why. The constraints that shape the approach:
 - **Endings are scattered event names, not one record.** `ask` records
   `question.asked`, `answer.given` and `answer.evidence` as events pass through,
   but `QuestionEnded` itself is not written to the trail. A question's ending is
-  therefore one of several event names (`question.answered`,
-  `question.no_answer`, `run.budget_reached`, `conversation.bound_reached`,
-  `spend.limit_reached`, `provider.failed`, `internal.failed`, `not_configured`,
-  …), one per `EndReason`.
+  therefore one of ten event names, and two of them carry the reason in their
+  payload rather than in their name (decision 4).
 - **Most of what a dashboard would want from Langfuse is already in the trail.**
   `question.answered` carries `spend_micro`, `model_calls` and `tool_calls`.
   `spend.increment` carries the model and the prompt and completion tokens per
@@ -31,7 +29,8 @@ See proposal.md for why. The constraints that shape the approach:
   its password needs at least 60 bits of entropy. Roles belong to a branch and
   are copied into branches made from it.
 - **`accounts` holds `openrouter_key`.** A role that can read every table can read
-  every tester's API key.
+  every tester's API key. `pending`'s enrolment query reads only `accounts.email`
+  and `accounts.disabled`.
 - **`test_driver_independence.py` allows exactly one module in `scinumbers_ask` to
   import Streamlit (`web`).**
 
@@ -88,13 +87,20 @@ dependency appears that `ask` does not have.
 ### 2. A role that can read `trail` and nothing else, made in SQL (ADR-1310)
 
 `sql/monitor_role.sql` creates `scinumbers_monitor` with `LOGIN`, `CONNECT` on
-the database, `USAGE` on `public`, and `SELECT` on `trail` **only**. It deviates
-from Neon's documented read-only recipe twice, deliberately:
+the database, `USAGE` on `public`, `SELECT` on `trail`, and `SELECT (email,
+disabled)` on `accounts`, a **column-level** grant. The door row reuses
+`pending.waiting()`, and its enrolment query asks `accounts` whether an address
+is enrolled and not disabled. Those two columns are all it reads, and the
+addresses are already in the trail. `openrouter_key` and `openrouter_key_hash`
+stay unreadable: Postgres refuses any statement that names an ungranted column,
+`select *` included. The script deviates from Neon's documented read-only recipe
+twice, deliberately:
 
 - **No `SELECT ON ALL TABLES` and no default privileges.** That recipe would hand
-  over `accounts` today and every future table automatically. A table the view
-  needs is granted by name, in the same change that reads it. The cheap direction
-  is a view that errors on a missing grant, not one that can read keys.
+  over every key in `accounts` today and every future table automatically. A
+  table or column the view needs is granted by name, in the same change that
+  reads it. The cheap direction is a view that errors on a missing grant, not
+  one that can read keys.
 - **`ALTER ROLE … SET default_transaction_read_only = on`** and a role-level
   `statement_timeout`. The grants already make writes impossible. These make the
   intent visible to anyone reading `\drds`, and bound a runaway query.
@@ -136,17 +142,29 @@ screen as the trail.
 
 ### 4. Endings classified from a declared map, with an unidentified bucket
 
-`scinumbers_monitor` declares `ENDINGS: dict[EndReason, str]`, from each end
-reason to the trail event that records it. A question's ending is the latest
-event among those names. A question with none is **unidentified**, and the view
-shows its last recorded event.
+The trail has no one-to-one map from end reason to event, so the map is keyed
+by event:
+`ENDING_EVENTS: dict[str, frozenset[str]]`, from each ending event to the end
+reasons it can record. Most events record exactly one reason
+(`question.answered` → `answered`, `spend.unpriceable` → `not_configured`, …).
+Two record one of several, and name it in `detail["reason"]`:
+`spend.limit_reached` (`spend_ceiling` | `run_budget`) and `provider.failed`
+(`provider_failure` | `provider_limit`).
 
-Two tests keep the map honest. One asserts every `EndReason` member has an
-entry, so a new reason fails the suite until it is mapped. The other asserts
-every mapped event name is one `scinumbers_ask` actually records, found by
-scanning the source for `record("<name>"`. That catches a rename. A question
-recorded under an ending added later, before the map knows it, still falls into
-unidentified, never into answered. That is the spec's cheap direction.
+A question's ending is the **latest event that is a key of the map**. Its kind
+is the set's single member, or `detail["reason"]` when it is a member of the
+set. Records after the ending (`answer.given`, `answer.evidence`,
+`feedback.*`) are ignored for classification; they follow `question.answered` in
+time, because `ask` records them as events pass on to the driver. A question
+with no mapped event, or whose `detail["reason"]` is missing or outside the
+set, is **unidentified**, and the view shows its last recorded event.
+
+Two tests keep the map honest. One asserts that the union of the sets is exactly
+the set of `EndReason` values, so a new reason fails the suite until it is
+mapped. The other asserts that every key is a string literal somewhere in
+`src/scinumbers_ask/`, which catches a rename. A question recorded under an
+ending added later, before the map knows it, still falls into unidentified,
+never into answered. That is the spec's cheap direction.
 
 *Considered and deferred:* having `ask` record one `question.ended` row with the
 reason as events pass through, the ADR-0840 pattern. It would make

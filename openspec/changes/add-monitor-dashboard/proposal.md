@@ -34,9 +34,10 @@ tracer into a record it was decided it cannot be (ADR-0750, ADR-1000).
 - **Langfuse is linked, never queried.** Its own dashboards (latency, cost,
   units) are configured in Langfuse, documented here as an operator step. The
   local dashboard makes no call to Langfuse's API.
-- **A database role that can read the trail and nothing else**, created by a
-  committed SQL script. It cannot read `accounts`, which holds testers' API keys,
-  and it cannot write anywhere.
+- **A database role that can read the trail and who is enrolled, and nothing
+  else**, created by a committed SQL script. Of `accounts`, which holds testers'
+  API keys, it can read only the address and whether the account is disabled.
+  It cannot write anywhere.
 
 ## Capabilities
 

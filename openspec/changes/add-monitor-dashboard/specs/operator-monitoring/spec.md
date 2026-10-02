@@ -7,11 +7,12 @@ showing it.
 
 ## ADDED Requirements
 
-### Requirement: The view reads the trail and nothing else, and changes nothing
+### Requirement: The view reads the trail and who is enrolled, never a credential, and changes nothing
 
-The monitoring view SHALL read only the trail. It SHALL NOT be able to read
-account records, which hold testers' credentials, and it SHALL NOT be able to
-insert, update or delete any row anywhere.
+The monitoring view SHALL read only the trail and, of the account records, which
+addresses are enrolled and whether each is disabled. It SHALL NOT be able to read
+the credentials held with an account, and it SHALL NOT be able to insert, update
+or delete any row anywhere.
 
 Both limits SHALL be enforced by the database, through the identity the view
 connects as, and not only by the queries the view happens to issue. A view that
@@ -22,9 +23,13 @@ is read-only because nobody wrote a write is read-only until somebody does.
 - **THEN** the database refuses it
 - **AND** no row is changed
 
-#### Scenario: The view's identity tries to read account records
-- **WHEN** a read of the account records is attempted under the identity the view connects as
+#### Scenario: The view's identity tries to read account credentials
+- **WHEN** a read of the credentials held with an account is attempted under the identity the view connects as
 - **THEN** the database refuses it
+
+#### Scenario: The view's identity reads who is enrolled
+- **WHEN** the view asks which addresses are enrolled and whether each is disabled
+- **THEN** the database answers
 
 #### Scenario: The operator uses the view
 - **WHEN** the operator opens the view and uses every part of it
@@ -78,8 +83,10 @@ an error and not as an empty page.
 
 ### Requirement: A question's ending is what the trail recorded, and an ending the view cannot identify is never counted as an answer
 
-Each question SHALL be classified by the ending the trail recorded for it. A
-question for which the view finds no ending it can identify SHALL be shown as
+Each question SHALL be classified by the latest ending the trail recorded for
+it, among the endings the view knows. Records that follow an ending — the answer
+itself, its evidence, a reader's rating — SHALL NOT change the classification. A
+question for which the view finds no ending it knows SHALL be shown as
 unidentified, together with the last event the trail recorded for that question,
 and SHALL NOT be counted as answered or as any other ending.
 
@@ -101,9 +108,13 @@ answer rate that looks ordinary.
 - **AND** does not count it as answered
 
 #### Scenario: An ending the view does not know
-- **WHEN** the last event the trail records for a question is one the view does not recognise as an ending
+- **WHEN** the trail records for a question no ending the view knows, and its last event is one the view does not recognise
 - **THEN** the view shows that question as unidentified, naming that event
 - **AND** does not count it as answered
+
+#### Scenario: Records after the ending
+- **WHEN** the trail records a question as answered and afterwards records the answer, its evidence and a reader's rating of it
+- **THEN** the view still counts it as answered
 
 ### Requirement: Readers' judgements are shown grouped by what produced the answer
 

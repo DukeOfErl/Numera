@@ -1383,7 +1383,7 @@ COVERED.update(
 #: being built so the suite stays green between its task groups. Task 5.1 moves
 #: each into `COVERED` and this tuple must be empty when the change archives.
 AWAITING_THE_MONITOR = (
-    "The view reads the trail and nothing else, and changes nothing",
+    "The view reads the trail and who is enrolled, never a credential, and changes nothing",
     "The view runs on the operator's machine and names the branch it reads",
     "Use, cost and endings are shown for a chosen period, with every rate beside its count",
     "A question's ending is what the trail recorded, and an ending the view cannot identify "
