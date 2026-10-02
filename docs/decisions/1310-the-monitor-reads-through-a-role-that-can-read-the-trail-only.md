@@ -46,8 +46,12 @@ generated password and prints it once. Re-running is how the password is rotated
 
 The view never asks Neon for a URI. It takes the host from `neon.endpoint_host`,
 the branch's read-write endpoint, which carries no credential. It takes its own
-password from `SCINUMBERS_MONITOR_DB_PASSWORD`. The owner's URL is therefore
-never in the view's memory. This also made the planned probe (task 1.1)
+password from `SCINUMBERS_MONITOR_DB_PASSWORD`. Streamlit is started with
+`--secrets.files` pointing at an empty file: a verifier found that, run from the
+repository root, Streamlit loads `.streamlit/secrets.toml` at server start, and
+that file holds the owner's URL. `test_monitor_cli.py` measures it with
+Streamlit's own loader, the file read without the flag and ignored with it. So
+the view neither fetches the owner's URL nor loads it. This also made the planned probe (task 1.1)
 unnecessary: whether the API reveals SQL-role passwords no longer matters.
 
 `tests/test_monitor_role_live.py` probes the grants on a real branch. It runs each
@@ -56,6 +60,13 @@ grants and not the read-only default, and it rolls every probe back. The owner
 runs the same probes first as the canary.
 
 ## Trade-off accepted
+
+Temporary tables are not refused. Postgres grants `TEMPORARY` on a database to
+`PUBLIC` by default, so the role can probably create and fill a temporary table
+in its own session. It vanishes at disconnect and touches no shared row.
+Revoking it from `PUBLIC` would change every role's privileges, the app's
+included, to close a hole that holds nothing. Not measured: the live probes test
+`create table` in `public` only.
 
 One more secret for the operator to hold: the monitor's password, in the
 environment. It is a read credential for testers' emails and comments, which is

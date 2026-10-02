@@ -87,7 +87,8 @@ dependency appears that `ask` does not have.
 
 ### 2. A role that can read `trail` and nothing else, made in SQL (ADR-1310)
 
-`sql/monitor_role.sql` creates `scinumbers_monitor` with `LOGIN`, `CONNECT` on
+`scinumbers-monitor-grant` (`grant.py`; first planned as a `psql` script, but `psql`
+is not installed on the operator's machine) creates `scinumbers_monitor` with `LOGIN`, `CONNECT` on
 the database, `USAGE` on `public`, `SELECT` on `trail`, and `SELECT (email,
 disabled)` on `accounts`, a **column-level** grant. The door row reuses
 `pending.waiting()`, and its enrolment query asks `accounts` whether an address
@@ -106,18 +107,17 @@ twice, deliberately:
   `statement_timeout`. The grants already make writes impossible. These make the
   intent visible to anyone reading `\drds`, and bound a runaway query.
 
-The script is idempotent: create if absent, then grant. The password is
-supplied at run time with `psql -v` and never appears in the repository. It is
+The command is idempotent: create if absent, then grant. Every run sets a fresh
+generated password and prints it once, so re-running is how it is rotated. It is
 run once on `alpha`, and on `dev` for development. A branch made from either
 inherits the role.
 
-**How the view gets the password.** Neon's API reveals passwords for roles it
-manages, and it is not documented whether that covers a role made in SQL.
-Task 1.1 probes it. If it does, the view resolves the full URL by branch name
-through `neon.connection_url(role="scinumbers_monitor")`, as `pending` does, and
-nothing is kept locally. If it does not, the host still comes from the API by
-branch name, and the password comes from `SCINUMBERS_MONITOR_DB_PASSWORD` in
-the operator's environment. In neither case is a URL written to disk.
+**How the view gets the password.** It never asks Neon for a URI. The host comes
+from `neon.endpoint_host` (the branch's read-write endpoint, no credential) and
+the password from `SCINUMBERS_MONITOR_DB_PASSWORD`, so the owner's URL is never
+fetched. Streamlit is started with `--secrets.files` pointing at an empty file:
+run from the repository root, it would otherwise load `.streamlit/secrets.toml`,
+and the owner's URL with it. No URL is written to disk.
 
 *Alternative:* connecting as `neondb_owner`, as `pending` does. It works today,
 and it is exactly the "read-only because nobody wrote a write" the spec forbids.
@@ -229,16 +229,14 @@ in the page header and in the title of every row.
 
 ## Migration Plan
 
-Nothing deployed changes. Operator steps, in order: run `sql/monitor_role.sql`
-on `dev`, then on `alpha`. Set `LANGFUSE_PROJECT_ID` (and, depending on task 1.1,
-`SCINUMBERS_MONITOR_DB_PASSWORD`). Configure the Langfuse dashboards and alerts
+Nothing deployed changes. Operator steps, in order: run
+`scinumbers-monitor-grant --branch dev`, then `--branch alpha`. Set
+`SCINUMBERS_MONITOR_DB_PASSWORD` and `LANGFUSE_PROJECT_ID`. Configure the Langfuse dashboards and alerts
 (task 6). Rollback is `drop role scinumbers_monitor` on each branch. The role owns
 nothing, so it drops cleanly.
 
 ## Open Questions
 
-- Whether Neon's API returns a connection URI for a role made in SQL. Task 1.1
-  answers it, and either answer fits the design above.
 - Which two Langfuse alerts are worth the Hobby allowance. Proposed: p95 latency
   of `ask` traces, and a count of error-level observations. Revisit once a week
   of alpha traffic has been seen in its dashboards.

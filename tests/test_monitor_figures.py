@@ -399,3 +399,59 @@ def test_the_module_reads_no_database_and_draws_nothing():
     source = Path(figures.__file__).read_text()
     for name in ("streamlit", "sqlalchemy", "psycopg", "langfuse"):
         assert f"import {name}" not in source and f"from {name}" not in source
+
+
+def test_an_ungrounded_record_on_a_question_with_no_answer_is_not_counted():
+    """`ask` judges the prose of a question that ended on a provider failure too,
+    in this order, with no `answer.given`. Counting it would put it in the
+    numerator and not the denominator."""
+    rows = answered("q1") + [
+        row("question.asked", q="q2", question="?"),
+        row("provider.failed", q="q2", reason="provider_failure"),
+        row("answer.ungrounded", q="q2"),
+        row("citations.unsupported", q="q2", unknown=["7"], unretrieved=[]),
+    ]
+    q = quality(rows)
+    assert q.ungrounded == Share(0, 1)
+    assert q.unsupported_citations == Share(0, 1)
+
+
+@pytest.mark.parametrize(
+    ("event", "reason"),
+    [
+        ("question.answered", "answered"),
+        ("question.no_answer", "no_answer"),
+        ("not_configured", "not_configured"),
+        ("spend.unpriceable", "not_configured"),
+        ("run.budget_reached", "run_budget"),
+        ("conversation.bound_reached", "conversation_bound"),
+        ("retrieval.bound_reached", "retrieval_bound"),
+        ("internal.failed", "internal_error"),
+    ],
+)
+def test_each_single_reason_event_means_its_reason(event, reason):
+    """Written from `AskAgent._ask`, where each event is recorded beside the
+    `QuestionEnded` it precedes. The completeness test compares only the union, so a
+    swap of two events' reasons would pass it."""
+    assert ENDING_EVENTS[event] == {reason}
+    rows = [row("question.asked", q="q1", question="?"), row(event, q="q1")]
+    assert classify(rows)["q1"].kind == reason
+
+
+def test_write_order_is_the_id_not_the_timestamp():
+    """Two rows can share a transaction's `at`, and clocks are not ids. A later id
+    with an earlier `at` is still the later write."""
+    rows = [
+        row("question.asked", q="q1", at=T0, question="?"),
+        Row(id=1000, at=T0 + timedelta(seconds=5), event="question.no_answer", question_id="q1"),
+        Row(id=1001, at=T0 + timedelta(seconds=1), event="question.answered", question_id="q1"),
+    ]
+    assert classify(rows)["q1"].kind == "answered"
+
+
+def test_an_unattributed_verdict_counts_once_as_its_latest():
+    rows = answered("q1", email=None) + [
+        row("feedback.verdict", q="q1", verdict="up"),
+        row("feedback.verdict", q="q1", verdict="down"),
+    ]
+    assert quality(rows).unattributed_verdicts == 1

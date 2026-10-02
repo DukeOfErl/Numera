@@ -29,9 +29,11 @@ The monitor links to each question's trace and makes no request to Langfuse. The
 link is `{LANGFUSE_BASE_URL}/project/{LANGFUSE_PROJECT_ID}/traces/{trace_id}`, with
 the id from `hosted_trace.trace_id_for(question_id)`, Langfuse's own derivation. It
 is omitted for questions older than the 30-day window, where it would lead nowhere.
-`tests/test_monitor_app.py` runs the whole page with sockets refused. A copy of the
-page that called Langfuse failed that test, which was checked before the test was
-believed.
+`tests/test_monitor_app.py` runs the whole page with sockets refused, and records
+every attempt as well as refusing it. A copy of the page that called Langfuse
+failed that test, which was checked before the test was believed. A verifier then
+showed the refusal alone missed a call that swallows its own error, as Langfuse's
+SDK does, which is why each attempt is also recorded and asserted absent.
 
 Langfuse's own charts (latency, cost, units, `reader_verdict` over time) and its two
 Hobby alerts are configured in Langfuse, as an operator step in the README.

@@ -783,7 +783,8 @@ it cannot read a tester's key. That limit is Postgres's, not the page's
 The role is made in SQL by `scinumbers-monitor-grant` because a role made in Neon's
 console joins `neon_superuser` and can never be read-only. Running the command again
 rotates the password. The page takes the database host from Neon's API by branch
-name, so the owner's URL is never in it.
+name, and is told to load no Streamlit secrets file, so the owner's URL is never
+in it — even when started from the repository root, beside `.streamlit/secrets.toml`.
 
 **It is bound to 127.0.0.1 and has no sign-in of its own**, because it shows
 testers' addresses and comments. There is no default branch, for the same reason

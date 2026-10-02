@@ -1380,8 +1380,12 @@ COVERED.update(
 
 
 # `operator-monitoring` (add-monitor-dashboard). "Another machine connects" is
-# asserted as the address handed to Streamlit, not by a connection attempt. The
-# grants are asserted live (`-m network`), with the owner as the canary.
+# asserted as the address handed to Streamlit, not by a connection attempt.
+# **Live only, and say so:** what the database refuses the role, that a read
+# changes no row, and the door rule under the column grant are `-m network` tests
+# (`test_monitor_role_live`, `test_monitor_queries_live`, `test_pending_live`).
+# The default run deselects them, so the first two requirements below are
+# asserted offline only as far as the grant's text and the page's wiring.
 COVERED.update(
     {
         "The view reads the trail and who is enrolled, never a credential, and changes nothing": (
@@ -1390,6 +1394,8 @@ COVERED.update(
             "test_monitor_role_live.py::test_the_monitor_can_read_what_the_view_needs",
             "test_monitor_connection.py::test_nothing_is_granted_wholesale",
             "test_monitor_connection.py::test_the_owner_s_url_is_never_asked_for",
+            "test_monitor_cli.py::test_the_page_is_told_to_load_no_secrets_file",
+            "test_monitor_queries_live.py::test_using_every_read_changes_no_row",
         ),
         "The view runs on the operator's machine and names the branch it reads": (
             "test_monitor_cli.py::test_no_branch_starts_nothing_and_says_one_must_be_named",
@@ -1412,6 +1418,7 @@ COVERED.update(
             "test_monitor_figures.py::test_an_unknown_last_event_is_unidentified_not_answered",
             "test_monitor_figures.py::test_a_reason_outside_the_event_s_set_is_unidentified",
             "test_monitor_figures.py::test_the_map_covers_every_end_reason_and_nothing_else",
+            "test_monitor_figures.py::test_each_single_reason_event_means_its_reason",
             "test_monitor_figures.py::test_every_mapped_event_is_one_the_application_records",
         ),
         "Readers' judgements are shown grouped by what produced the answer": (
@@ -1421,6 +1428,7 @@ COVERED.update(
             "test_monitor_figures.py::test_ungrounded_and_unsupported_are_shares_of_the_questions_given_an_answer",
         ),
         "The view shows who is waiting at the door": (
+            "test_monitor_app.py::test_the_door_lists_who_is_waiting",
             "test_pending_live.py::test_an_enrolled_account_leaves_the_queue_even_if_it_never_returns",
             "test_pending_live.py::test_the_enrolment_queue_reports_everyone_with_no_row",
             "test_monitor_queries_live.py::test_the_door_rule_runs_under_the_monitor_s_role",
@@ -1428,6 +1436,7 @@ COVERED.update(
         "The view shows whether the recording itself is working": (
             "test_monitor_figures.py::test_recording_reports_the_last_row_and_tracer_trouble_by_name",
             "test_monitor_figures.py::test_a_cold_write_is_timed_by_the_row_after_it",
+            "test_monitor_app.py::test_the_recording_row_shows_the_last_row_and_tracer_failures",
         ),
         "A question can be followed to its hosted trace without contacting the tracer": (
             "test_monitor_links.py::test_a_recent_question_links_to_its_derived_trace",

@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 APP = Path(__file__).with_name("app.py")
+NO_SECRETS = Path(__file__).with_name("no-secrets.toml")
 
 #: No default, for the reason `pending.NO_BRANCH` has none: the deployment's testers
 #: are in one branch and a rehearsal's in another. Worded for a command that writes
@@ -38,6 +39,11 @@ def streamlit_argv(branch: str) -> list[str]:
         "127.0.0.1",
         "--server.headless",
         "true",
+        # No secrets file. Started from the repository root, Streamlit would load
+        # `.streamlit/secrets.toml`, and the owner's database URL with it -- the one
+        # credential this view is built never to hold (ADR-1310).
+        "--secrets.files",
+        str(NO_SECRETS),
         "--",
         "--branch",
         branch,

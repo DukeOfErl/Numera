@@ -52,7 +52,7 @@ def _rows():
 @pytest.fixture
 def offline(monkeypatch):
     """No database and no network: reads return rows, and any socket is refused."""
-    state = {"rows": _rows(), "asked_for": []}
+    state = {"rows": _rows(), "asked_for": [], "attempts": [], "waiting": ([], [])}
     monkeypatch.setattr(connection, "resolve", lambda branch: "postgresql+psycopg://x@h/db")
     monkeypatch.setattr(connection, "engine", lambda url: object())
     monkeypatch.setattr(queries, "period_rows", lambda engine, since, until: state["rows"])
@@ -64,9 +64,13 @@ def offline(monkeypatch):
             state["asked_for"].append(q) or [x for x in state["rows"] if x.question_id == q]
         ),
     )
-    monkeypatch.setattr(pending, "waiting", lambda engine, **kw: ([], []))
+    monkeypatch.setattr(pending, "waiting", lambda engine, **kw: state["waiting"])
 
     def refuse(*args, **kwargs):
+        # Recorded as well as raised: a client that swallows its own errors (the
+        # Langfuse SDK and `hosted_trace` both fail open) would hide the raise, and
+        # the page would pass. The record cannot be swallowed.
+        state["attempts"].append(args)
         raise AssertionError(f"the page opened a network connection: {args!r}")
 
     monkeypatch.setattr(socket.socket, "connect", refuse)
@@ -121,6 +125,7 @@ def test_the_page_makes_no_network_request_through_every_part(offline, monkeypat
     at.run()
     assert not at.exception, at.exception
     assert offline["asked_for"] == ["q1"], "the drill-down did not run"
+    assert offline["attempts"] == []
 
 
 def test_without_a_branch_the_page_refuses(offline, monkeypatch):
@@ -164,3 +169,26 @@ def test_nothing_on_the_page_runs_on_a_timer():
     source = APP.read_text()
     assert "run_every" not in source
     assert "autorefresh" not in source
+
+
+def test_the_recording_row_shows_the_last_row_and_tracer_failures(offline, monkeypatch):
+    """What the page shows, not what `figures` computes: the last-row time comes
+    from its own query, over the whole table."""
+    at = _run(monkeypatch)
+    values = {m.label: m.value for m in at.metric}
+    assert values["Last row in the trail"] == f"{NOW:%Y-%m-%d %H:%M} UTC"
+    assert values["tracing.failed"] == "1"
+    assert values["tracing.unavailable"] == "0"
+
+
+def test_the_door_lists_who_is_waiting(offline, monkeypatch):
+    from scinumbers_ask.pending import Waiting
+
+    offline["waiting"] = (
+        [Waiting(address="lost@x.org", last_seen=NOW, times=2)],
+        [Waiting(address="queued@x.org", last_seen=NOW, times=1)],
+    )
+    at = _run(monkeypatch)
+    assert not at.exception, at.exception
+    shown = " ".join(str(df.value) for df in at.dataframe)
+    assert "lost@x.org" in shown and "queued@x.org" in shown

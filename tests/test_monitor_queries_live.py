@@ -47,3 +47,25 @@ def test_the_door_rule_runs_under_the_monitor_s_role(monitor):  # noqa: F811
     what proves the column grant covers what it reads."""
     no_email, not_enrolled = pending.waiting(monitor)
     assert isinstance(no_email, list) and isinstance(not_enrolled, list)
+
+
+def test_using_every_read_changes_no_row(monitor, owner):  # noqa: F811
+    """The operator uses the view; the trail holds exactly what it held. Counted by
+    the owner, before and after every read the page makes."""
+    from sqlalchemy import text
+
+    def count():
+        with owner.connect() as conn:
+            return conn.execute(text("select count(*), max(id) from trail")).one()
+
+    before = count()
+    now = datetime.now(UTC)
+    rows = queries.period_rows(monitor, now - timedelta(days=30), now)
+    queries.last_row_at(monitor)
+    pending.waiting(monitor)
+    for q in {r.question_id for r in rows if r.question_id}:
+        queries.question_rows(monitor, q)
+    after = count()
+    # Only rows the deployment itself wrote meanwhile could differ; on `dev` that is
+    # nothing, and a difference here is worth a look rather than a retry.
+    assert after == before

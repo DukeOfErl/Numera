@@ -63,9 +63,11 @@ no requirement on what is recorded changes.
   Streamlit, SQLAlchemy, psycopg and Langfuse (the last only for the trace-id
   derivation).
 - **New console script** `scinumbers-monitor`.
-- **New SQL** `sql/monitor_role.sql`: creates the read-only role. Run once per
-  Neon branch by the operator; the password is supplied at run time and never
-  written to the repository.
+- **`neon.endpoint_host`**, a small addition to `scinumbers_ask/neon.py`: a
+  branch's host with no credential, so the view never fetches the owner's URL.
+- **New console script** `scinumbers-monitor-grant`: creates the read-only role
+  (or rotates its password). Run once per Neon branch by the operator; the
+  password is printed once and never written to the repository.
 - **Neon**: a new role on the `alpha` branch (and `dev`, for development). No
   schema change. Reads wake a suspended compute, which the design accounts for.
 - **Langfuse**: dashboards and up to two alerts configured in its UI — an

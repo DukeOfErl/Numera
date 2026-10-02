@@ -245,8 +245,14 @@ def quality(rows: Iterable[Row]) -> Quality:
     ]
 
     given = {r.question_id for r in rows if r.event == "answer.given" and r.question_id}
-    ungrounded = {r.question_id for r in rows if r.event == "answer.ungrounded" and r.question_id}
-    unsupported = {
+    # Intersected with `given`: `ask` also judges the prose of a question that ended
+    # on a provider or internal failure, with no answer given, and those rows would
+    # otherwise count in the numerator and not the denominator -- "2 of 1 (200%)",
+    # or, mixed into a busy period, an inflated rate that looks ordinary.
+    ungrounded = given & {
+        r.question_id for r in rows if r.event == "answer.ungrounded" and r.question_id
+    }
+    unsupported = given & {
         r.question_id for r in rows if r.event == "citations.unsupported" and r.question_id
     }
     evidence = [r for r in rows if r.event == "answer.evidence"]

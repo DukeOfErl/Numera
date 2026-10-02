@@ -72,9 +72,12 @@ repository. The implementer's job is to leave the instructions right.
       Test: no branch → non-zero exit and the sentence; with a branch → the argv
       handed to the exec names the branch and binds to localhost (exec stubbed).
 - [x] 2.3 `tests/test_monitor_boundaries.py`: `scinumbers_monitor` imports from
-      `scinumbers_ask` only `neon` and `hosted_trace`; no `scinumbers_ask` module
-      imports `scinumbers_monitor`; within the package, only `app` imports
-      Streamlit. Reuse `test_driver_independence`'s import reader, don't copy it.
+      `scinumbers_ask` only `neon`, `hosted_trace`, `pending` and `trail_store`
+      (widened from two when the door row reused `pending.waiting`); no
+      `scinumbers_ask` module imports `scinumbers_monitor`; within the package,
+      only `app` imports Streamlit. Its own import reader, not
+      `test_driver_independence`'s: that one strips the package prefix and
+      answers a different question (the test's docstring says so).
 - [x] 2.4 Write ADR-1300.
 
 ## 3. Queries and figures
@@ -159,7 +162,7 @@ repository. The implementer's job is to leave the instructions right.
 - [x] 7.5 `docs/roadmap.md`: reconcile WP4. "The usage-events table and its
       queries" is met by reading the trail, unless that is decided otherwise;
       note the deferred `question.ended` record (design §4).
-- [ ] 7.6 (operator) Run `sql/monitor_role.sql` on `alpha`; open the view
+- [ ] 7.6 (operator) Run `scinumbers-monitor-grant --branch alpha`; open the view
       against `alpha`.
 - [ ] 7.7 Full suite green, `openspec validate --strict` passes, and the work is
       committed and handed over for the operator to try before merge.
