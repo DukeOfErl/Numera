@@ -1,0 +1,32 @@
+name: keepalive
+
+# Streamlit Community Cloud puts an app to sleep after 12 hours without a visitor,
+# and the first reader afterwards waits through a cold start. A real browser's
+# visit counts as traffic; a commit or a plain request does not (checked against
+# Streamlit's docs and forum, 2026-10-02 -- not against this app).
+#
+# **A scheduled workflow runs from the default branch only.** This file does
+# nothing until it is on `main`, wherever it was written.
+on:
+  schedule:
+    # Hourly. GitHub may delay or skip a tick under load, which is why the
+    # window is an hour and not twelve: several consecutive misses are needed
+    # before the app can sleep.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
+      - run: uvx --from playwright playwright install --with-deps chromium
+      # Fails -- and so mails the repository owner -- when the app is asleep and
+      # will not wake, or is up and not drawing the door.
+      - run: uv run bin/keepalive.py https://scinumbers.streamlit.app

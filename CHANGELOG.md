@@ -10,6 +10,10 @@ any release; `1.0.0` when it stabilizes.
 
 ## [Unreleased]
 
+### Added
+
+- An hourly keepalive (`.github/workflows/keepalive.yml`, `bin/keepalive.py`): a headless browser visits the deployed app, clicks the sleep screen's button if it is showing, and fails unless the door renders, so Community Cloud's 12-hour hibernation no longer costs the first reader a cold start. A scheduled workflow runs from `main` only, so it starts once merged there. A daily `keepalive-digest` workflow replaces GitHub's per-run failure mail with one comment on a standing issue, and also reports a day with no runs at all.
+
 ### Changed
 
 - **The door says why there is a door, and offers one way in.** It reads "Use of
