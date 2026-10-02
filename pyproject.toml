@@ -101,6 +101,8 @@ dev = [
     # purpose: this tool runs the hooks, it does not rewrite code, so its version
     # cannot move formatting under anyone.
     "pre-commit>=4.0",
+    "pytest-testmon>=2.2.0",
+    "pytest-xdist>=3.8.0",
 ]
 
 [build-system]

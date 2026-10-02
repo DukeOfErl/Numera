@@ -76,6 +76,8 @@ what let the blocks drift: no branch can see another's copy.
 | `add-one-way-in` | `1100`–`1140` — `1100`, `1110` written; archived 2026-09-29 |
 | `add-account-withdrawal` | `1150`–`1190` — `1150` written; archived 2026-09-29 |
 | `add-door-demo` | `1200`–`1240` — `1200`, `1210`, `1220` written |
+| `add-first-use-notice` | `1250`–`1290` |
+| `speed-up-test-loop` | `1300`–`1340` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets

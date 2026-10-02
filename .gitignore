@@ -78,3 +78,6 @@ eval-results/
 .coverage
 .coverage.*
 htmlcov/
+
+# pytest-testmon database: per checkout, rebuilt from scratch, never shared
+.testmondata*
