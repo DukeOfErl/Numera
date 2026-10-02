@@ -87,6 +87,7 @@ what let the blocks drift: no branch can see another's copy.
 | `fix-guard-fails-closed` | `1800`–`1840` — `1800` written; archived 2026-10-17, after `add-paper-references`' `1750`–`1790` |
 | `add-answer-view-redesign` | `1850`–`1890` — `1850` written; reserved 2026-10-17, after `fix-guard-fails-closed`'s `1800`–`1840` |
 | `rename-to-numera` | `1900`–`1940` — `1900` written; reserved 2026-11-19, after `add-answer-view-redesign`'s `1850`–`1890` |
+| `add-monitor-dashboard` | `1950`–`1990` — renumbered 2026-11-22 from `1300`–`1340`, which `speed-up-test-loop` holds on `dev`; reserved after `rename-to-numera`'s `1900`–`1940` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets
