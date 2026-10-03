@@ -75,7 +75,11 @@ priced into the projection, against a $2 ceiling.
 #: What a claim may be. Anything else the model hands back as a claim is a candidate rather
 #: than a claim, and is moved rather than kept -- the spec's "only a value the paper
 #: measured or derived from its own measurements".
-CLAIMABLE = (CandidateKind.MEASURED, CandidateKind.DERIVED)
+CLAIMABLE = (
+    CandidateKind.MEASURED,
+    CandidateKind.DERIVED,
+    CandidateKind.DERIVED_FROM_PUBLISHED,
+)
 
 INSTRUCTION = f"""You are given one research article, passage by passage, each passage with
 an id. The user turn names the property and the organism asked about. Report what this
@@ -91,10 +95,13 @@ value for it -- stating it only as a figure curve, or only in supplementary mate
 not at all. Answer NOTHING_TO_EXTRACT and give your reason in one sentence. That is a
 correct answer and not a failure. Producing a claim you cannot quote is a failure.
 
-WHAT COUNTS AS A CLAIM. Only a value this article MEASURED itself, or DERIVED from its own
-measurements, is a claim. A DERIVED value carries the quoted measurements it was computed
-from. Every other number for the property goes to the rejected list, with its category:
-- CITED: the value comes from other work.
+WHAT COUNTS AS A CLAIM. A value this article MEASURED itself, or DERIVED from its own
+measurements, is a claim. So is a value this article computed itself from other
+publications' data, which is DERIVED_FROM_PUBLISHED: it is this article's result, not a
+number copied from elsewhere. A derived value of either kind carries the quoted
+measurements or data it was computed from. Every other number for the property goes to the
+rejected list, with its category:
+- CITED: the value comes from other work, restated here and not computed here.
 - PARAMETER: the value is assumed, fixed, or used as an input to a model rather than
   measured here.
 - COMPILED: the value sits in a table or list gathering other publications' numbers.

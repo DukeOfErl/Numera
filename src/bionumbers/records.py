@@ -49,11 +49,16 @@ class Provenance(StrEnum):
 
 
 class CandidateKind(StrEnum):
-    """What a number in the paper is doing there. The first two are claims; the rest are
+    """What a number in the paper is doing there. The first three are claims; the rest are
     rejected candidates, kept because the second text is drawn from them."""
 
     MEASURED = "MEASURED"
     DERIVED = "DERIVED"
+    DERIVED_FROM_PUBLISHED = "DERIVED_FROM_PUBLISHED"
+    """Computed by this article from other publications' data: its own result, flagged so it
+    is never read as its own measurement. Added 2026-10-04 (ADR-0950): such papers are often
+    the cited source of a number, BioNumbers keeps them, and with no category for them the
+    models split between calling them derived and refusing the paper."""
     CITED = "CITED"
     PARAMETER = "PARAMETER"
     COMPILED = "COMPILED"

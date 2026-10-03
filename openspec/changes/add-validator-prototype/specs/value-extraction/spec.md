@@ -17,7 +17,9 @@ quote containing the value; the quote's location as a section path and a contain
 table cell with its row and column headers, or a caption); and a kind — a single measurement, a
 measurement with stated uncertainty, or a range whose endpoints belong to different conditions.
 
-Only a value the paper **measured** or **derived from its own measurements** SHALL be a claim. A
+Only a value the paper **measured**, **derived from its own measurements**, or **computed itself from
+other publications' data** SHALL be a claim, and the last SHALL be labelled as such so it is never
+read as the paper's own measurement. A
 value cited from other work, a value used as a parameter or assumption, and a value in a table that
 compiles the literature SHALL NOT be claims for this paper; they SHALL be recorded as rejected
 candidates with their category, because the review task draws its second texts from them. A derived
@@ -45,6 +47,10 @@ value is cited, and outranks any verb in the sentence.
 #### Scenario: A derived value
 - **WHEN** the article computes a value for the asked property from its own measurements
 - **THEN** the claim is labelled derived and carries the quoted inputs
+
+#### Scenario: A value computed from published data
+- **WHEN** the article computes a value itself from other publications' data
+- **THEN** the claim is kept, labelled as derived from published data, and carries the quoted inputs
 
 ### Requirement: Conditions and method are quoted, and each says where it came from
 

@@ -829,6 +829,29 @@ def test_the_cell_s_own_value_is_still_stated_through_its_headers(tables):
     assert claim.quote.text == "8.2"
 
 
+def test_a_value_computed_from_published_data_is_a_claim_and_says_so(article):
+    """Added 2026-10-04: an article that computes a figure from other publications' datasets
+    states its own result. It is kept, under a category that stops it reading as a measurement."""
+    passage = passage_holding(article, MEASURED_SENTENCE)
+    draft = a_claim(
+        MEASURED_SENTENCE,
+        passage,
+        value="65",
+        candidate_kind=CandidateKind.DERIVED_FROM_PUBLISHED,
+    )
+
+    result = run(ScriptedModel(found(draft)), article)
+
+    (claim,) = result.claims
+    assert claim.candidate_kind is CandidateKind.DERIVED_FROM_PUBLISHED
+    assert result.rejected == ()
+
+
+def test_the_instruction_names_every_category_a_claim_or_a_candidate_can_have():
+    for kind in CandidateKind:
+        assert kind.value in INSTRUCTION, kind
+
+
 def test_every_state_but_unreadable_is_reachable_from_here(article, essay):
     """UNREADABLE is a fact about access, established by discovery before extraction is attempted,
     so this step must never produce it -- and must produce every other one."""

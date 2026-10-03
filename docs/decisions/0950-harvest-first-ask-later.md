@@ -40,6 +40,15 @@ text are unchanged. A claim is named by its label and its review item asks about
 Review moves away from retrieval: each entry carries a trust tier derived from the decisions it
 has collected, and the review pipeline (a separate change) fills those in over time.
 
+**Amended 2026-10-04.** A third claimable category, `DERIVED_FROM_PUBLISHED`, for a value an
+article computes itself from other publications' data. On the first model comparison one paper
+(PMC2590609, yeast translation figures estimated from published genome-wide datasets) was taken as
+ten derived claims by three models and refused outright by three others, each reading "derived
+from its own measurements" its own way. BioNumbers lists four entries from that paper. Keeping
+such values under their own category records what they are instead of forcing a choice between
+mislabelling and losing them. The alternative, leaving the rule strict, would drop the papers that
+are most often the cited source of a number.
+
 ## Trade-off accepted
 
 Cost now scales with papers harvested rather than with questions asked, and is paid before anyone
