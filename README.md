@@ -347,6 +347,12 @@ streamlit run review_app.py
   text is a distractor or a second legitimate occurrence; which it was is stored and never shown.
   Decisions are written the moment they are given and the write fails closed: a reviewer whose
   decision could not be saved is told so and keeps the item.
+- **A simulated review** (`bionumbers simulate-review --reviewer student=<model>@0.6 --reviewer
+  scientist=<model>@0.35 ...`) lets models stand in for reviewers until there are people: each
+  role reviews its own fixed share of the items, is shown exactly what the page shows a person, and
+  may raise an issue instead of deciding. Every row it writes records the role and the model, and
+  anything built on those rows must be labelled as simulated. It is bounded at $0.10 per decision
+  and $2 per run by default, and running it again continues where it stopped.
 
 What it does not read: supplementary files, figure images, PDFs. What it does not do: verify an
 existing BioNumbers entry (that is `add-grounding-validator`), score reviewer agreement, or route to

@@ -51,7 +51,7 @@ from sqlalchemy import (
 
 from bionumbers import curated
 from bionumbers.curated import Refusal
-from bionumbers.records import UNLICENSED, PaperResult, ReviewItem
+from bionumbers.records import UNLICENSED, PaperResult, ReviewerRole, ReviewItem
 
 #: Seconds to wait for a connection to be established.
 #:
@@ -120,7 +120,8 @@ review_item = Table(
     ForeignKeyConstraint(["run_id", "pmcid"], ["review_paper.run_id", "review_paper.pmcid"]),
 )
 
-#: What a reviewer decided, once per item per reviewer. `reviewer` is null where no identity is
+#: What a reviewer decided -- or the issue they raised instead -- once per item per reviewer.
+#: `reviewer` is null where no identity is
 #: configured, which `user-identity` already allows and this spec repeats: the decision is recorded
 #: with no account and nothing else about it differs.
 #:
@@ -142,11 +143,23 @@ review_decision = Table(
     ),
     Column("item_id", Text, ForeignKey("review_item.item_id"), nullable=False),
     Column("reviewer", Text),
-    Column("chosen_supporting", Boolean, nullable=False),
-    Column("approved", Boolean, nullable=False),
+    # Both null on an issue row and both set on every other: a reviewer who raises an issue has
+    # said the item cannot be judged, and a choice or verdict stored beside that would be one
+    # nobody gave. No check constraint says so -- one could not be added to a deployed table by
+    # an idempotent statement, and a rule some databases enforce reads as one all of them do --
+    # so the two writers below are the enforcement: each can only write its own shape.
+    Column("chosen_supporting", Boolean),
+    Column("approved", Boolean),
     Column("comment", Text, nullable=False, default=""),
     Column("decided_at", DateTime(timezone=True), nullable=False),
     Column("time_to_decide_s", Float),
+    Column("issue", Text, nullable=False, default=""),
+    # The rung of the trust ladder the reviewer stands on (`records.ReviewerRole`), null where
+    # none was recorded. `reviewer_model` is the model id when a model decided and null for a
+    # person: a row with a model and a role other than `AI` is a *simulated* review, and every
+    # figure drawn from it has to say so (ADR-0960).
+    Column("reviewer_role", Text),
+    Column("reviewer_model", Text),
 )
 
 
@@ -349,6 +362,25 @@ def remaining(engine: Any, reviewer: str | None) -> int:
         return int(conn.execute(statement).scalar_one())
 
 
+def undecided_items(engine: Any, reviewer: str | None) -> list[ReviewItem]:
+    """Every item this reviewer has not decided, in item-id order.
+
+    For a reviewer that is handed a batch rather than one screen at a time -- the simulated
+    review. Not interleaved across papers the way `next_item` is: that ordering exists because a
+    person remembers the previous screen, and a model call carries nothing from one item to the
+    next.
+    """
+    statement = (
+        select(review_item.c.item_json)
+        .where(_undecided(review_item.c.item_id, reviewer))
+        .order_by(review_item.c.item_id)
+    )
+    with engine.begin() as conn:
+        _bound(conn)
+        rows = conn.execute(statement).all()
+    return [ReviewItem.model_validate_json(row.item_json) for row in rows]
+
+
 def record_decision(
     engine: Any,
     item_id: str,
@@ -358,6 +390,8 @@ def record_decision(
     approved: bool,
     comment: str = "",
     time_to_decide_s: float | None = None,
+    reviewer_role: ReviewerRole | None = None,
+    reviewer_model: str | None = None,
 ) -> None:
     """Write one decision, or raise. Returns only when the row is committed.
 
@@ -370,6 +404,57 @@ def record_decision(
     an item this database does not have, and a reviewer who was told "saved" would have been told
     a falsehood.
     """
+    _write_decision(
+        engine,
+        item_id,
+        reviewer=reviewer,
+        chosen_supporting=chosen_supporting,
+        approved=approved,
+        comment=comment,
+        issue="",
+        time_to_decide_s=time_to_decide_s,
+        reviewer_role=reviewer_role.value if reviewer_role else None,
+        reviewer_model=reviewer_model,
+    )
+
+
+def record_issue(
+    engine: Any,
+    item_id: str,
+    *,
+    reviewer: str | None,
+    issue: str,
+    time_to_decide_s: float | None = None,
+    reviewer_role: ReviewerRole | None = None,
+    reviewer_model: str | None = None,
+) -> None:
+    """Write one raised issue, or raise. The third outcome, in place of a choice and a verdict.
+
+    A row like a decision's -- the item is not offered to this reviewer again -- with the choice
+    and the verdict null, because a reviewer who says the item cannot be judged has given
+    neither. Fails closed exactly as `record_decision` does.
+
+    Raises `ValueError` for an issue with no text. That refusal is here rather than in a caller
+    because there are two callers already in prospect, the page and the simulated review, and an
+    issue row with nothing in it is indistinguishable from a decision that lost both its halves.
+    """
+    if not issue.strip():
+        raise ValueError("an issue needs its text: an empty one says nothing was wrong")
+    _write_decision(
+        engine,
+        item_id,
+        reviewer=reviewer,
+        chosen_supporting=None,
+        approved=None,
+        comment="",
+        issue=issue,
+        time_to_decide_s=time_to_decide_s,
+        reviewer_role=reviewer_role.value if reviewer_role else None,
+        reviewer_model=reviewer_model,
+    )
+
+
+def _write_decision(engine: Any, item_id: str, **values: Any) -> None:
     try:
         with engine.begin() as conn:
             _bound(conn)
@@ -378,13 +463,7 @@ def record_decision(
                 raise DecisionNotSaved(f"no review item {item_id!r}")
             conn.execute(
                 insert(review_decision).values(
-                    item_id=item_id,
-                    reviewer=reviewer,
-                    chosen_supporting=chosen_supporting,
-                    approved=approved,
-                    comment=comment,
-                    decided_at=datetime.now(UTC),
-                    time_to_decide_s=time_to_decide_s,
+                    item_id=item_id, decided_at=datetime.now(UTC), **values
                 )
             )
     except DecisionNotSaved:

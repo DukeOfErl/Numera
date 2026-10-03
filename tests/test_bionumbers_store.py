@@ -31,6 +31,7 @@ from bionumbers.records import (
     PaperResult,
     PaperState,
     Quote,
+    ReviewerRole,
     ReviewItem,
     SecondTextKind,
     Spend,
@@ -339,6 +340,104 @@ def test_a_decision_without_sign_in_records_no_account_and_nothing_else_differs(
     (row,) = rows(engine, store.review_decision)
     assert row.reviewer is None
     assert (row.chosen_supporting, row.approved, row.comment) == (True, True, "clear")
+
+
+def test_a_decision_made_by_a_person_records_no_role_no_model_and_no_issue(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+
+    store.record_decision(
+        engine, "i1", reviewer="alice@example.org", chosen_supporting=True, approved=True
+    )
+
+    (row,) = rows(engine, store.review_decision)
+    assert (row.reviewer_role, row.reviewer_model, row.issue) == (None, None, "")
+
+
+def test_a_decision_holds_the_role_and_the_model_that_made_it(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+
+    store.record_decision(
+        engine,
+        "i1",
+        reviewer="simulated-student:some/model",
+        chosen_supporting=True,
+        approved=False,
+        reviewer_role=ReviewerRole.STUDENT,
+        reviewer_model="some/model",
+    )
+
+    (row,) = rows(engine, store.review_decision)
+    assert (row.reviewer_role, row.reviewer_model) == ("STUDENT", "some/model")
+    assert (row.chosen_supporting, row.approved) == (True, False)
+
+
+def test_an_issue_holds_its_text_and_neither_a_choice_nor_a_verdict(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+
+    store.record_issue(
+        engine,
+        "i1",
+        reviewer="alice@example.org",
+        issue="neither text states 39 min",
+        time_to_decide_s=12.0,
+        reviewer_role=ReviewerRole.SCIENTIST,
+    )
+
+    (row,) = rows(engine, store.review_decision)
+    assert row.issue == "neither text states 39 min"
+    assert row.chosen_supporting is None
+    assert row.approved is None
+    assert row.comment == ""
+    assert (row.reviewer, row.reviewer_role, row.reviewer_model) == (
+        "alice@example.org",
+        "SCIENTIST",
+        None,
+    )
+    assert row.time_to_decide_s == pytest.approx(12.0)
+
+
+@pytest.mark.parametrize("empty", ["", "   ", "\n"])
+def test_an_issue_with_no_text_is_refused_and_writes_nothing(engine, empty):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+
+    with pytest.raises(ValueError, match="needs its text"):
+        store.record_issue(engine, "i1", reviewer="alice@example.org", issue=empty)
+
+    assert rows(engine, store.review_decision) == []
+
+
+def test_an_issue_on_an_unknown_item_is_not_saved_and_says_so(engine):
+    with pytest.raises(store.DecisionNotSaved, match="i-nope"):
+        store.record_issue(engine, "i-nope", reviewer="alice@example.org", issue="garbled unit")
+
+    assert rows(engine, store.review_decision) == []
+
+
+def test_an_item_a_reviewer_raised_an_issue_on_is_not_offered_to_them_again(engine):
+    store.load_run(
+        engine, [a_result()], [an_item("i1"), an_item("i2")], question=QUESTION, run_id=RUN
+    )
+
+    store.record_issue(engine, "i1", reviewer="alice@example.org", issue="garbled unit")
+
+    assert store.next_item(engine, "alice@example.org").item_id == "i2"
+    assert store.next_item(engine, "bob@example.org").item_id == "i1"
+
+
+def test_undecided_items_are_all_of_a_reviewer_s_open_items_and_no_one_else_s(engine):
+    store.load_run(
+        engine,
+        [a_result()],
+        [an_item("i3"), an_item("i1"), an_item("i2")],
+        question=QUESTION,
+        run_id=RUN,
+    )
+    store.record_decision(engine, "i2", reviewer="alice", chosen_supporting=True, approved=True)
+    store.record_issue(engine, "i3", reviewer="bob", issue="garbled unit")
+
+    assert [item.item_id for item in store.undecided_items(engine, "alice")] == ["i1", "i3"]
+    assert [item.item_id for item in store.undecided_items(engine, "bob")] == ["i1", "i2"]
+    assert [item.item_id for item in store.undecided_items(engine, None)] == ["i1", "i2", "i3"]
 
 
 def test_a_decision_on_an_unknown_item_is_not_saved_and_says_so(engine):

@@ -21,8 +21,9 @@ tool; if the extractor seems to need to search the paper, give it the whole pape
 | `review.py` | Presentation: the two texts in an uninformative order and as the paper wrote them, the whole table a cell sits in (ADR-0940), the condition rows, the decision's completeness rule |
 | `harvest.py` | Harvest mode (ADR-0950): the classes of number wanted and not wanted, the instruction built from extraction's, the three model-written labels, the twenty-claim bound, one scope per domain (ADR-1500), `organismal` among them |
 | `curated.py` | The curated tier (ADR-1510): which BioNumbers entries in the slice nothing marks doubtful, and why each other one is left out |
-| `cli.py` | `bionumbers discover \| harvest \| extract \| load \| curate \| status` |
+| `cli.py` | `bionumbers discover \| harvest \| extract \| load \| curate \| status \| simulate-review` |
 | `paths.py` | `data/europepmc/`, `data/runs/`; a test asks git that both stay ignored |
+| `simulated_review.py` | Models standing in for reviewers (ADR-0960): the screen as text, built from `review.py`'s own functions; each role's subset by hash; one call per decision under a ledger; rows that say a model wrote them. A second **driver** over the review task, not a pipeline step |
 
 **The dependency direction holds here too.** Core modules import no Streamlit and nothing from
 `scinumbers_ask`; only `review.py` and the root `review_app.py` may, and
@@ -33,6 +34,12 @@ extras.
 
 **What the model is never shown**: a decision, a choice or a comment. Decisions measure the
 extractor and cannot also be its input; the messages are built from the paper and the question only.
+A simulated reviewer is a different model call with the mirror rule: it sees one item's screen and
+nothing else -- not the paper, not the second text's kind, not another reviewer's row.
+
+**A row with `reviewer_model` set and a role other than `AI` is simulated**, and anything that
+counts or draws decisions has to say so. `store.record_decision` and `store.record_issue` are the
+only two writers, one per row shape; there is no check constraint behind them.
 
 **Ported code is unreviewed code.** `europepmc.py`, `cache.py` and `retrieval.py` came from
 `feat/grounding-validator-cytoskeleton` with two corrections made in the port itself; the commit

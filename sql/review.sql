@@ -86,16 +86,39 @@ create table if not exists review_item (
 -- `time_to_decide_s` is nullable because the page may not have a start time to subtract from — a
 -- reloaded tab, a session resumed. It is here because it costs one column and the rebuild's
 -- attention analysis cannot be reconstructed later from rows that never carried it.
+--
+-- A reviewer may raise an issue instead of deciding: the item cannot be judged as it stands. That
+-- row carries the issue's text in `issue` and null in both `chosen_supporting` and `approved`,
+-- because a choice or a verdict stored beside "this cannot be judged" is one nobody gave. Every
+-- other row has both set and `issue` empty. `bionumbers.store` has one writer per shape and no
+-- other way in; there is no check constraint, since one cannot be added to a deployed table by an
+-- idempotent statement and a rule only fresh databases enforce reads as one they all do.
+--
+-- `reviewer_role` is the rung of the trust ladder the reviewer stands on (`AI`, `STUDENT`,
+-- `SCIENTIST`, `SENIOR_SCIENTIST`), null where none was recorded. `reviewer_model` is the model id
+-- when a model decided, null for a person. **A row with a model and a role other than `AI` is a
+-- simulated review** — a model standing in for a person of that role (ADR-0960) — and any figure
+-- drawn from such rows has to say so. An entry's trust tier is read off these rows, never stored.
 create table if not exists review_decision (
     id                bigserial primary key,
     item_id           text not null references review_item (item_id),
     reviewer          text,
-    chosen_supporting boolean not null,
-    approved          boolean not null,
+    chosen_supporting boolean,
+    approved          boolean,
     comment           text not null default '',
     decided_at        timestamptz not null default now(),
-    time_to_decide_s  double precision
+    time_to_decide_s  double precision,
+    issue             text not null default '',
+    reviewer_role     text,
+    reviewer_model    text
 );
+
+-- The same, for a database created before the issue outcome and the reviewer's role existed.
+alter table review_decision add column if not exists issue text not null default '';
+alter table review_decision add column if not exists reviewer_role text;
+alter table review_decision add column if not exists reviewer_model text;
+alter table review_decision alter column chosen_supporting drop not null;
+alter table review_decision alter column approved drop not null;
 
 -- Serving the next item asks, per item, whether this reviewer has a row for it. That is the query
 -- every page load makes, and it is the only one whose latency a person waits on.
@@ -136,3 +159,11 @@ create table if not exists curated_entry (
 -- select d.decided_at, d.reviewer, d.chosen_supporting, d.comment, i.value, i.unit, i.pmcid
 -- from review_decision d join review_item i on i.item_id = d.item_id
 -- where not d.approved order by d.decided_at desc;
+
+-- What each rung of the ladder has said about each item. `simulated` is the label a figure built
+-- on this must carry.
+--
+-- select d.item_id, d.reviewer_role, d.reviewer_model,
+--        d.reviewer_model is not null and d.reviewer_role <> 'AI' as simulated,
+--        d.approved, d.chosen_supporting, d.issue
+-- from review_decision d order by d.item_id, d.decided_at;

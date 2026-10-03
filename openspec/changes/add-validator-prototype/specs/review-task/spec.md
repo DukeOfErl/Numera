@@ -47,7 +47,8 @@ A reviewer SHALL be required to choose which of the two texts better fits the va
 and SHALL separately record whether they approve or disapprove that this value, under the conditions
 shown, came from this paper. Both are required before the next item is offered. The reviewer SHALL
 be able to add a free-text comment. An item SHALL NOT be skipped silently: a reviewer who cannot
-decide SHALL disapprove, and the comment is where they say why.
+decide SHALL disapprove, and the comment is where they say why, or, where the reviewer is offered
+it, SHALL raise an issue in place of both the choice and the verdict, with its text.
 
 The choice is made every time, whether or not the second text is a distractor, so that the presence
 of a choice carries no information about the item.
@@ -109,7 +110,12 @@ with its quote and provenance state; and the fingerprint of what produced the cl
 instruction fingerprint, article, run). For
 every decision, the record SHALL hold: which text was chosen; whether it was the supporting text;
 the approval or disapproval; the comment; the reviewer's account where one is signed in, and the
-absence of one otherwise; and the time.
+absence of one otherwise; the reviewer's role where one is known; the model, where a model and not
+a person decided; and the time.
+
+An issue raised in place of a decision SHALL be recorded as one: its text, and neither a choice nor
+a verdict. An issue with no text SHALL be refused. An item a reviewer raised an issue on is decided
+for that reviewer and SHALL NOT be offered to them again.
 
 A decision SHALL be written at the moment it is given, and the write SHALL **fail closed**: a
 decision that could not be written SHALL be reported to the reviewer as not saved, and the item
@@ -127,6 +133,14 @@ which is the opposite of the trail's case, where a lost row costs one row.
 #### Scenario: A decision without sign-in
 - **WHEN** a deployment has no identity configured and a reviewer completes an item
 - **THEN** the decision is recorded with no account, and nothing else about it differs
+
+#### Scenario: An issue is raised
+- **WHEN** a reviewer raises an issue on an item and gives its text
+- **THEN** the row holds the text, no choice and no verdict, and the item is not offered to that reviewer again
+
+#### Scenario: An issue with no text
+- **WHEN** an issue is raised with empty text
+- **THEN** it is refused and nothing is recorded
 
 ### Requirement: Items are served so that every item is reviewed and none twice by the same reviewer
 
@@ -151,3 +165,48 @@ chooses second texts. Decisions are the measurement of the extractor and cannot 
 #### Scenario: A later run
 - **WHEN** extraction or second-text selection runs after decisions exist
 - **THEN** the instruction and inputs sent to the model contain no decision, choice or comment
+
+### Requirement: A review may be simulated by models, and every simulated decision says so
+
+Models MAY stand in for reviewers. Each simulated reviewer SHALL have a role, a model and a share
+of the items, and SHALL decide only the items assigned to its role that it has not already decided.
+Which items a role is assigned SHALL be fixed for the role and the item, the same on every run, and
+drawn independently for each role, so that an item may be decided by several roles, by one, or by
+none.
+
+A simulated reviewer SHALL be shown what a human reviewer is shown and nothing else: never the
+second text's kind or type, and never another reviewer's decision, choice or comment. Every role
+SHALL be given the same instruction, and the instruction SHALL NOT name a role: a role is which
+model answers, not a manner of answering.
+
+Every decision or issue a model writes SHALL record the model and the role, and SHALL be
+distinguishable from a person's by the record alone. Any figure drawn from simulated decisions
+SHALL be presented as simulated.
+
+A simulated run SHALL be bounded in spend per decision and per run, and the call that would cross
+either bound SHALL NOT be made. An item whose call fails SHALL get no decision and SHALL be offered
+again on the next run. A refusal of the provider account, or the run's bound, SHALL stop the run.
+
+#### Scenario: A model decides an item
+- **WHEN** a simulated reviewer answers an item with a text and a verdict
+- **THEN** the decision is recorded with its role and its model, and whether the chosen text was the supporting one
+
+#### Scenario: The screen does not depend on the second text's kind
+- **WHEN** two items differ only in the kind and type of their second text
+- **THEN** a simulated reviewer is shown the same thing for both
+
+#### Scenario: Two roles review overlapping subsets
+- **WHEN** two roles each review a share of the items
+- **THEN** each reviews a subset fixed by its role, the two subsets differ, and some items are in both
+
+#### Scenario: A run is repeated
+- **WHEN** a simulated run is started again after decisions exist
+- **THEN** no item a simulated reviewer has decided is asked about again
+
+#### Scenario: The run's bound is reached
+- **WHEN** the next call's projected cost would cross the run's bound
+- **THEN** the call is not made, the run stops, and it says why
+
+#### Scenario: A call fails
+- **WHEN** the model's answer to one item cannot be read
+- **THEN** no decision is recorded for it, the cost reported for the call is still counted, and the next item is reviewed

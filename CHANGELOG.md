@@ -41,6 +41,13 @@ any release; `1.0.0` when it stabilizes.
 - **The curated tier** (`bionumbers curate`): BioNumbers' yeast and cytoskeleton entries that are
   measured, referenced and undoubted — 423 of 492 — loaded beside the harvested entries as the
   top of the trust order ([ADR-1510]).
+- **A simulated review: models stand in for reviewers** (`bionumbers simulate-review --reviewer
+  ROLE=MODEL@SHARE`). Each role (AI, student, scientist, senior scientist) is played by a model
+  over its own fixed share of the items; a model is shown exactly what the review page shows a
+  person and answers the same two questions. Every row it writes records the role and the model,
+  and its reviewer name begins `simulated-`, so no figure can pass these off as people's. A
+  reviewer can now also **raise an issue** in place of a choice and a verdict; the store records
+  it with its text. The review page itself is unchanged ([ADR-0960]).
 - **The Europe PMC client from the feasibility branch, ported and corrected**: an article without
   XML is now recognised from the response body rather than a 404 status, because the service
   answers 500 today; and the article check reads the root element rather than searching for
@@ -507,3 +514,4 @@ number rather than an error:
 [ADR-0950]: docs/decisions/0950-harvest-first-ask-later.md
 [ADR-1500]: docs/decisions/1500-a-domain-is-a-scope-in-the-user-turn.md
 [ADR-1510]: docs/decisions/1510-the-curated-tier-admits-only-undoubted-entries.md
+[ADR-0960]: docs/decisions/0960-a-simulated-review-says-it-is-one.md

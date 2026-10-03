@@ -424,3 +424,34 @@ sequenceDiagram
 decision is written the moment it is given and the write fails closed
 (ADR-0930), which is the opposite of the trail's choice (ADR-0710) for the
 reason the ADR gives: here the row is the product.*
+
+## 7c. A simulated review
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operator
+    participant CLI as bionumbers simulate-review
+    participant Sim as simulated_review.py
+    participant Screen as review.py
+    participant Model as model (OpenRouter)
+    participant Store as store.py
+    Operator->>CLI: --reviewer ROLE=MODEL@SHARE, a budget
+    CLI->>Sim: run(reviewers)
+    loop each reviewer, each of its undecided items
+        Sim->>Sim: assigned(role, item)? else skip
+        Sim->>Screen: texts in the page's order, conditions, citation
+        Sim->>Sim: project the cost; refuse past either bound
+        Sim->>Model: one instruction, one screen
+        Model-->>Sim: A or B and a verdict, or an issue
+        Sim->>Store: record_decision / record_issue, with role and model
+    end
+    Sim-->>Operator: a summary marked simulated
+```
+
+*Caption: a second driver over the review task, standing where the page and
+the person stand in 7b (ADR-0960). The model is shown one screen and nothing
+else, every role gets the same instruction, and every row records the model
+that wrote it. What the diagram cannot show: the budget and an account refusal
+stop the whole run, a failed call skips one item, and a run started again
+continues from the rows already written.*

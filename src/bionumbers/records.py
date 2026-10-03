@@ -300,3 +300,17 @@ class Discovery(Frozen):
     kept: tuple[Paper, ...] = ()
     excluded: tuple[tuple[str, str], ...] = Field(default=())
     """(identifier, reason) for every record dropped before any fetch."""
+
+
+class ReviewerRole(StrEnum):
+    """The rung of the trust ladder a decision was made on, lowest first.
+
+    `AI` is a model reviewing as itself. The other three are people -- or, in a simulated review,
+    a model standing in for one, which the decision's `reviewer_model` then says. An entry's trust
+    tier is read off the roles of the decisions that approved it and is stored nowhere (ADR-0960).
+    """
+
+    AI = "AI"
+    STUDENT = "STUDENT"
+    SCIENTIST = "SCIENTIST"
+    SENIOR_SCIENTIST = "SENIOR_SCIENTIST"
