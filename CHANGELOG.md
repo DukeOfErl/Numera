@@ -10,6 +10,10 @@ any release; `1.0.0` when it stabilizes.
 
 ## [Unreleased]
 
+### Changed
+
+- The test loop is two tiers. A commit runs only the tests it reaches (pytest-testmon), falling back to the full suite when a staged file is not Python under `src/` or `tests/` and is not known to be read by no test; push, merge and CI run the full suite in parallel (pytest-xdist, six workers by default). `bin/testloop.py` carries both. `uv run pre-commit install` again in an existing clone to pick up the push and merge hooks.
+
 ### Fixed
 
 - The keepalive no longer reports a failure when a page reload lands mid-poll after waking the app, installs its browser from the same pinned Playwright it then runs under (`--install-browser`), runs on `ubuntu-24.04` rather than the floating `ubuntu-latest` that migrates to Ubuntu 26 on 2026-10-19, and its comments no longer promise a per-run failure mail.
