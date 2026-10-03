@@ -17,7 +17,7 @@ import pytest
 from europepmc_double import TABLES_PMCID, FakeEuropePMC, fixture
 from sqlalchemy import create_engine, func, select
 
-from bionumbers import cli, store
+from bionumbers import cli, harvest, store
 from bionumbers.cache import DocumentCache
 from bionumbers.distractor import Candidate, SecondTextOutput
 from bionumbers.europepmc import VERSION_OF_RECORD, EuropePMC
@@ -26,6 +26,7 @@ from bionumbers.extraction import (
     ExtractionOutput,
     ProviderRefused,
     QuoteDraft,
+    instruction_sha256,
     read_results,
 )
 from bionumbers.jats import read_jats
@@ -316,6 +317,95 @@ def test_a_refusal_of_the_account_stops_the_run_and_leaves_the_rest_unread(
     assert summary["papers_left_unread"] == 1
     assert "402" in summary["stopped"]
     assert len(model.calls) == 2, "no call was made for the third paper"
+
+
+# --- harvest ----------------------------------------------------------------------------------
+
+
+def test_harvest_starts_a_run_from_pmcids_with_each_paper_s_own_metadata_and_licence(
+    provider, dirs, capsys
+):
+    code = cli.main(
+        ["harvest", "h1", "--pmcids", f"{TABLES_PMCID}, {TEXTLESS.pmcid}", *common(dirs)]
+    )
+
+    assert code == 0
+    request = json.loads((dirs.runs / "h1" / cli.REQUEST_FILE).read_text())
+    assert request["mode"] == cli.HARVEST_MODE
+    papers = {p.pmcid: p for p in read_jsonl(dirs.runs / "h1" / cli.PAPERS_FILE, Paper)}
+    with_text = papers[TABLES_PMCID]
+    assert with_text.title == ARTICLE.title and with_text.year == ARTICLE.year
+    assert with_text.licence != UNLICENSED
+    assert not with_text.full_text_status
+    assert "500" in papers[TEXTLESS.pmcid].full_text_status
+    assert "2 paper(s), no full text 1" in capsys.readouterr().out
+
+
+def test_harvest_without_a_pmcid_says_so_and_writes_nothing(provider, dirs, capsys):
+    code = cli.main(["harvest", "h1", *common(dirs)])
+
+    assert code == 2
+    assert "PMCID" in capsys.readouterr().err
+    assert not (dirs.runs / "h1").exists()
+
+
+def test_extracting_a_harvested_run_asks_no_question_and_names_each_item_by_its_claim(
+    monkeypatch, provider, dirs
+):
+    cli.main(["harvest", "h1", "--pmcids", TABLES_PMCID, *common(dirs)])
+    draft = claim_draft(APERTURE_SENTENCE, "100", "μm").model_copy(
+        update={
+            "property_name": "aperture diameter",
+            "property_class": "SIZE",
+            "organism_name": "Coxiella burnetii",
+        }
+    )
+    model = scripted(
+        monkeypatch, ExtractionOutput(state="CLAIMS_FOUND", claims=[draft]), distractor_output()
+    )
+    seen: list[dict] = []
+    original = model.parse
+
+    def recording(**kwargs):
+        seen.append(kwargs)
+        return original(**kwargs)
+
+    model.parse = recording
+
+    code = cli.main(["extract", "h1", *common(dirs)])
+
+    assert code == 0
+    assert seen[0]["system"][1]["text"] == harvest.HARVEST_INSTRUCTION
+    assert seen[0]["messages"] == [harvest.user_turn()]
+    (item,) = read_jsonl(dirs.runs / "h1" / cli.ITEMS_FILE, ReviewItem)
+    assert item.question == "aperture diameter (Coxiella burnetii)"
+    assert item.claim.property_class == "SIZE"
+    assert "aperture diameter (Coxiella burnetii)" in seen[1]["messages"][0]["content"]
+    (result,) = read_results(dirs.runs / "h1" / "results.jsonl")
+    assert result.fingerprint.instruction_sha256 == instruction_sha256(harvest.HARVEST_INSTRUCTION)
+
+
+def test_a_harvested_item_is_stored_under_its_own_question(monkeypatch, provider, dirs, capsys):
+    cli.main(["harvest", "h1", "--pmcids", TABLES_PMCID, *common(dirs)])
+    draft = claim_draft(APERTURE_SENTENCE, "100", "μm").model_copy(
+        update={"property_name": "aperture diameter", "organism_name": "Coxiella burnetii"}
+    )
+    scripted(
+        monkeypatch, ExtractionOutput(state="CLAIMS_FOUND", claims=[draft]), distractor_output()
+    )
+    cli.main(["extract", "h1", *common(dirs)])
+    url = f"sqlite:///{dirs.runs / 'review.db'}"
+    engine = create_engine(url)
+    store.create_all(engine)
+
+    cli.main(["load", "h1", "--runs", str(dirs.runs), "--db-url", url])
+
+    with engine.begin() as conn:
+        assert conn.scalar(select(store.review_item.c.question)) == (
+            "aperture diameter (Coxiella burnetii)"
+        )
+        assert conn.scalar(select(store.review_paper.c.question)) == cli.HARVEST_QUESTION
+    engine.dispose()
 
 
 def test_extract_with_an_unpriced_model_refuses_before_any_paper(

@@ -167,6 +167,10 @@ class Claim(Frozen):
     claim_id: str
     property_asked: str
     property_in_paper: str
+    property_class: str = ""
+    """Harvest mode only: the class of quantity (`bionumbers.harvest.PROPERTY_CLASSES`)."""
+    organism_name: str = ""
+    """Harvest mode only: the species, as a label. The quoted organism is in `conditions`."""
     value: str
     """As the paper states it: `39 ± 1`, `20–40`, `2.1`."""
     unit: str

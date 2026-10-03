@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from bionumbers import paths, store
+from bionumbers import harvest, paths, store
 from bionumbers.cache import DocumentCache
 from bionumbers.distractor import choose_second_text
 from bionumbers.europepmc import (
@@ -39,6 +39,7 @@ from bionumbers.europepmc import (
     licence_of,
 )
 from bionumbers.extraction import (
+    INSTRUCTION,
     RESULTS_FILE,
     ProviderRefused,
     RunFileWouldBeCommitted,
@@ -243,6 +244,65 @@ def discover(args: argparse.Namespace) -> int:
     return 0
 
 
+# --- harvest ----------------------------------------------------------------------------------
+
+HARVEST_MODE = "harvest"
+#: What a harvested run records where a question would be. Shown by `status` and stored on the
+#: paper rows; every item carries its own question (`harvest.question_of`).
+HARVEST_QUESTION = "harvest: reusable quantitative values"
+
+
+def harvest_run(args: argparse.Namespace) -> int:
+    """A run from a list of articles rather than from a search: `extract` then reads each
+    one in harvest mode. Discovery's other half -- fetch, licence, the typed absence -- is the
+    same, because the same facts about access and terms are needed whoever chose the paper."""
+    run_dir = Path(args.runs) / args.run_id
+    _refuse_a_committable_run_dir(run_dir)
+    pmcids = [part.strip() for part in args.pmcids.split(",") if part.strip()]
+    if args.pmcid_file:
+        lines = Path(args.pmcid_file).read_text(encoding="utf-8").splitlines()
+        pmcids += [line.split()[0] for line in lines if line.strip() and line[0] != "#"]
+    if not pmcids:
+        print("Give --pmcids or --pmcid-file with at least one PMCID.", file=sys.stderr)
+        return 2
+
+    provider = _europepmc(Path(args.data))
+    papers: list[Paper] = []
+    for pmcid in dict.fromkeys(pmcids):
+        fetched = provider.fetch(pmcid)
+        if not isinstance(fetched, FullText):
+            papers.append(Paper(pmcid=pmcid, full_text_status=_status_of(fetched)))
+            continue
+        try:
+            doc = read_jats(fetched.xml)
+        except JatsUnreadable as why:
+            papers.append(Paper(pmcid=pmcid, full_text_status=f"not a JATS article: {why}"))
+            continue
+        papers.append(
+            Paper(
+                pmcid=pmcid,
+                pmid=doc.pmid,
+                doi=doc.doi,
+                title=doc.title,
+                year=doc.year,
+                licence=licence_of(None, fetched.xml),
+                source_url=fetched.url,
+            )
+        )
+
+    run_dir.mkdir(parents=True, exist_ok=True)
+    _write_json(
+        run_dir / REQUEST_FILE,
+        {"mode": HARVEST_MODE, "question": HARVEST_QUESTION, "organism": ""},
+    )
+    _write_lines(run_dir / PAPERS_FILE, papers)
+    without_text = sum(1 for paper in papers if paper.full_text_status)
+    unlicensed = sum(1 for p in papers if not p.full_text_status and p.licence == UNLICENSED)
+    print(f"{len(papers)} paper(s), no full text {without_text}, unlicensed {unlicensed}")
+    print(f"run id: {args.run_id}")
+    return 0
+
+
 # --- extract ----------------------------------------------------------------------------------
 
 
@@ -284,10 +344,12 @@ def _one_paper(
     organism: str,
     run_id: str,
     ledger: Ledger,
+    harvesting: bool = False,
 ) -> tuple[PaperResult, list[ReviewItem], list[NotReviewable]]:
+    instruction = harvest.HARVEST_INSTRUCTION if harvesting else INSTRUCTION
     fingerprint = Fingerprint(
         model=model_id,
-        instruction_sha256=instruction_sha256(),
+        instruction_sha256=instruction_sha256(instruction),
         article_id=paper.pmcid,
         run_id=run_id,
     )
@@ -310,11 +372,13 @@ def _one_paper(
         model,
         doc,
         paper,
-        question=question,
+        question="" if harvesting else question,
         organism=organism,
         run_id=run_id,
         ledger=ledger,
         model_id=model_id,
+        instruction=instruction,
+        user=harvest.user_turn() if harvesting else None,
     )
     if paper.licence == UNLICENSED:
         # Extraction ran and its spend stands, but nothing quoted leaves the cache: the spec's
@@ -330,7 +394,14 @@ def _one_paper(
     for claim in result.claims:
         try:
             chosen = choose_second_text(
-                model, doc, claim, paper, question=question, ledger=ledger, model_id=model_id
+                model,
+                doc,
+                claim,
+                paper,
+                # A harvested claim answers no question, so it is judged against its own name.
+                question=harvest.question_of(claim) if harvesting else question,
+                ledger=ledger,
+                model_id=model_id,
             )
         except ProviderRefused:
             raise
@@ -393,6 +464,7 @@ def extract_run(args: argparse.Namespace) -> int:
                 organism=request["organism"],
                 run_id=args.run_id,
                 ledger=ledger,
+                harvesting=request.get("mode") == HARVEST_MODE,
             )
         except ProviderRefused as refused:
             # The account, not the paper: this paper ends FAILED with the provider's words, the
@@ -517,6 +589,16 @@ def _parser() -> argparse.ArgumentParser:
     data_dir(discover_cmd)
     run_dirs(discover_cmd)
     discover_cmd.set_defaults(command=discover)
+
+    harvest_cmd = commands.add_parser(
+        "harvest", help="start a run from a list of PMCIDs, to be extracted without a question"
+    )
+    harvest_cmd.add_argument("run_id")
+    harvest_cmd.add_argument("--pmcids", default="", help="comma-separated PMCIDs")
+    harvest_cmd.add_argument("--pmcid-file", default=None, help="one PMCID per line; # comments")
+    data_dir(harvest_cmd)
+    run_dirs(harvest_cmd)
+    harvest_cmd.set_defaults(command=harvest_run)
 
     extract_cmd = commands.add_parser("extract", help="extract claims from a discovered run")
     extract_cmd.add_argument("run_id")

@@ -405,7 +405,9 @@ def _item_row(item: ReviewItem, *, question: str, run_id: str, now: datetime) ->
     return {
         "item_id": item.item_id,
         "run_id": run_id,
-        "question": question,
+        # The item's own question, not the run's: a harvested run asks none, and each of
+        # its items is named by the quantity it holds.
+        "question": item.question or question,
         "pmcid": item.paper.pmcid,
         "claim_id": item.claim.claim_id,
         "value": item.claim.value,

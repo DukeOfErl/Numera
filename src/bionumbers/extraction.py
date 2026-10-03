@@ -131,14 +131,15 @@ quote is empty. A field filled from general knowledge is a fabrication however t
 elsewhere."""
 
 
-def instruction_sha256() -> str:
+def instruction_sha256(instruction: str = INSTRUCTION) -> str:
     """The fingerprint that groups items by the instruction that produced them.
 
     Over the instruction alone, not the whole request: the paper and the question vary per
     item by construction, so folding them in would give every item its own fingerprint and
-    group nothing.
+    group nothing. Harvest mode (`bionumbers.harvest`) passes its own instruction, so its
+    items are never grouped with a question's.
     """
-    return hashlib.sha256(INSTRUCTION.encode("utf-8")).hexdigest()
+    return hashlib.sha256(instruction.encode("utf-8")).hexdigest()
 
 
 class ConditionDraft(Frozen):
@@ -156,6 +157,11 @@ class QuoteDraft(Frozen):
 
 class ClaimDraft(Frozen):
     property_in_paper: str
+    property_name: str = ""
+    """Harvest mode's labels, written by the model rather than quoted: a general name for the
+    quantity, its class and the species. Empty when a question was asked."""
+    property_class: str = ""
+    organism_name: str = ""
     value: str
     unit: str
     kind: ClaimKind
@@ -281,7 +287,7 @@ class AnthropicModel:
         return _Counted(input_tokens=counted)
 
 
-def system_blocks(doc: Document) -> list[dict]:
+def system_blocks(doc: Document, instruction: str = INSTRUCTION) -> list[dict]:
     """The paper first, carrying the cache breakpoint; the instruction after it.
 
     Order is load-bearing. The cached prefix is a byte prefix ending at the block carrying
@@ -298,7 +304,7 @@ def system_blocks(doc: Document) -> list[dict]:
             "text": render_for_model(doc),
             "cache_control": {"type": "ephemeral"},
         },
-        {"type": "text", "text": INSTRUCTION},
+        {"type": "text", "text": instruction},
     ]
 
 
@@ -626,8 +632,12 @@ def _assemble(
         claims.append(
             Claim(
                 claim_id=claim_id,
-                property_asked=question,
+                # No question in harvest mode: the claim is named by the model's label for
+                # the quantity, falling back to the article's own term.
+                property_asked=question or draft.property_name or draft.property_in_paper,
                 property_in_paper=draft.property_in_paper,
+                property_class=draft.property_class,
+                organism_name=draft.organism_name,
                 value=draft.value,
                 unit=draft.unit,
                 kind=draft.kind,
@@ -669,16 +679,22 @@ def extract(
     run_id: str,
     ledger: Ledger,
     model_id: str = MODEL,
+    instruction: str = INSTRUCTION,
+    user: dict | None = None,
 ) -> PaperResult:
     """One paper, one named ending, whatever happened.
 
     Every return below goes through `ending`, so the fingerprint and the paper's spend are
     on the record by construction. There are six endings and a seventh is easy to add; a
     per-ending copy of that line is the one the seventh forgets.
+
+    `instruction` and `user` are harvest mode's way in (`bionumbers.harvest`): another
+    instruction over the same paper, and a user turn that states a scope instead of a
+    question. With an empty `question` each claim is named by the model's own label.
     """
     fingerprint = Fingerprint(
         model=model_id,
-        instruction_sha256=instruction_sha256(),
+        instruction_sha256=instruction_sha256(instruction),
         article_id=paper.pmcid,
         run_id=run_id,
     )
@@ -712,8 +728,8 @@ def extract(
             reason="no methods section: nothing here was measured by this article",
         )
 
-    system = system_blocks(doc)
-    messages = [user_turn(question, organism)]
+    system = system_blocks(doc, instruction)
+    messages = [user if user is not None else user_turn(question, organism)]
     try:
         output = _one_call(
             model,
