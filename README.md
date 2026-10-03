@@ -745,8 +745,8 @@ can read three columns of the trail and nothing else**, never the Neon API key
 2. Add the repository secret `SCINUMBERS_TRAIL_READ_URL` (that role's URL, `postgresql+psycopg://…`)
    and the variable `FIRST_USE_EXCLUDE` (your own and test addresses, comma-separated).
 3. The workflow exists only once it is on `main`. Run it by hand with **`test`** ticked and check that
-   the mail arrives: whether the mention is enough under your notification settings has not yet
-   been shown for this account
+   the mail arrives: a `test` run delivered mail on 2026-10-03 with the mention in place (whether
+   the mention alone is what did it was not tried)
    ([ADR-1270](docs/decisions/1270-first-use-reaches-the-operator-through-a-standing-issue.md)).
 
 By hand: `SCINUMBERS_TRAIL_READ_URL=… scinumbers-first-use --minutes 1440 --exclude me@example.org`.

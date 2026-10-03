@@ -7,8 +7,8 @@ name: first-use
 # Delivery is a comment on ONE standing issue, which mails the owner through GitHub --
 # no mail account, no mail secret (ADR-1270). That relies on the owner watching the
 # repository or being mentioned (every comment mentions the owner for that reason),
-# and neither has been shown for this account: run it by hand with `test` ticked and
-# see the mail arrive before relying on it.
+# and a `test` run delivered mail on 2026-10-03 (ADR-1270). Run it by hand with `test`
+# ticked to check it again.
 #
 # **Readers' addresses go into that comment, and nowhere else**: the command writes its
 # report to a file, never to the log. (The exclusion list is the operator's own addresses,
