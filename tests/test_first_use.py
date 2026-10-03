@@ -9,11 +9,15 @@ shape, the exclusions, the refusals, and that asking writes nothing. The meaning
 
 from __future__ import annotations
 
+import re
+import subprocess
+import sys
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
-from scinumbers_ask import first_use, pending
+from scinumbers_ask import first_use
 from scinumbers_ask.first_use import URL_ENV, FirstSeen, first_seen, main
 
 SIGNED_IN = datetime(2026, 10, 2, 14, 3, tzinfo=UTC)
@@ -196,16 +200,36 @@ def test_a_missing_database_url_is_refused_and_names_the_setting(run):
     assert engine.conn.statements == []
 
 
-def test_it_does_not_reach_the_neon_control_plane(monkeypatch, run):
-    # The scheduled job holds a database URL and nothing that can manage the
-    # project. If this ever calls `neon`, it has started needing that key.
-    def boom(*a, **k):
-        raise AssertionError("first_use reached the Neon control plane")
+def test_importing_first_use_never_loads_the_neon_control_plane():
+    # The scheduled job holds a database URL and nothing that can manage the project.
+    # Checked in a fresh process, because this one has long since imported `neon` for
+    # other tests: what matters is that `first_use` does not pull it in by itself.
+    program = (
+        "import sys, scinumbers_ask.first_use; "
+        "bad = [m for m in ('scinumbers_ask.neon', 'scinumbers_ask.pending', "
+        "'scinumbers_ask.enrol') if m in sys.modules]; "
+        "sys.exit(1 if bad else 0)"
+    )
+    result = subprocess.run([sys.executable, "-c", program], capture_output=True, text=True)
+    assert result.returncode == 0, "first_use imports a module that reaches the control plane"
 
-    monkeypatch.setattr(pending.neon, "branch_id", boom)
-    monkeypatch.setattr(pending.neon, "connection_url", boom)
-    status, *_ = run(rows=[])
-    assert status == 0
+
+ROLE_SQL = Path(__file__).resolve().parents[1] / "sql" / "first_use_reader.sql"
+
+
+def test_an_unedited_role_script_is_a_syntax_error_not_a_login_role_with_a_known_password():
+    sql = ROLE_SQL.read_text()
+    create = next(s for s in sql.split(";") if "create role" in s)
+    assert not re.search(r"password\s+'", create), "the password placeholder is a valid literal"
+    assert "CHANGE-ME" not in sql
+
+
+def test_the_role_is_granted_three_columns_and_never_the_table():
+    sql = "\n".join(
+        line for line in ROLE_SQL.read_text().splitlines() if not line.lstrip().startswith("--")
+    )
+    grants = re.findall(r"grant select[^;]*;", sql)
+    assert grants == ["grant select (at, event, user_email) on trail to first_use_reader;"]
 
 
 def test_first_seen_returns_values_rather_than_printing(capsys):

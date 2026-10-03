@@ -10,8 +10,9 @@ name: first-use
 # and neither has been shown for this account: run it by hand with `test` ticked and
 # see the mail arrive before relying on it.
 #
-# **Reader addresses go into that comment, and nowhere else**: the command writes its
-# report to a file, never to the log. That is acceptable only while the repository is
+# **Readers' addresses go into that comment, and nowhere else**: the command writes its
+# report to a file, never to the log. (The exclusion list is the operator's own addresses,
+# not a reader's, and Actions prints step env values in the log.) That is acceptable only while the repository is
 # private -- an issue on a public repository is public, and so are its comments
 # (ADR-1280). Do not make this repository public without removing this workflow.
 #
@@ -74,9 +75,11 @@ jobs:
           done
           # Only what the command imports: it needs a database driver and not the
           # model stack the `ask` extra carries, which would be a minute of install
-          # 24 times a day. The report goes to a file so no address reaches the log.
+          # 24 times a day. The versions are exact -- those in `uv.lock` -- because this job holds
+          # the database URL and a floating release would run with it; move them with the lock.
+          # The report goes to a file so no reader's address reaches the log.
           PYTHONPATH=src uv run --no-project \
-            --with "sqlalchemy>=2.0" --with "psycopg[binary]" \
+            --with "sqlalchemy==2.0.52" --with "psycopg[binary]==3.3.5" \
             python -m scinumbers_ask.first_use "${args[@]}" > report.md
       - name: Tell the operator
         run: |
@@ -87,7 +90,8 @@ jobs:
           [ -s report.md ] || exit 0
           { echo "@$OWNER"; echo; cat report.md; } > body.md
           number=$(gh issue list --state open --search "\"$TITLE\" in:title" \
-            --json number --jq '.[0].number // empty')
+            --json number,title \
+            --jq '[.[] | select(.title == env.TITLE)][0].number // empty')
           if [ -n "$number" ]; then
             gh issue comment "$number" --body-file body.md
           else

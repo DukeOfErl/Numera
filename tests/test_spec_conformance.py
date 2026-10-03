@@ -440,7 +440,9 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_first_use_live.py::test_an_excluded_address_is_dropped_whole",
     ),
     "Whatever asks on a schedule can read the records and change none of them": (
-        "test_first_use.py::test_it_does_not_reach_the_neon_control_plane",
+        "test_first_use.py::test_importing_first_use_never_loads_the_neon_control_plane",
+        "test_first_use.py::test_the_role_is_granted_three_columns_and_never_the_table",
+        "test_first_use_live.py::test_the_role_cannot_read_the_columns_the_question_does_not_need",
         "test_first_use_live.py::test_the_role_can_ask_the_question",
         "test_first_use_live.py::test_the_role_cannot_change_anything",
         "test_first_use_live.py::test_the_grants_alone_refuse_a_write_even_if_the_transaction_is_made_writable",

@@ -8,9 +8,9 @@ the reason it is not a flag on that one.
 through `neon.py`, which needs the organisation-scoped API key; a scheduled job
 holding that key could delete the project, and this reads one table. So it takes
 `SCINUMBERS_TRAIL_READ_URL`, the URL of a role that can `select` from the trail and
-nothing else (`sql/first_use_reader.sql`), and never *calls* `neon` (ADR-1260) --
-importing `pending` for its timeouts loads that module, and a test asserts that
-nothing in it is reached. The
+nothing else (`sql/first_use_reader.sql`), and never loads `neon` at all (ADR-1260):
+the timeouts it shares with `pending` live in `trail_store`, so neither command
+imports the other, and a test imports this module in a fresh process to prove it. The
 credential is the first guard; `set transaction read only` below is the operation's
 own, so a more powerful URL still cannot make asking a write (a guard belongs to the
 operation, not to whoever happens to call it).
@@ -38,7 +38,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from . import trail_store
-from .pending import CONNECT_TIMEOUT_S, STATEMENT_TIMEOUT_MS
+from .trail_store import BATCH_CONNECT_TIMEOUT_S, BATCH_STATEMENT_TIMEOUT_MS
 
 URL_ENV = "SCINUMBERS_TRAIL_READ_URL"
 
@@ -47,8 +47,13 @@ URL_ENV = "SCINUMBERS_TRAIL_READ_URL"
 #: window, and the reader who arrived in the gap would never be reported. With ten
 #: spare minutes the window overlaps its neighbour: a reader is reported twice
 #: instead of never. A repeated line costs a glance; a missed first reader costs the
-#: moment it was worth knowing. Do not trim this to 60 -- that removes the overlap
-#: and nothing fails until a tick is late. The delay actually seen is to be read out
+#: moment it was worth knowing. **The repeat is systematic, not rare:** ticks are 60
+#: minutes apart and the window is 70, so a reader whose first event falls in the 10
+#: minutes before a tick is reported by two consecutive runs -- about one reader in
+#: six, every time. The same arithmetic is the tolerance: a gap of more than 70
+#: minutes between two runs loses a reader, so a tick may be at most about 10 minutes
+#: later than its neighbour. Do not trim this to 60 -- that removes the overlap and
+#: nothing fails until a tick is late. The delay actually seen is to be read out
 #: of the keepalive's run history before this number is trusted (tasks 6.4).
 DEFAULT_MINUTES = 70
 
@@ -109,7 +114,7 @@ def _run(engine, statement: str, params: dict) -> list[tuple]:
     with engine.begin() as conn:
         # First in the transaction, which Postgres requires of this statement.
         conn.execute(text("set transaction read only"))
-        conn.execute(text(f"set local statement_timeout = {STATEMENT_TIMEOUT_MS}"))
+        conn.execute(text(f"set local statement_timeout = {BATCH_STATEMENT_TIMEOUT_MS}"))
         return conn.execute(text(statement), params).all()
 
 
@@ -180,7 +185,9 @@ def main(argv: list[str] | None = None) -> int:
         print(NO_URL, file=sys.stderr)
         return 2
 
-    engine = trail_store.engine_from_url(url, connect_args={"connect_timeout": CONNECT_TIMEOUT_S})
+    engine = trail_store.engine_from_url(
+        url, connect_args={"connect_timeout": BATCH_CONNECT_TIMEOUT_S}
+    )
     try:
         readers = first_seen(engine, minutes=args.minutes, exclude=tuple(args.exclude))
     except Exception as exc:  # noqa: BLE001 - a silent monitor is the failure to avoid

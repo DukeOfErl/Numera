@@ -46,7 +46,7 @@ None.
 - **Code:** a new harness module under `src/scinumbers_ask/` and a console script in
   `pyproject.toml`; named in the `HARNESS` set in `tests/test_driver_independence.py`.
   No agent-core, driver or schema change — both events are already written.
-- **Database:** a one-time `create role` with `select` on the trail table only,
+- **Database:** a one-time `create role` with `select` on three columns of the trail (`at`, `event`, `user_email`),
   run by the operator in Neon. `sql/` gains the script.
 - **CI:** one new scheduled workflow, one repository secret (the read-only URL).
   Scheduled workflows run from `main` only, and GitHub may delay or skip a tick.

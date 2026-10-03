@@ -58,7 +58,12 @@ def all_run_lines(doc: dict) -> list[str]:
 STUB_GH = """#!/usr/bin/env bash
 echo "$@" >> "$GH_CALLS"
 case "$1 $2" in
-  "issue list") echo "${GH_STUB_ISSUE:-}" ;;
+  "issue list")
+    # Applies the caller's own `--jq` to the fixture, as gh does, so what the
+    # workflow's filter selects is what is tested -- not what the stub assumes.
+    for i in "$@"; do [ "$prev" = "--jq" ] && expr="$i"; prev="$i"; done
+    echo "${GH_STUB_ISSUES:-[]}" | jq -r "$expr"
+    ;;
   "run list")
     # `--workflow NAME` selects which fixture to return.
     for i in "$@"; do last="$prev"; prev="$i"; [ "$last" = "--workflow" ] && wf="$i"; done
@@ -94,6 +99,10 @@ def sandbox(tmp_path):
     run.dir = tmp_path
     run.calls = lambda: calls.read_text().splitlines()
     return run
+
+
+def issue(number: int, title: str) -> str:
+    return f'[{{"number":{number},"title":"{title}"}}]'
 
 
 def runs(*conclusions: str) -> str:
@@ -188,7 +197,13 @@ def test_a_run_with_nobody_new_delivers_nothing(sandbox):
 def test_a_report_becomes_a_comment_on_the_one_standing_issue(sandbox):
     (sandbox.dir / "report.md").write_text("  new@example.org  signed in\n")
     script = step_script(load("first-use.yml"), "first-use", TELL)
-    sandbox(script, TEST="false", GH_STUB_ISSUE="42", OWNER="octocat")
+    sandbox(
+        script,
+        TEST="false",
+        GH_STUB_ISSUES=issue(42, "first use"),
+        TITLE="first use",
+        OWNER="octocat",
+    )
     calls = sandbox.calls()
     assert any(c.startswith("issue comment 42") and "--body-file body.md" in c for c in calls)
     assert not any(c.startswith("issue create") for c in calls), "one issue, not one per reader"
@@ -201,7 +216,13 @@ def test_every_comment_mentions_the_owner_and_still_carries_the_report(sandbox):
     # mention, which is exactly what that setting does notify on.
     (sandbox.dir / "report.md").write_text("  new@example.org  signed in\n")
     script = step_script(load("first-use.yml"), "first-use", TELL)
-    sandbox(script, TEST="false", GH_STUB_ISSUE="42", OWNER="octocat")
+    sandbox(
+        script,
+        TEST="false",
+        GH_STUB_ISSUES=issue(42, "first use"),
+        TITLE="first use",
+        OWNER="octocat",
+    )
     body = (sandbox.dir / "body.md").read_text()
     assert body.startswith("@octocat\n")
     assert "new@example.org  signed in" in body
@@ -211,7 +232,7 @@ def test_every_comment_mentions_the_owner_and_still_carries_the_report(sandbox):
 def test_the_first_report_also_mentions_the_owner(sandbox):
     (sandbox.dir / "report.md").write_text("  new@example.org  signed in\n")
     script = step_script(load("first-use.yml"), "first-use", TELL)
-    sandbox(script, TEST="false", GH_STUB_ISSUE="", OWNER="octocat")
+    sandbox(script, TEST="false", GH_STUB_ISSUES="[]", TITLE="first use", OWNER="octocat")
     assert (sandbox.dir / "body.md").read_text().startswith("@octocat\n")
     assert any(c.startswith("issue create") and "--body-file body.md" in c for c in sandbox.calls())
 
@@ -220,7 +241,12 @@ def test_the_first_report_also_mentions_the_owner(sandbox):
 def test_the_digest_mentions_the_owner_when_it_has_something_to_say(sandbox):
     (sandbox.dir / "report.md").write_text("- `first-use.yml`: 1 of 2 runs failed\n")
     script = step_script(load("keepalive-digest.yml"), "digest", "Write to the standing issue")
-    sandbox(script, GH_STUB_ISSUE="7", OWNER="octocat")
+    sandbox(
+        script,
+        GH_STUB_ISSUES=issue(7, "scheduled workflow problems"),
+        TITLE="scheduled workflow problems",
+        OWNER="octocat",
+    )
     assert (sandbox.dir / "body.md").read_text().startswith("@octocat\n")
     assert any(
         c.startswith("issue comment 7") and "--body-file body.md" in c for c in sandbox.calls()
@@ -231,7 +257,12 @@ def test_the_digest_mentions_the_owner_when_it_has_something_to_say(sandbox):
 def test_the_digest_says_nothing_when_it_has_nothing_to_say(sandbox):
     (sandbox.dir / "report.md").write_text("")
     script = step_script(load("keepalive-digest.yml"), "digest", "Write to the standing issue")
-    sandbox(script, GH_STUB_ISSUE="7", OWNER="octocat")
+    sandbox(
+        script,
+        GH_STUB_ISSUES=issue(7, "scheduled workflow problems"),
+        TITLE="scheduled workflow problems",
+        OWNER="octocat",
+    )
     assert sandbox.calls() == []
 
 
@@ -239,15 +270,49 @@ def test_the_digest_says_nothing_when_it_has_nothing_to_say(sandbox):
 def test_the_first_report_opens_the_standing_issue(sandbox):
     (sandbox.dir / "report.md").write_text("  new@example.org  signed in\n")
     script = step_script(load("first-use.yml"), "first-use", TELL)
-    sandbox(script, TEST="false", GH_STUB_ISSUE="")
+    sandbox(script, TEST="false", GH_STUB_ISSUES="[]", TITLE="first use")
     assert any(c.startswith("issue create") for c in sandbox.calls())
+
+
+@needs_tools
+def test_a_near_miss_title_is_not_the_standing_issue(sandbox):
+    # `"first use" in:title` is a phrase search: it also finds "Improve first use
+    # experience". Posting readers' addresses into an unrelated issue is the cost of
+    # trusting the search, so the title is matched exactly after it.
+    (sandbox.dir / "report.md").write_text("  new@example.org  signed in\n")
+    script = step_script(load("first-use.yml"), "first-use", TELL)
+    sandbox(
+        script,
+        TEST="false",
+        GH_STUB_ISSUES=issue(9, "Improve first use experience"),
+        TITLE="first use",
+        OWNER="octocat",
+    )
+    calls = sandbox.calls()
+    assert not any(c.startswith("issue comment 9") for c in calls)
+    assert any(c.startswith("issue create") for c in calls)
+
+
+@needs_tools
+def test_the_digest_does_not_post_into_a_near_miss_title_either(sandbox):
+    (sandbox.dir / "report.md").write_text("- `first-use.yml`: 1 of 2 runs failed\n")
+    script = step_script(load("keepalive-digest.yml"), "digest", "Write to the standing issue")
+    sandbox(
+        script,
+        GH_STUB_ISSUES=issue(9, "Notes on scheduled workflow problems in March"),
+        TITLE="scheduled workflow problems",
+        OWNER="octocat",
+    )
+    calls = sandbox.calls()
+    assert not any(c.startswith("issue comment 9") for c in calls)
+    assert any(c.startswith("issue create") for c in calls)
 
 
 @needs_tools
 def test_the_test_input_posts_a_marked_line_even_when_nobody_is_new(sandbox):
     (sandbox.dir / "report.md").write_text("")
     script = step_script(load("first-use.yml"), "first-use", TELL)
-    sandbox(script, TEST="true", GH_STUB_ISSUE="42")
+    sandbox(script, TEST="true", GH_STUB_ISSUES=issue(42, "first use"), TITLE="first use")
     assert any(c.startswith("issue comment 42") for c in sandbox.calls())
     assert "TEST" in (sandbox.dir / "report.md").read_text()
 
@@ -306,3 +371,12 @@ def test_the_report_is_never_printed_to_the_log():
     for line in all_run_lines(load("first-use.yml")):
         if "report.md" in line and re.match(r"\s*(cat|echo|printf|tee)\b", line):
             assert ">" in line, f"prints the report to the log: {line.strip()}"
+
+
+def test_the_dependencies_of_the_job_that_holds_the_credential_are_exact():
+    # It runs with the database URL in its environment, 24 times a day, outside
+    # `uv.lock`. A floating release would run with that URL.
+    text = (WORKFLOWS / "first-use.yml").read_text()
+    pins = re.findall(r'--with "([^"]+)"', text)
+    assert pins, "the job installs nothing explicitly: check what it runs"
+    assert all("==" in pin for pin in pins), f"unpinned: {pins}"

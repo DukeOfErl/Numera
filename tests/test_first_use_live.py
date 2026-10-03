@@ -250,9 +250,9 @@ def reader(engine, table):
     sql = ROLE_SQL.read_text()
     for needle, replacement in (
         ("first_use_reader", role),
-        ("CHANGE-ME", password),
+        ("<PASSWORD>", f"'{password}'"),
         (" neondb ", f" {database} "),
-        ("select on trail", f"select on {table}"),
+        (") on trail", f") on {table}"),
     ):
         assert needle in sql, f"sql/first_use_reader.sql no longer contains {needle!r}"
         sql = sql.replace(needle, replacement)
@@ -306,6 +306,25 @@ def test_the_grants_alone_refuse_a_write_even_if_the_transaction_is_made_writabl
         with role_engine.begin() as conn:
             conn.execute(text("set transaction read write"))
             conn.execute(text(f"insert into {table} (event, session_id) values ('x', 'y')"))
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "select detail from {t}",
+        "select count(*) from {t} where session_id = 'x'",
+        "select * from {t}",
+    ],
+)
+def test_the_role_cannot_read_the_columns_the_question_does_not_need(reader, table, statement):
+    # Question text, feedback comments and session ids live in the columns it was not
+    # granted: a leaked secret should expose three columns, not the table.
+    from sqlalchemy import text
+
+    role_engine, _ = reader
+    with pytest.raises(Exception, match="permission denied"):
+        with role_engine.begin() as conn:
+            conn.execute(text(statement.format(t=table))).all()
 
 
 def test_the_role_cannot_read_another_table(reader):

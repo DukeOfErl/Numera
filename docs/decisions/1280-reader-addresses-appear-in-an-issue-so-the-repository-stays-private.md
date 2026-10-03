@@ -18,7 +18,10 @@ this adds a place they are stored, not a new disclosure to the operator.
 
 Addresses go into the issue comment and **nowhere else**. The command writes its
 report to a file and never to standard output in the workflow, so the Actions log
-does not carry them; `tests/test_scheduled_workflows.py` fails if a step prints the
+does not carry them. **One exception, stated rather than hidden:** the operator's exclusion
+list (`FIRST_USE_EXCLUDE`, their own and test addresses, a plain variable) is printed by
+GitHub as a step `env` value, because only secrets are masked; it names no reader.
+`tests/test_scheduled_workflows.py` fails if a step prints the
 report file without redirecting it, and if an address is written into the workflow
 itself (the operator's exclusions come from a repository variable).
 

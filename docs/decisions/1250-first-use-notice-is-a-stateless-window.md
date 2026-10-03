@@ -61,9 +61,16 @@ needs a second credential with insert rights.
 
 ## Trade-off accepted
 
-No state means no guarantee: a tick delayed past the window loses a reader, and a
-tick inside the overlap repeats one. The 70 minutes is a guess until the real gaps
-between ticks are read out of the keepalive's run history (task 6.4). A reader whose
+No state means no guarantee. **The repeat is systematic, not a rare edge:** ticks are
+60 minutes apart and the window is 70, so a reader whose first event falls in the 10
+minutes before a tick is reported by two consecutive runs -- about one reader in six,
+every time. The same arithmetic is the tolerance: a gap of more than 70 minutes
+between two runs loses a reader, so a tick may be at most about 10 minutes later than
+its neighbour, and GitHub's schedule jitter can exceed that. The 70 minutes is a guess
+until the real gaps between ticks are read out of the keepalive's run history (task
+6.4); a wider window removes misses and adds repeats, which is the limit of a design
+that keeps no state. A review suggested deduplicating against the standing issue's
+existing comments instead; not done, to be decided with the gap data. A reader whose
 first `signin.admitted` is **unstamped** cannot be attributed — the session id is a
 hash of the address and the link, so the address cannot be recovered from it — and is
 missed until they ask something. Two such rows exist, none recently.

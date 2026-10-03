@@ -728,18 +728,20 @@ time they ask a question — one line per reader, with both firsts together when
 same window — and, like `scinumbers-pending`, **prints nothing when nobody is new**
 ([ADR-1250](docs/decisions/1250-first-use-notice-is-a-stateless-window.md)). It keeps no state:
 "first" is read out of the trail (an event in the window and none earlier for that address), so a
-tick GitHub delays can miss a reader and the 70-minute default window, longer than the hourly
-schedule, can report one twice. The repeat is the cheap error.
+tick that arrives more than about 10 minutes late can miss a reader, and the 70-minute default
+window, longer than the hourly schedule, reports about one reader in six twice, every time. The
+repeat is the cheap error.
 
 It runs hourly from `.github/workflows/first-use.yml` and comments on one standing issue, `first use`,
 which mails the owner through GitHub — no mail account. Every comment begins with an `@` mention of
 the repository owner, because the Actions bot opens the issue and so the owner would not otherwise be
 "participating" in it. It holds **one secret, the URL of a role that
-can only read the trail**, never the Neon API key
+can read three columns of the trail and nothing else**, never the Neon API key
 ([ADR-1260](docs/decisions/1260-the-scheduled-job-holds-a-read-only-role.md)). Setting it up, once:
 
 1. On the Neon branch the deployment writes to (`alpha`), run `sql/first_use_reader.sql` after
-   changing `CHANGE-ME` to a real password. Roles are per branch.
+   replacing the token `<PASSWORD>` with a real password in single quotes (left unedited it is
+   a syntax error, on purpose). Roles are per branch.
 2. Add the repository secret `SCINUMBERS_TRAIL_READ_URL` (that role's URL, `postgresql+psycopg://…`)
    and the variable `FIRST_USE_EXCLUDE` (your own and test addresses, comma-separated).
 3. The workflow exists only once it is on `main`. Run it by hand with **`test`** ticked and check that
@@ -754,7 +756,8 @@ day.
 **Reader addresses go into that issue comment.** That is fine while the repository is private and
 publishes them if it is not
 ([ADR-1280](docs/decisions/1280-reader-addresses-appear-in-an-issue-so-the-repository-stays-private.md));
-the report is written to a file, never to the run's log.
+the report is written to a file, never to the run's log (the exclusion list, which is your own
+addresses, is the one thing Actions does print).
 
 **Five roles exist — student, scientist, senior scientist, dev and admin — as
 foundations, built and tested now so that ratings can later be weighted by who

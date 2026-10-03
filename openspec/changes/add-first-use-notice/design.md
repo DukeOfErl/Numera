@@ -71,7 +71,7 @@ index on `(event, at)` is a schema change the operator makes, not this command.
 
 **3. A read-only role and a database URL, not the Neon API key.** The command reads
 `SCINUMBERS_TRAIL_READ_URL` (a `postgresql+psycopg://` URL) and never touches `neon.py`.
-`sql/first_use_reader.sql` creates a login role with `select` on the trail table only
+`sql/first_use_reader.sql` creates a login role with `select` on three columns of the trail (`at`, `event`, `user_email`)
 — **not on `accounts`**, because nothing here reads it, and a grant that nothing needs
 is the one that gets abused. The password is a placeholder in the file and set by the
 operator. Pattern: *least-privilege credential per caller* — the guard belongs to the
