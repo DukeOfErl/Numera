@@ -61,7 +61,16 @@ _OPUS_4_7 = Prices(5e-6, 6.25e-6, 0.5e-6, 25e-6)
 #: openrouter.ai/anthropic/claude-opus-4.7). One entry per route, so `cost` needs no
 #: knowledge of which adapter made the call.
 OPENROUTER_MODEL = "anthropic/claude-opus-4.7"
-PRICES: dict[str, Prices] = {MODEL: _OPUS_4_7, OPENROUTER_MODEL: _OPUS_4_7}
+#: Cheaper candidates for harvest mode, where cost scales with papers rather than questions.
+#: Read off OpenRouter's own `/api/v1/models` listing on 2026-10-03. GPT-4.1 has no separate
+#: cache-write price there (its caching is automatic), so a write is priced as plain input.
+PRICES: dict[str, Prices] = {
+    MODEL: _OPUS_4_7,
+    OPENROUTER_MODEL: _OPUS_4_7,
+    "anthropic/claude-sonnet-5": Prices(2e-6, 2.5e-6, 0.2e-6, 10e-6),
+    "anthropic/claude-haiku-4.5": Prices(1e-6, 1.25e-6, 0.1e-6, 5e-6),
+    "openai/gpt-4.1": Prices(2e-6, 2e-6, 0.5e-6, 8e-6),
+}
 
 
 class Unpriceable(Exception):
