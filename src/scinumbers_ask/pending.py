@@ -184,7 +184,7 @@ class Waiting:
 #: aggregates over a growing table in an unattended batch job, and the cost of
 #: waiting is nothing while the cost of a spurious failure is a monitor the operator
 #: learns to ignore.
-STATEMENT_TIMEOUT_MS = 30_000
+STATEMENT_TIMEOUT_MS = trail_store.BATCH_STATEMENT_TIMEOUT_MS
 
 #: Likewise the connect timeout. `trail_store.CONNECT_TIMEOUT_S` is 5s and its own
 #: comments record that a Neon free-tier cold start can outrun it -- and a 09:00
@@ -192,7 +192,7 @@ STATEMENT_TIMEOUT_MS = 30_000
 #: overnight. One attempt that times out prints a failure, so the check would
 #: false-alarm most mornings, which is the same wasted-mail outcome as reporting a
 #: quiet day.
-CONNECT_TIMEOUT_S = 30
+CONNECT_TIMEOUT_S = trail_store.BATCH_CONNECT_TIMEOUT_S
 
 
 def _run(engine, statement: str, params: dict) -> list[Waiting]:
