@@ -70,6 +70,12 @@ PRICES: dict[str, Prices] = {
     "anthropic/claude-sonnet-5": Prices(2e-6, 2.5e-6, 0.2e-6, 10e-6),
     "anthropic/claude-haiku-4.5": Prices(1e-6, 1.25e-6, 0.1e-6, 5e-6),
     "openai/gpt-4.1": Prices(2e-6, 2e-6, 0.5e-6, 8e-6),
+    "anthropic/claude-opus-5.5": Prices(4e-6, 5e-6, 0.2e-6, 20e-6),
+    # The listing gives the Nemotron models no cache-write price, and the Super none for a
+    # cache read either; each missing figure is priced as plain input, which errs high.
+    "nvidia/nemotron-3.5-lightning": Prices(0.0595e-6, 0.0595e-6, 0.0297e-6, 0.17e-6),
+    "nvidia/nemotron-3-super-120b-a12b": Prices(0.08e-6, 0.08e-6, 0.08e-6, 0.45e-6),
+    "nvidia/nemotron-3-ultra-550b-a55b": Prices(0.5e-6, 0.5e-6, 0.1e-6, 2.2e-6),
 }
 
 
