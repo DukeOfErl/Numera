@@ -41,4 +41,4 @@
 - [x] 6.2 Full suite once; commit; hand over. Merging to `dev` and `main` and pushing are the operator's call (scheduled workflows exist only on `main`).
 - [x] 6.3 After the merge: dispatch with `test: true` and **see the mail arrive** — until it does, neither this notice nor the digest has been shown to reach anyone. Then dispatch plain and confirm it is silent.
 - [ ] 6.4 After a week: read keepalive's run history for the largest gap between ticks and set `--minutes` from it rather than from 70.
-- [ ] 6.5 Archive the change once its requirements have landed (`openspec archive`), per `.claude/rules/specs.md`.
+- [x] 6.5 Archive the change once its requirements have landed (`openspec archive`), per `.claude/rules/specs.md`.
