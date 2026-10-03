@@ -76,6 +76,9 @@ PRICES: dict[str, Prices] = {
     "nvidia/nemotron-3.5-lightning": Prices(0.0595e-6, 0.0595e-6, 0.0297e-6, 0.17e-6),
     "nvidia/nemotron-3-super-120b-a12b": Prices(0.08e-6, 0.08e-6, 0.08e-6, 0.45e-6),
     "nvidia/nemotron-3-ultra-550b-a55b": Prices(0.5e-6, 0.5e-6, 0.1e-6, 2.2e-6),
+    "openai/gpt-6.1-sol": Prices(2e-6, 2.5e-6, 0.1e-6, 10e-6),
+    # No cache-write price listed for Kimi K3 either; priced as plain input.
+    "moonshotai/kimi-k3": Prices(0.72e-6, 0.72e-6, 0.7e-6, 13e-6),
 }
 
 
