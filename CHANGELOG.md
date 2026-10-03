@@ -23,6 +23,10 @@ any release; `1.0.0` when it stabilizes.
   the two texts ([ADR-0940]). Extraction
   reaches the model through OpenRouter on its own key, `BIONUMBERS_OPENROUTER_API_KEY`, so the
   prototype's spend is readable apart from the ask app's.
+- **Harvest mode for the validator** (`bionumbers harvest <run> --pmcids ...`, then `extract`):
+  a run starts from a list of papers, and each is asked once for its reusable numbers in seven
+  classes instead of for one question's answer; every claim is named by its own property and
+  species ([ADR-0950]).
 - **The Europe PMC client from the feasibility branch, ported and corrected**: an article without
   XML is now recognised from the response body rather than a 404 status, because the service
   answers 500 today; and the article check reads the root element rather than searching for
@@ -486,3 +490,4 @@ number rather than an error:
 [ADR-0920]: docs/decisions/0920-the-second-text-always-two-kind-recorded.md
 [ADR-0930]: docs/decisions/0930-the-review-store-fails-closed.md
 [ADR-0940]: docs/decisions/0940-texts-as-written-and-the-whole-table.md
+[ADR-0950]: docs/decisions/0950-harvest-first-ask-later.md

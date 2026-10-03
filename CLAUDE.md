@@ -71,7 +71,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-answer-feedback` | `0740`–`0770` — `0740`, `0750`, `0760` written |
 | `add-user-identity` | `0780`–`0830` — all written |
 | `add-question-and-answer-records` | `0840`–`0870` |
-| `add-validator-prototype` | `0900`–`0990` — `0900`, `0910`, `0920`, `0930`, `0940` written |
+| `add-validator-prototype` | `0900`–`0990` — `0900`, `0910`, `0920`, `0930`, `0940`, `0950` written. **`0900`–`0920` collide with `add-open-enrolment` on `dev`** (which wrote `0880`, `0890`, `0900`); resolve before this branch merges |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets

@@ -318,6 +318,9 @@ bionumbers load <run-id> --db-url "$BIONUMBERS_REVIEW_DB_URL"   # after applying
 streamlit run review_app.py
 ```
 
+- **Harvest** is the other way in (ADR-0950): `bionumbers harvest <run-id> --pmcids PMC1,PMC2`
+  starts a run from papers chosen ahead of any question, and `extract` then asks each one for
+  the numbers worth reusing, in seven classes, at most ten per paper.
 - **Discover** searches Europe PMC for open-access research articles with a PMCID — reviews,
   editorials, comments and preprints excluded by metadata — fetches each paper's JATS XML into
   `data/europepmc/`, and records the licence. A paper without XML is recorded with the status the
