@@ -188,10 +188,51 @@ def test_a_run_with_nobody_new_delivers_nothing(sandbox):
 def test_a_report_becomes_a_comment_on_the_one_standing_issue(sandbox):
     (sandbox.dir / "report.md").write_text("  new@example.org  signed in\n")
     script = step_script(load("first-use.yml"), "first-use", TELL)
-    sandbox(script, TEST="false", GH_STUB_ISSUE="42")
+    sandbox(script, TEST="false", GH_STUB_ISSUE="42", OWNER="octocat")
     calls = sandbox.calls()
-    assert any(c.startswith("issue comment 42") and "--body-file report.md" in c for c in calls)
+    assert any(c.startswith("issue comment 42") and "--body-file body.md" in c for c in calls)
     assert not any(c.startswith("issue create") for c in calls), "one issue, not one per reader"
+
+
+@needs_tools
+def test_every_comment_mentions_the_owner_and_still_carries_the_report(sandbox):
+    # The issue is opened by the Actions bot, so the owner is not "participating" in
+    # it and "Participating and @mentions" mail would never arrive -- except for a
+    # mention, which is exactly what that setting does notify on.
+    (sandbox.dir / "report.md").write_text("  new@example.org  signed in\n")
+    script = step_script(load("first-use.yml"), "first-use", TELL)
+    sandbox(script, TEST="false", GH_STUB_ISSUE="42", OWNER="octocat")
+    body = (sandbox.dir / "body.md").read_text()
+    assert body.startswith("@octocat\n")
+    assert "new@example.org  signed in" in body
+
+
+@needs_tools
+def test_the_first_report_also_mentions_the_owner(sandbox):
+    (sandbox.dir / "report.md").write_text("  new@example.org  signed in\n")
+    script = step_script(load("first-use.yml"), "first-use", TELL)
+    sandbox(script, TEST="false", GH_STUB_ISSUE="", OWNER="octocat")
+    assert (sandbox.dir / "body.md").read_text().startswith("@octocat\n")
+    assert any(c.startswith("issue create") and "--body-file body.md" in c for c in sandbox.calls())
+
+
+@needs_tools
+def test_the_digest_mentions_the_owner_when_it_has_something_to_say(sandbox):
+    (sandbox.dir / "report.md").write_text("- `first-use.yml`: 1 of 2 runs failed\n")
+    script = step_script(load("keepalive-digest.yml"), "digest", "Write to the standing issue")
+    sandbox(script, GH_STUB_ISSUE="7", OWNER="octocat")
+    assert (sandbox.dir / "body.md").read_text().startswith("@octocat\n")
+    assert any(
+        c.startswith("issue comment 7") and "--body-file body.md" in c for c in sandbox.calls()
+    )
+
+
+@needs_tools
+def test_the_digest_says_nothing_when_it_has_nothing_to_say(sandbox):
+    (sandbox.dir / "report.md").write_text("")
+    script = step_script(load("keepalive-digest.yml"), "digest", "Write to the standing issue")
+    sandbox(script, GH_STUB_ISSUE="7", OWNER="octocat")
+    assert sandbox.calls() == []
 
 
 @needs_tools

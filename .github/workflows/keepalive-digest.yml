@@ -29,6 +29,9 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       TITLE: "scheduled workflow problems"
+      # Mentioned in every comment, for the reason `first-use.yml` gives: the bot
+      # opens this issue, so only a mention reaches "Participating and @mentions".
+      OWNER: ${{ github.repository_owner }}
     steps:
       - name: Summarise the last 24 hours
         run: |
@@ -51,10 +54,11 @@ jobs:
       - name: Write to the standing issue
         run: |
           [ -s report.md ] || exit 0
+          { echo "@$OWNER"; echo; cat report.md; } > body.md
           number=$(gh issue list --state open --search "\"$TITLE\" in:title" \
             --json number --jq '.[0].number // empty')
           if [ -n "$number" ]; then
-            gh issue comment "$number" --body-file report.md
+            gh issue comment "$number" --body-file body.md
           else
-            gh issue create --title "$TITLE" --body-file report.md
+            gh issue create --title "$TITLE" --body-file body.md
           fi

@@ -36,11 +36,18 @@ new".
 ## Trade-off accepted
 
 The whole delivery rests on one assumption **that has not been shown for this
-account**: that a comment by the Actions bot on an issue emails the owner, which
-holds only if the owner watches the repository. Neither this notice nor the digest
-has yet delivered a mail to anyone. The `test` input exists to check it before
-anything relies on it (task 6.3); if it fails, the fallback is the owner subscribing
-to the issue, not a new mechanism.
+account**: that GitHub emails the owner about a comment the Actions bot made. The bot
+opens the issue, so the owner is not "participating" in it, and under GitHub's default
+"Participating and @mentions" setting a comment alone would not mail anyone (GitHub's
+documentation does not address a bot-opened thread; this is my understanding, not
+something I verified). **So every comment begins with `@<repository owner>`**, in both
+`first-use.yml` and `keepalive-digest.yml`: a mention is what that setting does notify
+on, so no watch level has to be changed. For a repository owned by an organisation this
+names the organisation, which is not what is wanted -- revisit if it ever moves.
+
+Neither this notice nor the digest has yet delivered a mail to anyone. The `test` input
+exists to check it before anything relies on it (task 6.3); if it fails, the fallback is
+subscribing to the issue, not a new mechanism.
 
 Delivery is also up to an hour late and can be missed or repeated (ADR-1250), and a
 failure notice is up to a day late — acceptable for a "someone arrived" message,
@@ -50,10 +57,12 @@ not for an alarm.
 against a stub `gh` and real `jq`: a quiet hour makes no call at all; a report is one
 comment on the existing issue and never a second issue; the first report opens it; the
 digest reports a failing first-use run by name, reports a workflow that never ran, and
-does not count a cancelled run. Fourteen defects were then seeded into a copy of the
+does not count a cancelled run; every comment, from either workflow, begins with the
+owner's mention and still carries the report. Twenty defects were then seeded into a copy of the
 workflows (a dropped silence guard, an issue per report, the digest forgetting
 first-use or the no-run case, a colliding or daily schedule, a Neon or mail secret,
 extra write permission, a floating runner, a committed address, the report printed to
-the log, the test input defaulting on) with a green baseline first; each was caught by
+the log, the test input defaulting on, the mention dropped, hard-coded, or posted with no
+report, the digest commenting when empty) with a green baseline first; each was caught by
 the test written for it. **Not verified:** that the workflow runs on GitHub's runners
 at all (it cannot until it is on `main`), and the mail.
