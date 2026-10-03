@@ -75,9 +75,15 @@ _TYPE_DEFINITIONS: dict[DistractorType, str] = {
         "temperature, substrate or time point; typically the neighbouring row or column of the "
         "same table"
     ),
+    # Never the same property for the same organism: that is another source's answer to the same
+    # question, not a text that fails to support the value, and a reviewer cannot tell the two
+    # apart (Yoav, 2026-09-23, on PMC13447829). Asked for in the instruction only -- nothing here
+    # can read an organism out of a passage, so the model's compliance is what holds it.
     DistractorType.CITED: (
-        "the same property taken from other work rather than measured here, with a bibliographic "
-        "marker in the clause that carries the number"
+        "the same property for a DIFFERENT organism, cell type or system, taken from other work "
+        "rather than measured here, with a bibliographic marker in the clause that carries the "
+        "number. A value other work reports for this property in the SAME organism is not "
+        "wanted, under this kind or any other"
     ),
     DistractorType.DIFFERENT_QUANTITY: (
         "a different quantity sharing this value's unit and subject -- a lag time beside a "

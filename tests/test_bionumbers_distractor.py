@@ -510,6 +510,28 @@ def test_the_model_is_told_the_value_and_its_quote_and_nothing_about_a_decision(
         assert word not in SECOND_TEXT_INSTRUCTION.lower()
 
 
+def test_a_cited_value_for_the_same_organism_is_asked_not_to_be_offered():
+    """Another source's figure for the same property in the same organism is a second answer to
+    the question rather than a wrong one, so the kind is defined on a different organism and the
+    same-organism case is refused in words. Read off the CITED line, not the whole instruction:
+    "SAME article" appears elsewhere and would satisfy a looser assertion."""
+    cited = next(
+        line
+        for line in SECOND_TEXT_INSTRUCTION.splitlines()
+        if line.startswith(f"- {DistractorType.CITED.value}:")
+    )
+    assert "DIFFERENT organism" in cited
+    assert "SAME organism is not wanted" in cited
+    for kind in DistractorType:
+        if kind is not DistractorType.CITED:
+            other = next(
+                line
+                for line in SECOND_TEXT_INSTRUCTION.splitlines()
+                if line.startswith(f"- {kind.value}:")
+            )
+            assert "organism" not in other
+
+
 def test_the_instruction_names_every_type_of_distractor():
     """The five types are the record's vocabulary; a type the instruction does not name is one the
     model cannot return, and the distribution of wrong answers by type would be silently short of

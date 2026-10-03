@@ -26,7 +26,8 @@ any release; `1.0.0` when it stabilizes.
 - **Harvest mode for the validator** (`bionumbers harvest <run> --pmcids ...`, then `extract`):
   a run starts from a list of papers, and each is asked once for its reusable numbers in seven
   classes instead of for one question's answer; every claim is named by its own property and
-  species ([ADR-0950]).
+  species ([ADR-0950]). The second text is asked never to be another source's value for the same
+  property in the same organism, which is a second answer rather than a wrong one.
 - **The Europe PMC client from the feasibility branch, ported and corrected**: an article without
   XML is now recognised from the response body rather than a 404 status, because the service
   answers 500 today; and the article check reads the root element rather than searching for

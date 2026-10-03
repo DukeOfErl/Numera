@@ -68,10 +68,14 @@ does legitimately state the same value for the same conditions. Which kind it is
 distractor which type, SHALL be recorded with the item and SHALL NOT be shown to the reviewer.
 
 A distractor SHALL be one of: a value for the same property under an adjacent condition; a value
-for the property cited from other work; a different quantity sharing the value's unit and subject;
-the same number used as a parameter or assumption rather than measured; or the other half of a
-derivation sentence. A distractor SHALL differ from the supporting text in a dimension named in the
-question or visible in the two texts as shown.
+for the property in a different organism or system, cited from other work; a different quantity
+sharing the value's unit and subject; the same number used as a parameter or assumption rather than
+measured; or the other half of a derivation sentence. A distractor SHALL differ from the supporting
+text in a dimension named in the question or visible in the two texts as shown.
+
+A distractor SHALL NOT be a value other work reports for the same property in the same organism:
+that is a second source's answer to the question, not a text that fails to support the value. The
+selector SHALL be instructed so; the prototype does not enforce it mechanically.
 
 A distractor SHALL NOT contain the value under review, its rounding, or its unit-converted form,
 and SHALL NOT be a passage that supports the value for the same conditions by another method. This
