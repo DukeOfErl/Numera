@@ -75,7 +75,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-hosted-tracing` | `1000`–`1040` — clear of `0880`–`0940`, spent on other branches |
 | `add-one-way-in` | `1100`–`1140` — `1100`, `1110` written; archived 2026-09-29 |
 | `add-account-withdrawal` | `1150`–`1190` — `1150` written; archived 2026-09-29 |
-| `add-door-demo` | `1200`–`1240` — all written |
+| `add-door-demo` | `1200`–`1240` — all written; archived 2026-10-04 |
 | `add-first-use-notice` | `1250`–`1290` — all written |
 | `speed-up-test-loop` | `1300`–`1340` — `1300` written |
 | `add-first-use-heartbeat` | `1350`–`1390` — `1350` written |

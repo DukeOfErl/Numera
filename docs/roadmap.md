@@ -197,7 +197,7 @@ Not part of the multi-user push; listed so the board is complete.
 | `add-answer-evaluation` | 23/43 — the evaluation harness and its judged layer |
 | `add-provider-limit-ending` | 29/31 |
 | `add-answer-shape` | 0/10 — an answer leads with its quantitative conclusion |
-| `add-door-demo` | built — the sign-in door plays a three-example demo, the third with a script-drawn chart (ADR-1210, ADR-1220, ADR-1230) |
+| `add-door-demo` | archived 2026-10-04 — the sign-in door plays a three-example demo, the third with a script-drawn chart; citations are grey superscripts on the door and in the app (ADR-1210–1240) |
 | _app-drawn charts_ | not proposed — the agent returns numbers and the application draws the chart. A model-drawn text chart misplaced every bar on its own axis (ADR-1210). Deferred by Yoav; the door's third example stands in with a script-drawn chart, to be redrawn by the app when this lands (ADR-1230) |
 
 ---
