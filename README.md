@@ -11,7 +11,8 @@ model's own knowledge. It is for people who need a figure they can defend.
 Three commitments shape the design:
 
 - **Provenance.** Every figure carries the identifier of the entry it came from, written `[[100002]]`
-  so a citation can never be confused with a quantity, and those entries
+  so a citation can never be confused with a quantity, and drawn as a small grey superscript, a run
+  of them comma-separated, so the prose reads through them (ADR-1240). Those entries
   are shown beside the answer. A number the answer used but the corpus never returned is flagged as
   unsupported rather than quietly printed.
 - **Precision.** Units are compared by dimension, so a length is never silently reconciled with a

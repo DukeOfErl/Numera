@@ -105,6 +105,15 @@ RAW_HTML_MARKERS = (
     # page's own title, escaped. No corpus text and no reader's text goes near it.
     "TITLE_HTML",
     "TITLE_CSS",
+    # `answer_markdown`: the one entry here that *does* carry model text -- an
+    # answer, with its citations drawn as superscripts (ADR-1240). It is listed
+    # because the function escapes the text itself, HTML first and then `$`, before
+    # adding tags of its own; escaping and the tags are one function so no caller
+    # can turn HTML on for an unescaped answer. That is asserted where the function
+    # is tested: `test_an_answer_drawn_with_html_allowed_is_escaped_first` and
+    # `test_the_page_draws_an_answer_s_citations_as_superscripts` in
+    # test_web_driver.py, and a seeded copy without the escape failed both.
+    "answer_markdown",
 )
 
 
