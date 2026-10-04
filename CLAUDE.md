@@ -78,7 +78,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-door-demo` | `1200`–`1240` — `1200`, `1210`, `1220` written |
 | `add-first-use-notice` | `1250`–`1290` — all written |
 | `speed-up-test-loop` | `1300`–`1340` — `1300` written |
-| `add-first-use-heartbeat` | `1350`–`1390` |
+| `add-first-use-heartbeat` | `1350`–`1390` — `1350` written |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets

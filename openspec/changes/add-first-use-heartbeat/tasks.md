@@ -8,23 +8,23 @@
 
 ## 2. Tests first, from the spec scenarios
 
-- [ ] 2.1 Extend the stub `gh` in `tests/test_scheduled_workflows.py`: `issue view N --json … --jq` applies the caller's own `--jq` to a fixture (`GH_STUB_ISSUE_VIEW`); `run list` already applies `--jq`. Keep `issue list`'s existing behaviour.
-- [ ] 2.2 Write the failing tests by executing the "Tell the operator" step: a quiet week posts exactly one comment; less than seven days since the last delivery posts nothing; the issue's creation counts when it has no comments; the newest comment decides, whatever it was (report, test line, heartbeat); a heartbeat run is followed by silence for seven days; no standing issue posts nothing and creates nothing; a non-empty report is posted as before and no heartbeat is added; a `test` run posts its line and no heartbeat; the heartbeat opens with the owner's mention; it says the check *found* no new reader, states the check count (successes plus one) and its own time, and does not claim that none exist; a failing `gh issue view` fails the step. Assertions come from the spec text, not from running the step.
+- [x] 2.1 Extend the stub `gh` in `tests/test_scheduled_workflows.py`: `issue view N --json … --jq` applies the caller's own `--jq` to a fixture (`GH_STUB_ISSUE_VIEW`); `run list` already applies `--jq`. Keep `issue list`'s existing behaviour.
+- [x] 2.2 Write the failing tests by executing the "Tell the operator" step: a quiet week posts exactly one comment; less than seven days since the last delivery posts nothing; the issue's creation counts when it has no comments; the newest comment decides, whatever it was (report, test line, heartbeat); a heartbeat run is followed by silence for seven days; no standing issue posts nothing and creates nothing; a non-empty report is posted as before and no heartbeat is added; a `test` run posts its line and no heartbeat; the heartbeat opens with the owner's mention; it says the check *found* no new reader, states the check count (successes plus one) and its own time, and does not claim that none exist; a failing `gh issue view` fails the step. Assertions come from the spec text, not from running the step.
 
 ## 3. The step
 
-- [ ] 3.1 In `.github/workflows/first-use.yml` "Tell the operator": when the report is empty and not a test run, find the standing issue (exact title, as now); with none, exit quietly. Read the last delivery with `max(createdAt, comments[].createdAt)`; if fewer than 604800 seconds old, exit quietly. Otherwise count successful runs in the last seven days, add one, and post the heartbeat body (mention, time, finding, count, the "may be what is wrong" sentence) as a comment. Under `bash -e`, so any failed read fails the job.
-- [ ] 3.2 Update the workflow's header comment: silence is still the rule for a run with nothing to say, except one message per quiet week.
+- [x] 3.1 In `.github/workflows/first-use.yml` "Tell the operator": when the report is empty and not a test run, find the standing issue (exact title, as now); with none, exit quietly. Read the last delivery with `max(createdAt, comments[].createdAt)`; if fewer than 604800 seconds old, exit quietly. Otherwise count successful runs in the last seven days, add one, and post the heartbeat body (mention, time, finding, count, the "may be what is wrong" sentence) as a comment. Under `bash -e`, so any failed read fails the job.
+- [x] 3.2 Update the workflow's header comment: silence is still the rule for a run with nothing to say, except one message per quiet week.
 
 ## 4. Prove the tests can fail (seed into a copy, green baseline first)
 
-- [ ] 4.1 Seed, each caught by the test written for it: a heartbeat on every run; the clock not reset by a real report (reads only the issue's creation); the clock read from the issue's creation only when comments exist; a heartbeat posted when no issue exists; the mention dropped; wording that asserts none exist; the count taken from the wrong workflow or without the "+ 1"; seven days compared as six or eight; a heartbeat added to a non-empty report; a heartbeat on a `test` run. Record which survived and what that means.
+- [x] 4.1 Seed, each caught by the test written for it: a heartbeat on every run; the clock not reset by a real report (reads only the issue's creation); the clock read from the issue's creation only when comments exist; a heartbeat posted when no issue exists; the mention dropped; wording that asserts none exist; the count taken from the wrong workflow or without the "+ 1"; seven days compared as six or eight; a heartbeat added to a non-empty report; a heartbeat on a `test` run. Record which survived and what that means.
 
 ## 5. Documentation, in this change
 
-- [ ] 5.1 ADR-1350: the heartbeat in the workflow, measured from the last delivery, the issue as the state; the rejected alternatives; the assumptions (a person's comment resets the week; no issue means no heartbeat); what was and was not verified, including the 2026-10-04 read of GitHub's output.
-- [ ] 5.2 README (the first-use section), CHANGELOG `[Unreleased]`, and the `CLAUDE.md` ADR row.
-- [ ] 5.3 `openspec validate add-first-use-heartbeat --strict`, and diff the MODIFIED requirement against the promoted one (scenarios and paragraphs).
+- [x] 5.1 ADR-1350: the heartbeat in the workflow, measured from the last delivery, the issue as the state; the rejected alternatives; the assumptions (a person's comment resets the week; no issue means no heartbeat); what was and was not verified, including the 2026-10-04 read of GitHub's output.
+- [x] 5.2 README (the first-use section), CHANGELOG `[Unreleased]`, and the `CLAUDE.md` ADR row.
+- [x] 5.3 `openspec validate add-first-use-heartbeat --strict`, and diff the MODIFIED requirement against the promoted one (scenarios and paragraphs).
 
 ## 6. Hand over
 

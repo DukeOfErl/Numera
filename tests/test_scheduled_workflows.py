@@ -65,6 +65,14 @@ case "$1 $2" in
     for i in "$@"; do [ "$prev" = "--jq" ] && expr="$i"; prev="$i"; done
     echo "${GH_STUB_ISSUES:-[]}" | jq -r "$expr"
     ;;
+  "issue view")
+    [ -n "${GH_STUB_VIEW_EXIT:-}" ] && exit "$GH_STUB_VIEW_EXIT"
+    expr=""; for i in "$@"; do [ "$p3" = "--jq" ] && expr="$i"; p3="$i"; done
+    # Not `${VAR:-{}}`: that expansion ends at the first `}`, so a set value would
+    # gain a stray one and `jq` would see invalid JSON.
+    v="$GH_STUB_ISSUE_VIEW"; [ -n "$v" ] || v='{}'
+    echo "$v" | jq -r "$expr"
+    ;;
   "run list")
     # `--workflow NAME` selects which fixture to return.
     for i in "$@"; do last="$prev"; prev="$i"; [ "$last" = "--workflow" ] && wf="$i"; done
@@ -120,6 +128,11 @@ def sandbox(tmp_path):
 
 def issue(number: int, title: str) -> str:
     return f'[{{"number":{number},"title":"{title}"}}]'
+
+
+def posts(sandbox) -> list[str]:
+    """What was written to GitHub: comments and new issues, not the reads before them."""
+    return [c for c in sandbox.calls() if c.startswith(("issue comment", "issue create"))]
 
 
 def runs(*conclusions: str) -> str:
@@ -207,7 +220,7 @@ def test_a_run_with_nobody_new_delivers_nothing(sandbox):
     script = step_script(load("first-use.yml"), "first-use", TELL)
     result = sandbox(script, TEST="false")
     assert result.returncode == 0, result.stderr
-    assert sandbox.calls() == [], "a quiet hour must not touch GitHub at all"
+    assert posts(sandbox) == [], "a quiet hour must post nothing"
 
 
 @needs_tools
@@ -503,3 +516,154 @@ def test_the_report_is_written_to_a_file_for_the_next_step(sandbox):
 def test_a_failing_command_fails_the_step_rather_than_looking_like_a_quiet_hour(sandbox):
     result = ask(sandbox, "[]", UV_STUB_EXIT="1")
     assert result.returncode != 0
+
+
+# -- first-use: the quiet-week message --------------------------------------------------
+
+DAY = 24 * 60
+
+
+def view(created_minutes_ago: int, *comment_minutes_ago: int) -> str:
+    """The standing issue as `gh issue view --json createdAt,comments` returns it."""
+    comments = ",".join(f'{{"createdAt":"{iso_ago(m)}"}}' for m in comment_minutes_ago)
+    return f'{{"createdAt":"{iso_ago(created_minutes_ago)}","comments":[{comments}]}}'
+
+
+def quiet_run(sandbox, issue_view: str, *, runs_json: str = "[]", issues=None, **env):
+    """The delivery step on a run that found nobody new."""
+    (sandbox.dir / "report.md").write_text("")
+    script = step_script(load("first-use.yml"), "first-use", TELL)
+    return sandbox(
+        script,
+        TEST=env.pop("TEST", "false"),
+        TITLE="first use",
+        OWNER="octocat",
+        GH_STUB_ISSUES=issues if issues is not None else issue(42, "first use"),
+        GH_STUB_ISSUE_VIEW=issue_view,
+        GH_STUB_RUNS_FIRST_USE_YML=runs_json,
+        **env,
+    )
+
+
+def heartbeat_body(sandbox) -> str:
+    return (sandbox.dir / "body.md").read_text()
+
+
+@needs_tools
+def test_a_quiet_week_delivers_exactly_one_message(sandbox):
+    quiet_run(sandbox, view(8 * DAY))
+    assert [c for c in posts(sandbox) if c.startswith("issue comment 42")]
+    assert len(posts(sandbox)) == 1
+    assert heartbeat_body(sandbox).startswith("@octocat\n")
+
+
+@needs_tools
+def test_less_than_seven_days_since_the_last_delivery_delivers_nothing(sandbox):
+    quiet_run(sandbox, view(6 * DAY))
+    assert posts(sandbox) == []
+
+
+@needs_tools
+def test_the_seven_days_are_counted_exactly_not_roughly(sandbox):
+    quiet_run(sandbox, view(7 * DAY - 10))
+    assert posts(sandbox) == [], "ten minutes short of seven days"
+
+
+@needs_tools
+def test_ten_minutes_past_seven_days_delivers(sandbox):
+    quiet_run(sandbox, view(7 * DAY + 10))
+    assert len(posts(sandbox)) == 1
+
+
+@needs_tools
+def test_the_newest_comment_decides_whatever_it_was(sandbox):
+    # A report, a test line or an earlier heartbeat are all comments, and any of them
+    # restarts the seven days. The issue is 20 days old; the newest comment is 2 days old.
+    quiet_run(sandbox, view(20 * DAY, 10 * DAY, 2 * DAY))
+    assert posts(sandbox) == []
+
+
+@needs_tools
+def test_old_comments_do_not_postpone_a_message_that_is_due(sandbox):
+    quiet_run(sandbox, view(20 * DAY, 15 * DAY, 9 * DAY))
+    assert len(posts(sandbox)) == 1
+
+
+@needs_tools
+def test_a_message_just_delivered_is_not_repeated_by_the_next_run(sandbox):
+    quiet_run(sandbox, view(30 * DAY, 60))
+    assert posts(sandbox) == []
+
+
+@needs_tools
+def test_with_no_standing_issue_nothing_is_delivered_and_nothing_is_created(sandbox):
+    result = quiet_run(sandbox, "{}", issues="[]")
+    assert result.returncode == 0, "a quiet run with no issue to measure from must succeed quietly"
+    assert posts(sandbox) == []
+
+
+@needs_tools
+def test_a_report_is_delivered_as_before_with_no_quiet_week_message_added(sandbox):
+    (sandbox.dir / "report.md").write_text("  new@example.org  signed in\n")
+    script = step_script(load("first-use.yml"), "first-use", TELL)
+    sandbox(
+        script,
+        TEST="false",
+        TITLE="first use",
+        OWNER="octocat",
+        GH_STUB_ISSUES=issue(42, "first use"),
+        GH_STUB_ISSUE_VIEW=view(30 * DAY),
+    )
+    assert len(posts(sandbox)) == 1
+    body = heartbeat_body(sandbox)
+    assert "new@example.org" in body and "found no new reader" not in body
+
+
+@needs_tools
+def test_a_test_run_posts_its_line_and_no_quiet_week_message(sandbox):
+    quiet_run(sandbox, view(30 * DAY), TEST="true")
+    assert len(posts(sandbox)) == 1
+    body = heartbeat_body(sandbox)
+    assert "TEST" in body and "found no new reader" not in body
+
+
+@needs_tools
+def test_the_message_says_what_the_check_found_and_does_not_claim_nobody_exists(sandbox):
+    quiet_run(sandbox, view(8 * DAY), runs_json=success(60, 600, 1200, 3000))
+    body = heartbeat_body(sandbox)
+    assert "found no new reader" in body
+    assert "last 7 days" in body
+    assert "may be what is wrong" in body
+    assert re.search(r"This check ran at \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC", body)
+    lowered = body.lower()
+    for claim in ("there are no", "no readers exist", "nobody has", "none exist", "no one"):
+        assert claim not in lowered, f"asserts rather than observes: {claim!r}"
+
+
+@needs_tools
+def test_the_message_counts_the_successful_checks_and_this_one(sandbox):
+    # Four earlier successes in the last week, plus the run that is writing this.
+    quiet_run(sandbox, view(8 * DAY), runs_json=success(60, 600, 1200, 3000))
+    assert "5 checks" in heartbeat_body(sandbox)
+
+
+@needs_tools
+def test_with_no_earlier_success_the_message_counts_just_this_check(sandbox):
+    quiet_run(sandbox, view(8 * DAY), runs_json="[]")
+    assert "1 checks" in heartbeat_body(sandbox) or "1 check " in heartbeat_body(sandbox)
+
+
+@needs_tools
+def test_the_count_asks_for_successful_runs_of_this_workflow_in_the_last_week(sandbox):
+    quiet_run(sandbox, view(8 * DAY))
+    asked = [c for c in sandbox.calls() if c.startswith("run list")]
+    assert len(asked) == 1
+    assert "--workflow first-use.yml" in asked[0] and "--status success" in asked[0]
+    assert "--created" in asked[0]
+
+
+@needs_tools
+def test_a_check_that_could_not_read_the_issue_fails_instead_of_reporting_a_quiet_week(sandbox):
+    result = quiet_run(sandbox, view(8 * DAY), GH_STUB_VIEW_EXIT="1")
+    assert result.returncode != 0
+    assert posts(sandbox) == []

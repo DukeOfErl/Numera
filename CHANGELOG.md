@@ -21,6 +21,7 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- The first-use check sends one message after seven days with nothing delivered, saying it found no new readers (with its own time and how many checks completed), so a quiet week can be told apart from a broken check. Measured from the standing issue's last comment; the command itself still prints nothing when nobody is new. See ADR-1350.
 - `scinumbers-first-use`, and an hourly workflow that runs it: the operator is told once per reader when they are first seen signing in and when they first ask a question (one line when both fall in the same window), by a comment on one standing issue that opens with an @mention of the owner, and hears nothing when nobody is new. It holds a read-only database role (`sql/first_use_reader.sql`), not the Neon API key. `keepalive-digest` now also covers this workflow, so a failing or silent run is reported once a day. See ADR-1250 to ADR-1280.
 - An hourly keepalive (`.github/workflows/keepalive.yml`, `bin/keepalive.py`): a headless browser visits the deployed app, clicks the sleep screen's button if it is showing, and fails unless the door renders, so Community Cloud's 12-hour hibernation no longer costs the first reader a cold start. A scheduled workflow runs from `main` only, so it starts once merged there. A daily `keepalive-digest` workflow replaces GitHub's per-run failure mail with one comment on a standing issue, and also reports a day with no runs at all.
 

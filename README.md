@@ -754,6 +754,15 @@ By hand: `SCINUMBERS_TRAIL_READ_URL=… scinumbers-first-use --minutes 1440 --ex
 `keepalive-digest` also watches this workflow, so a run that fails or never happens reaches you once a
 day.
 
+**A quiet week is told apart from a broken check.** After seven days with nothing delivered to you
+— a report, a `test` line or an earlier message of this kind all count — the workflow posts one
+comment saying the check *found* no new readers in that time, when it ran, and how many checks
+completed. It reports an observation and does not claim nobody exists; if you expected someone, the
+check may be what is wrong
+([ADR-1350](docs/decisions/1350-a-quiet-week-sends-one-message.md)). With no standing issue yet there
+is nothing to count from, so none is sent until the first post creates it. A comment you write on the
+issue also restarts the week.
+
 **Reader addresses go into that issue comment.** That is fine while the repository is private and
 publishes them if it is not
 ([ADR-1280](docs/decisions/1280-reader-addresses-appear-in-an-issue-so-the-repository-stays-private.md));
