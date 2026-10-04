@@ -28,6 +28,6 @@
 
 ## 6. Hand over
 
-- [ ] 6.1 Full suite once; commit; hand over. Merging and pushing are the operator's call; a scheduled workflow takes effect from `main`.
+- [x] 6.1 Full suite once; commit; hand over. Merging and pushing are the operator's call; a scheduled workflow takes effect from `main`.
 - [ ] 6.2 After the merge: the first real heartbeat is the live check, due about seven days after the last delivery (after 2026-10-10T21:56Z if nothing else is posted). Confirm it arrives and reads as intended.
-- [ ] 6.3 Archive the change once its requirement has landed (`openspec archive`), per `.claude/rules/specs.md`.
+- [x] 6.3 Archive the change once its requirement has landed (`openspec archive`), per `.claude/rules/specs.md`.
