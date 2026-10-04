@@ -128,6 +128,7 @@ scinumbers-eval = "scinumbers_ask.eval_cli:main"
 scinumbers-enrol = "scinumbers_ask.enrol:main"
 scinumbers-withdraw = "scinumbers_ask.enrol:withdraw_main"
 scinumbers-pending = "scinumbers_ask.pending:main"
+scinumbers-first-use = "scinumbers_ask.first_use:main"
 
 [dependency-groups]
 dev = [
@@ -145,6 +146,8 @@ dev = [
     # purpose: this tool runs the hooks, it does not rewrite code, so its version
     # cannot move formatting under anyone.
     "pre-commit>=4.0",
+    "pytest-testmon>=2.2.0",
+    "pytest-xdist>=3.8.0",
 ]
 
 [build-system]

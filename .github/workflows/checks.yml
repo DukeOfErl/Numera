@@ -30,7 +30,9 @@ jobs:
       # single arbiter of formatting: a developer whose local ruff has wandered
       # from the pin is told here instead of quietly committing churn. Needs none
       # of the project's own dependencies, so it finishes in seconds.
-      - run: uvx pre-commit run --all-files --show-diff-on-failure
+      # `SKIP`: the commit-time test hook needs the project's environment, which this
+      # job deliberately does not have -- the `tests` job below is where tests run.
+      - run: SKIP=testloop-commit uvx pre-commit run --all-files --show-diff-on-failure
 
   tests:
     runs-on: ubuntu-latest
@@ -52,4 +54,11 @@ jobs:
       # what a green tick means: the marked suites -- a real model call, and the
       # marker checks against a real corpus -- are exactly the ones this cannot run,
       # and they still have to be run by hand (see CLAUDE.md, "Running the tests").
-      - run: uv run pytest
+      # Parallel. `worksteal` lets a worker that runs dry take another's queue, and
+      # the suite has a few multi-second subprocess tests that make a fixed split
+      # lopsided. Measured locally, not controlled for the scheduler: `-n 6
+      # --dist worksteal` took 81s, `-n 4` with the default scheduler 104s. `auto`
+      # here is the runner's four cores; on a developer machine `bin/testloop.py`
+      # caps the count instead, because twelve workers on twelve cores were slower
+      # than serial (145s against 158s).
+      - run: uv run pytest -n auto --dist worksteal

@@ -10,8 +10,10 @@ behaves exactly as it did before.
 ### Requirement: A reader signs in before anything is shown, and identity comes from the provider
 
 Where identity is configured, a visitor who is not signed in SHALL be offered
-sign-in and nothing else: no question can be asked, no answer is shown, and no
-record of a question is written, because there is none. Who a reader is SHALL be
+sign-in and nothing else: no question can be asked, no answer is produced or shown
+for them, and no record of a question is written, because there is none. The one
+exception is the recorded examples the sign-in door may play, which are recordings
+of answers given to someone else and never an answer produced for the visitor. Who a reader is SHALL be
 the account the identity provider asserts — the system does not ask for a name,
 an email or a password of its own, and it accepts no credential from the reader.
 
@@ -40,7 +42,8 @@ whose questions are being recorded against the wrong name.
 #### Scenario: A visitor arrives without signing in
 - **WHEN** identity is configured and a visitor has not signed in
 - **THEN** the page offers sign-in
-- **AND** no question can be asked and no answer is displayed
+- **AND** no question can be asked and no answer is produced for the visitor
+- **AND** no answer is displayed other than the door's recorded examples
 
 #### Scenario: A visitor signs in
 - **WHEN** the identity provider asserts an account
@@ -569,4 +572,225 @@ reported as a withdrawal.
 - **WHEN** an account recorded before withdrawal was possible is withdrawn
 - **THEN** the account is refused from then on
 - **AND** the operator is told the credential has to be revoked by hand
+
+### Requirement: The operator is told when a reader is first seen, once for signing in and once for asking
+
+There SHALL be a way for the operator to learn that a reader has arrived: the first
+time an account is seen signing in, and the first time it is seen asking a question.
+These are two separate firsts, and a reader who signs in and asks nothing SHALL be
+reported for the first and never for the second. Where both firsts for the same
+reader fall inside the span asked about, they SHALL be reported together, as one
+message about one person.
+
+"First" SHALL be determined from what is already recorded about the reader — an
+event of that kind inside the span, and none earlier for the same account — and
+SHALL NOT depend on any record kept about the asking itself, so that asking changes
+nothing and can be asked as often as the operator likes. Two spellings of one
+address that differ only in letter case SHALL be one reader.
+
+It SHALL be answerable without a browser and without a person watching, so that it
+can be asked on a schedule. Asking SHALL produce nothing at all when nobody new has
+arrived: an answer that reports an empty hour is one that stops being read, and the
+hour it names someone is then unread too. Where the question cannot be answered —
+the records cannot be reached — that SHALL be said, loudly and as a failure,
+because silence otherwise means "nobody new" and would be indistinguishable from it.
+
+Because the span asked about is a fixed length, an account first seen in one span
+MAY be reported again when the next span overlaps it, and an account first seen
+while a scheduled ask was skipped MAY go unreported if the spans do not overlap
+enough. The first is the cheaper error and SHALL be the one the operator's chosen
+span leaves room for: a repeated notice costs a line, a missed first reader costs
+the moment it was worth knowing.
+
+The operator SHALL be able to name addresses that are never reported — their own,
+and the accounts used for testing — so that the notices that remain are about
+other people. How far back to look SHALL be the operator's to choose, and a span
+that could match nothing SHALL be refused rather than answered with silence.
+
+#### Scenario: Nobody new has arrived
+- **WHEN** the operator asks who has been first seen and nobody has
+- **THEN** nothing is reported at all
+
+#### Scenario: A reader signs in for the first time
+- **WHEN** an account is seen signing in for the first time, inside the span
+- **THEN** it is reported as having signed in, and not as having asked anything
+
+#### Scenario: A reader asks their first question
+- **WHEN** an account is seen asking a question for the first time, inside the span
+- **THEN** it is reported as having asked
+
+#### Scenario: Both firsts fall in the same span
+- **WHEN** an account is first seen signing in and first seen asking, both inside the span
+- **THEN** one message about that account reports both
+
+#### Scenario: A reader who was seen before is not reported again for it
+- **WHEN** an account signs in inside the span, having signed in before the span
+- **THEN** it is not reported as having signed in
+
+#### Scenario: Seen signing in before, asking for the first time now
+- **WHEN** an account signed in before the span and asks its first question inside it
+- **THEN** it is reported as having asked, and not as having signed in
+
+#### Scenario: One address in two spellings
+- **WHEN** the same address is recorded once in lower case and once in capitals, the first before the span and the second inside it
+- **THEN** it is one reader, who is not reported as new
+
+#### Scenario: An address the operator excluded
+- **WHEN** an account the operator named as never to be reported is first seen
+- **THEN** it is not reported
+
+#### Scenario: Asking changes nothing
+- **WHEN** the operator asks twice over the same span with nothing new recorded between
+- **THEN** both answers are the same, and nothing was recorded by asking
+
+#### Scenario: The records cannot be read
+- **WHEN** the records cannot be reached
+- **THEN** the failure is reported and is distinguishable from nobody new
+
+#### Scenario: A span that can match nothing
+- **WHEN** the operator asks over a span that cannot include anything
+- **THEN** the request is refused rather than answered with silence
+
+### Requirement: Whatever asks on a schedule can read the records and change none of them
+
+The means by which the question of who is new is asked on a schedule SHALL hold a
+credential that can read the one record it needs — what has been recorded about
+readers — and SHALL NOT be able to alter it or reach anything else, the enrolment
+records included, since nothing in answering this needs them. It SHALL NOT hold a credential with authority over the
+deployment itself, such as one that could create, change or remove the database.
+Whoever grants the reading credential SHALL do so once, as an operator action, and
+the means for doing so SHALL ship with the change that needs it.
+
+#### Scenario: The scheduled credential tries to write
+- **WHEN** the credential held for asking is used to change or remove a record
+- **THEN** the attempt is refused by the database
+
+#### Scenario: The scheduled credential tries to reach another table
+- **WHEN** the credential held for asking is used to read anything other than what has been recorded about readers
+- **THEN** the attempt is refused by the database
+
+### Requirement: A new reader's arrival reaches the operator on a schedule, with no mail account of their own
+
+A reader's first use SHALL reach the operator without the operator asking, within
+the interval the schedule runs at plus the time a delivery takes. A run in which
+nobody is new SHALL deliver nothing, with one exception: when seven days have passed
+since the operator was last sent anything by this check, the run SHALL deliver one
+message saying that the check found no new reader in that time. Delivery SHALL NOT
+require the operator to hold credentials for a mail service. The message SHALL name
+the reader by the address they signed in with, which is information the operator
+already holds about them as an enrolled account; the deployment's privacy statement
+SHALL NOT need to change because of it.
+
+That second message exists so that a quiet week can be told apart from a check that
+has stopped working, which silence alone cannot. It SHALL say what the check found
+rather than claim that no reader exists — it reports an observation, and says that if
+someone was expected, the check itself may be at fault — and it SHALL say how many
+checks completed in those seven days and when the last one ran. The seven days SHALL
+be counted from the last thing delivered to the operator, whatever it was, so that a
+report of a new reader, or an earlier message of this kind, restarts them; and it
+SHALL NOT be repeated until seven days have passed again. Where nothing has yet been
+delivered to count from, it SHALL NOT be sent. It SHALL reach the operator the same
+way a report of a new reader does, and a check that could not read the records SHALL
+NOT send it, because it would then be saying something the check did not find.
+
+#### Scenario: A new reader arrives
+- **WHEN** a reader is first seen, and the next scheduled run happens
+- **THEN** the operator receives a message naming them and what was first seen
+
+#### Scenario: Nothing new in the interval
+- **WHEN** a scheduled run finds nobody new, and the operator was sent something by this check less than seven days ago
+- **THEN** the operator receives nothing from that run
+
+#### Scenario: A quiet week
+- **WHEN** a scheduled run finds nobody new, and seven days have passed since the operator was last sent anything by this check
+- **THEN** the operator receives one message saying that the check found no new reader in that time
+
+#### Scenario: What the quiet-week message says
+- **WHEN** the quiet-week message is delivered
+- **THEN** it says that the check found no new reader, how many checks completed in the seven days and when the last one ran, and that the check may be at fault if someone was expected, and it does not say that no reader exists
+
+#### Scenario: A delivery of any kind restarts the seven days
+- **WHEN** the operator is sent a report of a new reader, a test message, or a quiet-week message
+- **THEN** no quiet-week message is sent until seven days after it
+
+#### Scenario: It is not repeated run after run
+- **WHEN** a quiet-week message has been delivered and later runs within the next seven days find nobody new
+- **THEN** none of those runs delivers anything
+
+#### Scenario: Nothing has been delivered yet
+- **WHEN** a run finds nobody new and nothing has ever been delivered to the operator by this check
+- **THEN** no quiet-week message is sent
+
+#### Scenario: A check that could not read the records
+- **WHEN** a run could not read the records
+- **THEN** no quiet-week message is sent, and the failure is reported as a failure
+
+### Requirement: The sign-in door may play a demo drawn from real answers
+
+Where identity is configured, the sign-in door MAY play examples of a question being
+asked and answered, so that a visitor can see what lies behind the door before
+signing in.
+
+Each example SHALL be a question actually put to the agent and the answer it gave.
+The answer MAY be shortened for the door. Every figure it keeps SHALL be one the
+corpus holds, any computed figure SHALL be recomputed from the figures kept, and
+every edit SHALL be recorded beside the example where it can be traced to its run.
+The examples SHALL be titled as a demo. However the question is typed, including
+words taken back, pauses, and words retyped, the text it ends on SHALL be the question
+the answer was recorded for, or a rewording of it. A reworded question SHALL be
+recorded beside the example, together with the question actually asked.
+
+A chart in an example SHALL be drawn from the figures the answer's run cited, and
+never by a model, and SHALL say that charts are not yet something the application
+does.
+
+The door SHALL show citations as entry identifiers set apart from the prose, and every
+example SHALL say that the application itself gives full citations.
+
+The examples SHALL accept nothing from the visitor: there is no input a question
+could go through, and nothing a visitor does to them reaches the agent or writes a
+record. They SHALL be played on the sign-in door only, not on a door that refuses an
+account, whose sentence is what that reader needs, and not to a reader who has
+signed in. A visitor who has asked their browser for reduced motion SHALL be shown
+the examples without animation.
+
+#### Scenario: A visitor at the sign-in door sees the demo
+- **WHEN** identity is configured and a visitor has not signed in
+- **THEN** the door plays a question and its answer under a heading that presents it as a demonstration of the app
+- **AND** no question can be asked and no record is written
+
+#### Scenario: An example shows a chart
+- **WHEN** an example's answer includes a chart
+- **THEN** every mark in it sits where its value places it on the chart's own axis
+- **AND** every value drawn is one the run cited, as the corpus stores it
+- **AND** the example says charts are upcoming
+
+#### Scenario: Citations are set apart, and the full ones are elsewhere
+- **WHEN** an example's answer cites entries
+- **THEN** the identifiers are drawn apart from the prose, a run of them together
+- **AND** the example ends by saying the application gives full citations
+
+#### Scenario: A shortened answer says what was changed
+- **WHEN** an example's answer differs from the one its run recorded
+- **THEN** what was cut, reworded or recomputed is recorded beside the example
+
+#### Scenario: A reworded question
+- **WHEN** the door shows a question worded differently from the one the answer was recorded for
+- **THEN** the question actually asked is recorded beside the example, in its edits
+
+#### Scenario: The typed question is the one that was answered
+- **WHEN** an example types a question, takes words back and types others
+- **THEN** the text it ends on is the question the shown answer was recorded for
+
+#### Scenario: A refused account sees no examples
+- **WHEN** a signed-in account is refused at the door, as unverified or not enrolled
+- **THEN** the door plays no examples
+
+#### Scenario: A signed-in reader sees no examples
+- **WHEN** an enrolled account is admitted
+- **THEN** the page plays no examples
+
+#### Scenario: A visitor who asked for less motion
+- **WHEN** the visitor's browser asks for reduced motion
+- **THEN** each example is shown whole, without typing or streaming
 

@@ -12,6 +12,24 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **Citations in an answer are grey superscripts.** A run of `[[nnnnnn]]` is drawn as one small grey superscript, its identifiers comma-separated, so the prose reads through them; the stored answer, the trail and the evaluation still use `[[nnnnnn]]`. HTML is turned on for these alone, after the answer is escaped, in one function (`web.answer_markdown`). Same style as the sign-in door's demo (ADR-1240).
+- The test loop's default is three parallel workers, not six: six is faster with memory free but was killed for lack of memory once on an 8 GB machine, mid-commit. `SCINUMBERS_TEST_WORKERS` still overrides. See ADR-1300.
+- The test loop is two tiers. A commit runs only the tests it reaches (pytest-testmon), falling back to the full suite when a staged file is not Python under `src/` or `tests/` and is not known to be read by no test; push, merge and CI run the full suite in parallel (pytest-xdist, six workers by default). `bin/testloop.py` carries both. `uv run pre-commit install` again in an existing clone to pick up the push and merge hooks.
+
+### Fixed
+
+- The commit hook no longer fails a commit made from a worktree. Git sets `GIT_DIR` for its hooks, and `bin/testloop.py` handed it on to pytest, so every test asking git about a temporary directory got an answer about this repository: 61 false failures whenever the full suite ran. Pytest now starts without the variables `git rev-parse --local-env-vars` names.
+- The first-use notice's window follows GitHub's real schedule: it looks back to the start of the previous successful run (plus six minutes) instead of a fixed 70 minutes, which saw about a quarter of arrivals because the "hourly" schedule fires every 4-7 hours. The command's own default is now seven hours. See ADR-1290.
+- The keepalive no longer reports a failure when a page reload lands mid-poll after waking the app, installs its browser from the same pinned Playwright it then runs under (`--install-browser`), runs on `ubuntu-24.04` rather than the floating `ubuntu-latest` that migrates to Ubuntu 26 on 2026-10-19, and its comments no longer promise a per-run failure mail.
+
+### Added
+
+- The first-use check sends one message after seven days with nothing delivered, saying it found no new readers (with its own time and how many checks completed), so a quiet week can be told apart from a broken check. Measured from the standing issue's last comment; the command itself still prints nothing when nobody is new. See ADR-1350.
+- `scinumbers-first-use`, and an hourly workflow that runs it: the operator is told once per reader when they are first seen signing in and when they first ask a question (one line when both fall in the same window), by a comment on one standing issue that opens with an @mention of the owner, and hears nothing when nobody is new. It holds a read-only database role (`sql/first_use_reader.sql`), not the Neon API key. `keepalive-digest` now also covers this workflow, so a failing or silent run is reported once a day. See ADR-1250 to ADR-1280.
+- An hourly keepalive (`.github/workflows/keepalive.yml`, `bin/keepalive.py`): a headless browser visits the deployed app, clicks the sleep screen's button if it is showing, and fails unless the door renders, so Community Cloud's 12-hour hibernation no longer costs the first reader a cold start. A scheduled workflow runs from `main` only, so it starts once merged there. A daily `keepalive-digest` workflow replaces GitHub's per-run failure mail with one comment on a standing issue, and also reports a day with no runs at all.
+
+### Changed
+
 - **The door says why there is a door, and offers one way in.** It reads "Use of
   this app is by invitation only since you are using the developer's budget" — the
   button already says what to do, and a stranger needs the reason. The Google button
@@ -68,9 +86,11 @@ any release; `1.0.0` when it stabilizes.
   "What can SciNumbers do?". Each finished answer stays up for 7 s with the caret
   blinking, so a visitor can see the next question is coming. Every example is a
   question actually put to the agent and its answer, shortened for the door with
-  every edit recorded beside it. Reduced motion shows each example whole. Two examples for now; a
-  third, a distribution as a text chart, was rejected after the model drew every bar
-  in the wrong place (ADR-1200, ADR-1210, ADR-1220).
+  every edit recorded beside it. Reduced motion shows each example whole. The third
+  example shows cell volumes across mouse cell types as a text chart. The figures
+  come from a live run, but the chart is drawn by a script, because the model drew
+  every bar of one in the wrong place; a red note says charts are an upcoming feature. Citations on the door are grey superscripts, a run of them comma-separated, and every example ends "*The app itself provides full citations" (ADR-1240)
+  (ADR-1200, ADR-1210, ADR-1220, ADR-1230).
 
 - **Enrolling an address that was withdrawn says so**, rather than "already
   enrolled" — which is true of a withdrawn row and reads as though the person has

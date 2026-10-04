@@ -11,7 +11,8 @@ model's own knowledge. It is for people who need a figure they can defend.
 Three commitments shape the design:
 
 - **Provenance.** Every figure carries the identifier of the entry it came from, written `[[100002]]`
-  so a citation can never be confused with a quantity, and those entries
+  so a citation can never be confused with a quantity, and drawn as a small grey superscript, a run
+  of them comma-separated, so the prose reads through them (ADR-1240). Those entries
   are shown beside the answer. A number the answer used but the corpus never returned is flagged as
   unsupported rather than quietly printed.
 - **Precision.** Units are compared by dimension, so a length is never silently reconciled with a
@@ -256,7 +257,9 @@ tried.
 **The sign-in door plays a demo** under the button: a question typed out and an
 answer streamed back, on a loop. Each is a question actually put to the agent and its
 answer (ADR-1210), shortened for the door with every edit recorded beside it
-(ADR-1220), in `src/scinumbers_ask/door_demo.json` (ADR-1200). Each answer stays up
+(ADR-1220), in `src/scinumbers_ask/door_demo.json` (ADR-1200). The third shows mouse
+cell volumes as a text chart, drawn by `bin/door-demo-chart` rather than by the app,
+which cannot plot yet (ADR-1230). Each answer stays up
 for 7 s, with the caret blinking, before the next question replaces it; a browser
 set to reduced motion shows each example whole.
 
@@ -709,6 +712,66 @@ On WSL, `cron` is not running by default (`sudo service cron start`, and see you
 distribution's notes on starting it at boot). Without it, run the command by hand;
 it costs one line and two seconds.
 
+**Keeping the deployed app awake.** Streamlit Community Cloud hibernates an app after
+12 hours without a visitor, and the first reader afterwards waits through a cold
+start. `.github/workflows/keepalive.yml` runs hourly and `bin/keepalive.py` visits the
+app in a headless browser, clicks the sleep screen's button if it is showing, and
+fails unless the door renders. A failed run would mail once an hour, so
+`keepalive-digest.yml` is the notice instead: once a day it comments on one standing
+issue, "keepalive problems", if any run failed or none ran at all (GitHub pauses
+scheduled workflows after 60 days without repository activity). Switch GitHub's own
+failure mail off under Settings > Notifications > Actions, or both will reach you.
+It needs no secrets. GitHub runs scheduled workflows from the default branch only, so it does
+nothing until it is on `main`.
+
+#### Hearing when a reader first arrives
+
+`scinumbers-first-use` reports each reader the first time they are seen signing in and the first
+time they ask a question — one line per reader, with both firsts together when they fall in the
+same window — and, like `scinumbers-pending`, **prints nothing when nobody is new**
+([ADR-1250](docs/decisions/1250-first-use-notice-is-a-stateless-window.md)). It keeps no state:
+"first" is read out of the trail (an event in the window and none earlier for that address), so the
+window has to be right. GitHub runs this "hourly" schedule every 4-7 hours, so the workflow looks
+back to when the **previous successful run** began, plus six minutes
+([ADR-1290](docs/decisions/1290-the-first-use-window-follows-the-schedule.md)): nobody falls in a
+gap, and only the overlap repeats. By hand, `--minutes` sets it, defaulting to seven hours.
+
+It is scheduled hourly in `.github/workflows/first-use.yml` and comments on one standing issue, `first use`,
+which mails the owner through GitHub — no mail account. Every comment begins with an `@` mention of
+the repository owner, because the Actions bot opens the issue and so the owner would not otherwise be
+"participating" in it. It holds **one secret, the URL of a role that
+can read three columns of the trail and nothing else**, never the Neon API key
+([ADR-1260](docs/decisions/1260-the-scheduled-job-holds-a-read-only-role.md)). Setting it up, once:
+
+1. On the Neon branch the deployment writes to (`alpha`), run `sql/first_use_reader.sql` after
+   replacing the token `<PASSWORD>` with a real password in single quotes (left unedited it is
+   a syntax error, on purpose). Roles are per branch.
+2. Add the repository secret `SCINUMBERS_TRAIL_READ_URL` (that role's URL, `postgresql+psycopg://…`)
+   and the variable `FIRST_USE_EXCLUDE` (your own and test addresses, comma-separated).
+3. The workflow exists only once it is on `main`. Run it by hand with **`test`** ticked and check that
+   the mail arrives: a `test` run delivered mail on 2026-10-03 with the mention in place (whether
+   the mention alone is what did it was not tried)
+   ([ADR-1270](docs/decisions/1270-first-use-reaches-the-operator-through-a-standing-issue.md)).
+
+By hand: `SCINUMBERS_TRAIL_READ_URL=… scinumbers-first-use --minutes 1440 --exclude me@example.org`.
+`keepalive-digest` also watches this workflow, so a run that fails or never happens reaches you once a
+day.
+
+**A quiet week is told apart from a broken check.** After seven days with nothing delivered to you
+— a report, a `test` line or an earlier message of this kind all count — the workflow posts one
+comment saying the check *found* no new readers in that time, when it ran, and how many checks
+completed. It reports an observation and does not claim nobody exists; if you expected someone, the
+check may be what is wrong
+([ADR-1350](docs/decisions/1350-a-quiet-week-sends-one-message.md)). With no standing issue yet there
+is nothing to count from, so none is sent until the first post creates it. A comment you write on the
+issue also restarts the week.
+
+**Reader addresses go into that issue comment.** That is fine while the repository is private and
+publishes them if it is not
+([ADR-1280](docs/decisions/1280-reader-addresses-appear-in-an-issue-so-the-repository-stays-private.md));
+the report is written to a file, never to the run's log (the exclusion list, which is your own
+addresses, is the one thing Actions does print).
+
 **Five roles exist — student, scientist, senior scientist, dev and admin — as
 foundations, built and tested now so that ratings can later be weighted by who
 gave them.** Today they differ in one visible thing: dev and admin get an extra
@@ -790,9 +853,20 @@ this branch redeploys, whether or not the checks pass.
 ## Tests
 
 ```bash
-uv run pytest                                  # 1,677 tests on a six-entry fixture; no API key needed
-uv run pre-commit install                      # once per clone: ruff check and ruff format at each commit
+uv run pytest -n 3 --dist worksteal            # ~1,940 tests on a six-entry fixture; no API key needed
+uv run pre-commit install                      # once per clone: lint and tests at commit, push and merge
 ```
+
+**The test loop has two tiers** ([ADR-1300](docs/decisions/1300-two-tier-test-loop.md)). At *commit*, only the
+tests the change reaches run (pytest-testmon: a few seconds to about a minute, against ~80s for the whole
+suite in parallel and ~160s serially). Testmon follows Python only, so a staged change to anything a test merely
+reads — `README.md`, `CLAUDE.md`, `sql/`, `openspec/`, a data file, `pyproject.toml` — runs the **full suite**
+instead; `CHANGELOG.md`, `docs/` and `.github/` run nothing. At *push*, *merge* and in CI the full suite runs
+in parallel. The first commit in a clone builds testmon's database, which is one serial full run (~5 minutes);
+the database is per-checkout and git-ignored. `SCINUMBERS_TEST_WORKERS` overrides the three workers. Three is a memory limit, not a speed one:
+on a 12-core, 8 GB machine six is faster (about 80s against 100–180s) when memory is free, but ran out of
+memory once under ordinary load, and twelve were slower than serial. A checkout with no
+`.venv` prints `NOT RUN` rather than failing, and the push and CI tiers still run everything.
 
 The suite drives the real agent with scripted models rather than mocking the framework, so the
 middleware, the checkpointer and the tool loop are exercised. Two suites are excluded by default

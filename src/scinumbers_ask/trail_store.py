@@ -62,6 +62,18 @@ STATEMENT_TIMEOUT_MS = 2000
 #: left for someone to discover.
 CONNECT_TIMEOUT_S = 5
 
+#: The unattended batch jobs' own, not the two above: `pending` and `first_use` run
+#: aggregates over a growing table from a scheduler, where the cost of waiting is
+#: nothing and the cost of a spurious failure is a monitor the operator learns to
+#: ignore. `STATEMENT_TIMEOUT_MS` bounds a single-row insert on the render path, where
+#: a slow write must not delay an answer. The connect timeout is longer because a Neon
+#: free-tier cold start can outrun `CONNECT_TIMEOUT_S`, and a scheduled run is the
+#: guaranteed-cold case: one attempt that times out prints a failure, so a check built
+#: on the short figure would false-alarm. Here, in the core, so that neither batch
+#: command has to import the other to share them.
+BATCH_STATEMENT_TIMEOUT_MS = 30_000
+BATCH_CONNECT_TIMEOUT_S = 30
+
 #: Seconds before a pooled connection is discarded and remade.
 #:
 #: Named here rather than written twice, because `web.trail_destination` builds
