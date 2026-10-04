@@ -32,7 +32,7 @@ ENTRIES = (
     ("Stem & fibroblast", 114286, "μm", 10.0, 20.0, "MEF"),
     ("Stem & fibroblast", 108905, "μm", 18.0, 18.0, "NIH/3T3"),
     ("Stem & fibroblast", 108979, "pL", 2.04, 2.04, "NIH/3T3"),
-    ("Neuron soma", 111420, "μm", 18.0, 25.0, "cochlear nucleus"),
+    ("Neuron soma", 111420, "μm", 18.0, 25.0, "cochlear-nucleus neurons"),
     ("Oocyte", 102237, "μm", 72.3, 72.3, "Graafian stage"),
     ("Oocyte", 111773, "pL", 300.0, 300.0, "post-ovulation"),
 )
