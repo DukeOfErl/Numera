@@ -167,10 +167,11 @@ def test_the_window_is_bound_as_a_parameter_not_interpolated(run):
     assert {"minutes": 95} in engine.conn.params
 
 
-def test_the_default_window_is_longer_than_an_hourly_schedule(run):
-    # An hourly tick plus room for a delayed one: a repeat is the cheap error, a
-    # missed first reader the expensive one (see `first_use.DEFAULT_MINUTES`).
-    assert first_use.DEFAULT_MINUTES > 60
+def test_the_fallback_window_covers_the_longest_gap_the_schedule_was_seen_to_leave(run):
+    # GitHub ran the "hourly" workflows 4-7 hours apart: the longest gap seen was
+    # 6 h 51 m (411 minutes). A fallback shorter than that would lose a reader whose
+    # arrival fell in it (see `first_use.DEFAULT_MINUTES`, ADR-1290).
+    assert first_use.DEFAULT_MINUTES >= 411
     _, _, _, engine = run(rows=[])
     assert {"minutes": first_use.DEFAULT_MINUTES} in engine.conn.params
 

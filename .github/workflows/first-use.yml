@@ -2,13 +2,15 @@ name: first-use
 
 # Tells the operator, once per reader, when a reader is first seen signing in and when
 # they first ask a question (ADR-1250). The command is silent when nobody is new, and
-# so is this: a run with nothing to say writes nothing anywhere.
+# so is this -- with one exception: after seven days with nothing delivered, one message
+# says the check found no new readers, so a quiet week can be told apart from a broken
+# check (ADR-1350).
 #
 # Delivery is a comment on ONE standing issue, which mails the owner through GitHub --
 # no mail account, no mail secret (ADR-1270). That relies on the owner watching the
 # repository or being mentioned (every comment mentions the owner for that reason),
-# and neither has been shown for this account: run it by hand with `test` ticked and
-# see the mail arrive before relying on it.
+# and a `test` run delivered mail on 2026-10-03 (ADR-1270). Run it by hand with `test`
+# ticked to check it again.
 #
 # **Readers' addresses go into that comment, and nowhere else**: the command writes its
 # report to a file, never to the log. (The exclusion list is the operator's own addresses,
@@ -17,8 +19,8 @@ name: first-use
 # (ADR-1280). Do not make this repository public without removing this workflow.
 #
 # Scheduled workflows run from the default branch only, and GitHub may delay or skip
-# a tick; the window in `first_use.DEFAULT_MINUTES` is longer than an hour for that
-# reason. A failing run is reported by `keepalive-digest`, because GitHub's own
+# a tick -- in practice it fires every 4-7 hours, which is why the window is computed
+# from the previous successful run and not fixed (ADR-1290). A failing run is reported by `keepalive-digest`, because GitHub's own
 # failure mail is off for this account.
 on:
   schedule:
@@ -37,6 +39,9 @@ concurrency:
 
 permissions:
   contents: read
+  # Read-only: the window starts at the previous successful run, which is read out of
+  # the run history (ADR-1290).
+  actions: read
   issues: write
 
 jobs:
@@ -73,6 +78,20 @@ jobs:
             address="${address// /}"
             [ -n "$address" ] && args+=(--exclude "$address")
           done
+          # **The window is "since the previous successful run", not a fixed hour.**
+          # GitHub runs this schedule every 4-7 hours, not hourly, and a fixed 70-minute
+          # window saw about a quarter of arrivals. So ask GitHub when the last success
+          # began and look back that far, plus a few minutes of overlap. A failed or
+          # cancelled run is not a success, so the next one covers its gap. With no
+          # earlier success the command's own default applies (`DEFAULT_MINUTES`); the
+          # cap stops a long outage turning into one enormous first report.
+          last=$(gh run list --workflow first-use.yml --status success --limit 1 \
+            --json createdAt --jq '.[0].createdAt // empty')
+          if [ -n "$last" ]; then
+            minutes=$(( ( $(date -u +%s) - $(date -u -d "$last" +%s) ) / 60 + 6 ))
+            [ "$minutes" -gt 10080 ] && minutes=10080
+            args+=(--minutes "$minutes")
+          fi
           # Only what the command imports: it needs a database driver and not the
           # model stack the `ask` extra carries, which would be a minute of install
           # 24 times a day. The versions are exact -- those in `uv.lock` -- because this job holds
@@ -87,11 +106,34 @@ jobs:
             { echo "TEST -- first-use mail check, $(date -u +%Y-%m-%dT%H:%MZ). Nobody arrived."; cat report.md; } > marked.md
             mv marked.md report.md
           fi
-          [ -s report.md ] || exit 0
-          { echo "@$OWNER"; echo; cat report.md; } > body.md
           number=$(gh issue list --state open --search "\"$TITLE\" in:title" \
             --json number,title \
             --jq '[.[] | select(.title == env.TITLE)][0].number // empty')
+          if [ ! -s report.md ]; then
+            # Nobody new. Say nothing -- except once a quiet week, so that the absence of
+            # mail can be told apart from a check that has stopped working (ADR-1350).
+            # With no standing issue there is nothing to measure the week from: the
+            # first post creates it and starts the clock.
+            [ -n "$number" ] || exit 0
+            # The last delivery is the newest of the issue's creation and its comments,
+            # whatever they were: a report, a test line, an earlier message of this kind.
+            # The issue is the state; nothing is written anywhere else. A failed read
+            # fails the step (bash -e) rather than looking like a quiet week.
+            last=$(gh issue view "$number" --json createdAt,comments \
+              --jq '[.createdAt, .comments[].createdAt] | max')
+            age=$(( $(date -u +%s) - $(date -u -d "$last" +%s) ))
+            [ "$age" -ge 604800 ] || exit 0
+            since=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+            checks=$(gh run list --workflow first-use.yml --status success \
+              --created ">=$since" --limit 200 --json createdAt --jq 'length')
+            # What the check *found*, not a claim that nobody exists; and the count
+            # includes this run, which is not a success until it ends.
+            {
+              echo "This check ran at $(date -u +'%Y-%m-%d %H:%M UTC'). It found no new readers in the last 7 days."
+              echo "$((checks + 1)) checks completed in that time, this one included. If you expected someone, the check may be what is wrong, not the readers."
+            } > report.md
+          fi
+          { echo "@$OWNER"; echo; cat report.md; } > body.md
           if [ -n "$number" ]; then
             gh issue comment "$number" --body-file body.md
           else

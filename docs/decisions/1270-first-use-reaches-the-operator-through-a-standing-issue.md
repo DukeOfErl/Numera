@@ -45,9 +45,15 @@ something I verified). **So every comment begins with `@<repository owner>`**, i
 on, so no watch level has to be changed. For a repository owned by an organisation this
 names the organisation, which is not what is wanted -- revisit if it ever moves.
 
-Neither this notice nor the digest has yet delivered a mail to anyone. The `test` input
-exists to check it before anything relies on it (task 6.3); if it fails, the fallback is
-subscribing to the issue, not a new mechanism.
+**Verified 2026-10-03:** a manual run of `first-use` with `test` ticked, from `main`,
+delivered the marked comment to the operator as mail (subject text received:
+"TEST -- first-use mail check, 2026-10-03T21:56Z. Nobody arrived."). That shows the
+whole chain for the first time -- the workflow ran on GitHub, read `alpha` through the
+read-only role, posted to the standing issue, and the mail arrived with the mention in
+place. It does not show *which* mechanism delivered it: whether the mention alone is
+enough, or the account's watch settings would have delivered it anyway, was not
+tried. Not yet seen: the digest's mail (same mechanism, never triggered), and a real
+arrival.
 
 Delivery is also up to an hour late and can be missed or repeated (ADR-1250), and a
 failure notice is up to a day late — acceptable for a "someone arrived" message,

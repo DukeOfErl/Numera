@@ -37,8 +37,8 @@
 
 ## 6. Roll out (operator steps, then verify)
 
-- [ ] 6.1 Create the role on the deployment's Neon branch and set its password; add the repository secret `SCINUMBERS_TRAIL_READ_URL` and the variable `FIRST_USE_EXCLUDE`. These are the operator's, and none of it is committed.
+- [x] 6.1 Create the role on the deployment's Neon branch and set its password; add the repository secret `SCINUMBERS_TRAIL_READ_URL` and the variable `FIRST_USE_EXCLUDE`. These are the operator's, and none of it is committed.
 - [x] 6.2 Full suite once; commit; hand over. Merging to `dev` and `main` and pushing are the operator's call (scheduled workflows exist only on `main`).
-- [ ] 6.3 After the merge: dispatch with `test: true` and **see the mail arrive** — until it does, neither this notice nor the digest has been shown to reach anyone. Then dispatch plain and confirm it is silent.
+- [x] 6.3 After the merge: dispatch with `test: true` and **see the mail arrive** — until it does, neither this notice nor the digest has been shown to reach anyone. Then dispatch plain and confirm it is silent.
 - [ ] 6.4 After a week: read keepalive's run history for the largest gap between ticks and set `--minutes` from it rather than from 70.
-- [ ] 6.5 Archive the change once its requirements have landed (`openspec archive`), per `.claude/rules/specs.md`.
+- [x] 6.5 Archive the change once its requirements have landed (`openspec archive`), per `.claude/rules/specs.md`.

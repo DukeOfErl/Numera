@@ -423,7 +423,7 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_first_use.py::test_an_excluded_address_is_not_reported_whatever_its_case",
         "test_first_use.py::test_everyone_excluded_is_silence_not_an_empty_report",
         "test_first_use.py::test_asking_writes_nothing_and_says_so_to_the_database",
-        "test_first_use.py::test_the_default_window_is_longer_than_an_hourly_schedule",
+        "test_first_use.py::test_the_fallback_window_covers_the_longest_gap_the_schedule_was_seen_to_leave",
         "test_first_use.py::test_a_trail_that_cannot_be_read_says_so_and_fails",
         "test_first_use.py::test_a_window_that_can_match_nothing_is_refused",
         # "First" is a `having min(at) > ...` over a case-folded address; only a real
@@ -454,6 +454,16 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_scheduled_workflows.py::test_a_report_becomes_a_comment_on_the_one_standing_issue",
         "test_scheduled_workflows.py::test_the_first_report_opens_the_standing_issue",
         "test_scheduled_workflows.py::test_a_run_with_nobody_new_delivers_nothing",
+        # The quiet-week message (add-first-use-heartbeat): measured from the last
+        # delivery on the standing issue, observed rather than asserted, never after a
+        # failed read.
+        "test_scheduled_workflows.py::test_a_quiet_week_delivers_exactly_one_message",
+        "test_scheduled_workflows.py::test_less_than_seven_days_since_the_last_delivery_delivers_nothing",
+        "test_scheduled_workflows.py::test_the_newest_comment_decides_whatever_it_was",
+        "test_scheduled_workflows.py::test_a_message_just_delivered_is_not_repeated_by_the_next_run",
+        "test_scheduled_workflows.py::test_with_no_standing_issue_nothing_is_delivered_and_nothing_is_created",
+        "test_scheduled_workflows.py::test_the_message_says_what_the_check_found_and_does_not_claim_nobody_exists",
+        "test_scheduled_workflows.py::test_a_check_that_could_not_read_the_issue_fails_instead_of_reporting_a_quiet_week",
         "test_scheduled_workflows.py::test_the_only_secret_is_the_read_only_url_and_no_mail_credential_exists",
         "test_first_use.py::test_a_first_sign_in_is_reported_as_a_sign_in_and_not_as_a_question",
     ),

@@ -727,12 +727,13 @@ nothing until it is on `main`.
 time they ask a question — one line per reader, with both firsts together when they fall in the
 same window — and, like `scinumbers-pending`, **prints nothing when nobody is new**
 ([ADR-1250](docs/decisions/1250-first-use-notice-is-a-stateless-window.md)). It keeps no state:
-"first" is read out of the trail (an event in the window and none earlier for that address), so a
-tick that arrives more than about 10 minutes late can miss a reader, and the 70-minute default
-window, longer than the hourly schedule, reports about one reader in six twice, every time. The
-repeat is the cheap error.
+"first" is read out of the trail (an event in the window and none earlier for that address), so the
+window has to be right. GitHub runs this "hourly" schedule every 4-7 hours, so the workflow looks
+back to when the **previous successful run** began, plus six minutes
+([ADR-1290](docs/decisions/1290-the-first-use-window-follows-the-schedule.md)): nobody falls in a
+gap, and only the overlap repeats. By hand, `--minutes` sets it, defaulting to seven hours.
 
-It runs hourly from `.github/workflows/first-use.yml` and comments on one standing issue, `first use`,
+It is scheduled hourly in `.github/workflows/first-use.yml` and comments on one standing issue, `first use`,
 which mails the owner through GitHub — no mail account. Every comment begins with an `@` mention of
 the repository owner, because the Actions bot opens the issue and so the owner would not otherwise be
 "participating" in it. It holds **one secret, the URL of a role that
@@ -745,13 +746,22 @@ can read three columns of the trail and nothing else**, never the Neon API key
 2. Add the repository secret `SCINUMBERS_TRAIL_READ_URL` (that role's URL, `postgresql+psycopg://…`)
    and the variable `FIRST_USE_EXCLUDE` (your own and test addresses, comma-separated).
 3. The workflow exists only once it is on `main`. Run it by hand with **`test`** ticked and check that
-   the mail arrives: whether the mention is enough under your notification settings has not yet
-   been shown for this account
+   the mail arrives: a `test` run delivered mail on 2026-10-03 with the mention in place (whether
+   the mention alone is what did it was not tried)
    ([ADR-1270](docs/decisions/1270-first-use-reaches-the-operator-through-a-standing-issue.md)).
 
 By hand: `SCINUMBERS_TRAIL_READ_URL=… scinumbers-first-use --minutes 1440 --exclude me@example.org`.
 `keepalive-digest` also watches this workflow, so a run that fails or never happens reaches you once a
 day.
+
+**A quiet week is told apart from a broken check.** After seven days with nothing delivered to you
+— a report, a `test` line or an earlier message of this kind all count — the workflow posts one
+comment saying the check *found* no new readers in that time, when it ran, and how many checks
+completed. It reports an observation and does not claim nobody exists; if you expected someone, the
+check may be what is wrong
+([ADR-1350](docs/decisions/1350-a-quiet-week-sends-one-message.md)). With no standing issue yet there
+is nothing to count from, so none is sent until the first post creates it. A comment you write on the
+issue also restarts the week.
 
 **Reader addresses go into that issue comment.** That is fine while the repository is private and
 publishes them if it is not
