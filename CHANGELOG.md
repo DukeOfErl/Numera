@@ -12,6 +12,7 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **Citations in an answer are grey superscripts.** A run of `[[nnnnnn]]` is drawn as one small grey superscript, its identifiers comma-separated, so the prose reads through them; the stored answer, the trail and the evaluation still use `[[nnnnnn]]`. HTML is turned on for these alone, after the answer is escaped, in one function (`web.answer_markdown`). Same style as the sign-in door's demo (ADR-1240).
 - The test loop's default is three parallel workers, not six: six is faster with memory free but was killed for lack of memory once on an 8 GB machine, mid-commit. `SCINUMBERS_TEST_WORKERS` still overrides. See ADR-1300.
 - The test loop is two tiers. A commit runs only the tests it reaches (pytest-testmon), falling back to the full suite when a staged file is not Python under `src/` or `tests/` and is not known to be read by no test; push, merge and CI run the full suite in parallel (pytest-xdist, six workers by default). `bin/testloop.py` carries both. `uv run pre-commit install` again in an existing clone to pick up the push and merge hooks.
 

@@ -1732,6 +1732,37 @@ def as_text(text: str) -> str:
     return text.replace("$", r"\$")
 
 
+#: A run of citations -- one or more `[[nnnnnn]]` separated by spaces or a comma --
+#: drawn as one superscript with its identifiers comma-separated (ADR-1240). Words
+#: between two citations make two runs.
+_CITATION_RUN = re.compile(r"\[\[\d+\]\](?:,?\s*\[\[\d+\]\])*")
+#: Opacity rather than a colour, so the grey follows Streamlit's light or dark theme.
+_CITATION_STYLE = "opacity: 0.6; font-size: 0.72em;"
+
+
+def answer_markdown(text: str) -> str:
+    """An answer, ready for `st.markdown(..., unsafe_allow_html=True)`.
+
+    Streamlit's markdown has no superscript, so the citations need HTML, and the
+    answer is model output. **Escaping and the superscripts are one function** so
+    that HTML is never turned on for an answer nobody escaped: the text is escaped
+    first, `$` is kept out of mathematics as `as_text` does, and only then do the
+    `<sup>` tags of our own go in. Markdown itself survives escaping -- `**`, `-`,
+    `#` and `|` are not HTML -- but a `<` or `>` the model meant as markup is shown
+    as the character, which is the safe way round.
+
+    The stored answer keeps `[[nnnnnn]]`: the parser, the trail and the evaluation
+    all read that form, and only drawing restyles it.
+    """
+    escaped = as_text(html.escape(text, quote=False))
+    return _CITATION_RUN.sub(
+        lambda run: (
+            f'<sup style="{_CITATION_STYLE}">{", ".join(re.findall(r"\d+", run.group()))}</sup>'
+        ),
+        escaped,
+    )
+
+
 def _row_label(row: entries_table.Row) -> str:
     """One line identifying an entry, for the side panel's collapsed rows."""
     value = "" if not row.has_scalar else f"{row.value} {row.units}".strip()
@@ -2103,7 +2134,7 @@ def run_status(
 def draw(item: Item) -> None:
     """Draw one item. The only function here that touches the screen."""
     if item.kind is Kind.ANSWER:
-        st.markdown(as_text(item.text))
+        st.markdown(answer_markdown(item.text), unsafe_allow_html=True)
     elif item.kind is Kind.ENTRIES:
         if item.table is not None:
             _draw_table(item.table)
