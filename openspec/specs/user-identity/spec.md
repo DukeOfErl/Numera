@@ -10,8 +10,10 @@ behaves exactly as it did before.
 ### Requirement: A reader signs in before anything is shown, and identity comes from the provider
 
 Where identity is configured, a visitor who is not signed in SHALL be offered
-sign-in and nothing else: no question can be asked, no answer is shown, and no
-record of a question is written, because there is none. Who a reader is SHALL be
+sign-in and nothing else: no question can be asked, no answer is produced or shown
+for them, and no record of a question is written, because there is none. The one
+exception is the recorded examples the sign-in door may play, which are recordings
+of answers given to someone else and never an answer produced for the visitor. Who a reader is SHALL be
 the account the identity provider asserts — the system does not ask for a name,
 an email or a password of its own, and it accepts no credential from the reader.
 
@@ -40,7 +42,8 @@ whose questions are being recorded against the wrong name.
 #### Scenario: A visitor arrives without signing in
 - **WHEN** identity is configured and a visitor has not signed in
 - **THEN** the page offers sign-in
-- **AND** no question can be asked and no answer is displayed
+- **AND** no question can be asked and no answer is produced for the visitor
+- **AND** no answer is displayed other than the door's recorded examples
 
 #### Scenario: A visitor signs in
 - **WHEN** the identity provider asserts an account
@@ -721,4 +724,73 @@ NOT send it, because it would then be saying something the check did not find.
 #### Scenario: A check that could not read the records
 - **WHEN** a run could not read the records
 - **THEN** no quiet-week message is sent, and the failure is reported as a failure
+
+### Requirement: The sign-in door may play a demo drawn from real answers
+
+Where identity is configured, the sign-in door MAY play examples of a question being
+asked and answered, so that a visitor can see what lies behind the door before
+signing in.
+
+Each example SHALL be a question actually put to the agent and the answer it gave.
+The answer MAY be shortened for the door. Every figure it keeps SHALL be one the
+corpus holds, any computed figure SHALL be recomputed from the figures kept, and
+every edit SHALL be recorded beside the example where it can be traced to its run.
+The examples SHALL be titled as a demo. However the question is typed, including
+words taken back, pauses, and words retyped, the text it ends on SHALL be the question
+the answer was recorded for, or a rewording of it. A reworded question SHALL be
+recorded beside the example, together with the question actually asked.
+
+A chart in an example SHALL be drawn from the figures the answer's run cited, and
+never by a model, and SHALL say that charts are not yet something the application
+does.
+
+The door SHALL show citations as entry identifiers set apart from the prose, and every
+example SHALL say that the application itself gives full citations.
+
+The examples SHALL accept nothing from the visitor: there is no input a question
+could go through, and nothing a visitor does to them reaches the agent or writes a
+record. They SHALL be played on the sign-in door only, not on a door that refuses an
+account, whose sentence is what that reader needs, and not to a reader who has
+signed in. A visitor who has asked their browser for reduced motion SHALL be shown
+the examples without animation.
+
+#### Scenario: A visitor at the sign-in door sees the demo
+- **WHEN** identity is configured and a visitor has not signed in
+- **THEN** the door plays a question and its answer under a heading that presents it as a demonstration of the app
+- **AND** no question can be asked and no record is written
+
+#### Scenario: An example shows a chart
+- **WHEN** an example's answer includes a chart
+- **THEN** every mark in it sits where its value places it on the chart's own axis
+- **AND** every value drawn is one the run cited, as the corpus stores it
+- **AND** the example says charts are upcoming
+
+#### Scenario: Citations are set apart, and the full ones are elsewhere
+- **WHEN** an example's answer cites entries
+- **THEN** the identifiers are drawn apart from the prose, a run of them together
+- **AND** the example ends by saying the application gives full citations
+
+#### Scenario: A shortened answer says what was changed
+- **WHEN** an example's answer differs from the one its run recorded
+- **THEN** what was cut, reworded or recomputed is recorded beside the example
+
+#### Scenario: A reworded question
+- **WHEN** the door shows a question worded differently from the one the answer was recorded for
+- **THEN** the question actually asked is recorded beside the example, in its edits
+
+#### Scenario: The typed question is the one that was answered
+- **WHEN** an example types a question, takes words back and types others
+- **THEN** the text it ends on is the question the shown answer was recorded for
+
+#### Scenario: A refused account sees no examples
+- **WHEN** a signed-in account is refused at the door, as unverified or not enrolled
+- **THEN** the door plays no examples
+
+#### Scenario: A signed-in reader sees no examples
+- **WHEN** an enrolled account is admitted
+- **THEN** the page plays no examples
+
+#### Scenario: A visitor who asked for less motion
+- **WHEN** the visitor's browser asks for reduced motion
+- **THEN** each example is shown whole, without typing or streaming
 
