@@ -53,6 +53,14 @@ INERT_FILES = frozenset({"CHANGELOG.md"})
 DEFAULT_WORKERS = 3
 WORKERS_ENV = "SCINUMBERS_TEST_WORKERS"
 
+#: Used only if git cannot be asked: `git rev-parse --local-env-vars` as git 2.43 gives it.
+LOCAL_GIT_VARIABLES = (
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT", "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_INDEX_FILE", "GIT_NO_REPLACE_OBJECTS",
+    "GIT_REPLACE_REF_BASE", "GIT_PREFIX", "GIT_SHALLOW_FILE", "GIT_COMMON_DIR",
+)  # fmt: skip
+
 #: pytest's exit status when nothing was collected or everything was deselected --
 #: exactly what testmon produces when the change reaches no test. Success here;
 #: for `full` it would mean the suite vanished, and stays a failure.
@@ -84,8 +92,34 @@ def project_python() -> Path | None:
     return candidate if candidate.exists() else None
 
 
+def environment_for_tests(environ: dict[str, str]) -> dict[str, str]:
+    """This environment without the variables git sets to point a hook at its repository.
+
+    Git exports them so that git commands *in the hook* act on the repository being
+    committed to. Handed on to pytest, they do the same to every git command a test
+    runs: committing from a worktree sets GIT_DIR, and each test asking git about a
+    temporary directory got an answer about this repository instead -- 61 failures,
+    none of them real. Which variables those are is git's to say, so git is asked
+    (`--local-env-vars`, documented for exactly this: cleaning the environment before
+    running git somewhere else); the list above is only the fallback.
+    """
+    try:
+        listed = subprocess.run(
+            ["git", "rev-parse", "--local-env-vars"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()
+    except (OSError, subprocess.CalledProcessError):
+        listed = []
+    local = set(listed or LOCAL_GIT_VARIABLES)
+    return {name: value for name, value in environ.items() if name not in local}
+
+
 def _run(python: Path, args: list[str]) -> int:
-    return subprocess.run([str(python), "-m", "pytest", *args], cwd=ROOT).returncode
+    return subprocess.run(
+        [str(python), "-m", "pytest", *args], cwd=ROOT, env=environment_for_tests(dict(os.environ))
+    ).returncode
 
 
 def full(python: Path) -> int:
