@@ -797,7 +797,7 @@ it binds — the number you set is the one that stops work
 ## Tests
 
 ```bash
-uv run pytest -n 6 --dist worksteal            # ~1,870 tests on a six-entry fixture; no API key needed
+uv run pytest -n 3 --dist worksteal            # ~1,940 tests on a six-entry fixture; no API key needed
 uv run pre-commit install                      # once per clone: lint and tests at commit, push and merge
 ```
 
@@ -807,8 +807,9 @@ suite in parallel and ~160s serially). Testmon follows Python only, so a staged 
 reads — `README.md`, `CLAUDE.md`, `sql/`, `openspec/`, a data file, `pyproject.toml` — runs the **full suite**
 instead; `CHANGELOG.md`, `docs/` and `.github/` run nothing. At *push*, *merge* and in CI the full suite runs
 in parallel. The first commit in a clone builds testmon's database, which is one serial full run (~5 minutes);
-the database is per-checkout and git-ignored. `SCINUMBERS_TEST_WORKERS` overrides the six workers, which is
-the count that was fastest on a 12-core, 8 GB machine — twelve were slower than serial. A checkout with no
+the database is per-checkout and git-ignored. `SCINUMBERS_TEST_WORKERS` overrides the three workers. Three is a memory limit, not a speed one:
+on a 12-core, 8 GB machine six is faster (about 80s against 100–180s) when memory is free, but ran out of
+memory once under ordinary load, and twelve were slower than serial. A checkout with no
 `.venv` prints `NOT RUN` rather than failing, and the push and CI tiers still run everything.
 
 The suite drives the real agent with scripted models rather than mocking the framework, so the
