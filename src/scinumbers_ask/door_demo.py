@@ -126,6 +126,11 @@ _ITALIC = re.compile(r"(?<![\*\w])\*(?!\s)(.+?)(?<!\s)\*(?![\*\w])")
 
 # `[ \t]`, never `\s`, at the start of a line: `\s` crosses the newline of a blank
 # line, which made every list after a paragraph read as nested.
+#: A fenced block: drawn verbatim in a monospace face, nothing inside it read as
+#: markdown. It exists for the text chart (ADR-1230); the opening fence may name a
+#: language, which is ignored.
+_FENCE = re.compile(r"^```[^\n]*\n(.*?)\n```[ \t]*$", re.M | re.S)
+
 _UNSUPPORTED = (
     ("inline code", re.compile(r"`")),
     ("a table", re.compile(r"^[ \t]*\|", re.M)),
@@ -149,8 +154,11 @@ def _inline(text: str) -> str:
 
 def unsupported(markdown: str) -> list[str]:
     """The markdown `render` would draw wrongly, named. Empty when all of it is drawable."""
-    found = [name for name, pattern in _UNSUPPORTED if pattern.search(markdown)]
-    for line in markdown.split("\n"):
+    outside = _FENCE.sub("", markdown)
+    found = [name for name, pattern in _UNSUPPORTED if pattern.search(outside)]
+    if "```" in outside:
+        found.append("an unclosed code block")
+    for line in outside.split("\n"):
         body = line[2:] if line.startswith("- ") else line.lstrip("#").strip()
         if "*" in _inline(body):
             found.append("an unmatched asterisk")
@@ -159,10 +167,12 @@ def unsupported(markdown: str) -> list[str]:
 
 
 def render(markdown: str) -> str:
-    """HTML for the subset: `##`/`###` headings, `- ` lists, bold, italic, paragraphs."""
+    """HTML for the subset: `##`/`###` headings, `- ` lists, bold, italic, paragraphs,
+    and fenced blocks, which are kept verbatim."""
     blocks: list[str] = []
     paragraph: list[str] = []
     items: list[str] = []
+    fenced: list[str] | None = None
 
     def close_paragraph() -> None:
         if paragraph:
@@ -176,7 +186,17 @@ def render(markdown: str) -> str:
 
     for line in markdown.split("\n"):
         stripped = line.strip()
-        if not stripped:
+        if stripped.startswith("```"):
+            if fenced is None:
+                close_paragraph()
+                close_list()
+                fenced = []
+            else:
+                blocks.append(f"<pre>{html.escape(chr(10).join(fenced))}</pre>")
+                fenced = None
+        elif fenced is not None:
+            fenced.append(line)
+        elif not stripped:
             close_paragraph()
             close_list()
         elif stripped.startswith(("## ", "### ")):
@@ -250,6 +270,9 @@ body { display: flex; flex-direction: column; gap: 6px; }
 .body p, .body ul { margin: 0 0 8px; }
 .body ul { padding-left: 20px; }
 .body .pending { display: none; }
+.body pre { margin: 0 0 8px; padding: 8px 10px; overflow-x: auto; border-radius: 8px;
+  background: var(--panel); font: 12.5px/1.35 ui-monospace, "SFMono-Regular", Menlo,
+  Consolas, "DejaVu Sans Mono", monospace; }
 .dots span { display: inline-block; width: 6px; height: 6px; margin-right: 4px;
   border-radius: 50%; background: var(--muted); animation: blink 1s infinite; }
 .dots span:nth-child(2) { animation-delay: .2s; }
@@ -367,9 +390,9 @@ async function stream(example) {
   while (walker.nextNode()) nodes.push(walker.currentNode);
   const full = nodes.map((node) => node.nodeValue);
   nodes.forEach((node) => (node.nodeValue = ""));
-  body.querySelectorAll("h3, p, li").forEach((block) => block.classList.add("pending"));
+  body.querySelectorAll("h3, p, li, pre").forEach((block) => block.classList.add("pending"));
   for (let n = 0; n < nodes.length; n++) {
-    const block = nodes[n].parentElement.closest("h3, p, li");
+    const block = nodes[n].parentElement.closest("h3, p, li, pre");
     if (block) block.classList.remove("pending");
     const words = full[n].match(/\\S+\\s*|\\s+/g) || [];
     for (let w = 0; w < words.length; w += 2) {

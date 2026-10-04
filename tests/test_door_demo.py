@@ -84,7 +84,7 @@ def test_every_answer_uses_only_the_markdown_the_door_can_draw():
         ("1. first", "a numbered list"),
         ("> quoted", "a quotation"),
         ("# Top heading", "a top-level heading"),
-        ("```\nblock\n```", "inline code"),
+        ("```\nblock never closed", "an unclosed code block"),
         ("  - nested", "a nested list"),
     ],
 )
@@ -108,6 +108,21 @@ def test_rendering_draws_headings_lists_and_emphasis():
 def test_rendering_joins_a_paragraph_s_lines_and_separates_paragraphs():
     html = door_demo.render("one\ntwo\n\nthree")
     assert html == "<p>one two</p><p>three</p>"
+
+
+def test_a_fenced_block_is_drawn_as_it_was_written():
+    """A text chart: spacing kept, nothing inside it read as markdown, and the
+    markup characters inside it not mistaken for unsupported syntax."""
+    markdown = "Before\n\n```\nrow  ●━━ *x* | y\n  10¹  10²\n```\n\nAfter"
+    assert door_demo.unsupported(markdown) == []
+    html = door_demo.render(markdown)
+    assert "<pre>row  ●━━ *x* | y\n  10¹  10²</pre>" in html
+    assert html.startswith("<p>Before</p>") and html.endswith("<p>After</p>")
+
+
+def test_a_fenced_block_is_escaped_like_everything_else():
+    html = door_demo.render("```\n<script>x</script>\n```")
+    assert "<script>" not in html and "&lt;script&gt;" in html
 
 
 def test_rendering_escapes_everything_it_does_not_draw():

@@ -21,4 +21,14 @@ ADR block: `1200`–`1240` (see the allocation table in `CLAUDE.md`).
 - [x] 3.5 Shorten both answers as Yoav asked, record the edits, title the frame "Demo",
   shorten the pause (ADR-1220)
 - [x] 3.3 README, CHANGELOG, CLAUDE.md, roadmap
-- [ ] 3.4 After merge: bring the deploy branch level, so the door reads the same there
+- [x] 3.4 After merge: bring the deploy branch level, so the door reads the same there
+
+## 4. The third example: mouse cell sizes, with a chart (`feat/door-demo-mouse-cells`)
+
+- [x] 4.1 Live run: "How do cell sizes vary across mouse cell types? Convert diameters
+  to volumes so they can be compared." Recompute every sphere volume it states
+- [x] 4.2 `bin/door-demo-chart` draws the chart from entries the run cited (ADR-1230)
+- [x] 4.3 Fenced blocks in the door's renderer, revealed by the stream
+- [x] 4.4 Tests: placement against the drawn axis, the exact chart on the door, the
+  upcoming note, the corpus values; two seeded defects each caught
+- [x] 4.5 Look at it in Chromium: wide, phone, light, dark; glyph widths equal

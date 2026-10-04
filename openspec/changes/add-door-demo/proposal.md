@@ -14,9 +14,11 @@ whether it is worth signing in from exactly that page.
   agent and its answer (ADR-1210), shortened for the door with each edit recorded
   beside it, under the title "Demo" (ADR-1220). A test holds the typed text to the
   question that was answered.
-- **Two examples, not three.** A third, a distribution drawn as a text chart, was
-  tried live twice and rejected on evidence: the model miscounted, then misplaced
-  every bar on its own axis. It waits for application-drawn charts (roadmap).
+- **A third example shows a chart, drawn by a script.** A distribution drawn by the
+  model was tried live twice and rejected on evidence: the model miscounted, then
+  misplaced every bar on its own axis. The third example, cell volumes across mouse
+  cell types, takes its figures from a live run and its chart from
+  `bin/door-demo-chart`, and says that charts are upcoming (ADR-1230).
 - **The examples are committed**, a bounded exception to ADR-0170 (ADR-1200).
 - Only on the sign-in door: not on a door that refuses an account, and not after
   sign-in. Reduced motion shows each example whole. A finished answer stays up for

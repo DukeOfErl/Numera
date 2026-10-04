@@ -95,6 +95,10 @@ The examples SHALL be titled as a demo. However the question is typed, including
 words taken back and retyped, the text it ends on SHALL be the question the answer
 was recorded for.
 
+A chart in an example SHALL be drawn from the figures the answer's run cited, and
+never by a model, and SHALL say that charts are not yet something the application
+does.
+
 The examples SHALL accept nothing from the visitor: there is no input a question
 could go through, and nothing a visitor does to them reaches the agent or writes a
 record. They SHALL be played on the sign-in door only, not on a door that refuses an
@@ -106,6 +110,12 @@ the examples without animation.
 - **WHEN** identity is configured and a visitor has not signed in
 - **THEN** the door plays a question and its answer under a heading that presents it as a demonstration of the app
 - **AND** no question can be asked and no record is written
+
+#### Scenario: An example shows a chart
+- **WHEN** an example's answer includes a chart
+- **THEN** every mark in it sits where its value places it on the chart's own axis
+- **AND** every value drawn is one the run cited, as the corpus stores it
+- **AND** the answer says charts are upcoming
 
 #### Scenario: A shortened answer says what was changed
 - **WHEN** an example's answer differs from the one its run recorded
