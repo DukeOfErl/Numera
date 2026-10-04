@@ -26,7 +26,14 @@ from bionumbers.records import Claim
 
 #: At most this many claims from one paper. A bound on cost before it is one on content: every
 #: claim buys a second-text call, and a paper's output has to fit the extraction call's cap.
-MAX_CLAIMS = 10
+#: Ten until the first seed (2026-10-04), which recovered 15 of BioNumbers' 34 values for its ten
+#: papers: one paper filled the bound with three of those values left out.
+MAX_CLAIMS = 20
+
+#: The extraction call's output bound in this mode. Ten claims ran to about ten thousand tokens
+#: in that seed, so twenty do not fit `extraction.MAX_TOKENS`; an answer cut off mid-JSON is a
+#: FAILED paper. Priced into the projection like the bound it replaces.
+MAX_TOKENS = 32000
 
 #: The classes of value wanted, each with what it covers. In words only: a unit or a magnitude
 #: here would be prior knowledge handed to the model, which the instruction forbids it to use.
@@ -65,8 +72,8 @@ PROPERTY_CLASSES: tuple[tuple[str, str], ...] = (
     (
         "PHYSICAL_CONSTANT",
         "physical and biochemical constants of biological material: diffusion coefficients, "
-        "binding and dissociation constants, forces, step sizes, stiffness and persistence "
-        "length",
+        "binding and dissociation constants, the kinetic constants of an enzyme, forces, step "
+        "sizes, stiffness and persistence length",
     ),
 )
 
@@ -80,6 +87,9 @@ EXCLUDED: tuple[str, ...] = (
     "values for single genes, single proteins or single samples out of a genome-wide or "
     "large-scale dataset, where the summary value is the reusable one",
     "counts of items in a database, a library or a dataset",
+    "properties of this study's own preparations rather than of the organism or the molecule: "
+    "the concentration of a suspension or an extract it made, the activity of a crude extract, "
+    "the size of particles it synthesised",
 )
 
 _HEAD = (
@@ -93,8 +103,14 @@ _SELECTION = f"""AT MOST {MAX_CLAIMS} CLAIMS, THE MOST REUSABLE FIRST. Prefer th
 type, control, untreated, the standard condition. Prefer a summary value -- a mean, a median, a
 total -- over rows for single genes, samples or replicates. A value that exists only under
 a perturbation particular to this study (its drug, its mutant, its construct) is not wanted,
-unless the article presents it as a property of that named system. An article with no value
-of the wanted classes is NOTHING_TO_EXTRACT.
+unless the article presents it as a property of that named system. An article that
+establishes many reusable values -- a quantitative survey, a model built on measured numbers --
+is wanted in full up to the bound: do not stop at the few most prominent. An article with no
+value of the wanted classes is NOTHING_TO_EXTRACT.
+
+THE VALUE FIELD HOLDS NO UNIT. The unit, a percent sign included, goes in the unit field and
+nowhere else; the value keeps the number as the article writes it, with its stated error or
+range.
 
 THE REJECTED LIST IS SHORT HERE. List at most five rejected candidates: numbers of the
 wanted classes that read like this article's own values and are not (CITED, PARAMETER,
@@ -104,8 +120,10 @@ THREE LABELS ARE YOURS TO WRITE. They are labels, not quotes; everything else st
 - property_name: a short general name for the quantity, worded as a database heading,
   without the value, the organism or this study's condition.
 - property_class: one of the class names in the user turn.
-- organism_name: the species the value belongs to, in full, as the article names it; for
-  purified material or an in vitro system, the species the material came from."""
+- organism_name: the species the value belongs to, as the Latin binomial the article gives
+  for it anywhere in its text -- the common name ("yeast", "mouse") only where the article
+  never gives one; for purified material or an in vitro system, the species the material
+  came from."""
 
 #: The extraction instruction with its first paragraph replaced and the harvest rules added.
 #: Built from `extraction.INSTRUCTION` rather than restated, so the quoting rule, the claim

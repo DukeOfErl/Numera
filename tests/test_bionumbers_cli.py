@@ -22,6 +22,7 @@ from bionumbers.cache import DocumentCache
 from bionumbers.distractor import Candidate, SecondTextOutput
 from bionumbers.europepmc import VERSION_OF_RECORD, EuropePMC
 from bionumbers.extraction import (
+    MAX_TOKENS,
     ClaimDraft,
     ExtractionOutput,
     ProviderRefused,
@@ -377,6 +378,7 @@ def test_extracting_a_harvested_run_asks_no_question_and_names_each_item_by_its_
     assert code == 0
     assert seen[0]["system"][1]["text"] == harvest.HARVEST_INSTRUCTION
     assert seen[0]["messages"] == [harvest.user_turn()]
+    assert seen[0]["max_tokens"] == harvest.MAX_TOKENS > MAX_TOKENS
     (item,) = read_jsonl(dirs.runs / "h1" / cli.ITEMS_FILE, ReviewItem)
     assert item.question == "aperture diameter (Coxiella burnetii)"
     assert item.claim.property_class == "SIZE"

@@ -32,7 +32,7 @@ the cytoskeleton that are measured, carry a method and cite a paper; plus a list
 wanted. It is data in `bionumbers.harvest` and travels in the user turn.
 
 The instruction is the extraction instruction with its opening replaced and three rules added:
-at most ten claims per paper with baseline and summary values first; a short rejected list; and
+at most twenty claims per paper (ten until the first seed of 2026-10-04) with baseline and summary values first; a short rejected list; and
 three labels the model writes for each claim (property name, class, species), which are the only
 unquoted fields. The quote checker, the retry, the claim categories, the conditions and the second
 text are unchanged. A claim is named by its label and its review item asks about that.
@@ -55,5 +55,6 @@ Cost now scales with papers harvested rather than with questions asked, and is p
 asks anything. The property name, class and species are model-written labels that nothing checks
 mechanically, where every other field is a verified quote; a vocabulary that maps them to
 canonical properties is still to be built, and until then two papers may name one quantity two
-ways. The ten-claim bound drops real values from rich papers. The question-first path stays in the
-code and is no longer the direction.
+ways. The claim bound drops real values from rich papers: at ten, the first seed recovered 15 of
+BioNumbers' 34 values for its ten papers, which is why it is twenty. The question-first path stays
+in the code and is no longer the direction.

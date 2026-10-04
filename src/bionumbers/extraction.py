@@ -491,6 +491,7 @@ def _one_call(
     article_id: str,
     ledger: Ledger,
     model_id: str,
+    max_tokens: int = MAX_TOKENS,
 ) -> ExtractionOutput:
     """Project, ask the ledger, call, record. Every model call comes through here.
 
@@ -503,14 +504,14 @@ def _one_call(
     counted = model.count_tokens(
         system=system, messages=messages, output_format=ExtractionOutput
     ).input_tokens
-    projected = projected_cost(model_id, input_tokens=counted, max_tokens=MAX_TOKENS)
+    projected = projected_cost(model_id, input_tokens=counted, max_tokens=max_tokens)
     ledger.check(article_id, projected)
     try:
         response = model.parse(
             system=system,
             messages=messages,
             output_format=ExtractionOutput,
-            max_tokens=MAX_TOKENS,
+            max_tokens=max_tokens,
         )
     except Exception as failure:
         # A response the adapter could not read into the schema was still billed. The first
@@ -688,6 +689,7 @@ def extract(
     model_id: str = MODEL,
     instruction: str = INSTRUCTION,
     user: dict | None = None,
+    max_tokens: int = MAX_TOKENS,
 ) -> PaperResult:
     """One paper, one named ending, whatever happened.
 
@@ -698,6 +700,7 @@ def extract(
     `instruction` and `user` are harvest mode's way in (`bionumbers.harvest`): another
     instruction over the same paper, and a user turn that states a scope instead of a
     question. With an empty `question` each claim is named by the model's own label.
+    `max_tokens` is harvest's too: twenty claims do not fit the bound three were sized for.
     """
     fingerprint = Fingerprint(
         model=model_id,
@@ -745,6 +748,7 @@ def extract(
             article_id=paper.pmcid,
             ledger=ledger,
             model_id=model_id,
+            max_tokens=max_tokens,
         )
         checked = verify_drafts(output, doc)
         if checked.failures:
@@ -763,6 +767,7 @@ def extract(
                 article_id=paper.pmcid,
                 ledger=ledger,
                 model_id=model_id,
+                max_tokens=max_tokens,
             )
             checked = verify_drafts(output, doc)
     except CeilingReached as reached:

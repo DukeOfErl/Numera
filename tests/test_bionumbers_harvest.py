@@ -95,6 +95,13 @@ def test_the_bound_on_claims_is_in_the_instruction():
     assert f"AT MOST {harvest.MAX_CLAIMS} CLAIMS" in harvest.HARVEST_INSTRUCTION
 
 
+def test_the_instruction_asks_for_a_latin_name_and_a_value_without_its_unit():
+    """Both read off the first seed: "yeast" and "mouse" as species, and "about 45%" with a
+    percent sign in the unit field as well."""
+    assert "Latin binomial" in harvest.HARVEST_INSTRUCTION
+    assert "THE VALUE FIELD HOLDS NO UNIT" in harvest.HARVEST_INSTRUCTION
+
+
 def test_the_scope_travels_in_the_user_turn_and_names_every_class_and_exclusion():
     content = harvest.user_turn()["content"]
     for name, covers in harvest.PROPERTY_CLASSES:

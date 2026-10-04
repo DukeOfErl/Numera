@@ -40,6 +40,7 @@ from bionumbers.europepmc import (
 )
 from bionumbers.extraction import (
     INSTRUCTION,
+    MAX_TOKENS,
     RESULTS_FILE,
     ProviderRefused,
     RunFileWouldBeCommitted,
@@ -379,6 +380,7 @@ def _one_paper(
         model_id=model_id,
         instruction=instruction,
         user=harvest.user_turn() if harvesting else None,
+        max_tokens=harvest.MAX_TOKENS if harvesting else MAX_TOKENS,
     )
     if paper.licence == UNLICENSED:
         # Extraction ran and its spend stands, but nothing quoted leaves the cache: the spec's
