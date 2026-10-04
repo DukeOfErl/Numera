@@ -13,16 +13,55 @@ import re
 import pytest
 
 from scinumbers_ask import door_demo
-from scinumbers_ask.door_demo import Erase, Scenario, Type
+from scinumbers_ask.door_demo import Erase, Pause, Scenario, Type
 
 
-def test_every_scenario_types_exactly_the_question_its_answer_was_recorded_for():
-    """The keystrokes are theatre; the answer is a record. If the two drift, the
-    door shows an answer to a question nobody asked."""
+def test_every_scenario_types_the_question_it_shows():
+    """The keystrokes are theatre; the answer is a record. The door types the
+    question it shows -- the one asked, or a rewording of it (ADR-1220)."""
     scenarios = door_demo.scenarios()
     assert scenarios, "the door has nothing to play"
     for scenario in scenarios:
-        assert door_demo.typed(scenario.steps) == scenario.asked, scenario.id
+        assert door_demo.typed(scenario.steps) == (scenario.shown or scenario.asked), scenario.id
+
+
+def test_a_reworded_question_names_the_one_actually_asked_in_its_edits():
+    """A rewording is an edit like any other: the question the agent really got
+    stays in `asked`, and `edits` says the door shows something else."""
+    for scenario in door_demo.scenarios():
+        if scenario.shown and scenario.shown != scenario.asked:
+            assert scenario.asked in scenario.edits, scenario.id
+
+
+def test_the_page_shows_the_reworded_question():
+    reworded = Scenario(
+        id="r",
+        steps=(Type("shown?"),),
+        asked="asked?",
+        answer="a [[100001]]",
+        model="m",
+        recorded="2026-01-01",
+        source="s",
+        edits="asked as 'asked?'",
+        shown="shown?",
+    )
+    (drawn,) = _examples_in(door_demo.page((reworded,)))
+    assert drawn["asked"] == "shown?"
+
+
+def test_a_pause_waits_without_typing():
+    steps = (Type("a "), Pause(seconds=1.0), Type("b"))
+    assert door_demo.keystrokes(steps) == [{"type": "a "}, {"pause": 1000}, {"type": "b"}]
+    assert door_demo.typed(steps) == "a b"
+
+
+def test_the_third_example_pauses_a_second_before_asking_for_the_chart():
+    (mouse,) = [s for s in door_demo.scenarios() if s.id == "mouse-cell-sizes"]
+    assert mouse.steps == (
+        Type("How do cell sizes vary across mouse cell types? "),
+        Pause(seconds=1.0),
+        Type("Visualize in a strip chart"),
+    )
 
 
 def test_erasing_words_takes_back_whole_words_and_leaves_the_space_before_them():
@@ -139,7 +178,8 @@ def test_the_page_is_titled_as_a_demo_and_carries_every_question():
     page no longer claims each is a model's answer as given (ADR-1220)."""
     page = door_demo.page()
     for scenario in door_demo.scenarios():
-        assert json.dumps(scenario.asked)[1:-1] in page or scenario.asked in page
+        question = scenario.shown or scenario.asked
+        assert json.dumps(question)[1:-1] in page or question in page
     assert '<div class="title">What can SciNumbers do?</div>' in page
     assert "a real answer from" not in page
 

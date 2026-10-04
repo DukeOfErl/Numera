@@ -37,7 +37,13 @@
     "id": "mouse-cell-sizes",
     "steps": [
       {
-        "type": "How do cell sizes vary across mouse cell types? Convert diameters to volumes so they can be compared."
+        "type": "How do cell sizes vary across mouse cell types? "
+      },
+      {
+        "pause_seconds": 1.0
+      },
+      {
+        "type": "Visualize in a strip chart"
       }
     ],
     "asked": "How do cell sizes vary across mouse cell types? Convert diameters to volumes so they can be compared.",
@@ -45,7 +51,8 @@
     "model": "anthropic/claude-opus-4.7",
     "recorded": "2026-10-04",
     "source": "scinumbers-ask --ask, 2026-10-04, session ce9cea77, question 7e0572555dd7",
-    "edits": "Shortened for the door at Yoav's request, 2026-10-04, from a 17-tool-call answer that gave two tables (volumes as stored; diameters with sphere volumes), a summary by size class and caveats. Kept, condensed into the editor's prose: the four-orders-of-magnitude span, the endpoints 45.5 μm³ (104861) and ~3 × 10⁵ μm³ (111773), the list of cell types, the sphere formula, and the disc caveat for red blood cells, all stated by the model. Added by the editor: the NIH/3T3 comparison sentence, joining two figures the model gave in separate tables (3,050 μm³ computed from 108905; 2,040 μm³ measured, 108979); the note that not all entries are cited; and the chart. Every sphere volume the model stated was recomputed (π/6·d³) and agrees to rounding. The chart is drawn by bin/door-demo-chart, not by a model, from ten entries the run cited (ADR-1230); left out: 112783 and 112496 (ranges flagged as possibly fused) and 102927 (a red blood cell diameter; the measured volume 104861 is used). The closing line says charts are upcoming, because plotting is not a feature of the app yet. Revised 2026-10-04 at Yoav's request: the paragraph on cell types and conversion replaced by his 'Notes:' wording (which drops the list of cell types and calls the NIH/3T3 gap a discrepancy), with 'discrepency' corrected and 'excluded' narrowed to 'excluded from this conversion', since the chart still shows the measured red-blood-cell volume. The closing italic line replaced by the notice '*Charts are an upcoming feature in SciNumbers', drawn in red after the answer. Revised 2026-10-04: the chart's annotation 'cochlear nucleus' (a brainstem region, not a cell type) relabelled 'cochlear-nucleus neurons'; 111420 measures the somata of neurons there, type unstated, and the row stays 'Neuron soma' because a soma is not the whole neuron.",
-    "notice": "*Charts are an upcoming feature in SciNumbers"
+    "edits": "Shortened for the door at Yoav's request, 2026-10-04, from a 17-tool-call answer that gave two tables (volumes as stored; diameters with sphere volumes), a summary by size class and caveats. Kept, condensed into the editor's prose: the four-orders-of-magnitude span, the endpoints 45.5 μm³ (104861) and ~3 × 10⁵ μm³ (111773), the list of cell types, the sphere formula, and the disc caveat for red blood cells, all stated by the model. Added by the editor: the NIH/3T3 comparison sentence, joining two figures the model gave in separate tables (3,050 μm³ computed from 108905; 2,040 μm³ measured, 108979); the note that not all entries are cited; and the chart. Every sphere volume the model stated was recomputed (π/6·d³) and agrees to rounding. The chart is drawn by bin/door-demo-chart, not by a model, from ten entries the run cited (ADR-1230); left out: 112783 and 112496 (ranges flagged as possibly fused) and 102927 (a red blood cell diameter; the measured volume 104861 is used). The closing line says charts are upcoming, because plotting is not a feature of the app yet. Revised 2026-10-04 at Yoav's request: the paragraph on cell types and conversion replaced by his 'Notes:' wording (which drops the list of cell types and calls the NIH/3T3 gap a discrepancy), with 'discrepency' corrected and 'excluded' narrowed to 'excluded from this conversion', since the chart still shows the measured red-blood-cell volume. The closing italic line replaced by the notice '*Charts are an upcoming feature in SciNumbers', drawn in red after the answer. Revised 2026-10-04: the chart's annotation 'cochlear nucleus' (a brainstem region, not a cell type) relabelled 'cochlear-nucleus neurons'; 111420 measures the somata of neurons there, type unstated, and the row stays 'Neuron soma' because a soma is not the whole neuron. Revised 2026-10-04 at Yoav's request: the door types the question as 'How do cell sizes vary across mouse cell types? Visualize in a strip chart', with a one-second pause before the second sentence. The question actually put to the agent was 'How do cell sizes vary across mouse cell types? Convert diameters to volumes so they can be compared.'; the answer was recorded for that one, and the app does not draw charts yet.",
+    "notice": "*Charts are an upcoming feature in SciNumbers",
+    "shown": "How do cell sizes vary across mouse cell types? Visualize in a strip chart"
   }
 ]

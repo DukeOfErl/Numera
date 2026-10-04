@@ -47,7 +47,14 @@ class Erase:
     words: int
 
 
-Step = Type | Erase
+@dataclass(frozen=True)
+class Pause:
+    """A moment with nothing typed, as a person thinks before going on."""
+
+    seconds: float
+
+
+Step = Type | Erase | Pause
 
 
 @dataclass(frozen=True)
@@ -70,6 +77,9 @@ class Scenario:
     #: not miss, such as a chart standing in for a feature the app does not have.
     #: Plain text, escaped; the answer's markdown cannot carry a colour.
     notice: str = ""
+    #: The question the door types, where it is a rewording of `asked` (ADR-1220).
+    #: `asked` keeps the question the agent really got, and `edits` must name it.
+    shown: str = ""
 
 
 def _step(raw: dict) -> Step:
@@ -77,6 +87,8 @@ def _step(raw: dict) -> Step:
         return Type(raw["type"])
     if set(raw) == {"erase_words"}:
         return Erase(raw["erase_words"])
+    if set(raw) == {"pause_seconds"}:
+        return Pause(raw["pause_seconds"])
     raise ValueError(f"not a step: {raw!r}")
 
 
@@ -100,6 +112,8 @@ def keystrokes(steps: tuple[Step, ...]) -> list[dict]:
         if isinstance(step, Type):
             text += step.text
             out.append({"type": step.text})
+        elif isinstance(step, Pause):
+            out.append({"pause": round(step.seconds * 1000)})
         else:
             words = list(re.finditer(r"\S+", text))
             if step.words > len(words):
@@ -114,7 +128,10 @@ def typed(steps: tuple[Step, ...]) -> str:
     """The text in the input once every step has run."""
     text = ""
     for key in keystrokes(steps):
-        text = text + key["type"] if "type" in key else text[: len(text) - key["erase"]]
+        if "type" in key:
+            text += key["type"]
+        elif "erase" in key:
+            text = text[: len(text) - key["erase"]]
     return text
 
 
@@ -240,7 +257,7 @@ def page(examples: tuple[Scenario, ...] | None = None) -> str:
     examples = scenarios() if examples is None else examples
     payload = [
         {
-            "asked": s.asked,
+            "asked": s.shown or s.asked,
             "keys": keystrokes(s.steps),
             "answer": render(s.answer)
             + f'<p class="footnote">{html.escape(CITATIONS_NOTE)}</p>'
@@ -386,7 +403,9 @@ function showWhole(example) {
 async function type(example) {
   let text = "";
   for (const key of example.keys) {
-    if ("type" in key) {
+    if ("pause" in key) {
+      await sleep(key.pause);
+    } else if ("type" in key) {
       for (const ch of key.type) {
         text += ch;
         setTyping(text);

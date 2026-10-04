@@ -408,8 +408,8 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_the_sign_in_door_plays_the_recorded_examples_and_nothing_live",
         "test_web_driver_identity.py::test_a_door_that_refuses_plays_no_examples",
         "test_web_driver_identity.py::test_a_signed_in_reader_does_not_see_the_examples",
-        "test_door_demo.py::"
-        "test_every_scenario_types_exactly_the_question_its_answer_was_recorded_for",
+        "test_door_demo.py::test_every_scenario_types_the_question_it_shows",
+        "test_door_demo.py::test_a_reworded_question_names_the_one_actually_asked_in_its_edits",
         "test_door_demo.py::test_every_scenario_says_which_model_answered_and_when",
         "test_door_demo.py::test_the_page_is_titled_as_a_demo_and_carries_every_question",
         "test_door_demo.py::test_every_shortened_answer_says_what_was_changed",

@@ -92,8 +92,9 @@ The answer MAY be shortened for the door. Every figure it keeps SHALL be one the
 corpus holds, any computed figure SHALL be recomputed from the figures kept, and
 every edit SHALL be recorded beside the example where it can be traced to its run.
 The examples SHALL be titled as a demo. However the question is typed, including
-words taken back and retyped, the text it ends on SHALL be the question the answer
-was recorded for.
+words taken back, pauses, and words retyped, the text it ends on SHALL be the question
+the answer was recorded for, or a rewording of it. A reworded question SHALL be
+recorded beside the example, together with the question actually asked.
 
 A chart in an example SHALL be drawn from the figures the answer's run cited, and
 never by a model, and SHALL say that charts are not yet something the application
@@ -128,6 +129,10 @@ the examples without animation.
 #### Scenario: A shortened answer says what was changed
 - **WHEN** an example's answer differs from the one its run recorded
 - **THEN** what was cut, reworded or recomputed is recorded beside the example
+
+#### Scenario: A reworded question
+- **WHEN** the door shows a question worded differently from the one the answer was recorded for
+- **THEN** the question actually asked is recorded beside the example, in its edits
 
 #### Scenario: The typed question is the one that was answered
 - **WHEN** an example types a question, takes words back and types others
