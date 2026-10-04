@@ -17,6 +17,7 @@ import re
 import shutil
 import stat
 import subprocess
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -69,9 +70,18 @@ case "$1 $2" in
     for i in "$@"; do last="$prev"; prev="$i"; [ "$last" = "--workflow" ] && wf="$i"; done
     wf="${wf:-$4}"
     var="GH_STUB_RUNS_$(echo "$wf" | tr '.-' '__' | tr a-z A-Z)"
-    echo "${!var:-[]}"
+    out="${!var:-[]}"
+    expr=""; for i in "$@"; do [ "$p2" = "--jq" ] && expr="$i"; p2="$i"; done
+    if [ -n "$expr" ]; then echo "$out" | jq -r "$expr"; else echo "$out"; fi
     ;;
 esac
+"""
+
+
+STUB_UV = """#!/usr/bin/env bash
+echo "$@" >> "$UV_CALLS"
+echo "${UV_STUB_OUT:-}"
+exit "${UV_STUB_EXIT:-0}"
 """
 
 
@@ -84,11 +94,17 @@ def sandbox(tmp_path):
     stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
     calls = tmp_path / "calls.log"
     calls.write_text("")
+    uv_stub = bin_dir / "uv"
+    uv_stub.write_text(STUB_UV)
+    uv_stub.chmod(uv_stub.stat().st_mode | stat.S_IEXEC)
+    uv_calls = tmp_path / "uv_calls.log"
+    uv_calls.write_text("")
 
     def run(script: str, **env) -> subprocess.CompletedProcess:
         full = {
             "PATH": f"{bin_dir}:{os.environ['PATH']}",
             "GH_CALLS": str(calls),
+            "UV_CALLS": str(uv_calls),
             "TITLE": "the title",
             **env,
         }
@@ -98,6 +114,7 @@ def sandbox(tmp_path):
 
     run.dir = tmp_path
     run.calls = lambda: calls.read_text().splitlines()
+    run.uv_calls = lambda: uv_calls.read_text().splitlines()
     return run
 
 
@@ -345,7 +362,10 @@ def test_the_only_secret_is_the_read_only_url_and_no_mail_credential_exists():
 
 def test_it_may_write_issues_and_nothing_else():
     permissions = load("first-use.yml")["permissions"]
-    assert permissions == {"contents": "read", "issues": "write"}
+    writes = {name for name, level in permissions.items() if level == "write"}
+    assert writes == {"issues"}
+    # `actions: read` is there for the run history the window is computed from.
+    assert set(permissions) <= {"contents", "actions", "issues"}
 
 
 def test_the_runner_is_pinned_not_the_floating_label():
@@ -380,3 +400,106 @@ def test_the_dependencies_of_the_job_that_holds_the_credential_are_exact():
     pins = re.findall(r'--with "([^"]+)"', text)
     assert pins, "the job installs nothing explicitly: check what it runs"
     assert all("==" in pin for pin in pins), f"unpinned: {pins}"
+
+
+# -- first-use: the window follows the schedule, not the clock ------------------------
+
+ASK = "Ask who is new"
+
+
+def iso_ago(minutes: int) -> str:
+    moment = datetime.now(UTC) - timedelta(minutes=minutes)
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def success(*minutes_ago: int) -> str:
+    """Newest first, as `gh run list` returns them."""
+    return "[" + ",".join(f'{{"createdAt":"{iso_ago(m)}"}}' for m in minutes_ago) + "]"
+
+
+def ask(sandbox, runs: str, **env):
+    script = step_script(load("first-use.yml"), "first-use", ASK)
+    return sandbox(script, GH_STUB_RUNS_FIRST_USE_YML=runs, **env)
+
+
+def window_passed(sandbox) -> int | None:
+    calls = sandbox.uv_calls()
+    assert len(calls) == 1, f"expected one command invocation, got {calls}"
+    match = re.search(r"--minutes (\d+)", calls[0])
+    return int(match.group(1)) if match else None
+
+
+#: How much later than the test's own clock the step's `date` may run. The lower
+#: bounds below are exact (the overlap is part of the requirement); the upper bounds
+#: allow for a loaded machine, because one full-suite run failed an earlier, tighter
+#: +2 band once and could not be reproduced in 12 runs under CPU load. What each test
+#: must distinguish is far wider than this (a 3-hour window from a 10-hour one).
+SLACK = 10
+
+
+@needs_tools
+def test_the_window_reaches_back_to_the_previous_successful_run(sandbox):
+    # GitHub fires this "hourly" schedule every 4-7 hours. A fixed look-back saw
+    # about a quarter of arrivals; looking back to the last success misses none.
+    ask(sandbox, success(180))
+    got = window_passed(sandbox)
+    assert 186 <= got <= 186 + SLACK, f"3 hours since the last run plus the overlap; got {got}"
+
+
+@needs_tools
+def test_the_window_keeps_an_overlap_so_a_slow_start_cannot_open_a_gap(sandbox):
+    ask(sandbox, success(2))
+    got = window_passed(sandbox)
+    assert got >= 2 + 6, f"two minutes since the last run needs at least the overlap; got {got}"
+
+
+@needs_tools
+def test_the_newest_success_decides_not_an_older_one(sandbox):
+    ask(sandbox, success(120, 600))
+    got = window_passed(sandbox)
+    assert 126 <= got <= 126 + SLACK, (
+        f"the 2-hour-old success decides, not the 10-hour-old; got {got}"
+    )
+
+
+@needs_tools
+def test_with_no_earlier_success_the_commands_own_default_applies(sandbox):
+    ask(sandbox, "[]")
+    got = window_passed(sandbox)
+    assert got is None, f"no --minutes expected so the command uses its default; got {got}"
+
+
+@needs_tools
+def test_a_long_outage_is_capped_at_a_week(sandbox):
+    ask(sandbox, success(60 * 24 * 30))
+    got = window_passed(sandbox)
+    assert got == 10080, f"a month's outage is capped at a week; got {got}"
+
+
+@needs_tools
+def test_only_successful_runs_of_this_workflow_set_the_window(sandbox):
+    # A failed or cancelled run is not a success, so the next run covers its gap.
+    ask(sandbox, success(60))
+    asked = [c for c in sandbox.calls() if c.startswith("run list")]
+    assert len(asked) == 1
+    assert "--workflow first-use.yml" in asked[0] and "--status success" in asked[0]
+
+
+@needs_tools
+def test_exclusions_are_passed_one_per_address_with_spaces_and_blanks_dropped(sandbox):
+    ask(sandbox, "[]", EXCLUDE="a@example.org, B@example.org,")
+    (call,) = sandbox.uv_calls()
+    assert call.count("--exclude") == 2
+    assert "--exclude a@example.org" in call and "--exclude B@example.org" in call
+
+
+@needs_tools
+def test_the_report_is_written_to_a_file_for_the_next_step(sandbox):
+    ask(sandbox, "[]", UV_STUB_OUT="  new@example.org  signed in")
+    assert "new@example.org" in (sandbox.dir / "report.md").read_text()
+
+
+@needs_tools
+def test_a_failing_command_fails_the_step_rather_than_looking_like_a_quiet_hour(sandbox):
+    result = ask(sandbox, "[]", UV_STUB_EXIT="1")
+    assert result.returncode != 0

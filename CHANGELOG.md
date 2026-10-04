@@ -16,6 +16,7 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- The first-use notice's window follows GitHub's real schedule: it looks back to the start of the previous successful run (plus six minutes) instead of a fixed 70 minutes, which saw about a quarter of arrivals because the "hourly" schedule fires every 4-7 hours. The command's own default is now seven hours. See ADR-1290.
 - The keepalive no longer reports a failure when a page reload lands mid-poll after waking the app, installs its browser from the same pinned Playwright it then runs under (`--install-browser`), runs on `ubuntu-24.04` rather than the floating `ubuntu-latest` that migrates to Ubuntu 26 on 2026-10-19, and its comments no longer promise a per-run failure mail.
 
 ### Added

@@ -18,7 +18,7 @@ operation, not to whoever happens to call it).
 **It keeps no state.** "First" is derived: a reader is new for an event kind when
 their earliest such event falls inside the window. Nothing is written to mark them
 reported, which keeps the command read-only and safe to point at the live branch
-(ADR-1250). The price is the window, see `DEFAULT_MINUTES`.
+(ADR-1250). The window is the caller's to say; see `DEFAULT_MINUTES` and ADR-1290.
 
 **It is one message per reader.** A reader whose first sign-in and first question
 both fall in the window is one line, not two, because it is one person's arrival.
@@ -42,20 +42,22 @@ from .trail_store import BATCH_CONNECT_TIMEOUT_S, BATCH_STATEMENT_TIMEOUT_MS
 
 URL_ENV = "SCINUMBERS_TRAIL_READ_URL"
 
-#: **Longer than the hourly interval on purpose, and which error that favours is the
-#: point.** A tick GitHub delays or skips would leave a gap in an exactly-an-hour
-#: window, and the reader who arrived in the gap would never be reported. With ten
-#: spare minutes the window overlaps its neighbour: a reader is reported twice
-#: instead of never. A repeated line costs a glance; a missed first reader costs the
-#: moment it was worth knowing. **The repeat is systematic, not rare:** ticks are 60
-#: minutes apart and the window is 70, so a reader whose first event falls in the 10
-#: minutes before a tick is reported by two consecutive runs -- about one reader in
-#: six, every time. The same arithmetic is the tolerance: a gap of more than 70
-#: minutes between two runs loses a reader, so a tick may be at most about 10 minutes
-#: later than its neighbour. Do not trim this to 60 -- that removes the overlap and
-#: nothing fails until a tick is late. The delay actually seen is to be read out
-#: of the keepalive's run history before this number is trusted (tasks 6.4).
-DEFAULT_MINUTES = 70
+#: **The fallback window, used when nothing says how long since the last look.** The
+#: scheduled workflow does not use it in the ordinary case: it asks GitHub when the
+#: previous successful run began and passes the time since then (plus a few minutes of
+#: overlap), so the window follows the schedule and no reader falls in a gap
+#: (ADR-1290). This number applies to the first ever run, to a run by hand, and to any
+#: caller that does not say.
+#:
+#: **Seven hours, because that is how often the schedule really fires.** The workflow
+#: is written to run hourly, but GitHub throttles scheduled runs: over 2026-10-02 to
+#: 10-04 the keepalive ran 7 times in 32 hours (median gap 4 h 32 m, longest 6 h 18 m)
+#: and `first-use` was 6 h 51 m between two ticks. A 70-minute window, which this used
+#: to be, saw about a quarter of arrivals. The margin over the longest gap seen is
+#: thin -- nine minutes -- which is acceptable only because this is a fallback. A
+#: longer window repeats readers instead of missing them, and a repeated line costs a
+#: glance where a missed first reader costs the moment it was worth knowing.
+DEFAULT_MINUTES = 420
 
 #: One statement for both kinds, joined on the address, so a reader whose firsts
 #: both landed in the window comes back as one row.

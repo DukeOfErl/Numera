@@ -3,6 +3,9 @@
 - **Status:** accepted
 - **Date:** 2026-10-02
 - **Pull request:** none yet (`feat/first-use-notice`)
+- **Amended 2026-10-04 by ADR-1290:** the window is no longer a fixed 70 minutes. GitHub ran the
+  "hourly" schedule every 4-7 hours, so that window saw about a quarter of arrivals; it now
+  starts at the previous successful run. The rest of this decision stands.
 
 ## Context
 

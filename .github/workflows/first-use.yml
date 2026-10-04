@@ -17,8 +17,8 @@ name: first-use
 # (ADR-1280). Do not make this repository public without removing this workflow.
 #
 # Scheduled workflows run from the default branch only, and GitHub may delay or skip
-# a tick; the window in `first_use.DEFAULT_MINUTES` is longer than an hour for that
-# reason. A failing run is reported by `keepalive-digest`, because GitHub's own
+# a tick -- in practice it fires every 4-7 hours, which is why the window is computed
+# from the previous successful run and not fixed (ADR-1290). A failing run is reported by `keepalive-digest`, because GitHub's own
 # failure mail is off for this account.
 on:
   schedule:
@@ -37,6 +37,9 @@ concurrency:
 
 permissions:
   contents: read
+  # Read-only: the window starts at the previous successful run, which is read out of
+  # the run history (ADR-1290).
+  actions: read
   issues: write
 
 jobs:
@@ -73,6 +76,20 @@ jobs:
             address="${address// /}"
             [ -n "$address" ] && args+=(--exclude "$address")
           done
+          # **The window is "since the previous successful run", not a fixed hour.**
+          # GitHub runs this schedule every 4-7 hours, not hourly, and a fixed 70-minute
+          # window saw about a quarter of arrivals. So ask GitHub when the last success
+          # began and look back that far, plus a few minutes of overlap. A failed or
+          # cancelled run is not a success, so the next one covers its gap. With no
+          # earlier success the command's own default applies (`DEFAULT_MINUTES`); the
+          # cap stops a long outage turning into one enormous first report.
+          last=$(gh run list --workflow first-use.yml --status success --limit 1 \
+            --json createdAt --jq '.[0].createdAt // empty')
+          if [ -n "$last" ]; then
+            minutes=$(( ( $(date -u +%s) - $(date -u -d "$last" +%s) ) / 60 + 6 ))
+            [ "$minutes" -gt 10080 ] && minutes=10080
+            args+=(--minutes "$minutes")
+          fi
           # Only what the command imports: it needs a database driver and not the
           # model stack the `ask` extra carries, which would be a minute of install
           # 24 times a day. The versions are exact -- those in `uv.lock` -- because this job holds

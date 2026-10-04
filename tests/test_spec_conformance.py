@@ -423,7 +423,7 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_first_use.py::test_an_excluded_address_is_not_reported_whatever_its_case",
         "test_first_use.py::test_everyone_excluded_is_silence_not_an_empty_report",
         "test_first_use.py::test_asking_writes_nothing_and_says_so_to_the_database",
-        "test_first_use.py::test_the_default_window_is_longer_than_an_hourly_schedule",
+        "test_first_use.py::test_the_fallback_window_covers_the_longest_gap_the_schedule_was_seen_to_leave",
         "test_first_use.py::test_a_trail_that_cannot_be_read_says_so_and_fails",
         "test_first_use.py::test_a_window_that_can_match_nothing_is_refused",
         # "First" is a `having min(at) > ...` over a case-folded address; only a real

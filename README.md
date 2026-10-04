@@ -727,12 +727,13 @@ nothing until it is on `main`.
 time they ask a question — one line per reader, with both firsts together when they fall in the
 same window — and, like `scinumbers-pending`, **prints nothing when nobody is new**
 ([ADR-1250](docs/decisions/1250-first-use-notice-is-a-stateless-window.md)). It keeps no state:
-"first" is read out of the trail (an event in the window and none earlier for that address), so a
-tick that arrives more than about 10 minutes late can miss a reader, and the 70-minute default
-window, longer than the hourly schedule, reports about one reader in six twice, every time. The
-repeat is the cheap error.
+"first" is read out of the trail (an event in the window and none earlier for that address), so the
+window has to be right. GitHub runs this "hourly" schedule every 4-7 hours, so the workflow looks
+back to when the **previous successful run** began, plus six minutes
+([ADR-1290](docs/decisions/1290-the-first-use-window-follows-the-schedule.md)): nobody falls in a
+gap, and only the overlap repeats. By hand, `--minutes` sets it, defaulting to seven hours.
 
-It runs hourly from `.github/workflows/first-use.yml` and comments on one standing issue, `first use`,
+It is scheduled hourly in `.github/workflows/first-use.yml` and comments on one standing issue, `first use`,
 which mails the owner through GitHub — no mail account. Every comment begins with an `@` mention of
 the repository owner, because the Actions bot opens the issue and so the owner would not otherwise be
 "participating" in it. It holds **one secret, the URL of a role that
