@@ -99,6 +99,9 @@ A chart in an example SHALL be drawn from the figures the answer's run cited, an
 never by a model, and SHALL say that charts are not yet something the application
 does.
 
+The door SHALL show citations as entry identifiers set apart from the prose, and every
+example SHALL say that the application itself gives full citations.
+
 The examples SHALL accept nothing from the visitor: there is no input a question
 could go through, and nothing a visitor does to them reaches the agent or writes a
 record. They SHALL be played on the sign-in door only, not on a door that refuses an
@@ -116,6 +119,11 @@ the examples without animation.
 - **THEN** every mark in it sits where its value places it on the chart's own axis
 - **AND** every value drawn is one the run cited, as the corpus stores it
 - **AND** the example says charts are upcoming
+
+#### Scenario: Citations are set apart, and the full ones are elsewhere
+- **WHEN** an example's answer cites entries
+- **THEN** the identifiers are drawn apart from the prose, a run of them together
+- **AND** the example ends by saying the application gives full citations
 
 #### Scenario: A shortened answer says what was changed
 - **WHEN** an example's answer differs from the one its run recorded

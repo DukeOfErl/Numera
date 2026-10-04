@@ -102,7 +102,7 @@ def test_rendering_draws_headings_lists_and_emphasis():
     assert "<h3>Heading</h3>" in html
     assert "<strong>Bold</strong>" in html
     assert "<em>italic</em>" in html
-    assert "<ul><li>one</li><li>two [[101794]]</li></ul>" in html
+    assert '<ul><li>one</li><li>two <sup class="cite">101794</sup></li></ul>' in html
 
 
 def test_rendering_joins_a_paragraph_s_lines_and_separates_paragraphs():
@@ -193,7 +193,9 @@ def test_a_notice_follows_the_answer_in_its_own_colour():
     page = door_demo.page((example,))
     (drawn,) = _examples_in(page)
     assert drawn["answer"] == (
-        '<p>an answer [[100001]]</p><p class="notice">*Charts are &lt;coming&gt;</p>'
+        '<p>an answer <sup class="cite">100001</sup></p>'
+        f'<p class="footnote">{door_demo.CITATIONS_NOTE}</p>'
+        '<p class="notice">*Charts are &lt;coming&gt;</p>'
     ), "after the answer, escaped, its asterisk kept as written"
     assert ".notice" in page and "--warn" in page
 
@@ -210,3 +212,43 @@ def _examples_in(page: str) -> list[dict]:
     start = page.index('<script type="application/json" id="examples">')
     body = page[page.index(">", start) + 1 : page.index("</script>", start)]
     return json.loads(body)
+
+
+@pytest.mark.parametrize(
+    "markdown, drawn",
+    [
+        ("a [[100427]] b", 'a <sup class="cite">100427</sup> b'),
+        # A run of identifiers is one superscript, comma-separated, whatever the
+        # model put between them: spaces, or a comma and a space.
+        (
+            "v [[100427]] [[100430]] [[103704]] and",
+            'v <sup class="cite">100427, 100430, 103704</sup> and',
+        ),
+        ("v [[101794]], [[101788]].", 'v <sup class="cite">101794, 101788</sup>.'),
+        # Words between them make two runs, not one.
+        (
+            "from [[100427]] and [[100004]],",
+            'from <sup class="cite">100427</sup> and <sup class="cite">100004</sup>,',
+        ),
+    ],
+)
+def test_citations_are_set_apart_as_superscripts(markdown, drawn):
+    assert door_demo.render(markdown) == f"<p>{drawn}</p>"
+
+
+def test_a_citation_inside_a_chart_is_left_as_written():
+    """A fenced block is verbatim; nothing in it is restyled."""
+    assert "[[100427]]" in door_demo.render("```\nrow [[100427]]\n```")
+
+
+def test_every_example_closes_by_saying_the_app_gives_full_citations():
+    """The door shows identifiers only; a visitor is told where the rest is."""
+    for drawn in _examples_in(door_demo.page()):
+        assert f'<p class="footnote">{door_demo.CITATIONS_NOTE}</p>' in drawn["answer"]
+    assert door_demo.CITATIONS_NOTE == "*The app itself provides full citations"
+
+
+def test_the_citations_note_comes_before_an_example_s_own_notice():
+    (mouse,) = [s for s in door_demo.scenarios() if s.id == "mouse-cell-sizes"]
+    (drawn,) = _examples_in(door_demo.page((mouse,)))
+    assert drawn["answer"].index('class="footnote"') < drawn["answer"].index('class="notice"')

@@ -419,6 +419,8 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_door_demo_chart.py::test_the_door_shows_exactly_the_chart_the_script_draws",
         "test_door_demo_chart.py::test_the_chart_says_charts_are_not_yet_a_feature",
         "test_door_demo_chart.py::test_every_value_drawn_is_the_corpus_value",
+        "test_door_demo.py::test_citations_are_set_apart_as_superscripts",
+        "test_door_demo.py::test_every_example_closes_by_saying_the_app_gives_full_citations",
         "test_door_demo.py::test_the_page_stands_still_for_a_reader_who_asked_for_less_motion",
     ),
     "The operator is told when a reader is first seen, once for signing in and once for asking": (

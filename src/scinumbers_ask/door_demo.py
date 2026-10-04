@@ -126,6 +126,10 @@ def typed(steps: tuple[Step, ...]) -> str:
 # rather than raw asterisks on the door.
 
 _BOLD = re.compile(r"\*\*(.+?)\*\*")
+#: A run of citations -- one or more `[[nnnnnn]]`, separated by spaces or a comma.
+#: Drawn as one grey superscript, comma-separated, so the prose reads through them
+#: and they stay legible for looking up (Yoav's choice, 2026-10-04, ADR-1240).
+_CITATION_RUN = re.compile(r"\[\[\d+\]\](?:,?\s*\[\[\d+\]\])*")
 _ITALIC = re.compile(r"(?<![\*\w])\*(?!\s)(.+?)(?<!\s)\*(?![\*\w])")
 
 # `[ \t]`, never `\s`, at the start of a line: `\s` crosses the newline of a blank
@@ -153,7 +157,17 @@ _UNSUPPORTED = (
 def _inline(text: str) -> str:
     """Escaped first, emphasis second -- so nothing in the text can become markup."""
     escaped = html.escape(text)
-    return _ITALIC.sub(r"<em>\1</em>", _BOLD.sub(r"<strong>\1</strong>", escaped))
+    emphasised = _ITALIC.sub(r"<em>\1</em>", _BOLD.sub(r"<strong>\1</strong>", escaped))
+    return _CITATION_RUN.sub(_superscript, emphasised)
+
+
+def _superscript(run: re.Match) -> str:
+    return f'<sup class="cite">{", ".join(re.findall(r"\d+", run.group()))}</sup>'
+
+
+#: Under every example: the door shows identifiers only, and the visitor is told
+#: where the rest is.
+CITATIONS_NOTE = "*The app itself provides full citations"
 
 
 def unsupported(markdown: str) -> list[str]:
@@ -229,6 +243,7 @@ def page(examples: tuple[Scenario, ...] | None = None) -> str:
             "asked": s.asked,
             "keys": keystrokes(s.steps),
             "answer": render(s.answer)
+            + f'<p class="footnote">{html.escape(CITATIONS_NOTE)}</p>'
             + (f'<p class="notice">{html.escape(s.notice)}</p>' if s.notice else ""),
         }
         for s in examples
@@ -276,6 +291,8 @@ body { display: flex; flex-direction: column; gap: 6px; }
 .body ul { padding-left: 20px; }
 .body .pending { display: none; }
 .body .notice { color: var(--warn); }
+.body .footnote { color: var(--muted); }
+.body .cite { color: var(--muted); font-size: 0.72em; line-height: 0; }
 .body pre { margin: 0 0 8px; padding: 8px 10px; overflow-x: auto; border-radius: 8px;
   background: var(--panel); font: 12.5px/1.35 ui-monospace, "SFMono-Regular", Menlo,
   Consolas, "DejaVu Sans Mono", monospace; }

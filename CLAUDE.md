@@ -75,7 +75,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-hosted-tracing` | `1000`–`1040` — clear of `0880`–`0940`, spent on other branches |
 | `add-one-way-in` | `1100`–`1140` — `1100`, `1110` written; archived 2026-09-29 |
 | `add-account-withdrawal` | `1150`–`1190` — `1150` written; archived 2026-09-29 |
-| `add-door-demo` | `1200`–`1240` — `1200`, `1210`, `1220`, `1230` written |
+| `add-door-demo` | `1200`–`1240` — all written |
 | `add-first-use-notice` | `1250`–`1290` — all written |
 | `speed-up-test-loop` | `1300`–`1340` — `1300` written |
 | `add-first-use-heartbeat` | `1350`–`1390` — `1350` written |
@@ -183,7 +183,7 @@ core, and a test there refuses a name with no file behind it.
 | `enrol.py` | The two commands that open and close an account: `scinumbers-enrol` mints a capped key and inserts the row, withdrawing the key if the row cannot be written (ADR-0900); `scinumbers-withdraw` disables the row and revokes the key, in that order, so a partial failure leaves a refused account rather than a live one (ADR-1150). A harness module |
 | `pending.py` | The daily check (`scinumbers-pending`): who is **still** stuck at the door, read out of the trail. Resolution is derived from `user_email` and `signin.refused` rather than tracked, so no state is added. **Silent when nobody is stuck** — the contract a cron line rests on. A harness module |
 | `first_use.py` | The hourly check (`scinumbers-first-use`): who was **just seen for the first time**, signing in or asking, read out of the trail with no state kept. Holds a **read-only database URL, never the Neon API key**, and sets its own transaction read-only. **Silent when nobody is new.** The window is computed by the workflow from the previous successful run. A harness module (ADR-1250, ADR-1260, ADR-1290) |
-| `door_demo.py` | The sign-in door's demo: real answers from `door_demo.json`, shortened with every edit recorded, typed and streamed in an iframe. **Presentation**; committed under ADR-1200, real by ADR-1210, shortened by ADR-1220. Its one chart is drawn by `bin/door-demo-chart`, not by the app (ADR-1230) |
+| `door_demo.py` | The sign-in door's demo: real answers from `door_demo.json`, shortened with every edit recorded, typed and streamed in an iframe. **Presentation**; committed under ADR-1200, real by ADR-1210, shortened by ADR-1220. Its one chart is drawn by `bin/door-demo-chart`, not by the app (ADR-1230); citations are grey superscripts (ADR-1240) |
 | `neon.py` | Neon's control plane: a branch's *name* to its connection URL, so no database url is kept on disk |
 
 **`ask` wraps `_ask`, and the wrapper is where the records are written.** The

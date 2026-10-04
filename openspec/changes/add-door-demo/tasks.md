@@ -32,3 +32,6 @@ ADR block: `1200`–`1240` (see the allocation table in `CLAUDE.md`).
 - [x] 4.4 Tests: placement against the drawn axis, the exact chart on the door, the
   upcoming note, the corpus values; two seeded defects each caught
 - [x] 4.5 Look at it in Chromium: wide, phone, light, dark; glyph widths equal
+- [x] 4.6 Citations as grey superscripts, runs comma-separated; "*The app itself provides
+  full citations" under every example (ADR-1240)
+- [ ] 4.7 The same citation style in the app itself, on a chore branch

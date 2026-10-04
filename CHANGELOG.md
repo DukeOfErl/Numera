@@ -86,7 +86,7 @@ any release; `1.0.0` when it stabilizes.
   every edit recorded beside it. Reduced motion shows each example whole. The third
   example shows cell volumes across mouse cell types as a text chart. The figures
   come from a live run, but the chart is drawn by a script, because the model drew
-  every bar of one in the wrong place; a red note says charts are an upcoming feature
+  every bar of one in the wrong place; a red note says charts are an upcoming feature. Citations on the door are grey superscripts, a run of them comma-separated, and every example ends "*The app itself provides full citations" (ADR-1240)
   (ADR-1200, ADR-1210, ADR-1220, ADR-1230).
 
 - **Enrolling an address that was withdrawn says so**, rather than "already
