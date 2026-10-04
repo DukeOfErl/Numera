@@ -166,6 +166,7 @@ def test_the_page_cannot_be_closed_early_by_what_it_carries():
         recorded="2026-01-01",
         source="s",
         edits="",
+        notice="",
     )
     page = door_demo.page((hostile,))
     assert page.count("</script>") == 2, "one data block and one program, nothing more"
@@ -173,3 +174,39 @@ def test_the_page_cannot_be_closed_early_by_what_it_carries():
 
 def test_the_page_stands_still_for_a_reader_who_asked_for_less_motion():
     assert "prefers-reduced-motion" in door_demo.page()
+
+
+def test_a_notice_follows_the_answer_in_its_own_colour():
+    """The answer's markdown cannot carry a colour, so a notice is a field of its
+    own, drawn after the answer -- and so streamed last."""
+    example = Scenario(
+        id="n",
+        steps=(Type("q"),),
+        asked="q",
+        answer="an answer [[100001]]",
+        model="m",
+        recorded="2026-01-01",
+        source="s",
+        edits="",
+        notice="*Charts are <coming>",
+    )
+    page = door_demo.page((example,))
+    (drawn,) = _examples_in(page)
+    assert drawn["answer"] == (
+        '<p>an answer [[100001]]</p><p class="notice">*Charts are &lt;coming&gt;</p>'
+    ), "after the answer, escaped, its asterisk kept as written"
+    assert ".notice" in page and "--warn" in page
+
+
+def test_an_example_without_a_notice_draws_none():
+    plain = next(s for s in door_demo.scenarios() if s.id == "yeast-vs-ecoli-volume")
+    assert plain.notice == ""
+    (drawn,) = _examples_in(door_demo.page((plain,)))
+    assert 'class="notice"' not in drawn["answer"]
+
+
+def _examples_in(page: str) -> list[dict]:
+    """The examples as the browser reads them: the page's data block, parsed."""
+    start = page.index('<script type="application/json" id="examples">')
+    body = page[page.index(">", start) + 1 : page.index("</script>", start)]
+    return json.loads(body)

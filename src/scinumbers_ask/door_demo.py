@@ -66,6 +66,10 @@ class Scenario:
     #: What the door shows that the run did not: every cut and every reworded
     #: sentence, with any recomputed figure and how it was recomputed (ADR-1220).
     edits: str
+    #: Said after the answer, in red: something about the example a visitor must
+    #: not miss, such as a chart standing in for a feature the app does not have.
+    #: Plain text, escaped; the answer's markdown cannot carry a colour.
+    notice: str = ""
 
 
 def _step(raw: dict) -> Step:
@@ -224,7 +228,8 @@ def page(examples: tuple[Scenario, ...] | None = None) -> str:
         {
             "asked": s.asked,
             "keys": keystrokes(s.steps),
-            "answer": render(s.answer),
+            "answer": render(s.answer)
+            + (f'<p class="notice">{html.escape(s.notice)}</p>' if s.notice else ""),
         }
         for s in examples
     ]
@@ -239,12 +244,12 @@ _PAGE = """<!doctype html>
 <style>
 :root {
   --bg: #ffffff; --panel: #f0f2f6; --text: #31333f; --muted: #6b6f7b;
-  --user: #ff4b4b; --bot: #ffbd45; --line: #d6d9e0;
+  --user: #ff4b4b; --bot: #ffbd45; --line: #d6d9e0; --warn: #d6262f;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0e1117; --panel: #262730; --text: #fafafa; --muted: #a3a8b8;
-    --user: #ff6c6c; --bot: #ffbd45; --line: #3b3d48;
+    --user: #ff6c6c; --bot: #ffbd45; --line: #3b3d48; --warn: #ff6c6c;
   }
 }
 * { box-sizing: border-box; }
@@ -270,6 +275,7 @@ body { display: flex; flex-direction: column; gap: 6px; }
 .body p, .body ul { margin: 0 0 8px; }
 .body ul { padding-left: 20px; }
 .body .pending { display: none; }
+.body .notice { color: var(--warn); }
 .body pre { margin: 0 0 8px; padding: 8px 10px; overflow-x: auto; border-radius: 8px;
   background: var(--panel); font: 12.5px/1.35 ui-monospace, "SFMono-Regular", Menlo,
   Consolas, "DejaVu Sans Mono", monospace; }

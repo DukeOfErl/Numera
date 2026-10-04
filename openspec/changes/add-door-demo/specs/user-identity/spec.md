@@ -115,7 +115,7 @@ the examples without animation.
 - **WHEN** an example's answer includes a chart
 - **THEN** every mark in it sits where its value places it on the chart's own axis
 - **AND** every value drawn is one the run cited, as the corpus stores it
-- **AND** the answer says charts are upcoming
+- **AND** the example says charts are upcoming
 
 #### Scenario: A shortened answer says what was changed
 - **WHEN** an example's answer differs from the one its run recorded

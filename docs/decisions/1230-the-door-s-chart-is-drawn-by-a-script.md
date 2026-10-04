@@ -32,8 +32,9 @@ output is pasted into `door_demo.json`.
 - **Left out:** two ranges flagged as possibly fused (BV-2 microglia 112783, the alpha
   motor neuron 112496). Also the red blood cell's diameter (102927), in favour of its
   measured volume (104861): a disc converted as a sphere lands 2.5× too high.
-- **The answer ends by saying so:** "Charts like this are upcoming in SciNumbers; this
-  one was drawn for the demo from the entries the answer used."
+- **The example says so, in red:** "*Charts are an upcoming feature in SciNumbers", a
+  `notice` drawn after the answer. The answer's markdown cannot carry a colour, so the
+  notice is a field of its own, escaped like everything else.
 
 The door's renderer learns fenced blocks, drawn verbatim in a monospace face, for this
 chart. A fenced block is escaped like everything else.

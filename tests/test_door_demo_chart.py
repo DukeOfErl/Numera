@@ -64,7 +64,7 @@ def test_the_door_shows_exactly_the_chart_the_script_draws():
 def test_the_chart_says_charts_are_not_yet_a_feature():
     """The visitor must not take the chart for something the app does today."""
     (mouse,) = [s for s in door_demo.scenarios() if s.id == "mouse-cell-sizes"]
-    assert "upcoming" in mouse.answer.lower()
+    assert "upcoming" in mouse.notice.lower()
 
 
 @pytest.mark.corpus
