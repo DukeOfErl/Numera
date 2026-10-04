@@ -92,8 +92,16 @@ The answer MAY be shortened for the door. Every figure it keeps SHALL be one the
 corpus holds, any computed figure SHALL be recomputed from the figures kept, and
 every edit SHALL be recorded beside the example where it can be traced to its run.
 The examples SHALL be titled as a demo. However the question is typed, including
-words taken back and retyped, the text it ends on SHALL be the question the answer
-was recorded for.
+words taken back, pauses, and words retyped, the text it ends on SHALL be the question
+the answer was recorded for, or a rewording of it. A reworded question SHALL be
+recorded beside the example, together with the question actually asked.
+
+A chart in an example SHALL be drawn from the figures the answer's run cited, and
+never by a model, and SHALL say that charts are not yet something the application
+does.
+
+The door SHALL show citations as entry identifiers set apart from the prose, and every
+example SHALL say that the application itself gives full citations.
 
 The examples SHALL accept nothing from the visitor: there is no input a question
 could go through, and nothing a visitor does to them reaches the agent or writes a
@@ -107,9 +115,24 @@ the examples without animation.
 - **THEN** the door plays a question and its answer under a heading that presents it as a demonstration of the app
 - **AND** no question can be asked and no record is written
 
+#### Scenario: An example shows a chart
+- **WHEN** an example's answer includes a chart
+- **THEN** every mark in it sits where its value places it on the chart's own axis
+- **AND** every value drawn is one the run cited, as the corpus stores it
+- **AND** the example says charts are upcoming
+
+#### Scenario: Citations are set apart, and the full ones are elsewhere
+- **WHEN** an example's answer cites entries
+- **THEN** the identifiers are drawn apart from the prose, a run of them together
+- **AND** the example ends by saying the application gives full citations
+
 #### Scenario: A shortened answer says what was changed
 - **WHEN** an example's answer differs from the one its run recorded
 - **THEN** what was cut, reworded or recomputed is recorded beside the example
+
+#### Scenario: A reworded question
+- **WHEN** the door shows a question worded differently from the one the answer was recorded for
+- **THEN** the question actually asked is recorded beside the example, in its edits
 
 #### Scenario: The typed question is the one that was answered
 - **WHEN** an example types a question, takes words back and types others

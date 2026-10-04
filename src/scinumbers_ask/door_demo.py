@@ -47,7 +47,14 @@ class Erase:
     words: int
 
 
-Step = Type | Erase
+@dataclass(frozen=True)
+class Pause:
+    """A moment with nothing typed, as a person thinks before going on."""
+
+    seconds: float
+
+
+Step = Type | Erase | Pause
 
 
 @dataclass(frozen=True)
@@ -66,6 +73,13 @@ class Scenario:
     #: What the door shows that the run did not: every cut and every reworded
     #: sentence, with any recomputed figure and how it was recomputed (ADR-1220).
     edits: str
+    #: Said after the answer, in red: something about the example a visitor must
+    #: not miss, such as a chart standing in for a feature the app does not have.
+    #: Plain text, escaped; the answer's markdown cannot carry a colour.
+    notice: str = ""
+    #: The question the door types, where it is a rewording of `asked` (ADR-1220).
+    #: `asked` keeps the question the agent really got, and `edits` must name it.
+    shown: str = ""
 
 
 def _step(raw: dict) -> Step:
@@ -73,6 +87,8 @@ def _step(raw: dict) -> Step:
         return Type(raw["type"])
     if set(raw) == {"erase_words"}:
         return Erase(raw["erase_words"])
+    if set(raw) == {"pause_seconds"}:
+        return Pause(raw["pause_seconds"])
     raise ValueError(f"not a step: {raw!r}")
 
 
@@ -96,6 +112,8 @@ def keystrokes(steps: tuple[Step, ...]) -> list[dict]:
         if isinstance(step, Type):
             text += step.text
             out.append({"type": step.text})
+        elif isinstance(step, Pause):
+            out.append({"pause": round(step.seconds * 1000)})
         else:
             words = list(re.finditer(r"\S+", text))
             if step.words > len(words):
@@ -110,7 +128,10 @@ def typed(steps: tuple[Step, ...]) -> str:
     """The text in the input once every step has run."""
     text = ""
     for key in keystrokes(steps):
-        text = text + key["type"] if "type" in key else text[: len(text) - key["erase"]]
+        if "type" in key:
+            text += key["type"]
+        elif "erase" in key:
+            text = text[: len(text) - key["erase"]]
     return text
 
 
@@ -122,10 +143,19 @@ def typed(steps: tuple[Step, ...]) -> str:
 # rather than raw asterisks on the door.
 
 _BOLD = re.compile(r"\*\*(.+?)\*\*")
+#: A run of citations -- one or more `[[nnnnnn]]`, separated by spaces or a comma.
+#: Drawn as one grey superscript, comma-separated, so the prose reads through them
+#: and they stay legible for looking up (Yoav's choice, 2026-10-04, ADR-1240).
+_CITATION_RUN = re.compile(r"\[\[\d+\]\](?:,?\s*\[\[\d+\]\])*")
 _ITALIC = re.compile(r"(?<![\*\w])\*(?!\s)(.+?)(?<!\s)\*(?![\*\w])")
 
 # `[ \t]`, never `\s`, at the start of a line: `\s` crosses the newline of a blank
 # line, which made every list after a paragraph read as nested.
+#: A fenced block: drawn verbatim in a monospace face, nothing inside it read as
+#: markdown. It exists for the text chart (ADR-1230); the opening fence may name a
+#: language, which is ignored.
+_FENCE = re.compile(r"^```[^\n]*\n(.*?)\n```[ \t]*$", re.M | re.S)
+
 _UNSUPPORTED = (
     ("inline code", re.compile(r"`")),
     ("a table", re.compile(r"^[ \t]*\|", re.M)),
@@ -144,13 +174,26 @@ _UNSUPPORTED = (
 def _inline(text: str) -> str:
     """Escaped first, emphasis second -- so nothing in the text can become markup."""
     escaped = html.escape(text)
-    return _ITALIC.sub(r"<em>\1</em>", _BOLD.sub(r"<strong>\1</strong>", escaped))
+    emphasised = _ITALIC.sub(r"<em>\1</em>", _BOLD.sub(r"<strong>\1</strong>", escaped))
+    return _CITATION_RUN.sub(_superscript, emphasised)
+
+
+def _superscript(run: re.Match) -> str:
+    return f'<sup class="cite">{", ".join(re.findall(r"\d+", run.group()))}</sup>'
+
+
+#: Under every example: the door shows identifiers only, and the visitor is told
+#: where the rest is.
+CITATIONS_NOTE = "*The app itself provides full citations"
 
 
 def unsupported(markdown: str) -> list[str]:
     """The markdown `render` would draw wrongly, named. Empty when all of it is drawable."""
-    found = [name for name, pattern in _UNSUPPORTED if pattern.search(markdown)]
-    for line in markdown.split("\n"):
+    outside = _FENCE.sub("", markdown)
+    found = [name for name, pattern in _UNSUPPORTED if pattern.search(outside)]
+    if "```" in outside:
+        found.append("an unclosed code block")
+    for line in outside.split("\n"):
         body = line[2:] if line.startswith("- ") else line.lstrip("#").strip()
         if "*" in _inline(body):
             found.append("an unmatched asterisk")
@@ -159,10 +202,12 @@ def unsupported(markdown: str) -> list[str]:
 
 
 def render(markdown: str) -> str:
-    """HTML for the subset: `##`/`###` headings, `- ` lists, bold, italic, paragraphs."""
+    """HTML for the subset: `##`/`###` headings, `- ` lists, bold, italic, paragraphs,
+    and fenced blocks, which are kept verbatim."""
     blocks: list[str] = []
     paragraph: list[str] = []
     items: list[str] = []
+    fenced: list[str] | None = None
 
     def close_paragraph() -> None:
         if paragraph:
@@ -176,7 +221,17 @@ def render(markdown: str) -> str:
 
     for line in markdown.split("\n"):
         stripped = line.strip()
-        if not stripped:
+        if stripped.startswith("```"):
+            if fenced is None:
+                close_paragraph()
+                close_list()
+                fenced = []
+            else:
+                blocks.append(f"<pre>{html.escape(chr(10).join(fenced))}</pre>")
+                fenced = None
+        elif fenced is not None:
+            fenced.append(line)
+        elif not stripped:
             close_paragraph()
             close_list()
         elif stripped.startswith(("## ", "### ")):
@@ -202,9 +257,11 @@ def page(examples: tuple[Scenario, ...] | None = None) -> str:
     examples = scenarios() if examples is None else examples
     payload = [
         {
-            "asked": s.asked,
+            "asked": s.shown or s.asked,
             "keys": keystrokes(s.steps),
-            "answer": render(s.answer),
+            "answer": render(s.answer)
+            + f'<p class="footnote">{html.escape(CITATIONS_NOTE)}</p>'
+            + (f'<p class="notice">{html.escape(s.notice)}</p>' if s.notice else ""),
         }
         for s in examples
     ]
@@ -219,12 +276,12 @@ _PAGE = """<!doctype html>
 <style>
 :root {
   --bg: #ffffff; --panel: #f0f2f6; --text: #31333f; --muted: #6b6f7b;
-  --user: #ff4b4b; --bot: #ffbd45; --line: #d6d9e0;
+  --user: #ff4b4b; --bot: #ffbd45; --line: #d6d9e0; --warn: #d6262f;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0e1117; --panel: #262730; --text: #fafafa; --muted: #a3a8b8;
-    --user: #ff6c6c; --bot: #ffbd45; --line: #3b3d48;
+    --user: #ff6c6c; --bot: #ffbd45; --line: #3b3d48; --warn: #ff6c6c;
   }
 }
 * { box-sizing: border-box; }
@@ -250,6 +307,12 @@ body { display: flex; flex-direction: column; gap: 6px; }
 .body p, .body ul { margin: 0 0 8px; }
 .body ul { padding-left: 20px; }
 .body .pending { display: none; }
+.body .notice { color: var(--warn); }
+.body .footnote { color: var(--muted); }
+.body .cite { color: var(--muted); font-size: 0.72em; line-height: 0; }
+.body pre { margin: 0 0 8px; padding: 8px 10px; overflow-x: auto; border-radius: 8px;
+  background: var(--panel); font: 12.5px/1.35 ui-monospace, "SFMono-Regular", Menlo,
+  Consolas, "DejaVu Sans Mono", monospace; }
 .dots span { display: inline-block; width: 6px; height: 6px; margin-right: 4px;
   border-radius: 50%; background: var(--muted); animation: blink 1s infinite; }
 .dots span:nth-child(2) { animation-delay: .2s; }
@@ -340,7 +403,9 @@ function showWhole(example) {
 async function type(example) {
   let text = "";
   for (const key of example.keys) {
-    if ("type" in key) {
+    if ("pause" in key) {
+      await sleep(key.pause);
+    } else if ("type" in key) {
       for (const ch of key.type) {
         text += ch;
         setTyping(text);
@@ -367,9 +432,9 @@ async function stream(example) {
   while (walker.nextNode()) nodes.push(walker.currentNode);
   const full = nodes.map((node) => node.nodeValue);
   nodes.forEach((node) => (node.nodeValue = ""));
-  body.querySelectorAll("h3, p, li").forEach((block) => block.classList.add("pending"));
+  body.querySelectorAll("h3, p, li, pre").forEach((block) => block.classList.add("pending"));
   for (let n = 0; n < nodes.length; n++) {
-    const block = nodes[n].parentElement.closest("h3, p, li");
+    const block = nodes[n].parentElement.closest("h3, p, li, pre");
     if (block) block.classList.remove("pending");
     const words = full[n].match(/\\S+\\s*|\\s+/g) || [];
     for (let w = 0; w < words.length; w += 2) {

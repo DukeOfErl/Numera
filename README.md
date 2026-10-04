@@ -256,7 +256,9 @@ tried.
 **The sign-in door plays a demo** under the button: a question typed out and an
 answer streamed back, on a loop. Each is a question actually put to the agent and its
 answer (ADR-1210), shortened for the door with every edit recorded beside it
-(ADR-1220), in `src/scinumbers_ask/door_demo.json` (ADR-1200). Each answer stays up
+(ADR-1220), in `src/scinumbers_ask/door_demo.json` (ADR-1200). The third shows mouse
+cell volumes as a text chart, drawn by `bin/door-demo-chart` rather than by the app,
+which cannot plot yet (ADR-1230). Each answer stays up
 for 7 s, with the caret blinking, before the next question replaces it; a browser
 set to reduced motion shows each example whole.
 

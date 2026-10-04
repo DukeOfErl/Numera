@@ -52,6 +52,18 @@ entries the answer cited (~6–170×). That is now more editor's text than model
 which is the limit this ADR allows, not its norm: every entry is one the run cited,
 and every figure is recomputed in the scenario's `edits`.
 
+**A question may be reworded too (2026-10-04).** Case 3 was asked "How do cell sizes
+vary across mouse cell types? Convert diameters to volumes so they can be compared."
+Yoav wanted the door to type "…? Visualize in a strip chart", with a one-second pause
+before the second sentence. A live re-run of that question was offered and declined.
+The example keeps the question actually asked in `asked`, and the typed wording in
+`shown`. A test fails unless `edits` names the question actually asked. The
+requirement now accepts "the question asked, or a rewording of it, recorded".
+
+This is the furthest an edit has gone. The door now shows a question the agent was
+never put, about a chart it cannot draw. What keeps it honest is the red notice under
+the chart, not the question.
+
 ## Trade-off accepted
 
 The door no longer promises that what it shows is exactly what the model said.
