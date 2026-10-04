@@ -103,6 +103,9 @@ def test_workers_default_is_capped_not_all_cores(testloop, monkeypatch):
     monkeypatch.delenv(testloop.WORKERS_ENV, raising=False)
     monkeypatch.setattr(testloop.os, "cpu_count", lambda: 64)
     assert testloop.workers() == testloop.DEFAULT_WORKERS
+    # Six ran an 8 GB machine out of memory once, mid-commit (exit 137); the default must
+    # stay at or under the count that did not.
+    assert testloop.DEFAULT_WORKERS <= 3
     monkeypatch.setattr(testloop.os, "cpu_count", lambda: 2)
     assert testloop.workers() == 2
 

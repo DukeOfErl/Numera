@@ -42,11 +42,15 @@ SELECTABLE_PREFIXES = ("src/", "tests/")
 INERT_PREFIXES = ("docs/", ".github/")
 INERT_FILES = frozenset({"CHANGELOG.md"})
 
-#: Measured on a 12-core, 7.8 GB machine: six workers took the suite from 158s to
-#: 81s, and twelve (`-n auto`) were *slower* than serial at 145s -- a dozen workers
-#: each importing Streamlit and LangChain press on memory, not on cores. So a cap,
-#: not "all cores", with an override for a machine that has the room.
-DEFAULT_WORKERS = 6
+#: **Three, because the limit on this machine is memory, not cores.** Measured on a 12-core,
+#: 7.8 GB machine: with the memory free, six workers took the suite from 158s to 81s, and
+#: twelve (`-n auto`) were *slower* than serial at 145s -- each worker imports Streamlit and
+#: LangChain. But with ordinary other work running (about 5.7 GB already in use) six workers
+#: were killed once by the out-of-memory killer (exit 137) in the middle of a commit, and the
+#: same suite ran to completion every time at three, in roughly 100-180s. A hook that can be
+#: killed is worse than a slow one: it reads as a failed commit. So a cap well under the
+#: fast setting, with an override for a machine that has the room.
+DEFAULT_WORKERS = 3
 WORKERS_ENV = "SCINUMBERS_TEST_WORKERS"
 
 #: pytest's exit status when nothing was collected or everything was deselected --

@@ -3,6 +3,10 @@
 - **Status:** accepted
 - **Date:** 2026-10-02
 - **Pull request:** none yet (`chore/test-loop`)
+- **Amended 2026-10-04:** the default is **three** workers, not six. Six is faster (81 s) with
+  memory free, but was killed once by the out-of-memory killer (exit 137) under ordinary load
+  on the 7.8 GB machine, mid-commit; three finished every full run in about 100-180 s. The
+  rest of this decision stands.
 
 ## Context
 
@@ -34,7 +38,8 @@ Two tiers, both in `bin/testloop.py` and wired through `.pre-commit-config.yaml`
   (`CHANGELOG.md`, `docs/`, `.github/`), run the **full suite** instead and say
   why. A list of what *is* inert, not of what is dangerous, so a new kind of file
   defaults to the safe direction.
-- **Push, merge and CI:** the full suite, in parallel, six workers locally and
+- **Push, merge and CI:** the full suite, in parallel, three workers locally (six when this
+  was written; see the amendment above) and
   `auto` on the CI runner. Not testmon, ever: the "green suite at a section
   boundary" is this tier.
 - Where there is no `.venv` the hook prints `NOT RUN` and exits 0, because this
