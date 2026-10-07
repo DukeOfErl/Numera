@@ -16,10 +16,14 @@ passed, what is wrong, and how sure the diagnosis is. Values and paper ids only;
 | 5 | PMC3496334 | Cytoplasmic diffusion coefficients (ribosomal subunits, ATP, amino acids, sugars): values with no unit | The publisher printed the column header's symbol and unit as images, so the unit is not in the text. The model rightly did not invent one; a person looking at the page reads it at once. | Information outside the text |
 | 6 | PMC3940484 | Median protein copy number: 170,000 molecules per cell, organism "mouse" | The value is for one cultured fibroblast line, not for mouse cells in general. The paper never gives a Latin species name, so the label is the common name and hides the cell line. | Organism label too coarse |
 | 7 | PMC2150578 | F-actin binding dissociation constant (human): 0.02 ± 0.01 μM | The quoted figures are the constants labelled K_X and K_Y in the paper's binding scheme, which the text never ties to F-actin; the figure it does give for F-actin is about 1 μM. Found by the entry-review session: four model reviewers chose the other text. | Wrong value, verbatim quote |
+| 8 | PMC9054212 (chemistry) | Half-maximal inhibitory concentration of compound H4: 149.21, unit "nm" | The paper writes "nm" — nanometres — for a concentration it means in nanomolar. The quote is verbatim and the unit is the paper's own; only a reader who knows an inhibitory concentration is never a length catches it. | Unit as written, wrong |
+| 9 | PMC11786770 (biophysics) | Mean filament length of skeletal muscle actin: 6.7 ± 01 μm | The paper's own typo: "± 01" for what is surely ± 0.1. Verbatim, and the store would carry an error term of one micrometre. | The paper's typo, faithfully kept |
+| 10 | PMC7021822 (physics) | Predicted glass transition temperature: −120 °C, material "all atoms are completely mobile" | A fit extrapolated to a hypothetical limit (ζ = 1), not the property of any material; the model labelled the hypothesis as the material. | Not a property of anything |
 
 ## How sure
 
 - 1, 2, 3 and 5 are read off the papers' own sentences and markup.
+- 8, 9 and 10 are read off the quotes (2026-10-07).
 - 7 is read off the review session's blind trial; the paper has not been re-read here.
 - 4 and 6 are a judgement about what a database entry needs to say; a biologist should confirm
   the wording.
