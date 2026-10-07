@@ -9,6 +9,7 @@ either read off a fixture or is a count of what the test itself put in.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,7 +21,7 @@ from sqlalchemy import create_engine, func, select
 from bionumbers import cli, harvest, store
 from bionumbers.cache import DocumentCache
 from bionumbers.distractor import Candidate, SecondTextOutput
-from bionumbers.europepmc import VERSION_OF_RECORD, EuropePMC
+from bionumbers.europepmc import VERSION_OF_RECORD, EuropePMC, licence_of
 from bionumbers.extraction import (
     MAX_TOKENS,
     ClaimDraft,
@@ -342,6 +343,28 @@ def test_harvest_starts_a_run_from_pmcids_with_each_paper_s_own_metadata_and_lic
     assert "2 paper(s), no full text 1" in capsys.readouterr().out
 
 
+def test_harvest_takes_the_licence_from_the_index_when_the_document_states_it_in_prose(
+    provider, dirs
+):
+    """Six of twenty CC papers chosen by hand on 2026-10-07 said so only in words, and read as
+    UNLICENSED: extraction would have been paid for and every quote withheld."""
+    prose_only = re.sub(
+        r"<license\b.*?</license>",
+        "<license><license-p>This article is distributed under an open licence.</license-p>"
+        "</license>",
+        ARTICLE_XML,
+        flags=re.DOTALL,
+    )
+    assert licence_of(None, prose_only) == UNLICENSED
+    provider.full_text_overrides[TABLES_PMCID] = httpx.Response(200, text=prose_only)
+
+    cli.main(["harvest", "h1", "--pmcids", TABLES_PMCID, *common(dirs)])
+
+    (paper,) = read_jsonl(dirs.runs / "h1" / cli.PAPERS_FILE, Paper)
+    assert paper.licence == "cc by"
+    assert any(query == f"PMCID:{TABLES_PMCID}" for query in provider.queries)
+
+
 def test_harvest_without_a_pmcid_says_so_and_writes_nothing(provider, dirs, capsys):
     code = cli.main(["harvest", "h1", *common(dirs)])
 
@@ -385,6 +408,43 @@ def test_extracting_a_harvested_run_asks_no_question_and_names_each_item_by_its_
     assert "aperture diameter (Coxiella burnetii)" in seen[1]["messages"][0]["content"]
     (result,) = read_results(dirs.runs / "h1" / "results.jsonl")
     assert result.fingerprint.instruction_sha256 == instruction_sha256(harvest.HARVEST_INSTRUCTION)
+    assert result.fingerprint.scope == item.claim.fingerprint.scope == harvest.DEFAULT_SCOPE
+
+
+def test_a_harvest_asked_in_another_domain_sends_that_scope_and_records_it(
+    monkeypatch, provider, dirs
+):
+    cli.main(["harvest", "h1", "--pmcids", TABLES_PMCID, "--scope", "physics", *common(dirs)])
+    model = scripted(monkeypatch, ExtractionOutput(state="NOTHING_TO_EXTRACT"))
+    seen: list[dict] = []
+    original = model.parse
+
+    def recording(**kwargs):
+        seen.append(kwargs)
+        return original(**kwargs)
+
+    model.parse = recording
+
+    assert cli.main(["extract", "h1", *common(dirs)]) == 0
+
+    assert seen[0]["messages"] == [harvest.user_turn("physics")]
+    assert seen[0]["messages"] != [harvest.user_turn()]
+    (result,) = read_results(dirs.runs / "h1" / "results.jsonl")
+    assert result.fingerprint.scope == "physics"
+
+
+def test_a_harvested_run_from_before_scopes_is_read_as_biology(monkeypatch, provider, dirs):
+    cli.main(["harvest", "h1", "--pmcids", TABLES_PMCID, *common(dirs)])
+    request_file = dirs.runs / "h1" / cli.REQUEST_FILE
+    request = json.loads(request_file.read_text())
+    del request["scope"]
+    request_file.write_text(json.dumps(request))
+    scripted(monkeypatch, ExtractionOutput(state="NOTHING_TO_EXTRACT"))
+
+    assert cli.main(["extract", "h1", *common(dirs)]) == 0
+
+    (result,) = read_results(dirs.runs / "h1" / "results.jsonl")
+    assert result.fingerprint.scope == "biology"
 
 
 def test_a_harvested_item_is_stored_under_its_own_question(monkeypatch, provider, dirs, capsys):

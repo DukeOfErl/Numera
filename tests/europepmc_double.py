@@ -69,6 +69,8 @@ def _search_fixture_for(query: str) -> str:
         return fixture("search_preprint_without_xml.json")
     if "SRC:PPR" in query and "TITLE:" in query:
         return fixture("search_preprint_by_title.json")
+    if query.startswith("PMCID:") and (FIXTURES / f"core_{query[6:]}.json").exists():
+        return fixture(f"core_{query[6:]}.json")
     return EMPTY_RESULT
 
 

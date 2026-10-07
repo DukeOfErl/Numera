@@ -347,6 +347,28 @@ class EuropePMC:
             return NoFullText(pmcid, "unreachable", None)
         return outcome
 
+    def index_record(self, pmcid: str) -> dict | None:
+        """The index's core record for one article, as the service wrote it, or None.
+
+        For the licence: a harvested paper was chosen by hand rather than found by a search, so
+        no record came with it, and `licence_of` reading the document alone calls a paper
+        UNLICENSED whenever its `<permissions>` state the licence in prose with no link -- six
+        of twenty CC papers chosen on 2026-10-07. An unreachable index is an absent record, not
+        a fault: the document is still read.
+        """
+        try:
+            payload = self._get_json(
+                "/search",
+                {"query": f"PMCID:{pmcid}", "resultType": "core", "format": "json"},
+                cache_key=f"record-{pmcid}",
+            )
+        except (httpx.HTTPError, ValueError):
+            return None
+        results = (payload.get("resultList") or {}).get("result") or []
+        return next(
+            (raw for raw in results if isinstance(raw, dict) and raw.get("pmcid") == pmcid), None
+        )
+
     def _find_preprint(
         self, identifier: SourceIdentifier, record: _Record
     ) -> RetrievedDocument | None:

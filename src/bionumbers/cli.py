@@ -286,7 +286,7 @@ def harvest_run(args: argparse.Namespace) -> int:
                 doi=doc.doi,
                 title=doc.title,
                 year=doc.year,
-                licence=licence_of(None, fetched.xml),
+                licence=licence_of(provider.index_record(pmcid), fetched.xml),
                 source_url=fetched.url,
             )
         )
@@ -294,7 +294,7 @@ def harvest_run(args: argparse.Namespace) -> int:
     run_dir.mkdir(parents=True, exist_ok=True)
     _write_json(
         run_dir / REQUEST_FILE,
-        {"mode": HARVEST_MODE, "question": HARVEST_QUESTION, "organism": ""},
+        {"mode": HARVEST_MODE, "question": HARVEST_QUESTION, "organism": "", "scope": args.scope},
     )
     _write_lines(run_dir / PAPERS_FILE, papers)
     without_text = sum(1 for paper in papers if paper.full_text_status)
@@ -346,6 +346,7 @@ def _one_paper(
     run_id: str,
     ledger: Ledger,
     harvesting: bool = False,
+    scope: str = "",
 ) -> tuple[PaperResult, list[ReviewItem], list[NotReviewable]]:
     instruction = harvest.HARVEST_INSTRUCTION if harvesting else INSTRUCTION
     fingerprint = Fingerprint(
@@ -353,6 +354,7 @@ def _one_paper(
         instruction_sha256=instruction_sha256(instruction),
         article_id=paper.pmcid,
         run_id=run_id,
+        scope=scope,
     )
     # Through the cached provider rather than the cache alone: a paper discovery found no XML
     # for is asked about once more, because the service has served XML later for articles it
@@ -379,8 +381,9 @@ def _one_paper(
         ledger=ledger,
         model_id=model_id,
         instruction=instruction,
-        user=harvest.user_turn() if harvesting else None,
+        user=harvest.user_turn(scope) if harvesting else None,
         max_tokens=harvest.MAX_TOKENS if harvesting else MAX_TOKENS,
+        scope=scope,
     )
     if paper.licence == UNLICENSED:
         # Extraction ran and its spend stands, but nothing quoted leaves the cache: the spec's
@@ -452,6 +455,9 @@ def extract_run(args: argparse.Namespace) -> int:
     unlicensed = 0
     papers_left_unread = 0
     stopped = ""
+    harvesting = request.get("mode") == HARVEST_MODE
+    # A harvested run from before scopes existed was asked in what is now `biology`.
+    scope = request.get("scope", harvest.DEFAULT_SCOPE) if harvesting else ""
     for index, paper in enumerate(papers):
         if ledger.run_exhausted:
             papers_left_unread = len(papers) - index
@@ -466,7 +472,8 @@ def extract_run(args: argparse.Namespace) -> int:
                 organism=request["organism"],
                 run_id=args.run_id,
                 ledger=ledger,
-                harvesting=request.get("mode") == HARVEST_MODE,
+                harvesting=harvesting,
+                scope=scope,
             )
         except ProviderRefused as refused:
             # The account, not the paper: this paper ends FAILED with the provider's words, the
@@ -483,6 +490,7 @@ def extract_run(args: argparse.Namespace) -> int:
                         instruction_sha256=instruction_sha256(),
                         article_id=paper.pmcid,
                         run_id=args.run_id,
+                        scope=scope,
                     ),
                 )
             )
@@ -598,6 +606,12 @@ def _parser() -> argparse.ArgumentParser:
     harvest_cmd.add_argument("run_id")
     harvest_cmd.add_argument("--pmcids", default="", help="comma-separated PMCIDs")
     harvest_cmd.add_argument("--pmcid-file", default=None, help="one PMCID per line; # comments")
+    harvest_cmd.add_argument(
+        "--scope",
+        choices=sorted(harvest.SCOPES),
+        default=harvest.DEFAULT_SCOPE,
+        help="the domain whose classes of value are wanted",
+    )
     data_dir(harvest_cmd)
     run_dirs(harvest_cmd)
     harvest_cmd.set_defaults(command=harvest_run)
