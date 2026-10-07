@@ -110,6 +110,15 @@ class TestRequest:
             "allow_fallbacks": False,
         }
 
+    def test_a_null_content_is_an_empty_answer_not_the_word_none(self):
+        """Opus 5.5 answered one item on 2026-10-07 with `content: null`; read as `str(None)` it
+        was reported as invalid JSON, which sends whoever triages it after a schema fault."""
+        seen, client = _server(_reply(None))
+        with pytest.raises(ModelRefused, match="empty structured output"):
+            OpenRouterModel("k", client=client).parse(
+                system=SYSTEM, messages=MESSAGES, output_format=Answer, max_tokens=9
+            )
+
     @pytest.mark.parametrize("status", [401, 402, 403, 429])
     def test_a_refusal_of_the_account_is_named_so_the_run_can_stop(self, status):
         """A 402 on 2026-09-22 (the OpenRouter balance ran out) ended ten papers FAILED at $0 one

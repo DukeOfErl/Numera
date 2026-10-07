@@ -161,6 +161,10 @@ def strict_schema(output_format: type) -> dict:
 
 
 def _text_of(content: Any) -> str:
+    # A null `content` is an empty answer, not the four letters "None": on 2026-10-07 Opus 5.5
+    # answered one item that way, and `str(None)` turned "empty output" into "invalid JSON".
+    if content is None:
+        return ""
     if isinstance(content, str):
         return content
     if isinstance(content, list):
