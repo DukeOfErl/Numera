@@ -57,8 +57,10 @@ from bionumbers.spend import (
 )
 
 #: Enough for an answer and for a reasoning model's thinking before it; the answer itself is
-#: three fields. Priced in full by the projection, so it is also most of the per-item ceiling.
-MAX_OUTPUT_TOKENS = 2000
+#: three fields. 2,000 cut off a routed DeepSeek V4.1 Flash on two of twelve steps and GPT-6.1
+#: Sol on three of sixty (2026-10-07), so it is doubled. Priced in full by the projection, so it
+#: is also most of the per-item ceiling.
+MAX_OUTPUT_TOKENS = 4000
 
 #: The two bounds of a simulated run, in US dollars: per decision and per run. A decision is two
 #: small calls -- a screen in, three fields out, twice -- so ten cents means a screen has gone

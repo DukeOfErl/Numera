@@ -55,10 +55,10 @@ SUPPORTING = "a doubling time of 39 min in rich medium"
 SECOND = "21 min in minimal medium"
 
 #: 1,000 tokens in and 100 out on Haiku 4.5 is $0.0015; the projection before a call is the
-#: 1,000 counted tokens plus `MAX_OUTPUT_TOKENS` of output, $0.011.
+#: 1,000 counted tokens plus `MAX_OUTPUT_TOKENS` of output, $0.021.
 USAGE = SimpleNamespace(input_tokens=1000, output_tokens=100)
 ONE_CALL_USD = 0.0015
-ONE_PROJECTION_USD = 0.011
+ONE_PROJECTION_USD = 0.001 + simulated_review.MAX_OUTPUT_TOKENS * 5e-6
 
 STUDENT = Reviewer(role=ReviewerRole.STUDENT, model=MODEL)
 
