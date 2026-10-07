@@ -27,7 +27,7 @@
 ## 5. Seeding the demo
 
 - [x] 5.1 Twenty-five biology papers harvested with GPT-6.1 Sol into `harvest-demo.sqlite`
-- [ ] 5.2 Five papers in each new domain: planarians (biology), cytoskeletal mechanics (biophysics), cytoskeleton chemistry, the glass transition (physics)
+- [x] 5.2 Five papers in each new domain (planarians, cytoskeletal mechanics, cytoskeleton chemistry, the glass transition): 152 claims from 15 papers, $3.77; three set aside for no methods section, two left unread by the run budget
 - [x] 5.3 The curated tier loaded into `harvest-demo.sqlite` (423 entries)
 
 ## 6. Before hand-over
