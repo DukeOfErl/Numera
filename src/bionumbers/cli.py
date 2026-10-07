@@ -28,7 +28,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from bionumbers import harvest, paths, store
+from bionumbers import curated, harvest, paths, store
 from bionumbers.cache import DocumentCache
 from bionumbers.distractor import choose_second_text
 from bionumbers.europepmc import (
@@ -545,6 +545,27 @@ def load(args: argparse.Namespace) -> int:
     return 0
 
 
+#: The ask app's name for the corpus path, read here too so one export serves both.
+CORPUS_ENV = "SCINUMBERS_CORPUS"
+
+
+def curate(args: argparse.Namespace) -> int:
+    """Load the curated tier: BioNumbers' entries in the slice that nothing marks doubtful."""
+    url = args.db_url or os.environ.get(DB_URL_ENV, "")
+    corpus = args.corpus or os.environ.get(CORPUS_ENV, "")
+    if not url or not corpus:
+        print(f"Give --db-url (or {DB_URL_ENV}) and --corpus (or {CORPUS_ENV}).", file=sys.stderr)
+        return 2
+    kept, refused = curated.select(curated.read_corpus(corpus))
+    loaded = store.load_curated(_engine(url), kept)
+    in_slice = loaded + sum(n for r, n in refused.items() if r != curated.Refusal.OUT_OF_SCOPE)
+    print(f"{loaded} curated entr{'y' if loaded == 1 else 'ies'} of {in_slice} in the slice")
+    for reason, count in refused.most_common():
+        if reason != curated.Refusal.OUT_OF_SCOPE:
+            print(f"  {count:>4} left out: {reason.value}")
+    return 0
+
+
 def status(args: argparse.Namespace) -> int:
     run_dir = Path(args.runs) / args.run_id
     results = read_results(run_dir / RESULTS_FILE)
@@ -632,6 +653,13 @@ def _parser() -> argparse.ArgumentParser:
     load_cmd.add_argument("--db-url", default=None, help=f"else {DB_URL_ENV}")
     run_dirs(load_cmd)
     load_cmd.set_defaults(command=load)
+
+    curate_cmd = commands.add_parser(
+        "curate", help="load BioNumbers' undoubted entries in the slice as the curated tier"
+    )
+    curate_cmd.add_argument("--corpus", default=None, help=f"the corpus JSONL, else {CORPUS_ENV}")
+    curate_cmd.add_argument("--db-url", default=None, help=f"else {DB_URL_ENV}")
+    curate_cmd.set_defaults(command=curate)
 
     status_cmd = commands.add_parser("status", help="states, spend and items of a run, from disk")
     status_cmd.add_argument("run_id")

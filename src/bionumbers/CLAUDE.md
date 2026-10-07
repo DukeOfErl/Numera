@@ -17,10 +17,11 @@ tool; if the extractor seems to need to search the paper, give it the whole pape
 | `spend.py` | Prices for the configured model, projection through the provider's token count, `Ledger` with the $2 per-paper ceiling and the run budget |
 | `extraction.py` | The instruction (no unit, no expected value), the one call, the verification pass, the states, the fingerprint, the JSONL writer behind the ingester's guard |
 | `distractor.py` | The second text: candidates of five types, mechanical exclusion of the value in every form, preference order, second-occurrence fallback (ADR-0920) |
-| `store.py` | `review_paper`, `review_item`, `review_decision` in SQLAlchemy Core; `record_decision` **fails closed** (ADR-0930). DDL in `sql/review.sql` |
+| `store.py` | `review_paper`, `review_item`, `review_decision`, `curated_entry` in SQLAlchemy Core; `record_decision` **fails closed** (ADR-0930). DDL in `sql/review.sql` |
 | `review.py` | Presentation: the two texts in an uninformative order and as the paper wrote them, the whole table a cell sits in (ADR-0940), the condition rows, the decision's completeness rule |
 | `harvest.py` | Harvest mode (ADR-0950): the classes of number wanted and not wanted, the instruction built from extraction's, the three model-written labels, the twenty-claim bound, one scope per domain (ADR-1500) |
-| `cli.py` | `bionumbers discover \| harvest \| extract \| load \| status` |
+| `curated.py` | The curated tier (ADR-1510): which BioNumbers entries in the slice nothing marks doubtful, and why each other one is left out |
+| `cli.py` | `bionumbers discover \| harvest \| extract \| load \| curate \| status` |
 | `paths.py` | `data/europepmc/`, `data/runs/`; a test asks git that both stay ignored |
 
 **The dependency direction holds here too.** Core modules import no Streamlit and nothing from

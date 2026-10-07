@@ -101,6 +101,27 @@ create table if not exists review_decision (
 -- every page load makes, and it is the only one whose latency a person waits on.
 create index if not exists review_decision_item_reviewer on review_decision (item_id, reviewer);
 
+-- BioNumbers' own entries as the curated tier (ADR-1510): measured, referenced, and with nothing
+-- in the entry itself that gives cause for doubt — no fused or one-sided range, a readable unit,
+-- no "rule of thumb". Shown beside harvested entries at the top of the trust order. Replaced whole
+-- on every load by `bionumbers curate`: no decision points at a curated entry. The corpus these
+-- come from is an external input with unresolved licensing; this table is a copy of part of it.
+create table if not exists curated_entry (
+    entry_id    integer primary key,
+    property    text not null,
+    organism    text not null default '',
+    value       double precision,
+    range_low   double precision,
+    range_high  double precision,
+    units       text not null,
+    approximate boolean not null default false,
+    reference   text not null default '',
+    pubmed_id   text not null,
+    method      text not null,
+    comments    text not null default '',
+    loaded_at   timestamptz not null default now()
+);
+
 -- How far a run has got, without reading any paper text.
 --
 -- select p.state, count(distinct i.item_id) as items, count(d.id) as decisions

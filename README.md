@@ -323,6 +323,10 @@ streamlit run review_app.py
   the numbers worth reusing, at most twenty per paper. `--scope` names the domain whose classes
   of value are wanted — `biology` (the default), `biophysics`, `chemistry` or `physics`
   (ADR-1500).
+- **Curate** loads BioNumbers' own entries as the top trust tier, beside the harvested ones:
+  `bionumbers curate --corpus ~/bionumbers/bionumbers.jsonl` keeps the yeast and cytoskeleton
+  entries that are measured and referenced and that nothing in the record marks doubtful — no
+  fused or one-sided range, a readable unit, no "rule of thumb" (ADR-1510).
 - **Discover** searches Europe PMC for open-access research articles with a PMCID — reviews,
   editorials, comments and preprints excluded by metadata — fetches each paper's JATS XML into
   `data/europepmc/`, and records the licence. A paper without XML is recorded with the status the

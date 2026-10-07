@@ -32,6 +32,9 @@ any release; `1.0.0` when it stabilizes.
   domain is recorded on every claim ([ADR-1500]). A value reported beside others of its kind is
   named by its condition (growth state, construct, tissue, position), the control by nothing; and
   every paper and claim records the model the provider says answered, beside the one asked for.
+- **The curated tier** (`bionumbers curate`): BioNumbers' yeast and cytoskeleton entries that are
+  measured, referenced and undoubted — 423 of 492 — loaded beside the harvested entries as the
+  top of the trust order ([ADR-1510]).
 - **The Europe PMC client from the feasibility branch, ported and corrected**: an article without
   XML is now recognised from the response body rather than a 404 status, because the service
   answers 500 today; and the article check reads the root element rather than searching for
@@ -497,3 +500,4 @@ number rather than an error:
 [ADR-0940]: docs/decisions/0940-texts-as-written-and-the-whole-table.md
 [ADR-0950]: docs/decisions/0950-harvest-first-ask-later.md
 [ADR-1500]: docs/decisions/1500-a-domain-is-a-scope-in-the-user-turn.md
+[ADR-1510]: docs/decisions/1510-the-curated-tier-admits-only-undoubted-entries.md

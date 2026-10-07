@@ -373,6 +373,26 @@ instruction in both. Which second text an item got — distractor, and of which
 type, or a second legitimate occurrence — is stored on the item and never shown
 (ADR-0920).
 
+## 7a. What the store holds: harvested and curated
+
+```mermaid
+flowchart LR
+    papers["Papers chosen by hand<br/><i>harvest --scope biology / biophysics /<br/>chemistry / physics</i>"]
+    extract["extract<br/><i>the pipeline of §7, no question</i>"]
+    items[("review_item<br/>quote-verified")]
+    review["review<br/><i>people, or models standing in<br/>for them, labelled simulated</i>"]
+    corpus[("BioNumbers corpus<br/><i>external, never committed</i>")]
+    curate["curate<br/><i>ten signs of doubt,<br/>any one refuses</i>"]
+    curated[("curated_entry<br/>top of the trust order")]
+    papers --> extract --> items --> review
+    corpus --> curate --> curated
+```
+
+*Caption: two ways in, one store. Harvested entries start at "quote verified" and
+rise as reviewers decide (ADR-0950, ADR-1500); BioNumbers entries enter at the
+top, but only where the record itself gives no cause for doubt (ADR-1510). The
+trust tier is derived from decisions, not stored.*
+
 ## 7b. A review decision
 
 ```mermaid

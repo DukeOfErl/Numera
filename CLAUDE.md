@@ -72,7 +72,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-user-identity` | `0780`–`0830` — all written |
 | `add-question-and-answer-records` | `0840`–`0870` |
 | `add-validator-prototype` | `0900`–`0990` — `0900`, `0910`, `0920`, `0930`, `0940`, `0950` written. **`0900`–`0920` collide with `add-open-enrolment` on `dev`** (which wrote `0880`, `0890`, `0900`); resolve before this branch merges |
-| `add-harvest-prototype` | `1500`–`1590` — `1500` written; clear of every block on `dev` and the branches as of 2026-10-07 (highest `1350`–`1390`) |
+| `add-harvest-prototype` | `1500`–`1590` — `1500`, `1510` written; clear of every block on `dev` and the branches as of 2026-10-07 (highest `1350`–`1390`) |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets

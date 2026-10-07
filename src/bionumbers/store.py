@@ -1,4 +1,4 @@
-"""The review store: three tables of its own, and a writer that fails closed.
+"""The review store: three tables of its own and the curated tier, and a writer that fails closed.
 
 The trail (`scinumbers_ask.trail_store`) is an append-only event log whose writer swallows every
 failure. This is the inverse on both counts, and both inversions are design D8 (ADR-0930). A
@@ -48,6 +48,7 @@ from sqlalchemy import (
     text,
 )
 
+from bionumbers.curated import CuratedEntry
 from bionumbers.records import UNLICENSED, PaperResult, ReviewItem
 
 #: Seconds to wait for a connection to be established.
@@ -144,6 +145,29 @@ review_decision = Table(
     Column("comment", Text, nullable=False, default=""),
     Column("decided_at", DateTime(timezone=True), nullable=False),
     Column("time_to_decide_s", Float),
+)
+
+
+#: BioNumbers' own entries, where nothing about them gives cause for doubt (ADR-1510): the
+#: curated tier, shown beside harvested entries at the top of the trust order. Keyed by the BNID,
+#: and replaced whole on every load -- a curated entry has no decision pointing at it, so a
+#: reload that restates one restates nothing a reviewer saw.
+curated_entry = Table(
+    "curated_entry",
+    METADATA,
+    Column("entry_id", Integer, primary_key=True),
+    Column("property", Text, nullable=False),
+    Column("organism", Text, nullable=False, default=""),
+    Column("value", Float),
+    Column("range_low", Float),
+    Column("range_high", Float),
+    Column("units", Text, nullable=False),
+    Column("approximate", Boolean, nullable=False, default=False),
+    Column("reference", Text, nullable=False, default=""),
+    Column("pubmed_id", Text, nullable=False),
+    Column("method", Text, nullable=False),
+    Column("comments", Text, nullable=False, default=""),
+    Column("loaded_at", DateTime(timezone=True), nullable=False),
 )
 
 
@@ -254,6 +278,21 @@ def load_run(
         if new_items:
             conn.execute(insert(review_item), new_items)
     return len(new_items)
+
+
+def load_curated(engine: Any, entries: Iterable[CuratedEntry]) -> int:
+    """Replace the curated tier with `entries`. Returns how many rows it now holds.
+
+    Takes `CuratedEntry` rather than raw corpus lines, so nothing reaches the table without
+    passing `curated.refusal`: the type is the guard, and only `curated.entry` builds one.
+    """
+    now = datetime.now(UTC)
+    rows = [{**entry.model_dump(), "loaded_at": now} for entry in entries]
+    with engine.begin() as conn:
+        conn.execute(curated_entry.delete())
+        if rows:
+            conn.execute(insert(curated_entry), rows)
+    return len(rows)
 
 
 def next_item(engine: Any, reviewer: str | None) -> ReviewItem | None:
