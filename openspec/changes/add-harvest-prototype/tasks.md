@@ -33,4 +33,4 @@
 ## 6. Before hand-over
 
 - [x] 6.1 Conformance mapping for every requirement in this change
-- [ ] 6.2 Full suite green
+- [x] 6.2 Full suite green (2069 passed, 2026-10-07)
