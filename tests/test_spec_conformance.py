@@ -636,6 +636,52 @@ COVERED.update(
     }
 )
 
+# add-harvest-prototype.
+COVERED.update(
+    {
+        "A harvest starts from chosen articles and asks each for its reusable values": (
+            "test_bionumbers_cli.py::test_harvest_starts_a_run_from_pmcids_with_each_paper_s_own_metadata_and_licence",
+            "test_bionumbers_cli.py::test_extracting_a_harvested_run_asks_no_question_and_names_each_item_by_its_claim",
+            "test_bionumbers_harvest.py::test_the_harvest_instruction_keeps_every_rule_of_the_question_instruction_but_its_opening",
+            "test_bionumbers_harvest.py::test_the_bound_on_claims_is_in_the_instruction",
+            "test_bionumbers_harvest.py::test_a_fabricated_quote_is_dropped_in_harvest_mode_as_in_any_other",
+            "test_bionumbers_extraction.py::test_a_value_computed_from_published_data_is_a_claim_and_says_so",
+        ),
+        "A harvest asks in one named domain, and the domain is on every entry": (
+            "test_bionumbers_harvest.py::test_every_scope_names_its_own_classes_and_exclusions_and_nothing_else",
+            "test_bionumbers_harvest.py::test_the_scopes_differ_where_their_domains_do",
+            "test_bionumbers_harvest.py::test_the_scope_hands_the_model_no_unit_and_no_magnitude",
+            "test_bionumbers_cli.py::test_a_harvest_asked_in_another_domain_sends_that_scope_and_records_it",
+            "test_bionumbers_cli.py::test_a_harvested_run_from_before_scopes_is_read_as_biology",
+        ),
+        # The labels are the model's to write; what is held is that the instruction asks for
+        # them and that the record keeps them. Whether a model names conditions as asked is
+        # measured by review, not by a test.
+        "A harvested entry names its quantity, its class and what it belongs to": (
+            "test_bionumbers_harvest.py::test_a_harvested_claim_is_named_by_its_label_and_keeps_its_class_and_species",
+            "test_bionumbers_harvest.py::test_the_instruction_asks_for_a_latin_name_and_a_value_without_its_unit",
+            "test_bionumbers_harvest.py::test_a_value_beside_others_of_its_kind_is_named_by_its_condition_and_the_control_is_not",
+        ),
+        "A hand-chosen article's licence is the index's where the document is silent": (
+            "test_bionumbers_cli.py::test_harvest_takes_the_licence_from_the_index_when_the_document_states_it_in_prose",
+        ),
+        "Every entry records the model that answered": (
+            "test_bionumbers_harvest.py::test_the_model_that_answered_is_recorded_beside_the_one_asked_for",
+            "test_bionumbers_harvest.py::test_a_retry_answered_by_another_model_records_both",
+            "test_bionumbers_harvest.py::test_a_provider_that_names_no_model_leaves_the_field_empty",
+        ),
+        "Only entries with no sign of doubt are curated": (
+            "test_bionumbers_curated.py::test_each_sign_of_doubt_keeps_an_entry_out",
+            "test_bionumbers_curated.py::test_what_reads_like_doubt_and_is_not_still_admits",
+            "test_bionumbers_curated.py::test_the_approximate_hedge_travels_with_the_entry",
+        ),
+        "The curated tier is loaded whole and says what it left out": (
+            "test_bionumbers_curated.py::test_a_load_replaces_the_tier_rather_than_adding_to_it",
+            "test_bionumbers_curated.py::test_curate_loads_the_slice_and_says_what_it_left_out",
+        ),
+    }
+)
+
 TESTED_BUT_UNNAMED = (
     "Events carry enough detail to show progress and to explain an ending",
     "A transient failure does not end a question",
