@@ -18,7 +18,7 @@ any release; `1.0.0` when it stabilizes.
   paper under a $2 ceiling, checks every quote mechanically against the paper, and chooses a second
   text for each claim; `bionumbers load` puts the items in Postgres; `review_app.py` shows a reviewer
   one claim at a time with two texts and records which fits and whether the value is approved,
-  failing closed on the write ([ADR-0900], [ADR-0910], [ADR-0920], [ADR-0930]). Each text is
+  failing closed on the write ([ADR-1520], [ADR-1530], [ADR-1540], [ADR-0930]). Each text is
   shown as the paper wrote it, and a table cell brings its whole table, caption included, beneath
   the two texts ([ADR-0940]). Extraction
   reaches the model through OpenRouter on its own key, `BIONUMBERS_OPENROUTER_API_KEY`, so the
@@ -493,9 +493,9 @@ number rather than an error:
 [ADR-0820]: docs/decisions/0820-one-agent-per-session-handed-a-credential-not-an-identity.md
 [ADR-0840]: docs/decisions/0840-what-a-question-s-trail-keeps.md
 
-[ADR-0900]: docs/decisions/0900-a-fixed-pipeline-not-an-agent-loop.md
-[ADR-0910]: docs/decisions/0910-named-terminal-states-not-confidence.md
-[ADR-0920]: docs/decisions/0920-the-second-text-always-two-kind-recorded.md
+[ADR-1520]: docs/decisions/1520-a-fixed-pipeline-not-an-agent-loop.md
+[ADR-1530]: docs/decisions/1530-named-terminal-states-not-confidence.md
+[ADR-1540]: docs/decisions/1540-the-second-text-always-two-kind-recorded.md
 [ADR-0930]: docs/decisions/0930-the-review-store-fails-closed.md
 [ADR-0940]: docs/decisions/0940-texts-as-written-and-the-whole-table.md
 [ADR-0950]: docs/decisions/0950-harvest-first-ask-later.md

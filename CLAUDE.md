@@ -71,8 +71,8 @@ what let the blocks drift: no branch can see another's copy.
 | `add-answer-feedback` | `0740`–`0770` — `0740`, `0750`, `0760` written |
 | `add-user-identity` | `0780`–`0830` — all written |
 | `add-question-and-answer-records` | `0840`–`0870` |
-| `add-validator-prototype` | `0900`–`0990` — `0900`, `0910`, `0920`, `0930`, `0940`, `0950` written. **`0900`–`0920` collide with `add-open-enrolment` on `dev`** (which wrote `0880`, `0890`, `0900`); resolve before this branch merges |
-| `add-harvest-prototype` | `1500`–`1590` — `1500`, `1510` written; clear of every block on `dev` and the branches as of 2026-10-07 (highest `1350`–`1390`) |
+| `add-validator-prototype` | `0930`–`0990` — `0930`, `0940`, `0950` written. Its first three, written as `0900`–`0920`, collided with `add-open-enrolment` on `dev` and were renumbered `1520`, `1530`, `1540` on 2026-10-07, inside `add-harvest-prototype`'s block |
+| `add-harvest-prototype` | `1500`–`1590` — `1500`, `1510` written, and `1520`–`1540` hold the validator's renumbered three; clear of every block on `dev` and the branches as of 2026-10-07 (highest `1350`–`1390`) |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets
@@ -103,7 +103,7 @@ is a description of the code.
 
 Three work packages, three packages under `src/`, one dependency extra each, so no two branches edit
 the same source tree: `bionumbers_ingest` (`ingest`), `scinumbers_ask` (`ask`), `bionumbers`
-(`validator`). All three are here now; the validator is a prototype (ADR-0900) and is described in
+(`validator`). All three are here now; the validator is a prototype (ADR-1520) and is described in
 its own subsection below.
 
 A fourth extra, `eval`, is **additive to `ask` rather than a package of its own**: the evaluation
@@ -215,7 +215,7 @@ and reported when it is reached (ADR-0180).
 
 ### `bionumbers` — the validator prototype
 
-A **fixed pipeline, not an agent** (ADR-0900): discovery → fetch → JATS reader → one structured
+A **fixed pipeline, not an agent** (ADR-1520): discovery → fetch → JATS reader → one structured
 extraction call → mechanical quote check → one retry → one second-text call → JSONL → Postgres → a
 review page. Its own `CLAUDE.md` lives in `src/bionumbers/` with the module table and the four
 rules a module will not tell you — the dependency direction holds there too, and only `review.py`

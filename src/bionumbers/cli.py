@@ -1,6 +1,6 @@
 """The `bionumbers` command: discover, extract, load, status.
 
-One driver over the pipeline's steps, in the order the design fixes them (D1, ADR-0900):
+One driver over the pipeline's steps, in the order the design fixes them (D1, ADR-1520):
 discovery writes what may be read, extraction reads it under the two ceilings and writes what
 came out, the loader moves a finished run into the store, and status reads a run back without
 touching a network or a model. The steps are separate commands rather than one because each

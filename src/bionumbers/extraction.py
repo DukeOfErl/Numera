@@ -1,6 +1,6 @@
 """One article in, verified claims out: the extraction call, its one retry, and the ending.
 
-The pipeline's only model calls live here (design D1, ADR-0900): one structured-output
+The pipeline's only model calls live here (design D1, ADR-1520): one structured-output
 call over the whole paper, one bounded retry when a quote does not check out, and nothing
 else. No tools, no loop, no chunking -- a chunked paper loses the Methods-to-Results link,
 which the scientist report says is the whole difficulty of the task, and a loop has no exit

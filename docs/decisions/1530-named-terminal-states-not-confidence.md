@@ -1,4 +1,4 @@
-# ADR-0910: Every paper, field and candidate ends in a named state, never a confidence score
+# ADR-1530: Every paper, field and candidate ends in a named state, never a confidence score
 
 - **Status:** accepted
 - **Date:** 2026-09-18

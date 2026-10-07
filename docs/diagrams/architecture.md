@@ -361,8 +361,8 @@ sequenceDiagram
 ```
 
 *Caption: one paper's path through a fixed pipeline with at most three model
-calls and no tools (ADR-0900). Every quote a reviewer will see has passed the
-checker; a paper ends in exactly one named state (ADR-0910), and a call that would
+calls and no tools (ADR-1520). Every quote a reviewer will see has passed the
+checker; a paper ends in exactly one named state (ADR-1530), and a call that would
 cross the $2 ceiling is not made.*
 
 There is no agent graph here because there is no agent: the extractor is one
@@ -371,7 +371,7 @@ with the checker's failures named. Grey boxes are model calls; the second one
 reads the paper at the cached rate because the paper block precedes the
 instruction in both. Which second text an item got — distractor, and of which
 type, or a second legitimate occurrence — is stored on the item and never shown
-(ADR-0920).
+(ADR-1540).
 
 ## 7a. What the store holds: harvested and curated
 

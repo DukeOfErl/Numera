@@ -45,7 +45,7 @@ See `proposal.md` for why. What shapes the how:
 
 ## Decisions
 
-### D1. A fixed pipeline with one extraction call per paper, not an agent loop (ADR-0900)
+### D1. A fixed pipeline with one extraction call per paper, not an agent loop (ADR-1520)
 
 Discovery → fetch → read → **one** structured extraction call → mechanical check → **one** bounded
 retry → second-text selection → store. The paper sits in the system block with `cache_control`, so
@@ -62,7 +62,7 @@ can — reward hacking of the quote check and fake success — are addressed by 
 scientist report says is the whole difficulty (conditions live in Methods, values in Results tables,
 pages apart). The paper goes in whole.
 
-### D2. Named terminal states, not confidence (ADR-0910)
+### D2. Named terminal states, not confidence (ADR-1530)
 
 Per paper: `CLAIMS_FOUND`, `NOTHING_TO_EXTRACT`, `NOT_A_RESEARCH_ARTICLE`, `UNREADABLE`,
 `CEILING_REACHED`, `FAILED`. Per condition field: `BESIDE_VALUE`, `FROM_METHODS`, `BY_REFERENCE`,
@@ -106,7 +106,7 @@ asserting the measurement. The check cannot see that; the reviewer can, and that
 text is for. The rejected-candidate categories (D2) also give the model a legitimate place to put
 such sentences, which removes the incentive to dress them as claims.
 
-### D5. The second text: always two, kind recorded, admissibility mechanical (ADR-0920)
+### D5. The second text: always two, kind recorded, admissibility mechanical (ADR-1540)
 
 A second call, on the cached paper, asks for candidate second texts of each type from the paper's
 passages, given the claim. Selection is then mechanical: reject any candidate whose folded text

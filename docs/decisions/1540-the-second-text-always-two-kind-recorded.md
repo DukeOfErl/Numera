@@ -1,4 +1,4 @@
-# ADR-0920: The reviewer always sees two texts; the second's kind is recorded and never shown
+# ADR-1540: The reviewer always sees two texts; the second's kind is recorded and never shown
 
 - **Status:** accepted
 - **Date:** 2026-09-18

@@ -1,6 +1,6 @@
 ## Context
 
-The validator pipeline (ADR-0900) is a fixed sequence: fetch, read the JATS into passages, one
+The validator pipeline (ADR-1520) is a fixed sequence: fetch, read the JATS into passages, one
 structured extraction call with the paper as a cached prefix, a mechanical quote check, one retry,
 one second-text call per claim. Harvest reuses all of it. What it changes is the first paragraph of
 the instruction and the user turn — a scope where the question was — plus a bound on claims.

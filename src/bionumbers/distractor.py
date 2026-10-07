@@ -1,6 +1,6 @@
 """The second text: what goes on the screen beside the claim's own quote, and why it is admissible.
 
-Design D5 (ADR-0920). A reviewer is always shown two texts and always has to say which one fits
+Design D5 (ADR-1540). A reviewer is always shown two texts and always has to say which one fits
 the value, so the second text carries the whole weight of the task: if it can be told apart without
 reading -- because it restates the value in another unit, or because it is the supporting sentence
 again -- the item measures nothing. The model proposes candidates; **selection is mechanical**, in

@@ -1,4 +1,4 @@
-# ADR-0900: Extraction is a fixed pipeline with one model call per paper, not an agent loop
+# ADR-1520: Extraction is a fixed pipeline with one model call per paper, not an agent loop
 
 - **Status:** accepted (first live run 2026-09-18/19, below)
 - **Date:** 2026-09-18

@@ -55,7 +55,7 @@ create table if not exists review_paper (
 -- measuring distractor difficulty does not mean parsing every blob. Where a column and the JSON
 -- disagree, the JSON is the one the reviewer saw.
 --
--- `second_kind` and `distractor_type` are recorded and never shown (ADR-0920): they are what lets
+-- `second_kind` and `distractor_type` are recorded and never shown (ADR-1540): they are what lets
 -- the rebuild separate attention from ambiguity, and showing them would tell the reviewer the
 -- answer.
 create table if not exists review_item (

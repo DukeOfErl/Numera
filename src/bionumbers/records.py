@@ -6,7 +6,7 @@ rather than dataclasses so that one definition serves all three -- the extractio
 `ExtractionOutput` to the SDK as its output schema, and `model_validate_json` reads a run back
 without a hand-written decoder that could drift from the encoder.
 
-The states are the design's D2 (ADR-0910): a closed set per paper, per condition field and per
+The states are the design's D2 (ADR-1530): a closed set per paper, per condition field and per
 candidate value, in place of any confidence score. Adding a member here is a decision, not a
 convenience -- each one exists because a real paper showed the shape.
 """

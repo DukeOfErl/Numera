@@ -5,6 +5,9 @@ authority. Four decisions are already made in `design.md` and get their files in
 so the numbers are claimed before the code exists: 0900 (pipeline, not loop), 0910 (named states),
 0920 (the second text), 0930 (the store fails closed). 0940–0990 are spare.
 
+**Renumbered 2026-10-07:** 0900, 0910 and 0920 collided with `add-open-enrolment` on `dev` and are
+now 1520, 1530 and 1540; the task text below keeps the numbers as they were allocated.
+
 **Read this before picking up a task.** Group 2 is a **port of code nobody here has reviewed**. It ran
 on another branch against a service that has since changed its behaviour; its tests pass because
 they encode the same assumption the code does. Task 2.3 carries the known correction. Budget review
@@ -145,13 +148,13 @@ time of writing `spend.py`, and record the date in its docstring.
       `bionumbers status <run-id>` printing states, spend and the cached-token fraction
 - [x] 8.2 Run end to end on one question against real papers, for ten to twenty papers, and record
       the state distribution, the spend per paper and the fraction of claims that got an item, in
-      the commit message and in ADR-0900's status
+      the commit message and in ADR-1520's status
 
 ## 9. Conformance, documentation, changelog
 
 - [x] 9.1 Add every requirement of the three specs to `tests/test_spec_conformance.py`'s `COVERED`
       map, naming the tests above; record any gap in `UNMAPPED` with its reason
-- [x] 9.2 Fill in ADR-0900, 0910, 0920, 0930 from their stubs with the options rejected, not only the
+- [x] 9.2 Fill in ADR-1520, 1530, 1540, 0930 from their stubs with the options rejected, not only the
       one taken; move status to *accepted* as each lands
 - [x] 9.3 `README.md`: what the prototype does, how to run the three commands and the review page,
       and the two-extra install

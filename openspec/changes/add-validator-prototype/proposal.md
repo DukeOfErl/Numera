@@ -86,4 +86,4 @@ it; a deployment with no identity configured stays open, exactly as that spec al
   API at Opus 4.7 rates; the existing Neon project.
 - **Documentation**: README, architecture diagrams, CLAUDE.md's architecture section and ADR table,
   the changelog, and the spec-conformance mapping — all in this change.
-- **ADR block**: `0900`–`0990`, allocated in `CLAUDE.md`.
+- **ADR block**: `0900`–`0990`, allocated in `CLAUDE.md`; `0900`–`0920` later renumbered `1520`–`1540` (collision with `dev`).
