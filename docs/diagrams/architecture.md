@@ -407,23 +407,29 @@ sequenceDiagram
     Page->>Door: which door? (no credential needed)
     Door-->>Page: open, with the account, or closed
     Page->>Store: next_item(reviewer)
-    Store-->>DB: an undecided item, papers interleaved
-    Page-->>Reviewer: value, conditions, citation, texts A and B
-    Reviewer->>Page: which text fits, approve or disapprove, comment
-    Page->>Store: record_decision(...)
+    Store-->>DB: an undecided item, a half-done one first
+    Page-->>Reviewer: question, citation, texts A and B — no value
+    Reviewer->>Page: which text states a value, and the value read
+    Page->>Store: record_choice(...)
+    Store-->>DB: one open row: choice and value read, no verdict
+    Page-->>Reviewer: the stored value, the paper's term, the conditions
+    Reviewer->>Page: approve or disapprove, comment
+    Page->>Store: record_verdict(...)
     alt the write fails
         Store-->>Page: DecisionNotSaved
-        Page-->>Reviewer: not saved; the same item stays
+        Page-->>Reviewer: not saved; the same screen stays
     else
-        Store-->>DB: one row, with the reviewer and the time
+        Store-->>DB: the row completed, with the time of both steps
         Page-->>Reviewer: the next item, and how many remain
     end
 ```
 
 *Caption: the door is the ask app's, imported; the store is not the trail's. A
-decision is written the moment it is given and the write fails closed
-(ADR-0930), which is the opposite of the trail's choice (ADR-0710) for the
-reason the ADR gives: here the row is the product.*
+decision is two writes on one row (ADR-0970): the choice and the value read go
+in before the stored value is shown, so the reading cannot have been steered by
+it. Each write fails closed (ADR-0930), which is the opposite of the trail's
+choice (ADR-0710) for the reason the ADR gives: here the row is the product.
+Not shown: an issue may be raised at either step in place of what remains.*
 
 ## 7c. A simulated review
 
@@ -440,18 +446,23 @@ sequenceDiagram
     CLI->>Sim: run(reviewers)
     loop each reviewer, each of its undecided items
         Sim->>Sim: assigned(role, item)? else skip
-        Sim->>Screen: texts in the page's order, conditions, citation
+        Sim->>Screen: texts in the page's order, citation — no value
         Sim->>Sim: project the cost; refuse past either bound
-        Sim->>Model: one instruction, one screen
-        Model-->>Sim: A or B and a verdict, or an issue
-        Sim->>Store: record_decision / record_issue, with role and model
+        Sim->>Model: the choice instruction, the first screen
+        Model-->>Sim: A or B and the value read, or an issue
+        Sim->>Store: record_choice / record_issue, with role, model, answerer
+        Sim->>Screen: the reveal: value, the paper's term, conditions
+        Sim->>Model: the verdict instruction, the reveal
+        Model-->>Sim: approve or disapprove, or an issue
+        Sim->>Store: record_verdict / record_issue
     end
     Sim-->>Operator: a summary marked simulated
 ```
 
 *Caption: a second driver over the review task, standing where the page and
-the person stand in 7b (ADR-0960). The model is shown one screen and nothing
-else, every role gets the same instruction, and every row records the model
-that wrote it. What the diagram cannot show: the budget and an account refusal
-stop the whole run, a failed call skips one item, and a run started again
-continues from the rows already written.*
+the person stand in 7b (ADR-0960, ADR-0970). The model is shown one screen per
+step and nothing else, every role gets the same instruction, and every row
+records the model asked for and the one that answered. What the diagram cannot
+show: the budget and an account refusal stop the whole run, a failed step skips
+one item, and a run started again continues from the rows already written — an
+item left after its first step gets only its second.*

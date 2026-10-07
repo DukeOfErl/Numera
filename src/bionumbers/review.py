@@ -48,13 +48,21 @@ TITLE = "SciNumbers review"
 APPROVE = "Approve"
 DISAPPROVE = "Disapprove"
 
-#: Said when an item is saved without one half of the answer. Each names the missing half rather
+#: Said when a step is saved without one half of its answer. Each names the missing half rather
 #: than "the form is incomplete": the reviewer is one click from done and has to be told which
 #: click. The choice comes first because it is the one a reviewer skips -- the verdict feels like
 #: the question and the choice feels like a preamble, and the spec's own scenario is a verdict with
 #: no choice.
-CHOICE_REQUIRED = "Choose which text better fits the value before saving."
+CHOICE_REQUIRED = "Choose which text states a value for this quantity before continuing."
+VALUE_REQUIRED = "Write the value the text you chose states, as it is written, before continuing."
 VERDICT_REQUIRED = "Say whether you approve or disapprove before saving."
+ISSUE_REQUIRED = "Describe the issue before raising it."
+
+#: The two steps' questions, as the reviewer reads them (ADR-0970). The first asks for a text and
+#: a value with the stored value withheld; the second shows the stored entry and asks the verdict.
+CHOICE_QUESTION = "Which text states a value for this quantity?"
+VALUE_QUESTION = "The value that text states, as it is written"
+VERDICT_QUESTION = "Did this value come from this paper under these conditions?"
 
 #: The failed write (ADR-0930). It says the item is still open, because the reviewer's natural
 #: reading of a page that did not move on is that their click missed -- and a reviewer who believes
@@ -108,6 +116,16 @@ class Shown:
     is_supporting: bool
     passage_id: str = ""
     """Where the text sits, so the table beneath can mark its cell with this label."""
+
+
+@dataclass(frozen=True)
+class FirstStep:
+    """The first step's answer: which text, and the value the reviewer read from it, taken
+    before the stored value is shown (ADR-0970)."""
+
+    chosen_label: str
+    chosen_supporting: bool
+    value_read: str
 
 
 @dataclass(frozen=True)
@@ -302,6 +320,53 @@ def citation_line(paper: Paper) -> str:
         f"doi:{paper.doi}" if paper.doi else "",
     ]
     return " · ".join(part for part in parts if part)
+
+
+def first_step_from(item: ReviewItem, choice: str | None, value_read: str) -> FirstStep:
+    """The first step, or `Incomplete` naming what is missing.
+
+    The value is required, not optional: it is written before the stored value is revealed, and
+    that order is the whole point -- a reviewer who has not committed to a reading has nothing to
+    compare the reveal against, and would read the stored value as the answer. The label is turned
+    into `chosen_supporting` here for the reason `decision_from` gives.
+    """
+    if choice is None:
+        raise Incomplete(CHOICE_REQUIRED)
+    if not value_read.strip():
+        raise Incomplete(VALUE_REQUIRED)
+    shown = {text.label: text for text in texts_in_order(item)}
+    if choice not in shown:
+        raise ValueError(f"no text is labelled {choice!r}")
+    return FirstStep(
+        chosen_label=choice, chosen_supporting=shown[choice].is_supporting, value_read=value_read
+    )
+
+
+def verdict_from(verdict: str | None) -> bool:
+    """The second step's verdict as a boolean, or `Incomplete`. Not `verdict == APPROVE` on its
+    own, for the reason `decision_from` gives: an unrecognised string must not read as a
+    disapproval."""
+    if verdict is None:
+        raise Incomplete(VERDICT_REQUIRED)
+    if verdict not in (APPROVE, DISAPPROVE):
+        raise ValueError(f"not a verdict: {verdict!r}")
+    return verdict == APPROVE
+
+
+def issue_from(text: str) -> str:
+    """An issue's text, or `Incomplete`: the store refuses an empty one, and the page should say
+    so in the reviewer's words before the store says it in its own."""
+    if not text.strip():
+        raise Incomplete(ISSUE_REQUIRED)
+    return text
+
+
+def chosen_label(item: ReviewItem, chosen_supporting: bool) -> str:
+    """The label the page put on the text a stored choice names -- for the reveal, which repeats
+    the reviewer's choice back to them in the page's own terms."""
+    return next(
+        text.label for text in texts_in_order(item) if text.is_supporting == chosen_supporting
+    )
 
 
 def decision_from(

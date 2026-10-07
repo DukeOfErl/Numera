@@ -420,6 +420,49 @@ def test_the_chosen_label_is_recorded_as_whether_it_was_the_supporting_text():
     assert review.decision_from(as_b, "B", review.APPROVE, "").chosen_supporting is True
 
 
+def test_the_first_step_needs_a_text_and_a_value():
+    """The choice first, then the value: each refusal names the half missing, and the value is
+    refused before anything is revealed (ADR-0970)."""
+    with pytest.raises(review.Incomplete) as no_choice:
+        review.first_step_from(an_item(), None, "39 min")
+    assert no_choice.value.message == review.CHOICE_REQUIRED
+
+    for blank in ("", "   "):
+        with pytest.raises(review.Incomplete) as no_value:
+            review.first_step_from(an_item(), "A", blank)
+        assert no_value.value.message == review.VALUE_REQUIRED
+
+
+def test_the_first_step_records_the_label_as_whether_it_was_the_supporting_text():
+    as_a = an_item(an_id_showing_the_supporting_text_as("A"))
+    as_b = an_item(an_id_showing_the_supporting_text_as("B"))
+
+    first = review.first_step_from(as_a, "A", "39 min")
+    assert (first.chosen_label, first.chosen_supporting, first.value_read) == ("A", True, "39 min")
+    assert review.first_step_from(as_a, "B", "x").chosen_supporting is False
+    assert review.first_step_from(as_b, "A", "x").chosen_supporting is False
+    assert review.first_step_from(as_b, "B", "x").chosen_supporting is True
+    assert review.chosen_label(as_a, True) == "A"
+    assert review.chosen_label(as_b, True) == "B"
+
+
+def test_a_verdict_is_approve_or_disapprove_and_nothing_else():
+    assert review.verdict_from(review.APPROVE) is True
+    assert review.verdict_from(review.DISAPPROVE) is False
+    with pytest.raises(review.Incomplete) as none:
+        review.verdict_from(None)
+    assert none.value.message == review.VERDICT_REQUIRED
+    with pytest.raises(ValueError):
+        review.verdict_from("Maybe")
+
+
+def test_an_issue_needs_its_text():
+    assert review.issue_from("the unit is wrong") == "the unit is wrong"
+    with pytest.raises(review.Incomplete) as blank:
+        review.issue_from("  ")
+    assert blank.value.message == review.ISSUE_REQUIRED
+
+
 def test_a_disapproval_is_recorded_as_one_and_keeps_the_comment():
     decision = review.decision_from(an_item(), "A", review.DISAPPROVE, "the strain differs")
 

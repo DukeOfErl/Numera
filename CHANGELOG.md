@@ -47,7 +47,16 @@ any release; `1.0.0` when it stabilizes.
   person and answers the same two questions. Every row it writes records the role and the model,
   and its reviewer name begins `simulated-`, so no figure can pass these off as people's. A
   reviewer can now also **raise an issue** in place of a choice and a verdict; the store records
-  it with its text. The review page itself is unchanged ([ADR-0960]).
+  it with its text ([ADR-0960]).
+- **A decision is taken in two steps, and the value is withheld until the text is chosen**
+  ([ADR-0970]). The review page first shows the quantity, the paper and the two texts; the
+  reviewer chooses the text that states a value for the quantity and writes the value they read,
+  and only then is the stored entry — value, the paper's term, conditions — revealed for the
+  verdict. The value read is recorded before the reveal. An issue can be raised at either step. The
+  simulated reviewers take the same two steps as two calls and record which model answered each.
+- **Every OpenRouter price is a price at one provider, and the request is pinned to it.** A model
+  served by several providers at several rates is otherwise projected at one price and billed at
+  another; the request now names the provider the price table was read from and allows no fallback.
 - **The Europe PMC client from the feasibility branch, ported and corrected**: an article without
   XML is now recognised from the response body rather than a 404 status, because the service
   answers 500 today; and the article check reads the root element rather than searching for
@@ -515,3 +524,4 @@ number rather than an error:
 [ADR-1500]: docs/decisions/1500-a-domain-is-a-scope-in-the-user-turn.md
 [ADR-1510]: docs/decisions/1510-the-curated-tier-admits-only-undoubted-entries.md
 [ADR-0960]: docs/decisions/0960-a-simulated-review-says-it-is-one.md
+[ADR-0970]: docs/decisions/0970-the-value-is-withheld-until-the-text-is-chosen.md

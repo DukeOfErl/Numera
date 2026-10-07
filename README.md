@@ -338,20 +338,23 @@ streamlit run review_app.py
   back to the model once, a second failure drops the claim. A second call picks the other text a
   reviewer will see. Each paper ends in one of six named states; the spend ceiling is **$2 per
   paper** and the call that would cross it is not made.
-- **The review page** shows one claim at a time: the question, the value as the paper states it,
-  the citation, the conditions and method each quoted with where it came from (beside the value,
-  from Methods, by reference, supplementary only, not stated), and **two texts** from the paper,
-  each as the paper wrote it with nothing in it emphasised. When a text is a table cell, the whole
-  table is drawn beneath the two texts with its caption, both texts' cells marked alike. The
-  reviewer must choose which text fits the value and, separately, approve or disapprove. The second
-  text is a distractor or a second legitimate occurrence; which it was is stored and never shown.
-  Decisions are written the moment they are given and the write fails closed: a reviewer whose
-  decision could not be saved is told so and keeps the item.
+- **The review page** shows one claim at a time, in two steps. First the question, the citation
+  and **two texts** from the paper, each as the paper wrote it with nothing in it emphasised; when
+  a text is a table cell, the whole table is drawn beneath the two texts with its caption, both
+  texts' cells marked alike. The reviewer chooses which text states a value for the quantity and
+  writes the value they read. Only then is the stored entry revealed — the value as the paper
+  states it, the paper's own term, the conditions and method each quoted with where it came from
+  (beside the value, from Methods, by reference, supplementary only, not stated) — and the reviewer
+  approves or disapproves. An issue can be raised at either step. The second text is a distractor
+  or a second legitimate occurrence; which it was is stored and never shown. Each step is written
+  the moment it is given and the write fails closed: a reviewer whose step could not be saved is
+  told so and keeps the item.
 - **A simulated review** (`bionumbers simulate-review --reviewer student=<model>@0.6 --reviewer
   scientist=<model>@0.35 ...`) lets models stand in for reviewers until there are people: each
-  role reviews its own fixed share of the items, is shown exactly what the page shows a person, and
-  may raise an issue instead of deciding. Every row it writes records the role and the model, and
-  anything built on those rows must be labelled as simulated. It is bounded at $0.10 per decision
+  role reviews its own fixed share of the items, is shown exactly what the page shows a person
+  step by step, and may raise an issue instead of deciding. Every row it writes records the role,
+  the model and the model that actually answered, and anything built on those rows must be
+  labelled as simulated. It is bounded at $0.10 per decision
   and $2 per run by default, and running it again continues where it stopped.
 
 What it does not read: supplementary files, figure images, PDFs. What it does not do: verify an

@@ -1,23 +1,30 @@
-"""Models standing in for reviewers: the review task, answered unattended (ADR-0960).
+"""Models standing in for reviewers: the review task, answered unattended (ADR-0960, ADR-0970).
 
 Finding people to review takes longer than the demonstration has, so each rung of the trust ladder
 is played by a model. That makes this a **second driver over the review task**, beside
-`review_app.py`: it reads one item's screen, answers the same two questions, and writes through the
-same store. It is not a step of the extraction pipeline and nothing upstream reads what it writes.
+`review_app.py`: it reads one item's screen, answers the same questions in the same two steps, and
+writes through the same store. It is not a step of the extraction pipeline and nothing upstream
+reads what it writes.
 
-Three things it holds to, each because the alternative would make the dataset say something false:
+Four things it holds to, each because the alternative would make the dataset say something false:
 
 - **A model sees what a person sees, and nothing more.** The screen is built from
-  `bionumbers.review`'s own functions -- the texts in the page's order, the page's condition rows --
-  so nothing here reads the second text's kind or type, and no reviewer is shown another's
+  `bionumbers.review`'s own functions -- the texts in the page's order, the page's condition rows
+  -- so nothing here reads the second text's kind or type, and no reviewer is shown another's
   decision. Every item has a known right answer, which is what lets a run report how often a model
   picked the supporting text; a screen that leaked the kind would make that figure worthless.
+- **The value is withheld until the text is chosen** (ADR-0970). The first step shows the
+  quantity, the paper and the two texts, and asks which text states a value for the quantity and
+  what that value is. Only then are the stored value and conditions revealed for the verdict. A
+  reviewer shown the answer first has nothing left to judge; shown the texts first, their reading
+  is a measurement of the entry the extractor's answer cannot have steered.
 - **One instruction for every role.** A role is a label on the model that plays it, never a
   persona: telling a model to answer "as a student" asks it to invent a student's mistakes, and a
   disagreement manufactured that way is not a finding. Where reviewers contradict each other here,
   two models read the same screen differently.
-- **Every row says a model wrote it.** `reviewer_model` is set on each decision and the reviewer's
-  name begins `simulated-`, so no query can mistake these for people.
+- **Every row says a model wrote it, and which one answered.** `reviewer_model` is the model asked
+  for and `answered_by` the one the provider says replied -- for a router, a different name -- and
+  the reviewer's name begins `simulated-`, so no query can mistake these for people.
 
 Which items a role reviews is drawn from a hash of the role and the item id (`assigned`): fixed
 across runs, independent between roles, so the subsets overlap by chance and an entry can carry
@@ -30,6 +37,7 @@ the `ask` extra as the review page does. `cli` therefore imports it inside its o
 from __future__ import annotations
 
 import hashlib
+import re
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -52,45 +60,65 @@ from bionumbers.spend import (
 #: three fields. Priced in full by the projection, so it is also most of the per-item ceiling.
 MAX_OUTPUT_TOKENS = 2000
 
-#: The two bounds of a simulated run, in US dollars: per decision and per run. A decision is one
-#: small call -- a screen in, three fields out -- so ten cents means a screen has gone wrong.
+#: The two bounds of a simulated run, in US dollars: per decision and per run. A decision is two
+#: small calls -- a screen in, three fields out, twice -- so ten cents means a screen has gone
+#: wrong.
 DEFAULT_CEILING = Ceiling(per_paper=0.10, per_run=2.00)
 
 ISSUE = "ISSUE"
 
-INSTRUCTION = """\
+CHOICE_INSTRUCTION = """\
 You are reviewing one entry of a database of numbers extracted from scientific papers.
 
-You are shown what a human reviewer is shown: the quantity, the value, the paper, the conditions \
-recorded for the value with the paper's own words for each, and two texts from the paper labelled \
-A and B, with any table they sit in. You are not shown the rest of the paper. Judge only from \
-what is shown.
+You are shown what a human reviewer is shown at this step: the quantity the entry is about, with \
+its organism, the paper, and two texts from the paper labelled A and B, with any table they sit \
+in. You are not shown the value that was extracted, and you are not shown the rest of the paper. \
+Judge only from what is shown.
 
-Answer two questions.
+Choose which text states a value for this quantity: A or B. Then give the value that text states \
+for the quantity, with its unit, exactly as the text writes it.
 
-1. Which text better fits the value: which of A and B states this value for this quantity?
-2. Did this value come from this paper under these conditions? Approve when the text you chose \
-states the value for the quantity named and nothing shown contradicts the recorded conditions. \
-Otherwise disapprove, and say why in the comment.
+Both texts may state a value for it; choose the one that states it more directly. Raise an issue \
+instead when neither text states a value for this quantity, or when you cannot tell from what is \
+shown which of the two the entry means: set choice to ISSUE, leave value_read empty, and say \
+which in the comment. Keep the comment to one or two sentences, and leave it empty when the \
+choice was plain.
+"""
 
-Raise an issue instead when the entry cannot be judged as it stands: neither text states the \
-value, the value or its unit is garbled, or the quantity named is not what the texts are about. \
-To raise an issue, set choice to ISSUE and describe the problem in the comment in one or two \
-sentences; the approval is then ignored. Do not raise an issue for something a disapproval says.
+VERDICT_INSTRUCTION = """\
+You are reviewing one entry of a database of numbers extracted from scientific papers.
 
-Both texts may state the value. That is not an issue: choose the one that states it more \
-precisely. Keep the comment short, and leave it empty when you approve without reservation.
+You have already chosen which of two texts from the paper states a value for the quantity, and \
+written down the value you read. You are now shown the entry as it is stored: its value, the \
+paper's own name for the quantity, and the conditions recorded for it with the paper's words for \
+each. You are not shown the rest of the paper. Judge only from what is shown.
+
+Did this value come from this paper under these conditions? Approve when the stored value is the \
+one your chosen text states, for the quantity named, and nothing shown contradicts the recorded \
+conditions. Otherwise disapprove, and say why in the comment.
+
+Raise an issue instead when the entry cannot be judged as it stands: the stored value or its \
+unit is garbled, or the quantity named is not what the texts are about. Set verdict to ISSUE and \
+describe the problem in the comment in one or two sentences. Do not raise an issue for something \
+a disapproval says. Leave the comment empty when you approve without reservation.
 """
 
 
-class Answer(Frozen):
-    """What a model returns for one screen. Flat and without nulls on purpose: the weaker
-    providers accept a strict schema of enums, booleans and strings and little else, so the
-    issue outcome is a third value of `choice` rather than a nullable pair."""
+class Chosen(Frozen):
+    """The first step's answer. Flat and without nulls on purpose: the weaker providers accept a
+    strict schema of enums and strings and little else, so the issue outcome is a third value of
+    `choice` rather than a nullable pair."""
 
     choice: Literal["A", "B", "ISSUE"]
-    approved: bool
-    """Ignored when `choice` is `ISSUE`."""
+    value_read: str
+    """The value the chosen text states, as written; empty with an issue."""
+    comment: str
+
+
+class Judged(Frozen):
+    """The second step's answer."""
+
+    verdict: Literal["APPROVE", "DISAPPROVE", "ISSUE"]
     comment: str
     """The reason for a disapproval, or the issue's text."""
 
@@ -127,12 +155,14 @@ class Tally:
     disapproved: int = 0
     issues: int = 0
     distractors: int = 0
-    """Decisions on an item whose second text is a distractor: the ones with a right answer."""
+    """Choices on an item whose second text is a distractor: the ones with a right answer."""
     distractors_caught: int = 0
     """Of those, how many chose the supporting text."""
+    values_agreed: int = 0
+    """Choices of the supporting text whose value read agrees with the stored value."""
     spend_usd: float = 0.0
     failures: list[tuple[str, str]] = field(default_factory=list)
-    """(item id, reason) for every item that got no row. Each is offered again on the next run."""
+    """(item id, reason) for every step that got no row. Each is offered again on the next run."""
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -145,6 +175,7 @@ class Tally:
             "issues": self.issues,
             "distractors": self.distractors,
             "distractors_caught": self.distractors_caught,
+            "values_agreed": self.values_agreed,
             "spend_usd": self.spend_usd,
             "failures": [list(failure) for failure in self.failures],
         }
@@ -178,27 +209,44 @@ def assigned(item_id: str, reviewer: Reviewer) -> bool:
 
 
 def screen(item: ReviewItem) -> str:
-    """One item as the page shows it, as text for a model.
+    """The first step's screen, as text for a model: the quantity, the paper, the two texts.
 
     Built from the page's own functions so the two drivers cannot drift: the texts are in
     `texts_in_order`'s order under its labels, which is also what turns the model's "A" back into
-    `chosen_supporting`.
+    `chosen_supporting`. No value, no condition and not the paper's own name for the quantity:
+    each of those is a clue to which text is meant, and the choice is the judgement being asked
+    for (ADR-0970).
     """
     shown = review.texts_in_order(item)
     lines = [
         f"Quantity: {item.question}",
-        f"Value: {item.claim.value} {item.claim.unit}".rstrip(),
-        f"The paper calls it: {item.claim.property_in_paper}",
         f"Paper: {review.citation_line(item.paper)}",
-        "",
-        "Conditions (field | where the paper states it | the paper's words):",
     ]
-    lines += [" | ".join(row) for row in review.condition_rows(item.claim)]
     for text in shown:
         lines += ["", f"Text {text.label}", f"Where: {text.location_line}", text.text]
     marks = {text.passage_id: text.label for text in shown if text.passage_id}
     for table in item.tables:
         lines += ["", *_table_lines(table, marks)]
+    return "\n".join(lines)
+
+
+def reveal(item: ReviewItem, choice: store.Choice) -> str:
+    """The second step's screen: the first step's, what the reviewer answered, and the entry as
+    stored -- value, the paper's name for it, every condition row the page shows."""
+    label = next(
+        t.label for t in review.texts_in_order(item) if t.is_supporting == choice.chosen_supporting
+    )
+    lines = [
+        screen(item),
+        "",
+        f"You chose Text {label} and read the value as: {choice.value_read or '(nothing)'}",
+        "",
+        "The entry as stored:",
+        f"Value: {item.claim.value} {item.claim.unit}".rstrip(),
+        f"The paper calls it: {item.claim.property_in_paper}",
+        "Conditions (field | where the paper states it | the paper's words):",
+    ]
+    lines += [" | ".join(row) for row in review.condition_rows(item.claim)]
     return "\n".join(lines)
 
 
@@ -217,24 +265,48 @@ def _table_lines(table: TableView, marks: dict[str, str]) -> list[str]:
     return lines
 
 
-def ask(model: Any, item: ReviewItem, reviewer: Reviewer, *, ledger: Ledger) -> Answer:
-    """One call for one screen: project, check, call, record -- `spend`'s order.
+_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+
+
+def value_agrees(read: str, stored: str) -> bool:
+    """Whether the value a reviewer read is the stored one, loosely: the stored value's first
+    number appears among the numbers in what was read, thousands separators dropped.
+
+    Loose on purpose -- "39 ± 1 min" against "39" agrees, "187,000" against "187000" agrees --
+    because the figure is a tally for the run's summary, not a verdict: the verdict is the
+    reviewer's, given with both values in front of them.
+    """
+    want = _NUMBER.findall(stored.replace(",", ""))
+    return bool(want) and want[0] in _NUMBER.findall(read.replace(",", ""))
+
+
+def ask(
+    model: Any,
+    reviewer: Reviewer,
+    *,
+    system: str,
+    content: str,
+    output_format: type,
+    ledger: Ledger,
+    entry: str,
+) -> tuple[Any, str]:
+    """One call for one step: project, check, call, record -- `spend`'s order. Returns the
+    parsed answer and the model the provider says answered (empty where it says nothing).
 
     The instruction goes as a plain string rather than as content blocks. Nothing here is long
     enough to cache, and a string is the one system form every provider behind the gateway takes.
     """
-    entry = f"{reviewer.name}|{item.item_id}"
-    messages = [{"role": "user", "content": screen(item)}]
-    counted = model.count_tokens(system=INSTRUCTION, messages=messages, output_format=Answer)
+    messages = [{"role": "user", "content": content}]
+    counted = model.count_tokens(system=system, messages=messages, output_format=output_format)
     projected = projected_cost(
         reviewer.model, input_tokens=counted.input_tokens, max_tokens=MAX_OUTPUT_TOKENS
     )
     ledger.check(entry, projected)
     try:
         response = model.parse(
-            system=INSTRUCTION,
+            system=system,
             messages=messages,
-            output_format=Answer,
+            output_format=output_format,
             max_tokens=MAX_OUTPUT_TOKENS,
         )
     except Exception as failure:
@@ -244,7 +316,9 @@ def ask(model: Any, item: ReviewItem, reviewer: Reviewer, *, ledger: Ledger) -> 
             ledger.record(entry, cost(reviewer.model, usage))
         raise
     ledger.record(entry, cost(reviewer.model, response.usage))
-    return response.parsed_output
+    raw = getattr(response, "raw", None)
+    answered = raw.get("model") if isinstance(raw, dict) else None
+    return response.parsed_output, answered if isinstance(answered, str) else ""
 
 
 def run(
@@ -256,13 +330,14 @@ def run(
 ) -> Summary:
     """Each reviewer decides the items assigned to it that it has not decided yet.
 
-    Resumable by construction: what is done is whatever has a row, so a run that stopped -- on the
-    budget, on the account, on a crash -- is continued by running it again.
+    Resumable by construction: what is done is whatever has a completed row, so a run that
+    stopped -- on the budget, on the account, on a crash -- is continued by running it again; an
+    item left with its first step taken gets only its second.
 
-    An item whose call fails gets no row and a line in the tally; the next item is still
-    reviewed. Two endings stop the run instead, because the next item would meet the same answer:
-    the provider refusing the account, and the run budget. A decision the store cannot save
-    raises out of here untouched (ADR-0930): a run that cannot record must not go on spending.
+    A step whose call fails gets no row and a line in the tally; the next item is still reviewed.
+    Two endings stop the run instead, because the next item would meet the same answer: the
+    provider refusing the account, and the run budget. A row the store cannot write raises out of
+    here untouched (ADR-0930): a run that cannot record must not go on spending.
 
     Raises `Unpriceable` before any call if a reviewer's model has no price, since a run that
     cannot account for its spend has no working budget.
@@ -282,9 +357,8 @@ def run(
         for item in store.undecided_items(engine, reviewer.name):
             if not assigned(item.item_id, reviewer):
                 continue
-            started = time.monotonic()
             try:
-                answer = ask(model, item, reviewer, ledger=ledger)
+                _review_one(engine, model, item, reviewer, ledger, tally)
             except ProviderRefused as refused:
                 summary.stopped = str(refused) or "the provider refused the account"
             except CeilingReached as reached:
@@ -292,10 +366,8 @@ def run(
                     summary.stopped = str(reached)
                 else:
                     tally.failures.append((item.item_id, str(reached)))
-            except Exception as failure:
-                tally.failures.append((item.item_id, f"{type(failure).__name__}: {failure}"))
-            else:
-                _record(engine, item, reviewer, answer, time.monotonic() - started, tally)
+            except _StepFailed as failed:
+                tally.failures.append((item.item_id, str(failed)))
             if summary.stopped:
                 break
         tally.spend_usd = ledger.run.usd - spent_before
@@ -305,45 +377,93 @@ def run(
     return summary
 
 
-def _record(
-    engine: Any,
-    item: ReviewItem,
-    reviewer: Reviewer,
-    answer: Answer,
-    elapsed_s: float,
-    tally: Tally,
+class _StepFailed(Exception):
+    """A step's call or answer could not be used; the item is offered again next run."""
+
+
+def _call(model: Any, reviewer: Reviewer, ledger: Ledger, item: ReviewItem, **request: Any):
+    """`ask`, with a failure of the model's -- not the account's, not a ceiling -- made a step
+    failure, so the loop above records it against the item and goes on."""
+    entry = f"{reviewer.name}|{item.item_id}"
+    try:
+        return ask(model, reviewer, ledger=ledger, entry=entry, **request)
+    except (ProviderRefused, CeilingReached):
+        raise
+    except Exception as failure:
+        raise _StepFailed(f"{type(failure).__name__}: {failure}") from failure
+
+
+def _review_one(
+    engine: Any, model: Any, item: ReviewItem, reviewer: Reviewer, ledger: Ledger, tally: Tally
 ) -> None:
-    who = {
-        "reviewer": reviewer.name,
-        "reviewer_role": reviewer.role,
-        "reviewer_model": reviewer.model,
-        "time_to_decide_s": elapsed_s,
-    }
-    if answer.choice == ISSUE:
-        if not answer.comment.strip():
-            # Not written as a decision either: the model said the item cannot be judged, and
-            # recording its ignored approval would turn that into a verdict it did not give.
-            tally.failures.append((item.item_id, "an issue with no text"))
+    who = {"reviewer": reviewer.name}
+    choice = store.open_choice(engine, item.item_id, reviewer.name)
+    if choice is None:
+        started = time.monotonic()
+        chosen, answered = _call(
+            model,
+            reviewer,
+            ledger,
+            item,
+            system=CHOICE_INSTRUCTION,
+            content=screen(item),
+            output_format=Chosen,
+        )
+        elapsed = time.monotonic() - started
+        opened = {
+            **who,
+            "time_to_decide_s": elapsed,
+            "reviewer_role": reviewer.role,
+            "reviewer_model": reviewer.model,
+            "answered_by": answered or None,
+        }
+        if chosen.choice == ISSUE:
+            if not chosen.comment.strip():
+                raise _StepFailed("an issue with no text")
+            store.record_issue(engine, item.item_id, issue=chosen.comment, **opened)
+            tally.issues += 1
             return
-        store.record_issue(engine, item.item_id, issue=answer.comment, **who)
+        # Through the page's own labelling (`texts_in_order`), so a person's "A" and a model's
+        # "A" are recorded against the same arrangement.
+        supports = {t.label: t.is_supporting for t in review.texts_in_order(item)}
+        choice = store.Choice(supports[chosen.choice], chosen.value_read)
+        store.record_choice(
+            engine,
+            item.item_id,
+            chosen_supporting=choice.chosen_supporting,
+            value_read=choice.value_read,
+            **opened,
+        )
+        if item.second_kind is SecondTextKind.DISTRACTOR:
+            tally.distractors += 1
+            tally.distractors_caught += choice.chosen_supporting
+        if choice.chosen_supporting and value_agrees(choice.value_read, item.claim.value):
+            tally.values_agreed += 1
+
+    started = time.monotonic()
+    judged, answered = _call(
+        model,
+        reviewer,
+        ledger,
+        item,
+        system=VERDICT_INSTRUCTION,
+        content=reveal(item, choice),
+        output_format=Judged,
+    )
+    closing = {
+        **who,
+        "time_to_decide_s": time.monotonic() - started,
+        "answered_by": answered or None,
+    }
+    if judged.verdict == ISSUE:
+        if not judged.comment.strip():
+            raise _StepFailed("an issue with no text")
+        store.record_issue(engine, item.item_id, issue=judged.comment, **closing)
         tally.issues += 1
         return
-    # Through the page's own mapping from a label to `chosen_supporting`, so a person's "A" and
-    # a model's "A" are recorded against the same arrangement.
-    verdict = review.APPROVE if answer.approved else review.DISAPPROVE
-    decision = review.decision_from(item, answer.choice, verdict, answer.comment)
-    store.record_decision(
-        engine,
-        item.item_id,
-        chosen_supporting=decision.chosen_supporting,
-        approved=decision.approved,
-        comment=decision.comment,
-        **who,
-    )
-    if decision.approved:
+    approved = judged.verdict == "APPROVE"
+    store.record_verdict(engine, item.item_id, approved=approved, comment=judged.comment, **closing)
+    if approved:
         tally.approved += 1
     else:
         tally.disapproved += 1
-    if item.second_kind is SecondTextKind.DISTRACTOR:
-        tally.distractors += 1
-        tally.distractors_caught += decision.chosen_supporting

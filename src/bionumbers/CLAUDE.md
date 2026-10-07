@@ -17,13 +17,13 @@ tool; if the extractor seems to need to search the paper, give it the whole pape
 | `spend.py` | Prices for the configured model, projection through the provider's token count, `Ledger` with the $2 per-paper ceiling and the run budget |
 | `extraction.py` | The instruction (no unit, no expected value), the one call, the verification pass, the states, the fingerprint, the JSONL writer behind the ingester's guard |
 | `distractor.py` | The second text: candidates of five types, mechanical exclusion of the value in every form, preference order, second-occurrence fallback (ADR-1540) |
-| `store.py` | `review_paper`, `review_item`, `review_decision`, `curated_entry` in SQLAlchemy Core; `record_decision` **fails closed** (ADR-0930). DDL in `sql/review.sql` |
-| `review.py` | Presentation: the two texts in an uninformative order and as the paper wrote them, the whole table a cell sits in (ADR-0940), the condition rows, the decision's completeness rule |
+| `store.py` | `review_paper`, `review_item`, `review_decision`, `curated_entry` in SQLAlchemy Core; a decision in two writes on one row, `record_choice` then `record_verdict`, or `record_issue` at either step; every writer **fails closed** (ADR-0930, ADR-0970). DDL in `sql/review.sql` |
+| `review.py` | Presentation: the two texts in an uninformative order and as the paper wrote them, the whole table a cell sits in (ADR-0940), the condition rows, each step's completeness rule |
 | `harvest.py` | Harvest mode (ADR-0950): the classes of number wanted and not wanted, the instruction built from extraction's, the three model-written labels, the twenty-claim bound, one scope per domain (ADR-1500), `organismal` among them |
 | `curated.py` | The curated tier (ADR-1510): which BioNumbers entries in the slice nothing marks doubtful, and why each other one is left out |
 | `cli.py` | `bionumbers discover \| harvest \| extract \| load \| curate \| status \| simulate-review` |
 | `paths.py` | `data/europepmc/`, `data/runs/`; a test asks git that both stay ignored |
-| `simulated_review.py` | Models standing in for reviewers (ADR-0960): the screen as text, built from `review.py`'s own functions; each role's subset by hash; one call per decision under a ledger; rows that say a model wrote them. A second **driver** over the review task, not a pipeline step |
+| `simulated_review.py` | Models standing in for reviewers (ADR-0960): the two screens as text, built from `review.py`'s own functions; each role's subset by hash; two calls per decision under a ledger; rows that say a model wrote them and which model answered. A second **driver** over the review task, not a pipeline step |
 
 **The dependency direction holds here too.** Core modules import no Streamlit and nothing from
 `scinumbers_ask`; only `review.py` and the root `review_app.py` may, and
@@ -38,8 +38,20 @@ A simulated reviewer is a different model call with the mirror rule: it sees one
 nothing else -- not the paper, not the second text's kind, not another reviewer's row.
 
 **A row with `reviewer_model` set and a role other than `AI` is simulated**, and anything that
-counts or draws decisions has to say so. `store.record_decision` and `store.record_issue` are the
-only two writers, one per row shape; there is no check constraint behind them.
+counts or draws decisions has to say so. A row with `approved` null and `issue` empty is *open*: a
+choice awaiting its verdict, still the reviewer's to finish. The store's writers are the only way
+in, one per step and shape; there is no check constraint behind them.
+
+**The value is withheld until the text is chosen** (ADR-0970), on the page and in the simulated
+review alike. Nothing on the first screen may name the stored value, the paper's own term for the
+quantity, or a condition: `tests/test_review_app.py` and `test_bionumbers_simulated_review.py`
+both read the first screen for them. `value_read` is written before the reveal and is the one
+figure the extractor's answer cannot have steered.
+
+**Every OpenRouter price is a price at one provider.** `spend.Prices.provider` is the slug the
+row was read from and `cli._model` pins the request to it with no fallback; a row without a pin
+is a projection against whatever OpenRouter picks. The Jev router is the one unpinned row, priced
+as an upper bound.
 
 **Ported code is unreviewed code.** `europepmc.py`, `cache.py` and `retrieval.py` came from
 `feat/grounding-validator-cytoskeleton` with two corrections made in the port itself; the commit

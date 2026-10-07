@@ -1,4 +1,5 @@
-"""The simulated review: what a model is shown, which items a role is given, what gets recorded.
+"""The simulated review: what a model is shown at each step, which items a role is given, what
+gets recorded.
 
 Offline throughout. The model is a scripted double behind the same two-method protocol the
 extraction step codes against, and the store is the real one over in-memory SQLite, so what these
@@ -19,12 +20,14 @@ from bionumbers.records import (
     CandidateKind,
     Claim,
     ClaimKind,
+    ConditionField,
     DistractorType,
     Fingerprint,
     Location,
     Paper,
     PaperResult,
     PaperState,
+    Provenance,
     Quote,
     ReviewerRole,
     ReviewItem,
@@ -32,7 +35,15 @@ from bionumbers.records import (
     TableCell,
     TableView,
 )
-from bionumbers.simulated_review import Answer, Reviewer, assigned, screen
+from bionumbers.simulated_review import (
+    Chosen,
+    Judged,
+    Reviewer,
+    assigned,
+    reveal,
+    screen,
+    value_agrees,
+)
 from bionumbers.spend import Ceiling, Unpriceable
 
 QUESTION = "doubling time of Escherichia coli"
@@ -73,6 +84,11 @@ def an_item(
             kind=ClaimKind.SINGLE,
             candidate_kind=CandidateKind.MEASURED,
             quote=Quote(text=SUPPORTING, location=Location(passage_id="p1")),
+            conditions=(
+                ConditionField(
+                    name="medium", provenance=Provenance.BESIDE_VALUE, quote="rich medium (LB)"
+                ),
+            ),
             fingerprint=FP,
         ),
         paper=PAPER,
@@ -93,8 +109,9 @@ class Scripted:
     """Answers from a queue, an exception in the queue being raised instead, and every call
     kept, so a case can say what a model was shown and that a call never happened."""
 
-    def __init__(self, *answers) -> None:
+    def __init__(self, *answers, answered_by: str | list[str] = "") -> None:
         self.answers = list(answers)
+        self.answered_by = answered_by
         self.calls: list[dict] = []
 
     def count_tokens(self, *, system, messages, output_format=None):
@@ -105,11 +122,24 @@ class Scripted:
         answer = self.answers.pop(0)
         if isinstance(answer, Exception):
             raise answer
-        return SimpleNamespace(parsed_output=answer, usage=USAGE)
+        by = self.answered_by
+        if isinstance(by, list):
+            # A router answers each call with a model of its choosing.
+            by = by[len(self.calls) - 1]
+        return SimpleNamespace(parsed_output=answer, usage=USAGE, raw={"model": by} if by else {})
 
 
-def approving(item: ReviewItem) -> Answer:
-    return Answer(choice=label_of(item, supporting=True), approved=True, comment="")
+def choosing(item: ReviewItem, *, supporting: bool = True, value_read: str = "39 min") -> Chosen:
+    return Chosen(choice=label_of(item, supporting=supporting), value_read=value_read, comment="")
+
+
+APPROVING = Judged(verdict="APPROVE", comment="")
+DISAPPROVING = Judged(verdict="DISAPPROVE", comment="wrong medium")
+
+
+def approving(item: ReviewItem) -> list:
+    """Both steps of a clean approval, in the order the runner asks them."""
+    return [choosing(item), APPROVING]
 
 
 @pytest.fixture
@@ -130,24 +160,26 @@ def decisions(engine):
         return conn.execute(select(store.review_decision)).all()
 
 
-# --- the screen ----------------------------------------------------------------------------
+# --- the two screens -------------------------------------------------------------------------
 
 
-def test_the_screen_holds_what_the_page_shows():
+def test_the_first_screen_shows_the_quantity_the_paper_and_the_texts_and_withholds_the_rest():
     item = an_item()
     shown = screen(item)
 
     assert f"Quantity: {QUESTION}" in shown
-    assert "Value: 39 min" in shown
-    assert "The paper calls it: generation time" in shown
     assert review.citation_line(PAPER) in shown
-    assert "Organism | not stated | —" in shown
     first, second = review.texts_in_order(item)
     assert shown.index(f"Text {first.label}\n") < shown.index(f"Text {second.label}\n")
     assert shown.index(first.text) < shown.index(second.text)
+    # The value, the paper's own name for the quantity and the conditions are the reveal's.
+    assert "Value:" not in shown
+    assert "generation time" not in shown
+    assert "rich medium (LB)" not in shown
+    assert "Organism" not in shown
 
 
-def test_the_screen_is_the_same_whatever_kind_the_second_text_is():
+def test_the_first_screen_is_the_same_whatever_kind_the_second_text_is():
     """The kind is what the reviewer is being measured against. An item whose second text is a
     distractor and one whose second text is a second occurrence must read alike."""
     distractor = an_item()
@@ -155,6 +187,30 @@ def test_the_screen_is_the_same_whatever_kind_the_second_text_is():
     parameter = an_item(distractor_type=DistractorType.PARAMETER)
 
     assert screen(distractor) == screen(occurrence) == screen(parameter)
+
+
+def test_the_reveal_repeats_the_choice_and_adds_the_stored_entry():
+    item = an_item()
+    shown = reveal(item, store.Choice(chosen_supporting=True, value_read="39 min"))
+
+    assert shown.startswith(screen(item))
+    assert (
+        f"You chose Text {label_of(item, supporting=True)} and read the value as: 39 min" in shown
+    )
+    assert "Value: 39 min" in shown
+    assert "The paper calls it: generation time" in shown
+    assert "Medium | beside the value | rich medium (LB)" in shown
+    assert "Organism | not stated | —" in shown
+
+
+def test_the_reveal_names_the_other_text_when_that_is_the_one_chosen():
+    item = an_item()
+    shown = reveal(item, store.Choice(chosen_supporting=False, value_read=""))
+
+    assert (
+        f"You chose Text {label_of(item, supporting=False)} and read the value as: (nothing)"
+        in shown
+    )
 
 
 def test_a_table_is_drawn_whole_with_both_texts_cells_marked_alike():
@@ -176,6 +232,21 @@ def test_a_table_is_drawn_whole_with_both_texts_cells_marked_alike():
     assert f"rich | 39 [{label_of(item, supporting=True)}]" in shown
     assert f"minimal | 21 [{label_of(item, supporting=False)}]" in shown
     assert "Mean of three cultures." in shown
+
+
+@pytest.mark.parametrize(
+    ("read", "stored", "agrees"),
+    [
+        ("39 min", "39", True),
+        ("39 ± 1 min", "39 ± 1", True),
+        ("187000", "187,000", True),
+        ("about 21 min", "39", False),
+        ("", "39", False),
+        ("39", "", False),
+    ],
+)
+def test_value_agreement_is_read_off_the_stored_value_s_first_number(read, stored, agrees):
+    assert value_agrees(read, stored) is agrees
 
 
 # --- which items a role reviews ------------------------------------------------------------
@@ -233,66 +304,146 @@ def test_a_simulated_reviewer_s_name_says_so_and_a_model_reviewing_as_itself_doe
 
 
 @pytest.mark.parametrize("picks_supporting", [True, False])
-def test_a_decision_records_the_role_the_model_and_which_text_the_label_named(
+def test_the_two_steps_make_one_row_with_the_choice_the_value_read_and_the_verdict(
     engine, picks_supporting
 ):
     item = an_item()
     load(engine, item)
-    answer = Answer(
-        choice=label_of(item, supporting=picks_supporting), approved=False, comment="wrong medium"
+    model = Scripted(
+        choosing(item, supporting=picks_supporting, value_read="21 min"),
+        DISAPPROVING,
+        answered_by="some/routed-model",
     )
 
-    summary = simulated_review.run(engine, [STUDENT], lambda model_id: Scripted(answer))
+    summary = simulated_review.run(engine, [STUDENT], lambda model_id: model)
 
     (row,) = decisions(engine)
     assert row.item_id == "i1"
     assert row.reviewer == STUDENT.name
     assert (row.reviewer_role, row.reviewer_model) == ("STUDENT", MODEL)
+    assert row.answered_by == "some/routed-model"
     assert row.chosen_supporting is picks_supporting
-    assert row.approved is False
-    assert (row.comment, row.issue) == ("wrong medium", "")
+    assert row.value_read == "21 min"
+    assert (row.approved, row.comment, row.issue) == (False, "wrong medium", "")
     assert row.time_to_decide_s is not None
     (tally,) = summary.tallies
     assert (tally.approved, tally.disapproved, tally.issues) == (0, 1, 0)
     assert (tally.distractors, tally.distractors_caught) == (1, int(picks_supporting))
+    assert tally.values_agreed == 0
+    assert len(model.calls) == 2
+
+
+def test_a_router_that_answers_the_two_steps_with_two_models_is_recorded_with_both(engine):
+    item = an_item()
+    load(engine, item)
+    router = Reviewer(ReviewerRole.STUDENT, "typesafe/jev-router")
+    model = Scripted(
+        *approving(item), answered_by=["openai/gpt-6-luna", "deepseek/deepseek-v4.1-flash"]
+    )
+
+    simulated_review.run(engine, [router], lambda model_id: model)
+
+    (row,) = decisions(engine)
+    assert row.reviewer_model == "typesafe/jev-router"
+    assert row.answered_by == "openai/gpt-6-luna, deepseek/deepseek-v4.1-flash"
+
+
+def test_the_second_step_is_asked_only_after_the_first_is_written_and_sees_the_reveal(engine):
+    item = an_item()
+    load(engine, item)
+    model = Scripted(*approving(item))
+
+    simulated_review.run(engine, [STUDENT], lambda model_id: model)
+
+    first, second = model.calls
+    assert first["system"] == simulated_review.CHOICE_INSTRUCTION
+    assert first["messages"] == [{"role": "user", "content": screen(item)}]
+    assert second["system"] == simulated_review.VERDICT_INSTRUCTION
+    assert second["messages"] == [
+        {"role": "user", "content": reveal(item, store.Choice(True, "39 min"))}
+    ]
+    assert "Value: 39 min" not in first["messages"][0]["content"]
+
+
+def test_a_value_read_that_agrees_with_the_stored_one_is_counted(engine):
+    one, two = an_item("i1"), an_item("i2")
+    load(engine, one, two)
+    model = Scripted(
+        choosing(one, value_read="39 ± 1 min"),
+        APPROVING,
+        choosing(two, value_read="40 min"),
+        APPROVING,
+    )
+
+    summary = simulated_review.run(engine, [STUDENT], lambda model_id: model)
+
+    assert summary.tallies[0].values_agreed == 1
+    assert summary.tallies[0].approved == 2
 
 
 def test_a_second_occurrence_has_no_right_answer_and_is_not_counted_as_one(engine):
     item = an_item(second_kind=SecondTextKind.SECOND_OCCURRENCE, distractor_type=None)
     load(engine, item)
 
-    summary = simulated_review.run(engine, [STUDENT], lambda m: Scripted(approving(item)))
+    summary = simulated_review.run(engine, [STUDENT], lambda m: Scripted(*approving(item)))
 
     (tally,) = summary.tallies
     assert tally.approved == 1
     assert (tally.distractors, tally.distractors_caught) == (0, 0)
 
 
-def test_an_issue_is_recorded_as_one_with_its_text_and_no_verdict(engine):
+def test_an_issue_at_the_first_step_is_recorded_with_no_choice_and_no_second_call(engine):
     load(engine, an_item())
-    answer = Answer(choice="ISSUE", approved=True, comment="neither text states 39 min")
+    model = Scripted(Chosen(choice="ISSUE", value_read="", comment="neither text states a time"))
 
-    summary = simulated_review.run(engine, [STUDENT], lambda model_id: Scripted(answer))
+    summary = simulated_review.run(engine, [STUDENT], lambda model_id: model)
 
     (row,) = decisions(engine)
-    assert row.issue == "neither text states 39 min"
-    assert (row.chosen_supporting, row.approved, row.comment) == (None, None, "")
+    assert row.issue == "neither text states a time"
+    assert (row.chosen_supporting, row.approved, row.value_read) == (None, None, "")
     assert (row.reviewer_role, row.reviewer_model) == ("STUDENT", MODEL)
     assert summary.tallies[0].issues == 1
-    assert summary.tallies[0].approved == 0
+    assert len(model.calls) == 1
 
 
-def test_an_issue_with_no_text_writes_nothing_and_is_reported(engine):
-    load(engine, an_item())
-    answer = Answer(choice="ISSUE", approved=True, comment="  ")
+def test_an_issue_at_the_second_step_keeps_the_choice_and_the_value_read(engine):
+    item = an_item()
+    load(engine, item)
+    model = Scripted(
+        choosing(item, value_read="39 min"),
+        Judged(verdict="ISSUE", comment="the stored unit is hours, the text says minutes"),
+    )
 
-    summary = simulated_review.run(engine, [STUDENT], lambda model_id: Scripted(answer))
+    summary = simulated_review.run(engine, [STUDENT], lambda model_id: model)
 
-    assert decisions(engine) == []
+    (row,) = decisions(engine)
+    assert (row.chosen_supporting, row.value_read) == (True, "39 min")
+    assert row.approved is None
+    assert row.issue == "the stored unit is hours, the text says minutes"
+    assert (summary.tallies[0].issues, summary.tallies[0].approved) == (1, 0)
+
+
+@pytest.mark.parametrize(
+    "answers",
+    [
+        [Chosen(choice="ISSUE", value_read="", comment="  ")],
+        [Chosen(choice="A", value_read="39", comment=""), Judged(verdict="ISSUE", comment="")],
+    ],
+)
+def test_an_issue_with_no_text_writes_no_issue_and_is_reported(engine, answers):
+    item = an_item()
+    load(engine, item)
+    if answers[0].choice == "A":
+        answers[0] = choosing(item)
+
+    summary = simulated_review.run(engine, [STUDENT], lambda model_id: Scripted(*answers))
+
+    assert all(row.issue == "" for row in decisions(engine))
     assert summary.tallies[0].failures == [("i1", "an issue with no text")]
+    assert summary.tallies[0].issues == 0
 
 
-def test_the_model_is_shown_the_screen_and_the_one_instruction_and_no_one_s_decision(engine):
+def test_the_model_is_shown_no_one_s_decision_and_no_role(engine):
     item = an_item()
     load(engine, item)
     store.record_decision(
@@ -303,15 +454,13 @@ def test_the_model_is_shown_the_screen_and_the_one_instruction_and_no_one_s_deci
         approved=False,
         comment="alice thought the strain was wrong",
     )
-    model = Scripted(approving(item))
+    model = Scripted(*approving(item))
 
     simulated_review.run(engine, [STUDENT], lambda model_id: model)
 
-    (call,) = model.calls
-    assert call["system"] == simulated_review.INSTRUCTION
-    assert call["messages"] == [{"role": "user", "content": screen(item)}]
-    assert "alice" not in json.dumps(call)
-    assert "student" not in call["system"].lower()
+    for call in model.calls:
+        assert "alice" not in json.dumps(call)
+        assert "student" not in call["system"].lower()
 
 
 def test_only_the_items_assigned_to_a_role_are_reviewed(engine):
@@ -320,20 +469,19 @@ def test_only_the_items_assigned_to_a_role_are_reviewed(engine):
     half = Reviewer(ReviewerRole.SCIENTIST, MODEL, share=0.5)
     expected = [item.item_id for item in items if assigned(item.item_id, half)]
     assert 0 < len(expected) < len(items)
-    model = Scripted(*[approving(item) for item in items if item.item_id in expected])
+    answers = [a for item in items if item.item_id in expected for a in approving(item)]
+    model = Scripted(*answers)
 
     simulated_review.run(engine, [half], lambda model_id: model)
 
     assert [row.item_id for row in decisions(engine)] == expected
-    assert len(model.calls) == len(expected)
+    assert len(model.calls) == 2 * len(expected)
 
 
 def test_a_second_run_asks_about_nothing_already_decided(engine):
     one, two = an_item("i1"), an_item("i2")
     load(engine, one, two)
-    simulated_review.run(
-        engine, [STUDENT], lambda m: Scripted(approving(one), approving(two)), ceiling=Ceiling()
-    )
+    simulated_review.run(engine, [STUDENT], lambda m: Scripted(*approving(one), *approving(two)))
     again = Scripted()
 
     summary = simulated_review.run(engine, [STUDENT], lambda model_id: again)
@@ -343,15 +491,33 @@ def test_a_second_run_asks_about_nothing_already_decided(engine):
     assert summary.spend_usd == 0
 
 
+def test_an_item_left_after_its_first_step_gets_only_its_second_on_the_next_run(engine):
+    item = an_item()
+    load(engine, item)
+    cut_off = RuntimeError("timed out")
+    simulated_review.run(engine, [STUDENT], lambda m: Scripted(choosing(item), cut_off))
+    (row,) = decisions(engine)
+    assert row.approved is None
+    resumed = Scripted(APPROVING)
+
+    summary = simulated_review.run(engine, [STUDENT], lambda model_id: resumed)
+
+    assert len(resumed.calls) == 1
+    assert resumed.calls[0]["system"] == simulated_review.VERDICT_INSTRUCTION
+    (row,) = decisions(engine)
+    assert (row.chosen_supporting, row.value_read, row.approved) == (True, "39 min", True)
+    assert summary.tallies[0].approved == 1
+    # The choice was counted on the run that made it, not again.
+    assert summary.tallies[0].distractors == 0
+
+
 def test_each_reviewer_decides_for_itself_so_an_item_can_carry_two_ratings(engine):
     item = an_item()
     load(engine, item)
     senior = Reviewer(ReviewerRole.SENIOR_SCIENTIST, "anthropic/claude-opus-5.5")
     models = {
-        MODEL: Scripted(approving(item)),
-        senior.model: Scripted(
-            Answer(choice=label_of(item, supporting=True), approved=False, comment="strain differs")
-        ),
+        MODEL: Scripted(*approving(item)),
+        senior.model: Scripted(choosing(item), DISAPPROVING),
     }
 
     simulated_review.run(engine, [STUDENT, senior], models.__getitem__)
@@ -360,20 +526,20 @@ def test_each_reviewer_decides_for_itself_so_an_item_can_carry_two_ratings(engin
     assert by_role == {"STUDENT": True, "SENIOR_SCIENTIST": False}
 
 
-def test_a_failed_call_writes_nothing_is_charged_and_does_not_stop_the_next_item(engine):
+def test_a_failed_first_call_writes_nothing_is_charged_and_does_not_stop_the_next_item(engine):
     one, two = an_item("i1"), an_item("i2")
     load(engine, one, two)
-    unreadable = RuntimeError("output does not match Answer")
+    unreadable = RuntimeError("output does not match Chosen")
     unreadable.usage = USAGE
-    model = Scripted(unreadable, approving(two))
+    model = Scripted(unreadable, *approving(two))
 
     summary = simulated_review.run(engine, [STUDENT], lambda model_id: model)
 
     assert [row.item_id for row in decisions(engine)] == ["i2"]
     (tally,) = summary.tallies
-    assert tally.failures == [("i1", "RuntimeError: output does not match Answer")]
-    assert summary.spend_usd == pytest.approx(2 * ONE_CALL_USD)
-    assert tally.spend_usd == pytest.approx(2 * ONE_CALL_USD)
+    assert tally.failures == [("i1", "RuntimeError: output does not match Chosen")]
+    assert summary.spend_usd == pytest.approx(3 * ONE_CALL_USD)
+    assert tally.spend_usd == pytest.approx(3 * ONE_CALL_USD)
     assert summary.stopped == ""
 
 
@@ -397,18 +563,18 @@ def test_a_refusal_of_the_account_stops_the_run_and_every_later_reviewer(engine)
 def test_the_run_budget_stops_the_run_before_the_call_that_would_cross_it(engine):
     one, two = an_item("i1"), an_item("i2")
     load(engine, one, two)
-    model = Scripted(approving(one), approving(two))
-    # Room for the first projection, not for the first call's cost plus a second projection.
-    budget = ONE_PROJECTION_USD + ONE_CALL_USD / 2
+    model = Scripted(*approving(one), *approving(two))
+    # Room for the first item's two calls, not for the second item's first projection.
+    budget = 2 * ONE_CALL_USD + ONE_PROJECTION_USD - ONE_CALL_USD / 2
 
     summary = simulated_review.run(
         engine, [STUDENT], lambda model_id: model, ceiling=Ceiling(per_paper=1.0, per_run=budget)
     )
 
-    assert [row.item_id for row in decisions(engine)] == ["i1"]
-    assert len(model.calls) == 1
+    assert [(row.item_id, row.approved) for row in decisions(engine)] == [("i1", True)]
+    assert len(model.calls) == 2
     assert "run ceiling" in summary.stopped
-    assert summary.spend_usd == pytest.approx(ONE_CALL_USD)
+    assert summary.spend_usd == pytest.approx(2 * ONE_CALL_USD)
 
 
 def test_a_decision_over_its_own_ceiling_is_skipped_and_the_run_goes_on(engine):
@@ -443,15 +609,15 @@ def test_a_model_with_no_price_is_refused_before_any_model_is_built(engine):
     assert decisions(engine) == []
 
 
-def test_a_decision_the_store_cannot_save_stops_the_run(engine, monkeypatch):
+def test_a_row_the_store_cannot_write_stops_the_run(engine, monkeypatch):
     one, two = an_item("i1"), an_item("i2")
     load(engine, one, two)
-    model = Scripted(approving(one), approving(two))
+    model = Scripted(*approving(one), *approving(two))
 
     def refuse(*args, **kwargs):
         raise store.DecisionNotSaved("OperationalError: connection refused")
 
-    monkeypatch.setattr(store, "record_decision", refuse)
+    monkeypatch.setattr(store, "record_choice", refuse)
 
     with pytest.raises(store.DecisionNotSaved):
         simulated_review.run(engine, [STUDENT], lambda model_id: model)
@@ -476,7 +642,7 @@ def test_the_command_runs_each_reviewer_and_prints_a_summary_marked_simulated(
 ):
     item = an_item()
     load(database.engine, item)
-    monkeypatch.setattr(cli, "_model", lambda model_id: Scripted(approving(item)))
+    monkeypatch.setattr(cli, "_model", lambda model_id: Scripted(*approving(item)))
 
     code = cli.main(["simulate-review", "--reviewer", f"student={MODEL}", "--db-url", database.url])
 
@@ -484,6 +650,7 @@ def test_the_command_runs_each_reviewer_and_prints_a_summary_marked_simulated(
     printed = json.loads(capsys.readouterr().out)
     assert printed["simulated"] is True
     assert printed["reviewers"][0]["approved"] == 1
+    assert printed["reviewers"][0]["values_agreed"] == 1
     assert printed["reviewers"][0]["reviewer"] == STUDENT.name
     assert [row.reviewer_role for row in decisions(database.engine)] == ["STUDENT"]
 

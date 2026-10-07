@@ -11,11 +11,13 @@ decision. The reviewer is the check that the mechanical checks cannot be.
 ### Requirement: One claim, one item, one screen
 
 Each verified claim SHALL become exactly one review item, and a reviewer SHALL be shown one item at
-a time. An item SHALL show: the property question; the value as the paper states it, with its unit,
-and the paper's own term for the property beside the question's; the paper's citation (title, year,
-identifiers); a condition block listing each condition and method field with its quote and its
-provenance state; and two texts from the paper, each with its section path and container, in an
-order that carries no information about which is which.
+a time, in two steps. The first step SHALL show: the property question; the paper's citation
+(title, year, identifiers); and two texts from the paper, each with its section path and container,
+in an order that carries no information about which is which. It SHALL NOT show the value, the
+paper's own term for the property, or the conditions: each points at the text that is meant, and
+choosing the text is the judgement the step asks for. The second step SHALL add: the value as the
+paper states it, with its unit; the paper's own term for the property beside the question's; and a
+condition block listing each condition and method field with its quote and its provenance state.
 
 Each text SHALL be shown as the paper wrote it: the value under review SHALL NOT be highlighted or
 otherwise distinguished within a text, so that nothing on the screen points at the number the
@@ -27,7 +29,11 @@ Each text SHALL be at most a few sentences.
 
 #### Scenario: An item is shown
 - **WHEN** a reviewer opens the next item
-- **THEN** the question, the value, the citation, the condition block and two located texts are all on one screen, and nothing about the second text's kind is shown
+- **THEN** the question, the citation and two located texts are on the screen, the value and the condition block are not, and nothing about the second text's kind is shown
+
+#### Scenario: The entry is revealed
+- **WHEN** a reviewer has chosen a text and written the value they read
+- **THEN** the value, the paper's term and the condition block appear on the same screen as the texts, and the reviewer's own choice and reading are repeated to them
 
 #### Scenario: A cited sentence appears as a text
 - **WHEN** one of the two texts contains a bibliographic citation marker in the paper
@@ -41,25 +47,36 @@ Each text SHALL be at most a few sentences.
 - **WHEN** the claim's quote is a table cell
 - **THEN** the text shows the cell with its row and column headers, and the whole table appears once beneath the two texts with its caption, that cell marked and the other text's cell marked the same way if it is in the same table
 
-### Requirement: The reviewer always chooses between two texts, and separately gives a verdict
+### Requirement: The reviewer first chooses a text and reads its value, then gives a verdict
 
-A reviewer SHALL be required to choose which of the two texts better fits the value under review,
-and SHALL separately record whether they approve or disapprove that this value, under the conditions
-shown, came from this paper. Both are required before the next item is offered. The reviewer SHALL
-be able to add a free-text comment. An item SHALL NOT be skipped silently: a reviewer who cannot
-decide SHALL disapprove, and the comment is where they say why, or, where the reviewer is offered
-it, SHALL raise an issue in place of both the choice and the verdict, with its text.
+A reviewer SHALL be required, with the stored value withheld, to choose which of the two texts
+states a value for the quantity under review and to write the value that text states, as written.
+That choice and reading SHALL be recorded before the stored value is shown. The reviewer SHALL then
+record whether they approve or disapprove that this value, under the conditions shown, came from
+this paper, and SHALL be able to add a free-text comment. Both steps are required before the next
+item is offered. An item SHALL NOT be skipped silently: a reviewer who cannot decide SHALL
+disapprove, and the comment is where they say why, or SHALL raise an issue, at either step, in
+place of what remains, with its text.
 
 The choice is made every time, whether or not the second text is a distractor, so that the presence
-of a choice carries no information about the item.
+of a choice carries no information about the item. The value is written before the reveal so that
+the reviewer's reading is a measurement of the entry the extractor's answer cannot have steered.
 
 #### Scenario: A reviewer completes an item
-- **WHEN** a reviewer has chosen a text and given a verdict
-- **THEN** both are recorded at once, with the comment if any, and the next item is offered
+- **WHEN** a reviewer has chosen a text and written its value, and then, shown the stored entry, given a verdict
+- **THEN** one decision is recorded with the choice, the value read, the verdict and the comment if any, and the next item is offered
 
-#### Scenario: A reviewer gives a verdict without choosing a text
-- **WHEN** a reviewer records approval or disapproval but has not chosen a text
-- **THEN** the item is not completed, and the reviewer is told a choice is required
+#### Scenario: A reviewer continues without choosing a text or without a value
+- **WHEN** a reviewer continues from the first step with no text chosen, or with no value written
+- **THEN** nothing is revealed, nothing is recorded, and the reviewer is told which is required
+
+#### Scenario: A reviewer gives no verdict
+- **WHEN** a reviewer saves the second step with neither approval nor disapproval
+- **THEN** the item is not completed, and the reviewer is told a verdict is required
+
+#### Scenario: A reviewer leaves between the steps
+- **WHEN** a reviewer has taken the first step on an item and opens the page again
+- **THEN** that item is offered first, at its second step, with their choice and reading repeated
 
 ### Requirement: The second text is a distractor or a second occurrence, and its kind is recorded
 
@@ -109,13 +126,15 @@ its location, kind and type; the tables the texts sit in, as shown; every condit
 with its quote and provenance state; and the fingerprint of what produced the claim (model,
 instruction fingerprint, article, run). For
 every decision, the record SHALL hold: which text was chosen; whether it was the supporting text;
-the approval or disapproval; the comment; the reviewer's account where one is signed in, and the
-absence of one otherwise; the reviewer's role where one is known; the model, where a model and not
-a person decided; and the time.
+the value the reviewer read from it, written before the stored value was shown; the approval or
+disapproval; the comment; the reviewer's account where one is signed in, and the absence of one
+otherwise; the reviewer's role where one is known; the model, where a model and not a person
+decided, and the model the provider says answered where that differs; and the time.
 
-An issue raised in place of a decision SHALL be recorded as one: its text, and neither a choice nor
-a verdict. An issue with no text SHALL be refused. An item a reviewer raised an issue on is decided
-for that reviewer and SHALL NOT be offered to them again.
+An issue raised in place of a decision SHALL be recorded as one: its text, no verdict, and the
+choice and value read only if the issue was raised after them. An issue with no text SHALL be
+refused. An item a reviewer raised an issue on is decided for that reviewer and SHALL NOT be
+offered to them again.
 
 A decision SHALL be written at the moment it is given, and the write SHALL **fail closed**: a
 decision that could not be written SHALL be reported to the reviewer as not saved, and the item
@@ -134,9 +153,13 @@ which is the opposite of the trail's case, where a lost row costs one row.
 - **WHEN** a deployment has no identity configured and a reviewer completes an item
 - **THEN** the decision is recorded with no account, and nothing else about it differs
 
-#### Scenario: An issue is raised
-- **WHEN** a reviewer raises an issue on an item and gives its text
+#### Scenario: An issue is raised before any text is chosen
+- **WHEN** a reviewer raises an issue on an item at the first step and gives its text
 - **THEN** the row holds the text, no choice and no verdict, and the item is not offered to that reviewer again
+
+#### Scenario: An issue is raised after the reveal
+- **WHEN** a reviewer raises an issue at the second step and gives its text
+- **THEN** the row keeps the choice and the value read, holds the text and no verdict, and the item is not offered to that reviewer again
 
 #### Scenario: An issue with no text
 - **WHEN** an issue is raised with empty text
@@ -174,10 +197,11 @@ Which items a role is assigned SHALL be fixed for the role and the item, the sam
 drawn independently for each role, so that an item may be decided by several roles, by one, or by
 none.
 
-A simulated reviewer SHALL be shown what a human reviewer is shown and nothing else: never the
-second text's kind or type, and never another reviewer's decision, choice or comment. Every role
-SHALL be given the same instruction, and the instruction SHALL NOT name a role: a role is which
-model answers, not a manner of answering.
+A simulated reviewer SHALL be shown what a human reviewer is shown and nothing else, step by
+step: the first step without the stored value, the second with it, the reviewer's own reading
+recorded between the two. Never the second text's kind or type, and never another reviewer's
+decision, choice or comment. Every role SHALL be given the same instruction, and the instruction
+SHALL NOT name a role: a role is which model answers, not a manner of answering.
 
 Every decision or issue a model writes SHALL record the model and the role, and SHALL be
 distinguishable from a person's by the record alone. Any figure drawn from simulated decisions
@@ -188,8 +212,12 @@ either bound SHALL NOT be made. An item whose call fails SHALL get no decision a
 again on the next run. A refusal of the provider account, or the run's bound, SHALL stop the run.
 
 #### Scenario: A model decides an item
-- **WHEN** a simulated reviewer answers an item with a text and a verdict
-- **THEN** the decision is recorded with its role and its model, and whether the chosen text was the supporting one
+- **WHEN** a simulated reviewer answers an item's first step with a text and a value, and its second with a verdict
+- **THEN** one decision is recorded with its role, its model, the model that answered, the value read, and whether the chosen text was the supporting one
+
+#### Scenario: A model is cut off between the steps
+- **WHEN** a simulated reviewer's first step was recorded and its second step failed
+- **THEN** the next run asks it only the second step for that item
 
 #### Scenario: The screen does not depend on the second text's kind
 - **WHEN** two items differ only in the kind and type of their second text

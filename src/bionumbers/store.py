@@ -25,7 +25,9 @@ No Streamlit and nothing from `scinumbers_ask` (design D9): the page builds the 
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -47,6 +49,7 @@ from sqlalchemy import (
     insert,
     select,
     text,
+    update,
 )
 
 from bionumbers import curated
@@ -120,8 +123,11 @@ review_item = Table(
     ForeignKeyConstraint(["run_id", "pmcid"], ["review_paper.run_id", "review_paper.pmcid"]),
 )
 
-#: What a reviewer decided -- or the issue they raised instead -- once per item per reviewer.
-#: `reviewer` is null where no identity is
+#: What a reviewer decided -- or the issue they raised instead -- once per item per reviewer,
+#: written in two steps (ADR-0970): the choice of text with the value the reviewer read from it,
+#: *then*, once the stored value is revealed, the verdict. One row carries both; between the two
+#: steps it is an *open* row (`approved` null, `issue` empty) and the item is still this
+#: reviewer's to finish. `reviewer` is null where no identity is
 #: configured, which `user-identity` already allows and this spec repeats: the decision is recorded
 #: with no account and nothing else about it differs.
 #:
@@ -143,23 +149,31 @@ review_decision = Table(
     ),
     Column("item_id", Text, ForeignKey("review_item.item_id"), nullable=False),
     Column("reviewer", Text),
-    # Both null on an issue row and both set on every other: a reviewer who raises an issue has
-    # said the item cannot be judged, and a choice or verdict stored beside that would be one
-    # nobody gave. No check constraint says so -- one could not be added to a deployed table by
-    # an idempotent statement, and a rule some databases enforce reads as one all of them do --
-    # so the two writers below are the enforcement: each can only write its own shape.
+    # `approved` is null on an open row and on an issue row; `chosen_supporting` is null only on
+    # an issue raised before any text was chosen. A verdict is never stored beside an issue: a
+    # reviewer who says the item cannot be judged has given none. No check constraint says so --
+    # one could not be added to a deployed table by an idempotent statement, and a rule some
+    # databases enforce reads as one all of them do -- so the writers below are the enforcement:
+    # each can only write its own shape.
     Column("chosen_supporting", Boolean),
     Column("approved", Boolean),
     Column("comment", Text, nullable=False, default=""),
     Column("decided_at", DateTime(timezone=True), nullable=False),
     Column("time_to_decide_s", Float),
     Column("issue", Text, nullable=False, default=""),
+    # The value the reviewer read off the text they chose, written *before* the stored value is
+    # shown to them: the one figure here that an extractor's answer cannot have steered.
+    Column("value_read", Text, nullable=False, default=""),
     # The rung of the trust ladder the reviewer stands on (`records.ReviewerRole`), null where
     # none was recorded. `reviewer_model` is the model id when a model decided and null for a
     # person: a row with a model and a role other than `AI` is a *simulated* review, and every
     # figure drawn from it has to say so (ADR-0960).
     Column("reviewer_role", Text),
     Column("reviewer_model", Text),
+    # The model the provider says answered, where that differs from `reviewer_model`: a router
+    # names itself in the request and another model in the reply. Comma-joined when the two
+    # steps were answered by different ones. Null for a person.
+    Column("answered_by", Text),
 )
 
 
@@ -184,6 +198,13 @@ curated_entry = Table(
     Column("comments", Text, nullable=False, default=""),
     Column("loaded_at", DateTime(timezone=True), nullable=False),
 )
+
+@dataclass(frozen=True)
+class Choice:
+    """A reviewer's open first step on an item: which text, and the value they read from it."""
+
+    chosen_supporting: bool
+    value_read: str
 
 
 class DecisionNotSaved(RuntimeError):
@@ -338,16 +359,32 @@ def next_item(engine: Any, reviewer: str | None) -> ReviewItem | None:
         review_item.c.pmcid,
         position.label("position"),
     ).subquery()
+    # An item this reviewer has chosen a text for but not yet judged comes first, whatever its
+    # position: the reveal belongs to the choice just made, and an item left half-done is one
+    # whose second step would otherwise be made from memory of a screen seen items ago.
     statement = (
         select(ordered.c.item_json)
         .where(_undecided(ordered.c.item_id, reviewer))
-        .order_by(ordered.c.position, ordered.c.pmcid, ordered.c.run_id)
+        .order_by(
+            _has_open_row(ordered.c.item_id, reviewer).desc(),
+            ordered.c.position,
+            ordered.c.pmcid,
+            ordered.c.run_id,
+        )
         .limit(1)
     )
     with engine.begin() as conn:
         _bound(conn)
         row = conn.execute(statement).first()
     return None if row is None else ReviewItem.model_validate_json(row.item_json)
+
+
+def open_choice(engine: Any, item_id: str, reviewer: str | None) -> Choice | None:
+    """This reviewer's first step on the item, if they have taken it and not the second."""
+    with engine.begin() as conn:
+        _bound(conn)
+        row = conn.execute(_open_row(item_id, reviewer)).first()
+    return None if row is None else Choice(bool(row.chosen_supporting), row.value_read)
 
 
 def remaining(engine: Any, reviewer: str | None) -> int:
@@ -381,6 +418,81 @@ def undecided_items(engine: Any, reviewer: str | None) -> list[ReviewItem]:
     return [ReviewItem.model_validate_json(row.item_json) for row in rows]
 
 
+def record_choice(
+    engine: Any,
+    item_id: str,
+    *,
+    reviewer: str | None,
+    chosen_supporting: bool,
+    value_read: str,
+    time_to_decide_s: float | None = None,
+    reviewer_role: ReviewerRole | None = None,
+    reviewer_model: str | None = None,
+    answered_by: str | None = None,
+) -> None:
+    """The first step: which text, and the value read from it, before the stored value is shown.
+
+    Opens the row `record_verdict` or `record_issue` will complete. Refused -- `DecisionNotSaved`
+    -- when this reviewer already has any row on the item: a second choice would either overwrite
+    a verdict or stand beside one, and both are a decision the record cannot explain. Fails closed
+    (ADR-0930) like every writer here.
+    """
+    with _closed(engine) as conn:
+        _known(conn, item_id)
+        if conn.execute(_any_row(item_id, reviewer)).first() is not None:
+            raise DecisionNotSaved(f"{reviewer!r} has already chosen on {item_id!r}")
+        conn.execute(
+            insert(review_decision).values(
+                item_id=item_id,
+                reviewer=reviewer,
+                chosen_supporting=chosen_supporting,
+                approved=None,
+                comment="",
+                issue="",
+                value_read=value_read,
+                decided_at=datetime.now(UTC),
+                time_to_decide_s=time_to_decide_s,
+                reviewer_role=reviewer_role.value if reviewer_role else None,
+                reviewer_model=reviewer_model,
+                answered_by=answered_by,
+            )
+        )
+
+
+def record_verdict(
+    engine: Any,
+    item_id: str,
+    *,
+    reviewer: str | None,
+    approved: bool,
+    comment: str = "",
+    time_to_decide_s: float | None = None,
+    answered_by: str | None = None,
+) -> None:
+    """The second step: the verdict, once the stored value and conditions have been revealed.
+
+    Completes this reviewer's open row on the item; `DecisionNotSaved` when there is none, because
+    a verdict with no choice before it is the one-step decision the blind design exists to avoid.
+    The time adds to the choice's, so `time_to_decide_s` is the whole item's.
+    """
+    with _closed(engine) as conn:
+        _known(conn, item_id)
+        row = conn.execute(_open_row(item_id, reviewer)).first()
+        if row is None:
+            raise DecisionNotSaved(f"{reviewer!r} has no open choice on {item_id!r} to judge")
+        conn.execute(
+            update(review_decision)
+            .where(review_decision.c.id == row.id)
+            .values(
+                approved=approved,
+                comment=comment,
+                decided_at=datetime.now(UTC),
+                time_to_decide_s=_added(row.time_to_decide_s, time_to_decide_s),
+                answered_by=_joined(row.answered_by, answered_by),
+            )
+        )
+
+
 def record_decision(
     engine: Any,
     item_id: str,
@@ -393,16 +505,13 @@ def record_decision(
     reviewer_role: ReviewerRole | None = None,
     reviewer_model: str | None = None,
 ) -> None:
-    """Write one decision, or raise. Returns only when the row is committed.
+    """Both steps in one write, for a driver that showed the value with the texts.
 
-    Fails closed (ADR-0930): every failure becomes `DecisionNotSaved` with the cause chained, and
-    there is no path that returns quietly without a row. The swallow the trail store performs is
-    what this must never do -- and it is an easy inversion to make by accident, which is why the
-    two modules say so in each other's direction.
-
-    An unknown `item_id` is a failure of the same kind, not a no-op: it means the page is offering
-    an item this database does not have, and a reviewer who was told "saved" would have been told
-    a falsehood.
+    The form the first review page used, kept for the rows it wrote and the tests that read them;
+    the page and the simulated review now take the two steps apart. Fails closed (ADR-0930):
+    every failure becomes `DecisionNotSaved` with the cause chained, and there is no path that
+    returns quietly without a row. An unknown `item_id` is a failure of the same kind, not a
+    no-op: a reviewer told "saved" would have been told a falsehood.
     """
     _write_decision(
         engine,
@@ -427,53 +536,136 @@ def record_issue(
     time_to_decide_s: float | None = None,
     reviewer_role: ReviewerRole | None = None,
     reviewer_model: str | None = None,
+    answered_by: str | None = None,
 ) -> None:
-    """Write one raised issue, or raise. The third outcome, in place of a choice and a verdict.
+    """Write one raised issue, or raise. The third outcome, at either step.
 
-    A row like a decision's -- the item is not offered to this reviewer again -- with the choice
-    and the verdict null, because a reviewer who says the item cannot be judged has given
-    neither. Fails closed exactly as `record_decision` does.
+    Raised before any text was chosen, it is a row with the choice and the verdict null; raised
+    after the choice, it completes the open row, keeping the choice and the value read and
+    leaving the verdict null -- a reviewer who says the item cannot be judged has given none.
+    Either way the item is not offered to this reviewer again. Fails closed like every writer.
 
     Raises `ValueError` for an issue with no text. That refusal is here rather than in a caller
-    because there are two callers already in prospect, the page and the simulated review, and an
-    issue row with nothing in it is indistinguishable from a decision that lost both its halves.
+    because there are two callers, the page and the simulated review, and an issue row with
+    nothing in it is indistinguishable from a decision that lost both its halves.
     """
     if not issue.strip():
         raise ValueError("an issue needs its text: an empty one says nothing was wrong")
-    _write_decision(
-        engine,
-        item_id,
-        reviewer=reviewer,
-        chosen_supporting=None,
-        approved=None,
-        comment="",
-        issue=issue,
-        time_to_decide_s=time_to_decide_s,
-        reviewer_role=reviewer_role.value if reviewer_role else None,
-        reviewer_model=reviewer_model,
-    )
+    with _closed(engine) as conn:
+        _known(conn, item_id)
+        row = conn.execute(_open_row(item_id, reviewer)).first()
+        if row is not None:
+            conn.execute(
+                update(review_decision)
+                .where(review_decision.c.id == row.id)
+                .values(
+                    issue=issue,
+                    decided_at=datetime.now(UTC),
+                    time_to_decide_s=_added(row.time_to_decide_s, time_to_decide_s),
+                    answered_by=_joined(row.answered_by, answered_by),
+                )
+            )
+            return
+        conn.execute(
+            insert(review_decision).values(
+                item_id=item_id,
+                reviewer=reviewer,
+                chosen_supporting=None,
+                approved=None,
+                comment="",
+                issue=issue,
+                decided_at=datetime.now(UTC),
+                time_to_decide_s=time_to_decide_s,
+                reviewer_role=reviewer_role.value if reviewer_role else None,
+                reviewer_model=reviewer_model,
+                answered_by=answered_by,
+            )
+        )
 
 
 def _write_decision(engine: Any, item_id: str, **values: Any) -> None:
+    with _closed(engine) as conn:
+        _known(conn, item_id)
+        conn.execute(
+            insert(review_decision).values(item_id=item_id, decided_at=datetime.now(UTC), **values)
+        )
+
+
+@contextmanager
+def _closed(engine: Any) -> Iterator[Any]:
+    """One bounded transaction whose every failure is `DecisionNotSaved` (ADR-0930).
+
+    The swallow the trail store performs is what this must never do -- and it is an easy
+    inversion to make by accident, which is why the two modules say so in each other's direction.
+    """
     try:
         with engine.begin() as conn:
             _bound(conn)
-            known_item = select(review_item.c.item_id).where(review_item.c.item_id == item_id)
-            if conn.execute(known_item).first() is None:
-                raise DecisionNotSaved(f"no review item {item_id!r}")
-            conn.execute(
-                insert(review_decision).values(
-                    item_id=item_id, decided_at=datetime.now(UTC), **values
-                )
-            )
+            yield conn
     except DecisionNotSaved:
         raise
     except Exception as exc:
         raise DecisionNotSaved(f"{type(exc).__name__}: {exc}") from exc
 
 
+def _known(conn: Any, item_id: str) -> None:
+    known_item = select(review_item.c.item_id).where(review_item.c.item_id == item_id)
+    if conn.execute(known_item).first() is None:
+        raise DecisionNotSaved(f"no review item {item_id!r}")
+
+
+def _by_reviewer(reviewer: str | None):
+    """`reviewer IS NULL` for the unsigned-in reviewer, never a comparison to a bound NULL, which
+    matches nothing and would re-offer every item for ever (see `_undecided`)."""
+    if reviewer is None:
+        return review_decision.c.reviewer.is_(None)
+    return review_decision.c.reviewer == reviewer
+
+
+def _any_row(item_id: str, reviewer: str | None):
+    return select(review_decision.c.id).where(
+        review_decision.c.item_id == item_id, _by_reviewer(reviewer)
+    )
+
+
+def _open_row(item_id: str, reviewer: str | None):
+    return select(review_decision).where(
+        review_decision.c.item_id == item_id, _by_reviewer(reviewer), _is_open()
+    )
+
+
+def _is_open():
+    """A row with a choice and neither a verdict nor an issue."""
+    return (
+        review_decision.c.approved.is_(None)
+        & (review_decision.c.issue == "")
+        & review_decision.c.chosen_supporting.is_not(None)
+    )
+
+
+def _has_open_row(item_id_column: Any, reviewer: str | None):
+    return (
+        select(review_decision.c.id)
+        .where(review_decision.c.item_id == item_id_column, _by_reviewer(reviewer), _is_open())
+        .exists()
+    )
+
+
+def _added(so_far: float | None, more: float | None) -> float | None:
+    if so_far is None:
+        return more
+    return so_far if more is None else so_far + more
+
+
+def _joined(so_far: str | None, more: str | None) -> str | None:
+    names = [name for name in (so_far, more) if name]
+    return ", ".join(dict.fromkeys(names)) or None
+
+
 def _undecided(item_id_column: Any, reviewer: str | None):
-    """No decision row for this item by this reviewer.
+    """No *completed* row for this item by this reviewer: a verdict given, or an issue raised. An
+    open row -- a choice awaiting its verdict -- leaves the item undecided, and `next_item` serves
+    it first.
 
     The `None` reviewer is a reviewer in its own right -- an unsigned-in deployment, where the
     spec says the decision is recorded with no account and nothing else differs -- so it must
@@ -481,15 +673,12 @@ def _undecided(item_id_column: Any, reviewer: str | None):
     would re-offer every item for ever. Written out rather than left to SQLAlchemy's implicit
     `== None`, so that a reader tidying it into a parameter sees what they are removing.
     """
-    by_reviewer = (
-        review_decision.c.reviewer.is_(None)
-        if reviewer is None
-        else review_decision.c.reviewer == reviewer
-    )
     # A column rather than `literal(1)`: an untyped parameter in the select list of a correlated
     # EXISTS is the kind of thing a backend is free to refuse, and nothing here needs the constant.
     decided = select(review_decision.c.id).where(
-        review_decision.c.item_id == item_id_column, by_reviewer
+        review_decision.c.item_id == item_id_column,
+        _by_reviewer(reviewer),
+        review_decision.c.approved.is_not(None) | (review_decision.c.issue != ""),
     )
     return ~decided.exists()
 

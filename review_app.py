@@ -8,6 +8,13 @@ The door is imported, not copied -- `web.admit` with `check_key=None`, because a
 model credential and this page makes no model call at all. With no `[auth]` configured the door is
 open and decisions record no account, which `user-identity` already requires.
 
+An item is decided in two steps (ADR-0970). First the reviewer sees the quantity, the paper and
+the two texts, chooses the text that states a value for the quantity and writes the value they
+read -- and nothing else: not the stored value, not the paper's own name for it, not the
+conditions, each of which would point at the answer. That choice is written. Only then is the
+entry as stored revealed, and the reviewer approves or disapproves. An issue can be raised at
+either step. A reviewer who leaves after the first step comes back to the second.
+
 Everything that is not a screen element is in `bionumbers.review`, so what the page decides is
 tested without a browser and only the order and lifetime of the elements needs `AppTest`
 (`.claude/rules/streamlit-driver.md`).
@@ -29,19 +36,28 @@ NO_STORE = (
     "secrets and create the tables from sql/review.sql. There is nothing to review until then."
 )
 
-#: The widget key prefixes. Each widget's key is the prefix and the item id, so a new item is a
-#: new set of widgets and starts blank -- a choice or a comment carried over from the last item
-#: is a decision nobody made. Popping the keys from `session_state` after a save, the first
-#: version of this, left the buttons clicked and the comment typed in the browser (seen by Yoav
-#: on 2026-09-22): the widget's own state outlived the key. A fresh key is the mechanism
-#: Streamlit documents for a fresh widget.
+#: The widget key prefixes. Each widget's key is the prefix, the item id and the step, so a new
+#: item -- or the same item's next step -- is a new set of widgets and starts blank -- a choice or
+#: a comment carried over from the last screen is a decision nobody made. Popping the keys from
+#: `session_state` after a save, the first version of this, left the buttons clicked and the
+#: comment typed in the browser (seen by Yoav on 2026-09-22): the widget's own state outlived the
+#: key. A fresh key is the mechanism Streamlit documents for a fresh widget.
 CHOICE_KEY = "bionumbers.review.choice"
+VALUE_KEY = "bionumbers.review.value"
 VERDICT_KEY = "bionumbers.review.verdict"
 COMMENT_KEY = "bionumbers.review.comment"
-#: `(item id, monotonic seconds)` for the item now on screen. Keyed by the item because the script
-#: reruns on every click: a clock restarted per run would measure the last interaction rather than
-#: the decision, and one never restarted would charge this item with the time spent on the last.
+ISSUE_KEY = "bionumbers.review.issue"
+#: `(item id, step, monotonic seconds)` for the screen now showing. Keyed by the item and the step
+#: because the script reruns on every click: a clock restarted per run would measure the last
+#: interaction rather than the decision, and one never restarted would charge this screen with the
+#: time spent on the last.
 STARTED_KEY = "bionumbers.review.started"
+
+#: The two buttons' labels. The issue button says what it is, so a reviewer who means to approve
+#: cannot click it by habit.
+CONTINUE = "Continue"
+SAVE_AND_NEXT = "Save and next"
+RAISE_AN_ISSUE = "Raise an issue"
 
 st.set_page_config(page_title=review.TITLE, page_icon=":material/fact_check:")
 
@@ -83,28 +99,23 @@ if item is None:
     st.info(web.as_text(review.NOTHING_LEFT))
     st.stop()
 
+# The reviewer's first step on this item, if taken: it decides which screen this is.
+choice = store.open_choice(engine, item.item_id, reviewer)
+step = 2 if choice else 1
+key = f"{item.item_id}:{step}"
+
 started = st.session_state.get(STARTED_KEY)
-if started is None or started[0] != item.item_id:
-    started = (item.item_id, time.monotonic())
+if started is None or started[:2] != (item.item_id, step):
+    started = (item.item_id, step, time.monotonic())
     st.session_state[STARTED_KEY] = started
 
 st.subheader(web.as_text(item.question))
-st.markdown(web.as_text(f"### {item.claim.value} {item.claim.unit}".rstrip()))
-# The paper's own term beside the question's: the reviewer is judging whether this paper's
-# "generation time" is the question's "doubling time", and they cannot if only one is on screen.
-st.caption(web.as_text(f"the paper calls it: {item.claim.property_in_paper}"))
 st.caption(web.as_text(review.citation_line(item.paper)))
-
-st.table(
-    [
-        {"Condition": name, "Stated": provenance, "Quote": quote}
-        for name, provenance, quote in review.condition_rows(item.claim)
-    ]
-)
 
 # Both texts, in the order `texts_in_order` gives and never sorted, filtered or labelled further
 # here: which is which is the question being asked. Each text as the paper wrote it, nothing in
-# it emphasised (ADR-0940).
+# it emphasised (ADR-0940). Shown at both steps: the verdict is a judgement of the text against
+# the stored entry, and a reviewer should not have to hold the text in memory across a click.
 for shown in review.texts_in_order(item):
     with st.container(border=True):
         st.markdown(f"**{shown.label}**")
@@ -116,44 +127,129 @@ for shown in review.texts_in_order(item):
 for table in review.tables_html(item):
     st.markdown(table, unsafe_allow_html=True)
 
-# `index=None`, so neither radio carries an answer the reviewer did not give. A default would be
-# recorded verbatim by anyone who clicked straight past it, and it would be the same default every
-# time -- a bias in the dataset with no trace of itself.
-choice = st.radio(
-    "Which text better fits the value?", ["A", "B"], index=None, key=f"{CHOICE_KEY}:{item.item_id}"
-)
-verdict = st.radio(
-    "Did this value come from this paper under these conditions?",
-    [review.APPROVE, review.DISAPPROVE],
-    index=None,
-    key=f"{VERDICT_KEY}:{item.item_id}",
-)
-comment = st.text_area("Comment (optional)", key=f"{COMMENT_KEY}:{item.item_id}")
 
-if st.button("Save and next", type="primary"):
+def _save(write, *, on_saved) -> None:
+    """One write, failing closed (ADR-0930): nothing advances and nothing is cleared on a
+    refusal, so the next click retries this step rather than starting another."""
     try:
-        decision = review.decision_from(item, choice, verdict, comment)
-    except review.Incomplete as incomplete:
-        # The item stays as it is, widgets and all: a reviewer who has given half an answer is
-        # being asked for the other half, not asked again from the start.
-        st.warning(web.as_text(incomplete.message))
+        write()
+    except store.DecisionNotSaved:
+        st.error(web.as_text(review.NOT_SAVED))
     else:
+        on_saved()
+
+
+def _next_screen() -> None:
+    # The next screen brings its own widgets (see the key prefixes above); only the clock is
+    # ours to reset.
+    st.session_state.pop(STARTED_KEY, None)
+    st.rerun()
+
+
+def _elapsed() -> float:
+    return time.monotonic() - started[2]
+
+
+if step == 1:
+    # `index=None`, so the radio carries no answer the reviewer did not give. A default would be
+    # recorded verbatim by anyone who clicked straight past it, and it would be the same default
+    # every time -- a bias in the dataset with no trace of itself.
+    picked = st.radio(review.CHOICE_QUESTION, ["A", "B"], index=None, key=f"{CHOICE_KEY}:{key}")
+    value_read = st.text_input(review.VALUE_QUESTION, key=f"{VALUE_KEY}:{key}")
+    issue = st.text_area(
+        "Something wrong with this entry? Describe it here and raise an issue instead.",
+        key=f"{ISSUE_KEY}:{key}",
+    )
+    go, raise_issue = st.columns(2)
+    if go.button(CONTINUE, type="primary"):
         try:
-            store.record_decision(
-                engine,
-                item.item_id,
-                reviewer=reviewer,
-                chosen_supporting=decision.chosen_supporting,
-                approved=decision.approved,
-                comment=decision.comment,
-                time_to_decide_s=time.monotonic() - started[1],
-            )
-        except store.DecisionNotSaved:
-            # The reviewer's half of failing closed (ADR-0930): nothing advances and nothing is
-            # cleared, so the next click retries this decision rather than starting another.
-            st.error(web.as_text(review.NOT_SAVED))
+            first = review.first_step_from(item, picked, value_read)
+        except review.Incomplete as incomplete:
+            # The screen stays as it is, widgets and all: a reviewer who has given half an answer
+            # is being asked for the other half, not asked again from the start.
+            st.warning(web.as_text(incomplete.message))
         else:
-            # The next item brings its own widgets (see the key prefixes above); only the clock
-            # is ours to reset.
-            st.session_state.pop(STARTED_KEY, None)
-            st.rerun()
+            _save(
+                lambda: store.record_choice(
+                    engine,
+                    item.item_id,
+                    reviewer=reviewer,
+                    chosen_supporting=first.chosen_supporting,
+                    value_read=first.value_read,
+                    time_to_decide_s=_elapsed(),
+                ),
+                on_saved=_next_screen,
+            )
+    if raise_issue.button(RAISE_AN_ISSUE, key=f"issue-button:{key}"):
+        try:
+            text = review.issue_from(issue)
+        except review.Incomplete as incomplete:
+            st.warning(web.as_text(incomplete.message))
+        else:
+            _save(
+                lambda: store.record_issue(
+                    engine, item.item_id, reviewer=reviewer, issue=text, time_to_decide_s=_elapsed()
+                ),
+                on_saved=_next_screen,
+            )
+else:
+    # The reveal: what the reviewer answered, then the entry as stored. The value is shown only
+    # now, after the reading it will be compared with is on record.
+    st.markdown(
+        web.as_text(
+            f"You chose **{review.chosen_label(item, choice.chosen_supporting)}** and read the "
+            f"value as **{choice.value_read}**."
+        )
+    )
+    st.markdown(web.as_text(f"### Stored: {item.claim.value} {item.claim.unit}".rstrip()))
+    # The paper's own term beside the question's: the reviewer is judging whether this paper's
+    # "generation time" is the question's "doubling time", and they cannot if only one is on
+    # screen.
+    st.caption(web.as_text(f"the paper calls it: {item.claim.property_in_paper}"))
+    st.table(
+        [
+            {"Condition": name, "Stated": provenance, "Quote": quote}
+            for name, provenance, quote in review.condition_rows(item.claim)
+        ]
+    )
+    verdict = st.radio(
+        review.VERDICT_QUESTION,
+        [review.APPROVE, review.DISAPPROVE],
+        index=None,
+        key=f"{VERDICT_KEY}:{key}",
+    )
+    comment = st.text_area("Comment (optional)", key=f"{COMMENT_KEY}:{key}")
+    issue = st.text_area(
+        "Something wrong with this entry? Describe it here and raise an issue instead.",
+        key=f"{ISSUE_KEY}:{key}",
+    )
+    go, raise_issue = st.columns(2)
+    if go.button(SAVE_AND_NEXT, type="primary"):
+        try:
+            approved = review.verdict_from(verdict)
+        except review.Incomplete as incomplete:
+            st.warning(web.as_text(incomplete.message))
+        else:
+            _save(
+                lambda: store.record_verdict(
+                    engine,
+                    item.item_id,
+                    reviewer=reviewer,
+                    approved=approved,
+                    comment=comment,
+                    time_to_decide_s=_elapsed(),
+                ),
+                on_saved=_next_screen,
+            )
+    if raise_issue.button(RAISE_AN_ISSUE, key=f"issue-button:{key}"):
+        try:
+            text = review.issue_from(issue)
+        except review.Incomplete as incomplete:
+            st.warning(web.as_text(incomplete.message))
+        else:
+            _save(
+                lambda: store.record_issue(
+                    engine, item.item_id, reviewer=reviewer, issue=text, time_to_decide_s=_elapsed()
+                ),
+                on_saved=_next_screen,
+            )

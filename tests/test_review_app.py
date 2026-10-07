@@ -18,7 +18,7 @@ import ast
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.pool import StaticPool
 from streamlit.testing.v1 import AppTest
 
@@ -56,8 +56,13 @@ def _constant(name: str) -> str:
 
 
 CHOICE_KEY = _constant("CHOICE_KEY")
+VALUE_KEY = _constant("VALUE_KEY")
 VERDICT_KEY = _constant("VERDICT_KEY")
 COMMENT_KEY = _constant("COMMENT_KEY")
+ISSUE_KEY = _constant("ISSUE_KEY")
+CONTINUE = _constant("CONTINUE")
+SAVE_AND_NEXT = _constant("SAVE_AND_NEXT")
+RAISE_AN_ISSUE = _constant("RAISE_AN_ISSUE")
 NO_STORE = _constant("NO_STORE")
 
 QUESTION = "doubling time of Escherichia coli"
@@ -76,6 +81,8 @@ PHRASES = {
     SECOND_SUPPORTING: "at thirty degrees",
     SECOND_SECOND: "before growth resumed",
 }
+#: The stored value of the item each supporting text belongs to, as the reveal prints it.
+STORED = {FIRST_SUPPORTING: "Stored: 39 min", SECOND_SUPPORTING: "Stored: 47 min"}
 
 #: Every token that would tell a reviewer what kind of item they are looking at. The enum members
 #: by name, so a member added later joins the rule.
@@ -198,16 +205,47 @@ def _widget(widgets, prefix: str):
     return found
 
 
-def _decide(
-    at: AppTest, *, choice: str | None, verdict: str | None, comment: str | None = None
-) -> AppTest:
+def _button(at: AppTest, label: str):
+    (found,) = [b for b in at.button if b.label == label]
+    return found
+
+
+def _choose(at: AppTest, *, choice: str | None, value: str | None) -> AppTest:
+    """The first step: a text and the value read from it, then Continue."""
     if choice is not None:
         _widget(at.radio, CHOICE_KEY).set_value(choice)
+    if value is not None:
+        _widget(at.text_input, VALUE_KEY).set_value(value)
+    return _button(at, CONTINUE).click().run()
+
+
+def _judge(at: AppTest, *, verdict: str | None, comment: str | None = None) -> AppTest:
+    """The second step: the verdict, then Save and next."""
     if verdict is not None:
         _widget(at.radio, VERDICT_KEY).set_value(verdict)
     if comment is not None:
         _widget(at.text_area, COMMENT_KEY).set_value(comment)
-    return at.button[0].click().run()
+    return _button(at, SAVE_AND_NEXT).click().run()
+
+
+def _raise(at: AppTest, text: str | None) -> AppTest:
+    if text is not None:
+        _widget(at.text_area, ISSUE_KEY).set_value(text)
+    return _button(at, RAISE_AN_ISSUE).click().run()
+
+
+def _decide(at: AppTest, *, choice: str, verdict: str, comment: str | None = None) -> AppTest:
+    """Both steps of one item, for the cases that only need to get past it."""
+    return _judge(_choose(at, choice=choice, value="some value"), verdict=verdict, comment=comment)
+
+
+def _revealed(at: AppTest) -> bool:
+    return "Stored:" in _texts(at)
+
+
+def _rows(engine):
+    with engine.begin() as conn:
+        return conn.execute(select(store.review_decision)).all()
 
 
 def _the_first_item(at: AppTest) -> tuple[str, str]:
@@ -218,41 +256,85 @@ def _the_first_item(at: AppTest) -> tuple[str, str]:
     return SECOND_SUPPORTING, SECOND_SECOND
 
 
-# --- the open door -----------------------------------------------------------------------------
+# --- the open door, and the two steps -------------------------------------------------------------
 
 
-def test_with_no_identity_configured_an_item_is_shown_with_both_texts(page):
+def test_with_no_identity_configured_an_item_is_shown_with_both_texts_and_without_its_value(page):
+    """The first step (ADR-0970): the quantity, the paper and the two texts, and none of the
+    stored entry -- not the value, not the paper's name for it, not the conditions."""
     at = page.run()
     assert not at.exception
     shown = _the_first_item(at)
     assert _on_screen(at, *shown)
     assert _remaining(at) == 2
-    assert len(at.radio) == 2, "a choice and a verdict, both blank"
-    assert all(radio.value is None for radio in at.radio)
+    assert len(at.radio) == 1, "the choice alone; the verdict waits for the reveal"
+    assert at.radio[0].value is None
+    assert _widget(at.text_input, VALUE_KEY).value == ""
+    everything = _texts(at)
+    assert not _revealed(at)
+    assert "generation time" not in everything
+    assert "Condition" not in everything
 
 
-def test_a_verdict_without_a_choice_is_refused_and_the_item_stays(page):
-    """The spec's own scenario: approval with no text chosen does not complete the item."""
+def test_continuing_without_a_choice_is_refused_and_the_item_stays(page):
     at = page.run()
     shown = _the_first_item(at)
 
-    at = _decide(at, choice=None, verdict=review.APPROVE)
+    at = _choose(at, choice=None, value="39 min")
 
     assert not at.exception
     assert any(review.CHOICE_REQUIRED in w.value for w in at.warning)
     assert _on_screen(at, *shown), "the same item, not the next"
-    assert _remaining(at) == 2
-    assert _widget(at.radio, VERDICT_KEY).value == review.APPROVE, "the half given is kept"
+    assert not _revealed(at)
+    assert _widget(at.text_input, VALUE_KEY).value == "39 min", "the half given is kept"
 
 
-def test_a_choice_and_a_verdict_move_to_the_next_item(page):
+def test_continuing_without_the_value_read_is_refused_and_nothing_is_revealed(page):
+    """The value is typed before the stored one is shown, or the comparison means nothing."""
+    at = page.run()
+
+    at = _choose(at, choice="A", value=None)
+
+    assert not at.exception
+    assert any(review.VALUE_REQUIRED in w.value for w in at.warning)
+    assert not _revealed(at)
+    assert _widget(at.radio, CHOICE_KEY).value == "A"
+
+
+def test_the_choice_is_written_and_reveals_the_stored_entry_for_the_verdict(page, engine):
     at = page.run()
     first = _the_first_item(at)
 
-    at = _decide(at, choice="A", verdict=review.APPROVE, comment="clear enough")
+    at = _choose(at, choice="A", value="39 min")
 
     assert not at.exception
     assert not at.warning and not at.error
+    (row,) = _rows(engine)
+    assert (row.value_read, row.approved, row.issue) == ("39 min", None, "")
+    assert _remaining(at) == 2, "chosen is not yet decided"
+    assert _on_screen(at, *first), "the same item, both texts still in view"
+    everything = _texts(at)
+    assert STORED[first[0]] in everything
+    assert "You chose **A** and read the value as **39 min**" in everything
+    assert "generation time" in everything
+    assert "Condition" in everything
+    assert {radio.key for radio in at.radio} == {f"{VERDICT_KEY}:{row.item_id}:2"}
+    assert at.radio[0].value is None
+
+
+def test_the_verdict_completes_the_item_and_the_next_one_starts_blank_at_the_first_step(
+    page, engine
+):
+    at = page.run()
+    first = _the_first_item(at)
+    at = _choose(at, choice="A", value="39 min")
+
+    at = _judge(at, verdict=review.APPROVE, comment="clear enough")
+
+    assert not at.exception
+    assert not at.warning and not at.error
+    (row,) = _rows(engine)
+    assert (row.chosen_supporting, row.approved, row.comment) == (True, True, "clear enough")
     assert _remaining(at) == 1
     assert not _on_screen(at, first[0]), "the decided item is gone"
     other = (
@@ -264,29 +346,111 @@ def test_a_choice_and_a_verdict_move_to_the_next_item(page):
         )
     )
     assert _on_screen(at, *other)
+    assert not _revealed(at), "the next item is at its first step"
     # The next item starts blank: nothing chosen, nothing typed. Seen otherwise in the browser
     # on 2026-09-22, when the widgets kept one key across items.
-    assert all(radio.value is None for radio in at.radio), "the next item starts blank"
-    assert _widget(at.text_area, COMMENT_KEY).value == "", "the comment box is empty again"
-    assert {radio.key for radio in at.radio}.isdisjoint(
-        {f"{CHOICE_KEY}:i1", f"{VERDICT_KEY}:i1"} if first[0] == FIRST_SUPPORTING else set()
-    ), "the decided item's widgets are gone"
+    assert all(radio.value is None for radio in at.radio)
+    assert _widget(at.text_input, VALUE_KEY).value == ""
+    assert _widget(at.text_area, ISSUE_KEY).value == ""
 
 
-def test_a_decision_the_store_refuses_is_reported_and_the_item_stays(page, monkeypatch):
+def test_a_verdict_without_approve_or_disapprove_is_refused_and_the_reveal_stays(page):
+    at = page.run()
+    at = _choose(at, choice="B", value="21 min")
+
+    at = _judge(at, verdict=None, comment="hmm")
+
+    assert not at.exception
+    assert any(review.VERDICT_REQUIRED in w.value for w in at.warning)
+    assert _revealed(at)
+    assert _widget(at.text_area, COMMENT_KEY).value == "hmm"
+
+
+def test_a_reviewer_who_left_after_the_first_step_comes_back_to_the_second(page, engine):
+    at = page.run()
+    first = _the_first_item(at)
+    _choose(at, choice="A", value="39 min")
+
+    again = AppTest.from_file(str(APP), default_timeout=TIMEOUT).run()
+
+    assert not again.exception
+    assert _on_screen(again, *first), "the half-done item, before any other"
+    assert _revealed(again)
+    assert "read the value as **39 min**" in _texts(again)
+
+
+def test_a_choice_the_store_refuses_is_reported_and_the_item_stays(page, monkeypatch):
     def refusing(*args, **kwargs):
         raise store.DecisionNotSaved("connection refused")
 
-    monkeypatch.setattr(store, "record_decision", refusing)
+    monkeypatch.setattr(store, "record_choice", refusing)
     at = page.run()
     shown = _the_first_item(at)
 
-    at = _decide(at, choice="B", verdict=review.DISAPPROVE)
+    at = _choose(at, choice="B", value="21 min")
 
     assert not at.exception
     assert any(review.NOT_SAVED in e.value for e in at.error)
     assert _on_screen(at, *shown), "the item is still open"
+    assert not _revealed(at)
     assert _remaining(at) == 2
+
+
+def test_a_verdict_the_store_refuses_is_reported_and_the_reveal_stays(page, monkeypatch):
+    at = page.run()
+    at = _choose(at, choice="A", value="39 min")
+
+    def refusing(*args, **kwargs):
+        raise store.DecisionNotSaved("connection refused")
+
+    monkeypatch.setattr(store, "record_verdict", refusing)
+    at = _judge(at, verdict=review.DISAPPROVE)
+
+    assert not at.exception
+    assert any(review.NOT_SAVED in e.value for e in at.error)
+    assert _revealed(at)
+    assert _remaining(at) == 2
+
+
+def test_an_issue_at_the_first_step_is_recorded_with_no_choice_and_moves_on(page, engine):
+    at = page.run()
+    first = _the_first_item(at)
+
+    at = _raise(at, "neither text states a doubling time")
+
+    assert not at.exception
+    assert not at.warning and not at.error
+    (row,) = _rows(engine)
+    assert row.issue == "neither text states a doubling time"
+    assert (row.chosen_supporting, row.approved, row.value_read) == (None, None, "")
+    assert _remaining(at) == 1
+    assert not _on_screen(at, first[0])
+
+
+def test_an_issue_at_the_second_step_keeps_the_choice_and_the_value_read(page, engine):
+    at = page.run()
+    at = _choose(at, choice="A", value="39 min")
+
+    at = _raise(at, "the stored unit is wrong")
+
+    assert not at.exception
+    (row,) = _rows(engine)
+    assert (row.chosen_supporting, row.value_read) == (True, "39 min")
+    assert (row.approved, row.issue) == (None, "the stored unit is wrong")
+    assert _remaining(at) == 1
+    assert not _revealed(at), "on to the next item's first step"
+
+
+def test_an_issue_without_its_text_is_refused_and_nothing_is_written(page, engine):
+    at = page.run()
+    shown = _the_first_item(at)
+
+    at = _raise(at, None)
+
+    assert not at.exception
+    assert any(review.ISSUE_REQUIRED in w.value for w in at.warning)
+    assert _rows(engine) == []
+    assert _on_screen(at, *shown)
 
 
 def test_when_every_item_is_decided_the_page_says_so(page):

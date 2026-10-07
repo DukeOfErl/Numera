@@ -87,12 +87,23 @@ create table if not exists review_item (
 -- reloaded tab, a session resumed. It is here because it costs one column and the rebuild's
 -- attention analysis cannot be reconstructed later from rows that never carried it.
 --
--- A reviewer may raise an issue instead of deciding: the item cannot be judged as it stands. That
--- row carries the issue's text in `issue` and null in both `chosen_supporting` and `approved`,
--- because a choice or a verdict stored beside "this cannot be judged" is one nobody gave. Every
--- other row has both set and `issue` empty. `bionumbers.store` has one writer per shape and no
--- other way in; there is no check constraint, since one cannot be added to a deployed table by an
--- idempotent statement and a rule only fresh databases enforce reads as one they all do.
+-- A decision is taken in two steps (ADR-0970), on one row. First the reviewer chooses a text and
+-- writes the value they read from it, *before* the stored value is shown: `chosen_supporting` and
+-- `value_read` are set, `approved` is null — an *open* row, and the item is still theirs to
+-- finish. Then the stored value and conditions are revealed and they approve or disapprove:
+-- `approved` is set and the row is complete. `value_read` is the one figure here the extractor's
+-- answer cannot have steered, and the reviewer's agreement with the stored value is read by
+-- comparing the two.
+--
+-- A reviewer may raise an issue instead at either step: the item cannot be judged as it stands.
+-- `issue` holds the text and `approved` stays null; `chosen_supporting` is null if no text had
+-- been chosen yet. A verdict is never stored beside an issue. `bionumbers.store` has one writer
+-- per step and no other way in; there is no check constraint, since one cannot be added to a
+-- deployed table by an idempotent statement and a rule only fresh databases enforce reads as one
+-- they all do.
+--
+-- `answered_by` is the model the provider says answered, where it differs from `reviewer_model`:
+-- a router names itself in the request and the routed model in the reply. Null for a person.
 --
 -- `reviewer_role` is the rung of the trust ladder the reviewer stands on (`AI`, `STUDENT`,
 -- `SCIENTIST`, `SENIOR_SCIENTIST`), null where none was recorded. `reviewer_model` is the model id
@@ -110,7 +121,9 @@ create table if not exists review_decision (
     time_to_decide_s  double precision,
     issue             text not null default '',
     reviewer_role     text,
-    reviewer_model    text
+    reviewer_model    text,
+    value_read        text not null default '',
+    answered_by       text
 );
 
 -- The same, for a database created before the issue outcome and the reviewer's role existed.
@@ -119,6 +132,8 @@ alter table review_decision add column if not exists reviewer_role text;
 alter table review_decision add column if not exists reviewer_model text;
 alter table review_decision alter column chosen_supporting drop not null;
 alter table review_decision alter column approved drop not null;
+alter table review_decision add column if not exists value_read text not null default '';
+alter table review_decision add column if not exists answered_by text;
 
 -- Serving the next item asks, per item, whether this reviewer has a row for it. That is the query
 -- every page load makes, and it is the only one whose latency a person waits on.

@@ -440,6 +440,151 @@ def test_undecided_items_are_all_of_a_reviewer_s_open_items_and_no_one_else_s(en
     assert [item.item_id for item in store.undecided_items(engine, None)] == ["i1", "i2", "i3"]
 
 
+# --- two steps -----------------------------------------------------------------------------
+
+
+def test_a_choice_opens_the_row_with_the_value_read_and_no_verdict(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+
+    store.record_choice(
+        engine,
+        "i1",
+        reviewer="alice",
+        chosen_supporting=True,
+        value_read="39 min",
+        time_to_decide_s=20.0,
+        reviewer_role=ReviewerRole.STUDENT,
+        reviewer_model="some/router",
+        answered_by="some/model-a",
+    )
+
+    (row,) = rows(engine, store.review_decision)
+    assert (row.chosen_supporting, row.value_read, row.approved, row.issue) == (
+        True,
+        "39 min",
+        None,
+        "",
+    )
+    assert (row.reviewer_role, row.reviewer_model, row.answered_by) == (
+        "STUDENT",
+        "some/router",
+        "some/model-a",
+    )
+    assert store.open_choice(engine, "i1", "alice") == store.Choice(True, "39 min")
+    assert store.open_choice(engine, "i1", "bob") is None
+
+
+def test_a_verdict_completes_the_open_row_and_adds_its_time_and_its_answerer(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+    store.record_choice(
+        engine,
+        "i1",
+        reviewer="alice",
+        chosen_supporting=False,
+        value_read="21 min",
+        time_to_decide_s=20.0,
+        answered_by="some/model-a",
+    )
+
+    store.record_verdict(
+        engine,
+        "i1",
+        reviewer="alice",
+        approved=False,
+        comment="wrong medium",
+        time_to_decide_s=5.0,
+        answered_by="some/model-b",
+    )
+
+    (row,) = rows(engine, store.review_decision)
+    assert (row.chosen_supporting, row.value_read) == (False, "21 min")
+    assert (row.approved, row.comment) == (False, "wrong medium")
+    assert row.time_to_decide_s == pytest.approx(25.0)
+    assert row.answered_by == "some/model-a, some/model-b"
+    assert store.open_choice(engine, "i1", "alice") is None
+
+
+def test_the_same_answerer_twice_is_named_once(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+    store.record_choice(
+        engine, "i1", reviewer="alice", chosen_supporting=True, value_read="39", answered_by="m"
+    )
+    store.record_verdict(engine, "i1", reviewer="alice", approved=True, answered_by="m")
+
+    (row,) = rows(engine, store.review_decision)
+    assert row.answered_by == "m"
+
+
+def test_a_verdict_without_a_choice_before_it_is_refused(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+
+    with pytest.raises(store.DecisionNotSaved, match="no open choice"):
+        store.record_verdict(engine, "i1", reviewer="alice", approved=True)
+
+    assert rows(engine, store.review_decision) == []
+
+
+def test_a_second_choice_on_the_same_item_is_refused(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+    store.record_choice(engine, "i1", reviewer="alice", chosen_supporting=True, value_read="39")
+
+    with pytest.raises(store.DecisionNotSaved, match="already chosen"):
+        store.record_choice(
+            engine, "i1", reviewer="alice", chosen_supporting=False, value_read="21"
+        )
+
+    assert len(rows(engine, store.review_decision)) == 1
+    # Another reviewer's first step on the same item is not a second choice.
+    store.record_choice(engine, "i1", reviewer="bob", chosen_supporting=False, value_read="21")
+    assert len(rows(engine, store.review_decision)) == 2
+
+
+def test_an_item_with_an_open_choice_is_still_the_reviewer_s_and_is_served_first(engine):
+    store.load_run(
+        engine,
+        [a_result()],
+        [an_item("i1"), an_item("i2"), an_item("i3")],
+        question=QUESTION,
+        run_id=RUN,
+    )
+    store.record_choice(engine, "i3", reviewer="alice", chosen_supporting=True, value_read="39")
+
+    assert store.next_item(engine, "alice").item_id == "i3"
+    assert store.remaining(engine, "alice") == 3
+    assert [i.item_id for i in store.undecided_items(engine, "alice")] == ["i1", "i2", "i3"]
+    store.record_verdict(engine, "i3", reviewer="alice", approved=True)
+    assert store.next_item(engine, "alice").item_id == "i1"
+    assert store.remaining(engine, "alice") == 2
+
+
+def test_an_issue_after_the_choice_keeps_the_choice_and_leaves_no_verdict(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+    store.record_choice(
+        engine,
+        "i1",
+        reviewer="alice",
+        chosen_supporting=True,
+        value_read="39 min",
+        time_to_decide_s=10.0,
+    )
+
+    store.record_issue(
+        engine,
+        "i1",
+        reviewer="alice",
+        issue="the stored value is 93, the text says 39",
+        time_to_decide_s=4.0,
+    )
+
+    (row,) = rows(engine, store.review_decision)
+    assert (row.chosen_supporting, row.value_read) == (True, "39 min")
+    assert row.approved is None
+    assert row.issue == "the stored value is 93, the text says 39"
+    assert row.time_to_decide_s == pytest.approx(14.0)
+    assert store.open_choice(engine, "i1", "alice") is None
+    assert store.next_item(engine, "alice") is None
+
+
 def test_a_decision_on_an_unknown_item_is_not_saved_and_says_so(engine):
     """The page would be offering an item this database does not have. Telling the reviewer it was
     saved would be a falsehood, and returning quietly is that falsehood."""
