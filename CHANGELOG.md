@@ -29,7 +29,9 @@ any release; `1.0.0` when it stabilizes.
   species ([ADR-0950]). The second text is asked never to be another source's value for the same
   property in the same organism, which is a second answer rather than a wrong one.
   `--scope biology|biophysics|chemistry|physics` asks for one domain's classes of value, and the
-  domain is recorded on every claim ([ADR-1500]).
+  domain is recorded on every claim ([ADR-1500]). A value reported beside others of its kind is
+  named by its condition (growth state, construct, tissue, position), the control by nothing; and
+  every paper and claim records the model the provider says answered, beside the one asked for.
 - **The Europe PMC client from the feasibility branch, ported and corrected**: an article without
   XML is now recognised from the response body rather than a 404 status, because the service
   answers 500 today; and the article check reads the root element rather than searching for

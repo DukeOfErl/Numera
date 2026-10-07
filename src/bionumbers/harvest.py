@@ -259,7 +259,13 @@ COMPILED). Leave every other number in the article out.
 
 THREE LABELS ARE YOURS TO WRITE. They are labels, not quotes; everything else stays quoted.
 - property_name: a short general name for the quantity, worded as a database heading,
-  without the value, the organism or this study's condition.
+  without the value or the organism. Where the article reports the quantity under more
+  than one condition, the name of every value but the control ends with its condition,
+  named as a scientist would name it -- the growth state, genotype or construct, tissue,
+  developmental stage, or position ("third hyphal compartment from the tip", not "3rd
+  cell"); outside biology, the sample or state -- and never as a table's row or column
+  label. The value the article marks as its control or wild type carries no condition in
+  its name.
 - property_class: one of the class names in the user turn.
 - organism_name: the species the value belongs to, as the Latin binomial the article gives
   for it anywhere in its text -- the common name ("yeast", "mouse") only where the article

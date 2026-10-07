@@ -38,15 +38,19 @@ def article():
 
 
 class ScriptedModel:
-    def __init__(self, *answers: ExtractionOutput) -> None:
+    def __init__(self, *answers: ExtractionOutput, answered_by: tuple[str, ...] = ()) -> None:
         self.answers = list(answers)
         self.calls: list[dict] = []
+        self.answered_by = list(answered_by)
 
     def count_tokens(self, *, system, messages, output_format=None):
         return SimpleNamespace(input_tokens=61_000)
 
     def parse(self, *, system, messages, output_format, max_tokens):
         self.calls.append({"system": system, "messages": messages})
+        if self.answered_by:
+            raw = {"model": self.answered_by.pop(0)}
+            return SimpleNamespace(parsed_output=self.answers.pop(0), usage=USAGE, raw=raw)
         return SimpleNamespace(parsed_output=self.answers.pop(0), usage=USAGE)
 
 
@@ -100,6 +104,16 @@ def test_the_instruction_asks_for_a_latin_name_and_a_value_without_its_unit():
     percent sign in the unit field as well."""
     assert "Latin binomial" in harvest.HARVEST_INSTRUCTION
     assert "belongs to no organism" in harvest.HARVEST_INSTRUCTION
+
+
+def test_a_value_beside_others_of_its_kind_is_named_by_its_condition_and_the_control_is_not():
+    """Blind review of 60 seeded items (2026-10-07): about a third of the adjacent-condition
+    items were undecidable from the name alone -- two "Axonal actin ring spacing (mouse)", six
+    "Hyphal cell length". The control stays unnamed so a reviewer picks it by judgement."""
+    rule = harvest.HARVEST_INSTRUCTION.split("- property_name:", 1)[1].split("- property_class")[0]
+    assert "more\n  than one condition" in rule or "more than one condition" in rule
+    assert "never as a table's row or column" in rule
+    assert "control or wild type carries no condition" in rule
     assert "THE VALUE FIELD HOLDS NO UNIT" in harvest.HARVEST_INSTRUCTION
 
 
@@ -235,3 +249,48 @@ def test_a_fabricated_quote_is_dropped_in_harvest_mode_as_in_any_other(article):
 
     assert result.claims == ()
     assert result.state is PaperState.NOTHING_TO_EXTRACT
+
+
+# --- who answered ----------------------------------------------------------------------------
+
+
+def test_the_model_that_answered_is_recorded_beside_the_one_asked_for(article):
+    """A router or a dated build answers under another name than the one asked for; the
+    fingerprint said only what was asked."""
+    draft = a_draft(
+        article, property_name="replisome lifetime", organism_name="E. coli", property_class="TIME"
+    )
+    model = ScriptedModel(
+        ExtractionOutput(state="CLAIMS_FOUND", claims=[draft]),
+        answered_by=("openai/gpt-6.1-sol-20260917",),
+    )
+
+    result = harvested(model, article)
+
+    assert result.fingerprint.answered_by == "openai/gpt-6.1-sol-20260917"
+    assert result.claims[0].fingerprint.answered_by == "openai/gpt-6.1-sol-20260917"
+    assert result.fingerprint.model != result.fingerprint.answered_by
+
+
+def test_a_retry_answered_by_another_model_records_both(article):
+    invented = a_draft(article, property_name="x", organism_name="E. coli", property_class="TIME")
+    invented = invented.model_copy(
+        update={
+            "quote": invented.quote.model_copy(update={"text": "a sentence no article contains"})
+        }
+    )
+    model = ScriptedModel(
+        ExtractionOutput(state="CLAIMS_FOUND", claims=[invented]),
+        ExtractionOutput(state="NOTHING_TO_EXTRACT"),
+        answered_by=("router/a", "router/b"),
+    )
+
+    result = harvested(model, article)
+
+    assert result.fingerprint.answered_by == "router/a, router/b"
+
+
+def test_a_provider_that_names_no_model_leaves_the_field_empty(article):
+    result = harvested(ScriptedModel(ExtractionOutput(state="NOTHING_TO_EXTRACT")), article)
+
+    assert result.fingerprint.answered_by == ""

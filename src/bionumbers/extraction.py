@@ -492,8 +492,10 @@ def _one_call(
     ledger: Ledger,
     model_id: str,
     max_tokens: int = MAX_TOKENS,
-) -> ExtractionOutput:
+) -> tuple[ExtractionOutput, str]:
     """Project, ask the ledger, call, record. Every model call comes through here.
+
+    Returns the output and the model the provider says answered (`""` where it says nothing).
 
     The projection assumes nothing is cached, even on the retry where most of the prefix
     will be. That over-projects, and over-projecting stops a paper early while
@@ -522,7 +524,9 @@ def _one_call(
             ledger.record(article_id, cost(model_id, usage))
         raise
     ledger.record(article_id, cost(model_id, response.usage))
-    return response.parsed_output
+    raw = getattr(response, "raw", None)
+    answered = raw.get("model") if isinstance(raw, dict) else None
+    return response.parsed_output, answered if isinstance(answered, str) else ""
 
 
 def _location(doc: Document, passage_id: str) -> Location:
@@ -677,6 +681,11 @@ def _assemble(
     return tuple(claims), tuple(rejected), tuple(unverifiable)
 
 
+def _answered_by(fingerprint: Fingerprint, answered: list[str]) -> Fingerprint:
+    names = ", ".join(dict.fromkeys(name for name in answered if name))
+    return fingerprint.model_copy(update={"answered_by": names})
+
+
 def extract(
     model: Model,
     doc: Document,
@@ -743,8 +752,9 @@ def extract(
 
     system = system_blocks(doc, instruction)
     messages = [user if user is not None else user_turn(question, organism)]
+    answered: list[str] = []
     try:
-        output = _one_call(
+        output, by = _one_call(
             model,
             system=system,
             messages=messages,
@@ -753,6 +763,9 @@ def extract(
             model_id=model_id,
             max_tokens=max_tokens,
         )
+        answered.append(by)
+        # Rebinds the name `ending` reads, so every ending after a call says who answered it.
+        fingerprint = _answered_by(fingerprint, answered)
         checked = verify_drafts(output, doc)
         if checked.failures:
             # Exactly one retry, and the count is the design's rather than a tuning
@@ -763,7 +776,7 @@ def extract(
                 _assistant_turn(output),
                 _correction_turn(checked.failures),
             ]
-            output = _one_call(
+            output, by = _one_call(
                 model,
                 system=system,
                 messages=corrected,
@@ -772,6 +785,8 @@ def extract(
                 model_id=model_id,
                 max_tokens=max_tokens,
             )
+            answered.append(by)
+            fingerprint = _answered_by(fingerprint, answered)
             checked = verify_drafts(output, doc)
     except CeilingReached as reached:
         # Nothing kept, not even what verified before the stop: half a paper's claims, with

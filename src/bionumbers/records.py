@@ -168,6 +168,9 @@ class Fingerprint(Frozen):
     run_id: str
     scope: str = ""
     """Harvest mode only: the domain the paper was asked in (`bionumbers.harvest.SCOPES`)."""
+    answered_by: str = ""
+    """The model the provider says answered, where it says: a router or a dated build answers
+    under another name than `model`, the one asked for. Comma-joined if the retry differed."""
 
 
 class Claim(Frozen):
