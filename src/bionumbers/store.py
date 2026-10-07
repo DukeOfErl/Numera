@@ -199,6 +199,7 @@ curated_entry = Table(
     Column("loaded_at", DateTime(timezone=True), nullable=False),
 )
 
+
 @dataclass(frozen=True)
 class Choice:
     """A reviewer's open first step on an item: which text, and the value they read from it."""
