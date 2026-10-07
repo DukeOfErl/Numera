@@ -99,6 +99,7 @@ def test_the_instruction_asks_for_a_latin_name_and_a_value_without_its_unit():
     """Both read off the first seed: "yeast" and "mouse" as species, and "about 45%" with a
     percent sign in the unit field as well."""
     assert "Latin binomial" in harvest.HARVEST_INSTRUCTION
+    assert "belongs to no organism" in harvest.HARVEST_INSTRUCTION
     assert "THE VALUE FIELD HOLDS NO UNIT" in harvest.HARVEST_INSTRUCTION
 
 
@@ -110,10 +111,37 @@ def test_the_scope_travels_in_the_user_turn_and_names_every_class_and_exclusion(
         assert kind in content
 
 
-def test_the_scope_hands_the_model_no_unit_and_no_magnitude():
+@pytest.mark.parametrize("name", sorted(harvest.SCOPES))
+def test_every_scope_names_its_own_classes_and_exclusions_and_nothing_else(name):
+    content = harvest.user_turn(name)["content"]
+    scope = harvest.SCOPES[name]
+    for cls, covers in scope.classes:
+        assert f"- {cls}: {covers}" in content
+    for kind in scope.excluded:
+        assert kind in content
+    assert content.count("\n- ") == len(scope.classes) + len(scope.excluded)
+
+
+def test_the_scopes_differ_where_their_domains_do():
+    """Read off what each domain's papers were seen to hold: a glass has a transition temperature
+    and no organism, and a reconstituted network is the thing measured in biophysics rather than a
+    preparation to set aside."""
+    physics = harvest.user_turn("physics")["content"]
+    biophysics = harvest.user_turn("biophysics")["content"]
+    assert (
+        "glass transition" in physics and "glass transition" not in harvest.user_turn()["content"]
+    )
+    assert "MECHANICAL" in biophysics and "MECHANICAL" not in harvest.user_turn()["content"]
+    assert "own preparations" in harvest.user_turn()["content"]
+    assert "own preparations" not in biophysics
+    assert "docking scores" in harvest.user_turn("chemistry")["content"]
+
+
+@pytest.mark.parametrize("name", sorted(harvest.SCOPES))
+def test_the_scope_hands_the_model_no_unit_and_no_magnitude(name):
     """The instruction forbids answering from what the model knows; a scope that named units or
     typical figures would be this module doing it for the model."""
-    scope = harvest.user_turn()["content"]
+    scope = harvest.user_turn(name)["content"]
     assert not any(character.isdigit() for character in scope)
     for unit in (" nm", " μm", " um", " min", " μM", " mM", " kDa"):
         assert unit + " " not in scope and unit + "," not in scope

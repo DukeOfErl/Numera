@@ -166,6 +166,8 @@ class Fingerprint(Frozen):
     instruction_sha256: str
     article_id: str
     run_id: str
+    scope: str = ""
+    """Harvest mode only: the domain the paper was asked in (`bionumbers.harvest.SCOPES`)."""
 
 
 class Claim(Frozen):

@@ -28,6 +28,8 @@ any release; `1.0.0` when it stabilizes.
   classes instead of for one question's answer; every claim is named by its own property and
   species ([ADR-0950]). The second text is asked never to be another source's value for the same
   property in the same organism, which is a second answer rather than a wrong one.
+  `--scope biology|biophysics|chemistry|physics` asks for one domain's classes of value, and the
+  domain is recorded on every claim ([ADR-1500]).
 - **The Europe PMC client from the feasibility branch, ported and corrected**: an article without
   XML is now recognised from the response body rather than a 404 status, because the service
   answers 500 today; and the article check reads the root element rather than searching for
@@ -492,3 +494,4 @@ number rather than an error:
 [ADR-0930]: docs/decisions/0930-the-review-store-fails-closed.md
 [ADR-0940]: docs/decisions/0940-texts-as-written-and-the-whole-table.md
 [ADR-0950]: docs/decisions/0950-harvest-first-ask-later.md
+[ADR-1500]: docs/decisions/1500-a-domain-is-a-scope-in-the-user-turn.md

@@ -21,6 +21,8 @@ thing to a definition of "useful number" this project has.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from bionumbers.extraction import INSTRUCTION
 from bionumbers.records import Claim
 
@@ -77,20 +79,159 @@ PROPERTY_CLASSES: tuple[tuple[str, str], ...] = (
     ),
 )
 
+_STATISTICS = (
+    "statistics about the study rather than the subject: p-values, sample sizes, correlation "
+    "coefficients, fold changes, fit qualities, scores, percentages of a sample responding"
+)
+_SETTINGS = (
+    "experimental settings: amounts added, incubation times, temperatures set, heating and "
+    "cooling rates set, instrument and imaging parameters, software thresholds"
+)
+_COUNTS = "counts of items in a database, a library or a dataset"
+
 #: What is never wanted, however prominent in the paper. These are the numbers a store of
 #: "every number" fills with.
 EXCLUDED: tuple[str, ...] = (
-    "statistics about the study rather than the biology: p-values, sample sizes, correlation "
-    "coefficients, fold changes, scores, percentages of a sample responding",
-    "experimental settings: amounts added, incubation times, temperatures set, instrument "
-    "and imaging parameters, software thresholds",
+    _STATISTICS,
+    _SETTINGS,
     "values for single genes, single proteins or single samples out of a genome-wide or "
     "large-scale dataset, where the summary value is the reusable one",
-    "counts of items in a database, a library or a dataset",
+    _COUNTS,
     "properties of this study's own preparations rather than of the organism or the molecule: "
     "the concentration of a suspension or an extract it made, the activity of a crude extract, "
     "the size of particles it synthesised",
 )
+
+
+@dataclass(frozen=True)
+class Scope:
+    """One domain's wanted classes and unwanted kinds of value.
+
+    A domain is a scope and nothing more: the instruction, the quoting rule and everything after
+    the call are the same whatever the domain, and the scope travels in the user turn so the
+    cached paper prefix is too. Its name is recorded on every claim's fingerprint, because two
+    scopes asked of one paper are two different questions of it.
+    """
+
+    classes: tuple[tuple[str, str], ...]
+    excluded: tuple[str, ...]
+
+
+_MECHANICAL = (
+    "MECHANICAL",
+    "mechanical and rheological properties of filaments, networks, cytoplasm, cells and "
+    "tissues: elastic, storage and loss moduli, viscosities, bending stiffness, persistence "
+    "length, and the forces they bear or produce",
+)
+
+#: Biophysics: the biology classes with the mechanics of the material named on its own. A
+#: reconstituted network is the object measured there, not a preparation to set aside, so the
+#: biology scope's last exclusion is replaced rather than kept.
+BIOPHYSICS = Scope(
+    classes=(
+        *(cls for cls in PROPERTY_CLASSES if cls[0] != "PHYSICAL_CONSTANT"),
+        _MECHANICAL,
+        (
+            "PHYSICAL_CONSTANT",
+            "other physical and biochemical constants of biological material: diffusion "
+            "coefficients, binding and dissociation constants, step sizes",
+        ),
+    ),
+    excluded=(
+        *EXCLUDED[:-1],
+        "the amounts used to assemble a reconstituted network or to coat a probe: they are the "
+        "conditions of a value, recorded with it, not values of their own",
+        "properties of probe particles, beads and calibration samples",
+    ),
+)
+
+CHEMISTRY = Scope(
+    classes=(
+        (
+            "BINDING",
+            "affinities of molecules for their targets: dissociation, association and "
+            "inhibition constants, and the half-maximal inhibitory or effective concentration "
+            "of a named compound in a named assay",
+        ),
+        (
+            "RATE",
+            "rate constants and rates of reactions, of binding and of assembly or disassembly, "
+            "including enzyme turnover numbers and Michaelis constants",
+        ),
+        (
+            "THERMODYNAMIC",
+            "free energies, enthalpies, entropies and activation energies of binding, folding, "
+            "assembly or reaction; acid dissociation constants; redox potentials",
+        ),
+        (
+            "SPECTROSCOPIC",
+            "absorption and emission maxima, extinction coefficients, quantum yields and "
+            "fluorescence lifetimes of named molecules",
+        ),
+        ("SIZE", "molecular dimensions, distances and areas determined by structure or experiment"),
+        ("CONCENTRATION", "critical concentrations and solubilities"),
+    ),
+    excluded=(
+        _STATISTICS,
+        _SETTINGS,
+        "computed scores without a physical unit: docking scores, predicted drug-likeness, "
+        "predicted toxicity",
+        "characterisation of newly made compounds: synthetic yields, spectral peak positions "
+        "listed to identify them, elemental analysis",
+        "rows of a screening table, where the article's lead compound or its summary is the "
+        "reusable value",
+        _COUNTS,
+    ),
+)
+
+PHYSICS = Scope(
+    classes=(
+        (
+            "TEMPERATURE",
+            "characteristic temperatures of a material: glass transition, melting, "
+            "crystallisation, and crossover or onset temperatures",
+        ),
+        (
+            "TIME",
+            "relaxation, correlation and characteristic times, with the temperature or state "
+            "they belong to",
+        ),
+        (
+            "PHYSICAL_CONSTANT",
+            "material constants: fragility, activation energies, heat capacity steps, moduli, "
+            "viscosities, diffusion coefficients, and the exponents of scaling laws",
+        ),
+        (
+            "SIZE",
+            "characteristic length scales: correlation lengths, sizes of cooperatively "
+            "rearranging regions, interparticle distances",
+        ),
+        (
+            "FRACTION",
+            "packing and volume fractions at which a transition occurs, and ratios between "
+            "characteristic temperatures or times",
+        ),
+    ),
+    excluded=(
+        _STATISTICS,
+        _SETTINGS,
+        "parameters of a simulation chosen by its authors: system size, time step, interaction "
+        "parameters, number of runs",
+        "values for single samples out of a long series, where the trend or the summary value "
+        "is the reusable one",
+        _COUNTS,
+    ),
+)
+
+#: Every domain harvest can be asked in, by the name a run records. `biology` is the scope the
+#: classes above were read for and the one an unnamed run used before scopes existed.
+SCOPES: dict[str, Scope] = {
+    "biology": Scope(classes=PROPERTY_CLASSES, excluded=EXCLUDED),
+    "biophysics": BIOPHYSICS,
+    "chemistry": CHEMISTRY,
+    "physics": PHYSICS,
+}
+DEFAULT_SCOPE = "biology"
 
 _HEAD = (
     "You are given one research article, passage by passage, each passage with an id. There "
@@ -123,7 +264,8 @@ THREE LABELS ARE YOURS TO WRITE. They are labels, not quotes; everything else st
 - organism_name: the species the value belongs to, as the Latin binomial the article gives
   for it anywhere in its text -- the common name ("yeast", "mouse") only where the article
   never gives one; for purified material or an in vitro system, the species the material
-  came from."""
+  came from. A value that belongs to no organism -- a material, a compound, a model system --
+  is labelled with that material or system, named as the article names it."""
 
 #: The extraction instruction with its first paragraph replaced and the harvest rules added.
 #: Built from `extraction.INSTRUCTION` rather than restated, so the quoting rule, the claim
@@ -131,10 +273,11 @@ THREE LABELS ARE YOURS TO WRITE. They are labels, not quotes; everything else st
 HARVEST_INSTRUCTION = "\n\n".join((_HEAD, INSTRUCTION.split("\n\n", 1)[1], _SELECTION))
 
 
-def user_turn() -> dict:
+def user_turn(scope: str = DEFAULT_SCOPE) -> dict:
     """The scope: the wanted classes and the unwanted kinds. Nothing about any paper."""
-    wanted = "\n".join(f"- {name}: {covers}" for name, covers in PROPERTY_CLASSES)
-    unwanted = "\n".join(f"- {kind}" for kind in EXCLUDED)
+    chosen = SCOPES[scope]
+    wanted = "\n".join(f"- {name}: {covers}" for name, covers in chosen.classes)
+    unwanted = "\n".join(f"- {kind}" for kind in chosen.excluded)
     return {"role": "user", "content": f"Wanted classes:\n{wanted}\n\nNot wanted:\n{unwanted}"}
 
 

@@ -690,6 +690,7 @@ def extract(
     instruction: str = INSTRUCTION,
     user: dict | None = None,
     max_tokens: int = MAX_TOKENS,
+    scope: str = "",
 ) -> PaperResult:
     """One paper, one named ending, whatever happened.
 
@@ -701,12 +702,14 @@ def extract(
     instruction over the same paper, and a user turn that states a scope instead of a
     question. With an empty `question` each claim is named by the model's own label.
     `max_tokens` is harvest's too: twenty claims do not fit the bound three were sized for.
+    `scope` names the domain `user` states, for the fingerprint only.
     """
     fingerprint = Fingerprint(
         model=model_id,
         instruction_sha256=instruction_sha256(instruction),
         article_id=paper.pmcid,
         run_id=run_id,
+        scope=scope,
     )
 
     def ending(

@@ -320,7 +320,9 @@ streamlit run review_app.py
 
 - **Harvest** is the other way in (ADR-0950): `bionumbers harvest <run-id> --pmcids PMC1,PMC2`
   starts a run from papers chosen ahead of any question, and `extract` then asks each one for
-  the numbers worth reusing, in seven classes, at most twenty per paper.
+  the numbers worth reusing, at most twenty per paper. `--scope` names the domain whose classes
+  of value are wanted — `biology` (the default), `biophysics`, `chemistry` or `physics`
+  (ADR-1500).
 - **Discover** searches Europe PMC for open-access research articles with a PMCID — reviews,
   editorials, comments and preprints excluded by metadata — fetches each paper's JATS XML into
   `data/europepmc/`, and records the licence. A paper without XML is recorded with the status the
