@@ -692,3 +692,12 @@ def test_load_without_a_database_says_which_variable(monkeypatch, dirs, capsys):
 
     assert code == 2
     assert cli.DB_URL_ENV in capsys.readouterr().err
+
+
+def test_the_model_is_pinned_to_the_provider_its_price_was_read_from(monkeypatch):
+    """`_model` is the one place the pin is attached; a reviewer or an extraction built without
+    it is priced at one provider and served by another."""
+    monkeypatch.setenv(API_KEY_ENV, "k")
+    built = cli._model("nvidia/nemotron-3-ultra-550b-a55b")
+    assert built._provider == "deepinfra"
+    assert cli._model("typesafe/jev-router")._provider is None

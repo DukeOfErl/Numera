@@ -16,6 +16,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from bionumbers import spend
 from bionumbers.records import Spend
 from bionumbers.spend import (
     MODEL,
@@ -319,3 +320,15 @@ def test_a_run_that_never_hit_the_cache_reports_no_cached_fraction():
 
     assert empty.cached_fraction() == 0.0
     assert uncached.cached_fraction() == 0.0
+
+
+def test_every_openrouter_price_is_pinned_to_the_provider_it_was_read_from():
+    """A row without a pin is a projection against whichever provider OpenRouter picks. The
+    router is the one exception, by its nature; Anthropic's own id is not an OpenRouter route."""
+    unpinned = sorted(
+        model
+        for model, prices in spend.PRICES.items()
+        if "/" in model and not prices.provider and model != "typesafe/jev-router"
+    )
+    assert unpinned == []
+    assert spend.PRICES["anthropic/claude-opus-5.5"].provider == "anthropic"

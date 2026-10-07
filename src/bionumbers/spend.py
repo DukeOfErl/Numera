@@ -50,6 +50,13 @@ class Prices:
     cache_write: float
     cache_read: float
     output: float
+    provider: str = ""
+    """The OpenRouter provider slug these prices were read from, and the one the request is pinned
+    to (`openrouter.OpenRouterModel`). A price is a price *at a provider*: the same model is served
+    by several at different rates -- GLM 5.3 Flash from $0.25 to $1.00 per million output tokens on
+    2026-10-07, Opus 5.5 at twice list on `anthropic/fast` -- and OpenRouter's default routing is
+    free to pick any of them, so a table row without a pin is a projection against a price that
+    may not be the one charged. Empty for a model id that is not an OpenRouter route."""
 
 
 #: Cache write at 1.25x input and cache read at 0.1x (unconfirmed — see the docstring) make three
@@ -61,24 +68,42 @@ _OPUS_4_7 = Prices(5e-6, 6.25e-6, 0.5e-6, 25e-6)
 #: openrouter.ai/anthropic/claude-opus-4.7). One entry per route, so `cost` needs no
 #: knowledge of which adapter made the call.
 OPENROUTER_MODEL = "anthropic/claude-opus-4.7"
-#: Cheaper candidates for harvest mode, where cost scales with papers rather than questions.
-#: Read off OpenRouter's own `/api/v1/models` listing on 2026-10-03. GPT-4.1 has no separate
-#: cache-write price there (its caching is automatic), so a write is priced as plain input.
+#: Cheaper candidates for harvest mode, where cost scales with papers rather than questions, and
+#: the models tried as simulated reviewers. Each row is pinned to the provider its price was read
+#: from (`Prices.provider`), checked against `/api/v1/models/<id>/endpoints` on 2026-10-07.
+#: GPT-4.1 has no separate cache-write price (its caching is automatic), so a write is priced as
+#: plain input.
 PRICES: dict[str, Prices] = {
     MODEL: _OPUS_4_7,
-    OPENROUTER_MODEL: _OPUS_4_7,
-    "anthropic/claude-sonnet-5": Prices(2e-6, 2.5e-6, 0.2e-6, 10e-6),
-    "anthropic/claude-haiku-4.5": Prices(1e-6, 1.25e-6, 0.1e-6, 5e-6),
-    "openai/gpt-4.1": Prices(2e-6, 2e-6, 0.5e-6, 8e-6),
-    "anthropic/claude-opus-5.5": Prices(4e-6, 5e-6, 0.2e-6, 20e-6),
-    # The listing gives the Nemotron models no cache-write price, and the Super none for a
-    # cache read either; each missing figure is priced as plain input, which errs high.
-    "nvidia/nemotron-3.5-lightning": Prices(0.0595e-6, 0.0595e-6, 0.0297e-6, 0.17e-6),
-    "nvidia/nemotron-3-super-120b-a12b": Prices(0.08e-6, 0.08e-6, 0.08e-6, 0.45e-6),
-    "nvidia/nemotron-3-ultra-550b-a55b": Prices(0.5e-6, 0.5e-6, 0.1e-6, 2.2e-6),
-    "openai/gpt-6.1-sol": Prices(2e-6, 2.5e-6, 0.1e-6, 10e-6),
-    # No cache-write price listed for Kimi K3 either; priced as plain input.
-    "moonshotai/kimi-k3": Prices(0.72e-6, 0.72e-6, 0.7e-6, 13e-6),
+    OPENROUTER_MODEL: Prices(5e-6, 6.25e-6, 0.5e-6, 25e-6, provider="anthropic"),
+    "anthropic/claude-sonnet-5": Prices(2e-6, 2.5e-6, 0.2e-6, 10e-6, provider="anthropic"),
+    "anthropic/claude-sonnet-5.5": Prices(2e-6, 2.5e-6, 0.2e-6, 10e-6, provider="anthropic"),
+    "anthropic/claude-haiku-4.5": Prices(1e-6, 1.25e-6, 0.1e-6, 5e-6, provider="anthropic"),
+    "openai/gpt-4.1": Prices(2e-6, 2e-6, 0.5e-6, 8e-6, provider="openai"),
+    "anthropic/claude-opus-5.5": Prices(4e-6, 5e-6, 0.2e-6, 20e-6, provider="anthropic"),
+    # The Nemotron rows are DeepInfra's prices (read off `/api/v1/models/<id>/endpoints` on
+    # 2026-10-07): no cache-write price there, and none for a cache read on the Super, so each
+    # missing figure is priced as plain input, which errs high.
+    "nvidia/nemotron-3.5-lightning": Prices(
+        0.06e-6, 0.06e-6, 0.03e-6, 0.16e-6, provider="deepinfra"
+    ),
+    "nvidia/nemotron-3-super-120b-a12b": Prices(
+        0.085e-6, 0.085e-6, 0.085e-6, 0.4e-6, provider="deepinfra"
+    ),
+    "nvidia/nemotron-3-ultra-550b-a55b": Prices(
+        0.5e-6, 0.5e-6, 0.1e-6, 2.2e-6, provider="deepinfra"
+    ),
+    "openai/gpt-6.1-sol": Prices(2e-6, 2.5e-6, 0.1e-6, 10e-6, provider="openai"),
+    # Moonshot's own endpoint; the listing's cheaper figures were other providers' quantised
+    # copies, which is the kind of drift the pin exists to stop. No cache-write price.
+    "moonshotai/kimi-k3": Prices(3e-6, 3e-6, 0.3e-6, 15e-6, provider="moonshotai"),
+    "z-ai/glm-5.3-flash": Prices(0.15e-6, 0.15e-6, 0.03e-6, 0.5e-6, provider="z-ai"),
+    # A router has no price of its own: it sends each call to a model of its choosing and bills
+    # that model's rate. These are Sonnet's figures as an upper bound for the projection -- the
+    # calls observed on 2026-10-07 went to GPT-6 Luna and DeepSeek V4.1 Flash at a tenth of
+    # this -- so a run's recorded spend for it overstates, and the provider's own ledger is the
+    # figure to read. No pin: the routing is the service.
+    "typesafe/jev-router": Prices(2e-6, 2.5e-6, 0.2e-6, 10e-6),
 }
 
 

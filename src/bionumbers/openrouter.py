@@ -181,12 +181,18 @@ class OpenRouterModel:
         client: httpx.Client | None = None,
         url: str = OPENROUTER_URL,
         timeout: float = 600.0,
+        provider: str | None = None,
     ) -> None:
+        """`provider` pins every request to one OpenRouter provider slug, with no fallback: the
+        request fails rather than being served by another provider at another price. Left None,
+        OpenRouter routes as it likes -- which for a model served by many is a price the ledger
+        never agreed to. `cli._model` passes the slug the price table was read from."""
         key = api_key if api_key is not None else os.environ.get(API_KEY_ENV, "")
         if not key:
             raise NoCredential(f"{API_KEY_ENV} is not set and no key was given")
         self._headers = {"Authorization": f"Bearer {key}", **APP_HEADERS}
         self._model = model
+        self._provider = provider
         self._client = client if client is not None else httpx.Client(timeout=timeout)
         self._url = url
 
@@ -212,7 +218,7 @@ class OpenRouterModel:
                     "schema": strict_schema(output_format),
                 },
             },
-            "provider": {"require_parameters": True},
+            "provider": self._routing(),
             # Without this the usage block carries no `cost`, and `reported_cost_usd` was
             # always None on the first two live runs (code review of 2026-09-21, finding 8).
             "usage": {"include": True},
@@ -248,6 +254,16 @@ class OpenRouterModel:
                 f"output does not match {output_format.__name__}: {invalid}", usage
             ) from None
         return Parsed(parsed_output=parsed, usage=usage, raw=raw)
+
+    def _routing(self) -> dict:
+        routing: dict = {"require_parameters": True}
+        if self._provider:
+            # `only` rather than `order`: a base slug matches that provider's regional variants
+            # (10% dearer) but not its service tiers (`anthropic/fast`, twice list), which is
+            # the intended reading; `allow_fallbacks` off turns "that provider is down" into a
+            # failed call instead of a quietly dearer one.
+            routing |= {"only": [self._provider], "allow_fallbacks": False}
+        return routing
 
     def count_tokens(
         self, *, system: list[dict], messages: list[dict], output_format: type | None = None

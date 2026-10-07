@@ -110,7 +110,10 @@ def _model(model_id: str) -> Any:
     default. Raises `NoCredential` when no key is in the environment, which the command turns
     into one sentence before any paper is fetched.
     """
-    return OpenRouterModel(model=model_id)
+    # Pinned to the provider the price table was read from (`spend.Prices.provider`); a model
+    # with no price has no pin, and `extract` has already refused it.
+    prices = PRICES.get(model_id)
+    return OpenRouterModel(model=model_id, provider=prices.provider or None if prices else None)
 
 
 def _engine(url: str) -> Any:
