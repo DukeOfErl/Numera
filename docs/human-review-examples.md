@@ -15,14 +15,16 @@ passed, what is wrong, and how sure the diagnosis is. Values and paper ids only;
 | 4 | PMC13376574 | "Buried molecular contact surface area": 477, 443, 121, 350, 90 Å² | Five entries under one name that does not say which two molecules touch (a TOG domain and a tubulin subunit, different in each). The label is true and useless; two entries are also labelled "yeast" for values computed from another group's published structure. | Label loses identity |
 | 5 | PMC3496334 | Cytoplasmic diffusion coefficients (ribosomal subunits, ATP, amino acids, sugars): values with no unit | The publisher printed the column header's symbol and unit as images, so the unit is not in the text. The model rightly did not invent one; a person looking at the page reads it at once. | Information outside the text |
 | 6 | PMC3940484 | Median protein copy number: 170,000 molecules per cell, organism "mouse" | The value is for one cultured fibroblast line, not for mouse cells in general. The paper never gives a Latin species name, so the label is the common name and hides the cell line. | Organism label too coarse |
+| 7 | PMC2150578 | F-actin binding dissociation constant (human): 0.02 ± 0.01 μM | The quoted figures are the constants labelled K_X and K_Y in the paper's binding scheme, which the text never ties to F-actin; the figure it does give for F-actin is about 1 μM. Found by the entry-review session: four model reviewers chose the other text. | Wrong value, verbatim quote |
 
 ## How sure
 
 - 1, 2, 3 and 5 are read off the papers' own sentences and markup.
+- 7 is read off the review session's blind trial; the paper has not been re-read here.
 - 4 and 6 are a judgement about what a database entry needs to say; a biologist should confirm
   the wording.
-- None has yet been put in front of the simulated reviewers, so whether a model reviewer would
-  catch it is not known. That is worth measuring: a case the models miss is the stronger slide.
+- Only 7 has been in front of the simulated reviewers (they caught it); for the others, whether a
+  model reviewer would catch them is not known. That is worth measuring: a case the models miss is the stronger slide.
 
 ## Not yet examined
 
