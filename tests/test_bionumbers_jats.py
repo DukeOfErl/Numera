@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from bionumbers import jats
 from bionumbers.jats import Document, JatsUnreadable, Passage, read_jats, render_for_model
 from bionumbers.records import Location
 
@@ -84,6 +85,24 @@ def test_a_materials_and_methods_section_counts_as_methods(coxiella):
 
 def test_experimental_procedures_counts_as_methods(replisome):
     assert replisome.has_methods_section is True
+
+
+@pytest.mark.parametrize(
+    ("title", "counts"),
+    [
+        # Chemistry journals' heading for their methods, as a whole title (PMC5932598).
+        ("Experimental", True),
+        ("2. Experimental Section", True),
+        ("Experimental details", True),
+        # The same word heading something else: a results subsection with its methods in the
+        # supplement (PMC8146688), a review chapter (PMC2883084), the supplement itself.
+        ("Experimental configuration", False),
+        ("Experimental inactivation of the centrosome in Metazoan cells", False),
+        ("Supplementary experimental", False),
+    ],
+)
+def test_an_experimental_heading_counts_only_as_a_whole_title(title, counts):
+    assert jats._is_methods_title(title) is counts
 
 
 def test_the_back_less_brief_report_reads_and_has_no_methods_section(brief_report):

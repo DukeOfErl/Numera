@@ -75,6 +75,16 @@ _MINUS_LOOKALIKES = str.maketrans(
 #: and a third "Experimental Procedures" -- and no `sec-type` is reliable enough to use alone.
 _METHODS_WORDS = ("method", "materials", "experimental procedure")
 
+#: Whole titles, numbering aside, that chemistry journals give their methods: "Experimental",
+#: "Experimental section". Whole titles and not the word, because "experimental" alone also heads
+#: results subsections and review chapters ("Experimental configuration", "Experimental
+#: inactivation of the centrosome"); over the 115 cached papers on 2026-10-07 the word admitted
+#: three and the whole titles one, PMC5932598, which is the one with its methods there.
+_METHODS_TITLES = frozenset(
+    ("experimental", "experimental section", "experimental details", "experimental part")
+)
+_NUMBERING = re.compile(r"^[\divx]+[.)]?\s+")
+
 #: Units a paragraph's text must not swallow: each becomes passages of its own, so leaving its
 #: text in the enclosing `<p>` would make every table cell quotable twice, once with headers and
 #: once without. A nested `<p>` (list items, boxed text, footnotes) is a unit of its own for the
@@ -520,6 +530,8 @@ def _is_methods_title(title: str) -> bool:
     # (PMC13340094 is the sample that forced this clause).
     if "supplement" in folded:
         return False
+    if _NUMBERING.sub("", folded.strip()).strip(" .:") in _METHODS_TITLES:
+        return True
     return any(word in folded for word in _METHODS_WORDS)
 
 
