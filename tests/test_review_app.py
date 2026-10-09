@@ -63,6 +63,10 @@ ISSUE_KEY = _constant("ISSUE_KEY")
 CONTINUE = _constant("CONTINUE")
 SAVE_AND_NEXT = _constant("SAVE_AND_NEXT")
 RAISE_AN_ISSUE = _constant("RAISE_AN_ISSUE")
+SKIP_PAPER = _constant("SKIP_PAPER")
+DOMAIN_KEY = _constant("DOMAIN_KEY")
+TOPIC_KEY = _constant("TOPIC_KEY")
+ANY = _constant("ANY")
 NO_STORE = _constant("NO_STORE")
 
 QUESTION = "doubling time of Escherichia coli"
@@ -481,6 +485,96 @@ def test_a_cell_s_table_is_drawn_whole_with_its_caption_and_its_cell_marked(page
 
     at = _decide(at, choice="A", verdict=review.APPROVE)
     assert TABLE_CAPTION not in _texts(at), "the prose item brings no table"
+
+
+# --- what a person may choose, and a model may not (ADR-0980) ------------------------------------
+
+PHYSICS_SUPPORTING = "the lattice constant was measured as 0.41 nm at room temperature"
+PHYSICS_SECOND = "a thermal expansion coefficient of 12 per million per kelvin"
+PHRASES[PHYSICS_SUPPORTING] = "lattice constant"
+PHRASES[PHYSICS_SECOND] = "thermal expansion"
+PHYSICS_FP = Fingerprint(
+    model="opus", instruction_sha256="abc123", article_id="PMC2", run_id=RUN, scope="physics"
+)
+
+
+def a_physics_paper() -> Paper:
+    return Paper(pmcid="PMC2", title="A crystal", year=2025, licence="CC BY")
+
+
+@pytest.fixture
+def two_domains(engine):
+    """The two biology items of `engine` plus one physics item from a second paper."""
+    item = an_item("i3", "c3", "0.41", PHYSICS_SUPPORTING, PHYSICS_SECOND).model_copy(
+        update={
+            "paper": a_physics_paper(),
+            "claim": a_claim("c3", "0.41", PHYSICS_SUPPORTING).model_copy(
+                update={"fingerprint": PHYSICS_FP}
+            ),
+        }
+    )
+    result = PaperResult(
+        paper=a_physics_paper(), state=PaperState.CLAIMS_FOUND, fingerprint=PHYSICS_FP
+    )
+    store.load_run(engine, [result], [item], question=QUESTION, run_id=RUN)
+    return engine
+
+
+def _select(at: AppTest, key: str, value: str) -> AppTest:
+    (box,) = [s for s in at.sidebar.selectbox if s.key == key]
+    return box.set_value(value).run()
+
+
+def test_the_domain_filter_offers_the_loaded_domains_and_narrows_what_is_served(page, two_domains):
+    at = page.run()
+    (box,) = [s for s in at.sidebar.selectbox if s.key == DOMAIN_KEY]
+    assert box.options == [ANY, "biology", "physics"]
+    assert _remaining(at) == 3
+
+    at = _select(at, DOMAIN_KEY, "physics")
+
+    assert not at.exception
+    assert _on_screen(at, PHYSICS_SUPPORTING, PHYSICS_SECOND)
+    assert _remaining(at) == 1
+    at = _decide(at, choice="A", verdict=review.APPROVE)
+    assert any(review.NOTHING_LEFT in i.value for i in at.info), "physics is done; biology waits"
+
+
+def test_no_topic_filter_is_offered_until_a_paper_carries_a_topic(page, two_domains):
+    at = page.run()
+    assert not [s for s in at.sidebar.selectbox if s.key == TOPIC_KEY]
+
+    with two_domains.begin() as conn:
+        conn.execute(
+            store.review_paper.update()
+            .where(store.review_paper.c.pmcid == "PMC2")
+            .values(topic="crystals")
+        )
+    at = page.run()
+    (box,) = [s for s in at.sidebar.selectbox if s.key == TOPIC_KEY]
+    assert box.options == [ANY, "crystals"]
+    at = _select(at, TOPIC_KEY, "crystals")
+    assert _on_screen(at, PHYSICS_SUPPORTING)
+    assert _remaining(at) == 1
+
+
+def test_skipping_a_paper_records_it_and_moves_to_another_paper(page, two_domains):
+    at = _select(page.run(), DOMAIN_KEY, "physics")
+    assert _on_screen(at, PHYSICS_SUPPORTING)
+
+    at = _button(at, SKIP_PAPER).click().run()
+
+    assert not at.exception
+    with two_domains.begin() as conn:
+        (skip,) = conn.execute(select(store.review_skip)).all()
+    assert (skip.pmcid, skip.run_id, skip.reviewer) == ("PMC2", RUN, None)
+    assert any(review.NOTHING_LEFT in i.value for i in at.info), (
+        "the only physics paper is set aside"
+    )
+    at = _select(at, DOMAIN_KEY, ANY)
+    assert not _on_screen(at, PHYSICS_SUPPORTING)
+    assert _remaining(at) == 2
+    assert _rows(two_domains) == [], "a skip is not a decision"
 
 
 # --- the closed door, and no store --------------------------------------------------------------

@@ -47,7 +47,26 @@ create table if not exists review_paper (
     spend_json       text not null default '{}',
     fingerprint_json text not null default '{}',
     loaded_at        timestamptz not null default now(),
+    domain           text not null default 'biology',
+    topic            text not null default '',
     primary key (run_id, pmcid)
+);
+
+-- The same two for a database that predates them (ADR-0980). `domain` is the harvest scope the
+-- paper was read under, in `fingerprint_json` as `scope`; runs from before scopes are biology.
+alter table review_paper add column if not exists domain text not null default 'biology';
+alter table review_paper add column if not exists topic text not null default '';
+
+-- A paper a reviewer set aside — "not my field" — and is not offered to them again. Kept rather
+-- than dropped: a paper nobody wanted is a finding about the pool. Only a person skips; the
+-- simulated reviewers never read this table.
+create table if not exists review_skip (
+    id         bigserial primary key,
+    reviewer   text,
+    run_id     text not null,
+    pmcid      text not null,
+    skipped_at timestamptz not null default now(),
+    foreign key (run_id, pmcid) references review_paper (run_id, pmcid)
 );
 
 -- One row per screen. `item_json` is the whole `ReviewItem` and is what the page renders from; the

@@ -15,6 +15,10 @@ conditions, each of which would point at the answer. That choice is written. Onl
 entry as stored revealed, and the reviewer approves or disapproves. An issue can be raised at
 either step. A reviewer who leaves after the first step comes back to the second.
 
+A person may narrow what they are shown to one domain or one topic, and may set a paper aside
+("not my field"); the simulated reviewers get none of this (ADR-0980). Those are page arguments
+to the serving query, and the runner never passes them.
+
 Everything that is not a screen element is in `bionumbers.review`, so what the page decides is
 tested without a browser and only the order and lifetime of the elements needs `AppTest`
 (`.claude/rules/streamlit-driver.md`).
@@ -53,11 +57,19 @@ ISSUE_KEY = "bionumbers.review.issue"
 #: time spent on the last.
 STARTED_KEY = "bionumbers.review.started"
 
-#: The two buttons' labels. The issue button says what it is, so a reviewer who means to approve
-#: cannot click it by habit.
+#: The buttons' labels. The issue button says what it is, so a reviewer who means to approve
+#: cannot click it by habit; the skip button names the paper, not the item, because that is
+#: what it sets aside.
 CONTINUE = "Continue"
 SAVE_AND_NEXT = "Save and next"
 RAISE_AN_ISSUE = "Raise an issue"
+SKIP_PAPER = "Skip this paper"
+
+#: The filters' keys and their "no filter" option. One selectbox each, in the sidebar, so the
+#: choice survives from item to item; `ANY` is a label, never a stored value.
+DOMAIN_KEY = "bionumbers.review.domain"
+TOPIC_KEY = "bionumbers.review.topic"
+ANY = "All"
 
 st.set_page_config(page_title=review.TITLE, page_icon=":material/fact_check:")
 
@@ -81,12 +93,21 @@ reviewer = admission.account.email if admission.account else None
 
 engine = review.store_engine()
 
+preference = store.Preference()
 with st.sidebar:
     web.draw_identity(admission, session, tab)
     if engine is not None:
+        # A person's choices (ADR-0980): the domain and topic they want, read off the papers
+        # loaded, so an option is never offered that nothing matches.
+        domain = st.selectbox("Domain", [ANY, *store.domains(engine)], key=DOMAIN_KEY)
+        topics = store.topics(engine)
+        topic = st.selectbox("Topic", [ANY, *topics], key=TOPIC_KEY) if topics else ANY
+        preference = store.Preference(
+            domain=None if domain == ANY else domain, topic=None if topic == ANY else topic
+        )
         # Read before the decision below is written, so the figure is what is left *including*
         # this item -- the count a reviewer watches go down as they save.
-        st.caption(web.as_text(f"{store.remaining(engine, reviewer)} left to review"))
+        st.caption(web.as_text(f"{store.remaining(engine, reviewer, preference)} left to review"))
 
 web.draw_title(review.TITLE)
 
@@ -94,7 +115,7 @@ if engine is None:
     st.error(web.as_text(NO_STORE))
     st.stop()
 
-item = store.next_item(engine, reviewer)
+item = store.next_item(engine, reviewer, preference)
 if item is None:
     st.info(web.as_text(review.NOTHING_LEFT))
     st.stop()
@@ -110,7 +131,20 @@ if started is None or started[:2] != (item.item_id, step):
     st.session_state[STARTED_KEY] = started
 
 st.subheader(web.as_text(item.question))
-st.caption(web.as_text(review.citation_line(item.paper)))
+paper_line, aside = st.columns([5, 1])
+paper_line.caption(web.as_text(review.citation_line(item.paper)))
+# Beside the paper, because it is the paper that is set aside: every item of it, for this
+# reviewer, recorded (ADR-0980). Keyed per item so the click belongs to this screen.
+if aside.button(SKIP_PAPER, key=f"skip:{item.item_id}"):
+    try:
+        store.skip_paper(
+            engine, reviewer, run_id=item.claim.fingerprint.run_id, pmcid=item.paper.pmcid
+        )
+    except store.DecisionNotSaved:
+        st.error(web.as_text(review.NOT_SAVED))
+    else:
+        st.session_state.pop(STARTED_KEY, None)
+        st.rerun()
 
 # Both texts, in the order `texts_in_order` gives and never sorted, filtered or labelled further
 # here: which is which is the question being asked. Each text as the paper wrote it, nothing in

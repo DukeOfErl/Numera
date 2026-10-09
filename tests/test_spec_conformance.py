@@ -647,6 +647,12 @@ COVERED.update(
             "test_bionumbers_store.py::test_items_are_served_interleaved_across_papers",
             "test_bionumbers_store.py::test_remaining_counts_down_for_the_reviewer_who_decided",
             "test_review_app.py::test_when_every_item_is_decided_the_page_says_so",
+            "test_bionumbers_store.py::test_a_domain_preference_narrows_what_is_served_and_counted",
+            "test_bionumbers_store.py::test_a_topic_preference_reads_the_paper_s_topic",
+            "test_bionumbers_store.py::test_a_skipped_paper_is_not_offered_to_that_reviewer_again_and_still_is_to_others",
+            "test_bionumbers_store.py::test_without_a_preference_a_skip_changes_nothing",
+            "test_review_app.py::test_the_domain_filter_offers_the_loaded_domains_and_narrows_what_is_served",
+            "test_review_app.py::test_skipping_a_paper_records_it_and_moves_to_another_paper",
         ),
         "The model is never shown a decision": (
             "test_bionumbers_distractor.py::test_the_model_is_told_the_value_and_its_quote_and_nothing_about_a_decision",

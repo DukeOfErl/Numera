@@ -440,6 +440,103 @@ def test_undecided_items_are_all_of_a_reviewer_s_open_items_and_no_one_else_s(en
     assert [item.item_id for item in store.undecided_items(engine, None)] == ["i1", "i2", "i3"]
 
 
+# --- what a person may choose, and a model may not --------------------------------------------
+
+
+def a_physics_result(pmcid: str = "PMC2") -> PaperResult:
+    return PaperResult(
+        paper=a_paper(pmcid),
+        state=PaperState.CLAIMS_FOUND,
+        fingerprint=Fingerprint(
+            model="opus", instruction_sha256="abc", article_id=pmcid, run_id=RUN, scope="physics"
+        ),
+    )
+
+
+def two_domains(engine) -> None:
+    """PMC1 under the default domain (a fingerprint with no scope), PMC2 under physics."""
+    store.load_run(
+        engine,
+        [a_result(), a_physics_result()],
+        [an_item("i1"), an_item("i2", paper=a_paper("PMC2"))],
+        question=QUESTION,
+        run_id=RUN,
+    )
+
+
+def test_a_paper_s_domain_is_its_harvest_scope_and_biology_where_the_run_predates_scopes(engine):
+    two_domains(engine)
+
+    by_pmcid = {row.pmcid: row.domain for row in rows(engine, store.review_paper)}
+    assert by_pmcid == {"PMC1": "biology", "PMC2": "physics"}
+    assert store.domains(engine) == ["biology", "physics"]
+    assert store.topics(engine) == []
+
+
+def test_a_domain_preference_narrows_what_is_served_and_counted(engine):
+    two_domains(engine)
+    physics = store.Preference(domain="physics")
+
+    assert store.next_item(engine, "alice", physics).item_id == "i2"
+    assert store.remaining(engine, "alice", physics) == 1
+    assert store.remaining(engine, "alice", store.Preference()) == 2
+    assert store.next_item(engine, "alice", store.Preference(domain="chemistry")) is None
+
+
+def test_a_topic_preference_reads_the_paper_s_topic(engine):
+    two_domains(engine)
+    with engine.begin() as conn:
+        conn.execute(
+            store.review_paper.update()
+            .where(store.review_paper.c.pmcid == "PMC2")
+            .values(topic="planarians")
+        )
+
+    assert store.topics(engine) == ["planarians"]
+    assert store.next_item(engine, "alice", store.Preference(topic="planarians")).item_id == "i2"
+    assert store.remaining(engine, "alice", store.Preference(topic="yeast")) == 0
+
+
+def test_a_skipped_paper_is_not_offered_to_that_reviewer_again_and_still_is_to_others(engine):
+    two_domains(engine)
+
+    store.skip_paper(engine, "alice", run_id=RUN, pmcid="PMC1")
+
+    assert store.next_item(engine, "alice", store.Preference()).item_id == "i2"
+    assert store.remaining(engine, "alice", store.Preference()) == 1
+    assert store.next_item(engine, "bob", store.Preference()).item_id == "i1"
+    (skip,) = rows(engine, store.review_skip)
+    assert (skip.reviewer, skip.run_id, skip.pmcid) == ("alice", RUN, "PMC1")
+    assert skip.skipped_at is not None
+
+
+def test_without_a_preference_a_skip_changes_nothing(engine):
+    """The simulated review passes none: a model is never handed a person's choices."""
+    two_domains(engine)
+    store.skip_paper(engine, "alice", run_id=RUN, pmcid="PMC1")
+
+    assert store.next_item(engine, "alice").item_id == "i1"
+    assert store.remaining(engine, "alice") == 2
+    assert [i.item_id for i in store.undecided_items(engine, "alice")] == ["i1", "i2"]
+
+
+def test_the_unsigned_in_reviewer_s_skips_are_their_own(engine):
+    two_domains(engine)
+    store.skip_paper(engine, None, run_id=RUN, pmcid="PMC1")
+
+    assert store.next_item(engine, None, store.Preference()).item_id == "i2"
+    assert store.next_item(engine, "alice", store.Preference()).item_id == "i1"
+
+
+def test_skipping_a_paper_that_is_not_there_is_refused(engine):
+    two_domains(engine)
+
+    with pytest.raises(store.DecisionNotSaved, match="PMC9"):
+        store.skip_paper(engine, "alice", run_id=RUN, pmcid="PMC9")
+
+    assert rows(engine, store.review_skip) == []
+
+
 # --- two steps -----------------------------------------------------------------------------
 
 

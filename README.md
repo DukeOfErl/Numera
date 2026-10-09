@@ -348,7 +348,8 @@ streamlit run review_app.py
   approves or disapproves. An issue can be raised at either step. The second text is a distractor
   or a second legitimate occurrence; which it was is stored and never shown. Each step is written
   the moment it is given and the write fails closed: a reviewer whose step could not be saved is
-  told so and keeps the item.
+  told so and keeps the item. A reviewer can narrow the pool to one domain or topic and can set a
+  paper aside; those choices are a person's, and the simulated reviewers never get them.
 - **A simulated review** (`bionumbers simulate-review --reviewer student=<model>@0.6 --reviewer
   scientist=<model>@0.35 ...`) lets models stand in for reviewers until there are people: each
   role reviews its own fixed share of the items, is shown exactly what the page shows a person

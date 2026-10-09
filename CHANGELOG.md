@@ -54,6 +54,10 @@ any release; `1.0.0` when it stabilizes.
   and only then is the stored entry — value, the paper's term, conditions — revealed for the
   verdict. The value read is recorded before the reveal. An issue can be raised at either step. The
   simulated reviewers take the same two steps as two calls and record which model answered each.
+- **A human reviewer can choose a domain or a topic, and set a paper aside** ([ADR-0980]). The
+  page offers the domains and topics the loaded papers carry and a "Skip this paper" button; a
+  skip is recorded and the paper is not offered to that reviewer again. The simulated reviewers
+  get none of this and keep reviewing their assigned subsets.
 - **Every OpenRouter price is a price at one provider, and the request is pinned to it.** A model
   served by several providers at several rates is otherwise projected at one price and billed at
   another; the request now names the provider the price table was read from and allows no fallback.
@@ -525,3 +529,4 @@ number rather than an error:
 [ADR-1510]: docs/decisions/1510-the-curated-tier-admits-only-undoubted-entries.md
 [ADR-0960]: docs/decisions/0960-a-simulated-review-says-it-is-one.md
 [ADR-0970]: docs/decisions/0970-the-value-is-withheld-until-the-text-is-chosen.md
+[ADR-0980]: docs/decisions/0980-what-a-person-may-choose-and-a-model-may-not.md

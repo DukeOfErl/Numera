@@ -172,6 +172,12 @@ in an order that does not group by paper, so a reviewer does not learn a paper's
 previous item. A reviewer SHALL be shown how many items remain for them. When none remain, they
 SHALL be told so.
 
+A human reviewer SHALL be able to narrow what they are offered to papers of one domain or one
+topic, from those the loaded papers carry, and SHALL be able to set a paper aside, after which none
+of its items is offered to them; a skip SHALL be recorded with the reviewer and the time, and SHALL
+NOT count as a decision. None of these choices SHALL be available to a simulated reviewer, which
+is offered its assigned items whatever any person chose or skipped.
+
 #### Scenario: A reviewer returns
 - **WHEN** a reviewer who has decided some items opens the page again
 - **THEN** they are offered only items they have not decided
@@ -179,6 +185,18 @@ SHALL be told so.
 #### Scenario: Nothing remains
 - **WHEN** a reviewer has decided every item
 - **THEN** they are told there is nothing left to review
+
+#### Scenario: A reviewer chooses a domain
+- **WHEN** a human reviewer selects one domain
+- **THEN** only items of papers in that domain are offered and counted for them
+
+#### Scenario: A reviewer sets a paper aside
+- **WHEN** a human reviewer skips the paper on screen
+- **THEN** the skip is recorded, none of that paper's items is offered to them again, and the paper is still offered to other reviewers
+
+#### Scenario: A model is not offered the choice
+- **WHEN** a simulated reviewer runs after a person has skipped a paper
+- **THEN** that paper's items are still among the ones it is given
 
 ### Requirement: The model is never shown a decision
 

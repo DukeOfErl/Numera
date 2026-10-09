@@ -49,6 +49,7 @@ from sqlalchemy import (
     insert,
     select,
     text,
+    true,
     update,
 )
 
@@ -76,6 +77,10 @@ STATEMENT_TIMEOUT_MS = 5000
 
 METADATA = MetaData()
 
+#: The domain a paper is filed under when its run predates harvest scopes: every such run was
+#: a biology question or a yeast-and-cytoskeleton harvest.
+DEFAULT_DOMAIN = "biology"
+
 #: One row per article *per run*, whatever its ending -- `NOTHING_TO_EXTRACT` and `UNREADABLE`
 #: are findings and are kept. Keyed by the run as well as the article: two questions asked of
 #: the same paper are two extractions with two states, and keyed by article alone the second
@@ -99,6 +104,33 @@ review_paper = Table(
     Column("spend_json", Text, nullable=False, default="{}"),
     Column("fingerprint_json", Text, nullable=False, default="{}"),
     Column("loaded_at", DateTime(timezone=True), nullable=False),
+    # What a reviewer may choose to be shown (ADR-0980). `domain` is the harvest scope the paper
+    # was read under -- `biology`, `organismal`, `biophysics`, `chemistry`, `physics` -- with the
+    # runs from before scopes existed read as biology; `topic` is the harvester's label for the
+    # paper's subject ("planarians", "cytoskeleton"), empty where none was given. Columns rather
+    # than reads of the JSON beside them because the serving query filters on them, and a JSON
+    # path is spelled differently on the two backends.
+    Column("domain", Text, nullable=False, default=DEFAULT_DOMAIN),
+    Column("topic", Text, nullable=False, default=""),
+)
+
+#: A paper a reviewer set aside -- "not my field" -- and is not offered again. Recorded rather
+#: than dropped: a paper nobody wanted is itself a finding about the pool. Only a person skips;
+#: the simulated reviewers never read this table (ADR-0980).
+review_skip = Table(
+    "review_skip",
+    METADATA,
+    Column(
+        "id",
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    ),
+    Column("reviewer", Text),
+    Column("run_id", Text, nullable=False),
+    Column("pmcid", Text, nullable=False),
+    Column("skipped_at", DateTime(timezone=True), nullable=False),
+    ForeignKeyConstraint(["run_id", "pmcid"], ["review_paper.run_id", "review_paper.pmcid"]),
 )
 
 #: One row per screen. The columns beside `item_json` are the ones a later analysis groups by --
@@ -198,6 +230,18 @@ curated_entry = Table(
     Column("comments", Text, nullable=False, default=""),
     Column("loaded_at", DateTime(timezone=True), nullable=False),
 )
+
+
+@dataclass(frozen=True)
+class Preference:
+    """What a human reviewer asked to be shown (ADR-0980): papers of one domain, of one topic,
+    and never a paper they skipped. Passed by the page to the serving query; the simulated
+    review never builds one, so a model keeps drawing its assigned subset whatever a person
+    set aside. `None` for a field means no restriction on it; an instance with both `None`
+    still honours the reviewer's skips, which is what makes it a person's."""
+
+    domain: str | None = None
+    topic: str | None = None
 
 
 @dataclass(frozen=True)
@@ -336,8 +380,13 @@ def load_curated(engine: Any, corpus: Iterable[dict]) -> tuple[int, Counter[Refu
     return len(rows), refused
 
 
-def next_item(engine: Any, reviewer: str | None) -> ReviewItem | None:
+def next_item(
+    engine: Any, reviewer: str | None, preference: Preference | None = None
+) -> ReviewItem | None:
     """The next item this reviewer has not decided, or None when none remain.
+
+    `preference` narrows the pool to the domain and topic a person chose and leaves out the
+    papers they skipped; without one -- the simulated review -- every item is in the pool.
 
     Interleaved across papers: the spec's reason is that a reviewer who sees a paper's items in a
     row learns its conditions from the previous screen, and then judges the next one from memory
@@ -365,7 +414,10 @@ def next_item(engine: Any, reviewer: str | None) -> ReviewItem | None:
     # whose second step would otherwise be made from memory of a screen seen items ago.
     statement = (
         select(ordered.c.item_json)
-        .where(_undecided(ordered.c.item_id, reviewer))
+        .where(
+            _undecided(ordered.c.item_id, reviewer),
+            _preferred(ordered.c.run_id, ordered.c.pmcid, reviewer, preference),
+        )
         .order_by(
             _has_open_row(ordered.c.item_id, reviewer).desc(),
             ordered.c.position,
@@ -380,6 +432,43 @@ def next_item(engine: Any, reviewer: str | None) -> ReviewItem | None:
     return None if row is None else ReviewItem.model_validate_json(row.item_json)
 
 
+def domains(engine: Any) -> list[str]:
+    """Every domain a loaded paper is filed under, sorted, for the page's filter."""
+    with engine.begin() as conn:
+        _bound(conn)
+        return sorted(conn.scalars(select(review_paper.c.domain).distinct()))
+
+
+def topics(engine: Any) -> list[str]:
+    """Every topic a loaded paper carries, sorted, the empty one left out."""
+    with engine.begin() as conn:
+        _bound(conn)
+        found = conn.scalars(
+            select(review_paper.c.topic).distinct().where(review_paper.c.topic != "")
+        )
+        return sorted(found)
+
+
+def skip_paper(engine: Any, reviewer: str | None, *, run_id: str, pmcid: str) -> None:
+    """Set a paper aside for this reviewer: none of its items is offered to them again.
+
+    Recorded, not dropped (ADR-0980), and failing closed like a decision: a skip that did not
+    reach the table would offer the same paper on the next screen, and a reviewer told it was
+    set aside would have been told a falsehood.
+    """
+    with _closed(engine) as conn:
+        known = select(review_paper.c.pmcid).where(
+            review_paper.c.run_id == run_id, review_paper.c.pmcid == pmcid
+        )
+        if conn.execute(known).first() is None:
+            raise DecisionNotSaved(f"no paper {pmcid!r} in run {run_id!r}")
+        conn.execute(
+            insert(review_skip).values(
+                reviewer=reviewer, run_id=run_id, pmcid=pmcid, skipped_at=datetime.now(UTC)
+            )
+        )
+
+
 def open_choice(engine: Any, item_id: str, reviewer: str | None) -> Choice | None:
     """This reviewer's first step on the item, if they have taken it and not the second."""
     with engine.begin() as conn:
@@ -388,12 +477,15 @@ def open_choice(engine: Any, item_id: str, reviewer: str | None) -> Choice | Non
     return None if row is None else Choice(bool(row.chosen_supporting), row.value_read)
 
 
-def remaining(engine: Any, reviewer: str | None) -> int:
-    """How many items this reviewer has still to decide."""
+def remaining(engine: Any, reviewer: str | None, preference: Preference | None = None) -> int:
+    """How many items this reviewer has still to decide, within their preference if any."""
     statement = (
         select(func.count())
         .select_from(review_item)
-        .where(_undecided(review_item.c.item_id, reviewer))
+        .where(
+            _undecided(review_item.c.item_id, reviewer),
+            _preferred(review_item.c.run_id, review_item.c.pmcid, reviewer, preference),
+        )
     )
     with engine.begin() as conn:
         _bound(conn)
@@ -406,7 +498,8 @@ def undecided_items(engine: Any, reviewer: str | None) -> list[ReviewItem]:
     For a reviewer that is handed a batch rather than one screen at a time -- the simulated
     review. Not interleaved across papers the way `next_item` is: that ordering exists because a
     person remembers the previous screen, and a model call carries nothing from one item to the
-    next.
+    next. Takes no `Preference` on purpose: a domain, a topic and a skip are a person's choices
+    (ADR-0980), and a model that could be handed them would review a pool a person shaped.
     """
     statement = (
         select(review_item.c.item_json)
@@ -663,6 +756,27 @@ def _joined(so_far: str | None, more: str | None) -> str | None:
     return ", ".join(dict.fromkeys(names)) or None
 
 
+def _preferred(
+    run_column: Any, pmcid_column: Any, reviewer: str | None, preference: Preference | None
+):
+    """The paper is one this reviewer asked for and has not skipped; everything, with no
+    preference."""
+    if preference is None:
+        return true()
+    wanted = [review_paper.c.run_id == run_column, review_paper.c.pmcid == pmcid_column]
+    if preference.domain is not None:
+        wanted.append(review_paper.c.domain == preference.domain)
+    if preference.topic is not None:
+        wanted.append(review_paper.c.topic == preference.topic)
+    skipped_by = (
+        review_skip.c.reviewer.is_(None) if reviewer is None else review_skip.c.reviewer == reviewer
+    )
+    skipped = select(review_skip.c.id).where(
+        review_skip.c.run_id == run_column, review_skip.c.pmcid == pmcid_column, skipped_by
+    )
+    return select(review_paper.c.pmcid).where(*wanted).exists() & ~skipped.exists()
+
+
 def _undecided(item_id_column: Any, reviewer: str | None):
     """No *completed* row for this item by this reviewer: a verdict given, or an issue raised. An
     open row -- a choice awaiting its verdict -- leaves the item undecided, and `next_item` serves
@@ -712,6 +826,9 @@ def _paper_row(result: PaperResult, *, question: str, run_id: str, now: datetime
         "spend_json": result.spend.model_dump_json(),
         "fingerprint_json": result.fingerprint.model_dump_json(),
         "loaded_at": now,
+        "domain": getattr(result.fingerprint, "scope", "") or DEFAULT_DOMAIN,
+        # `Paper.topic` is the harvester's to add; read softly until it exists.
+        "topic": getattr(paper, "topic", "") or "",
     }
 
 
