@@ -111,6 +111,15 @@ def test_the_instruction_asks_for_a_latin_name_and_a_value_without_its_unit():
     assert "belongs to no organism" in harvest.HARVEST_INSTRUCTION
 
 
+def test_a_size_given_to_explain_a_method_is_not_asked_for():
+    """Yoav, 2026-10-09, on PMC10697840: "<1 mm" and "~5 mm" were the sizes of the animals the
+    authors happened to cut, not of the species, which spans 0.2 to 12 mm."""
+    assert "A VALUE IS A FINDING, NOT A DESCRIPTION OF THE STUDY'S MATERIAL" in (
+        harvest.HARVEST_INSTRUCTION
+    )
+    assert "one named animal or specimen" in harvest.HARVEST_INSTRUCTION
+
+
 def test_a_value_beside_others_of_its_kind_is_named_by_its_condition_and_the_control_is_not():
     """Blind review of 60 seeded items (2026-10-07): about a third of the adjacent-condition
     items were undecidable from the name alone -- two "Axonal actin ring spacing (mouse)", six

@@ -28,7 +28,8 @@ any release; `1.0.0` when it stabilizes.
   classes instead of for one question's answer; every claim is named by its own property and
   species ([ADR-0950]). The second text is asked never to be another source's value for the same
   property in the same organism, which is a second answer rather than a wrong one.
-  Each domain names its own condition fields (a glass: material, preparation, pressure, phase).
+  A value must be a finding: the size of the animals a study happened to use, given to explain a
+  method, is not asked for. Each domain names its own condition fields (a glass: material, preparation, pressure, phase).
   `--topic` names what the papers are about, for a reviewer to choose by.
   `--scope biology|organismal|biophysics|chemistry|physics` asks for one domain's classes of value, and the
   domain is recorded on every claim ([ADR-1500]). A value reported beside others of its kind is

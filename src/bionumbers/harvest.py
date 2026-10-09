@@ -318,7 +318,17 @@ _SELECTION = f"""AT MOST {MAX_CLAIMS} CLAIMS, THE MOST REUSABLE FIRST. Prefer th
 type, control, untreated, the standard condition. Prefer a summary value -- a mean, a median, a
 total -- over rows for single genes, samples or replicates. A value that exists only under
 a perturbation particular to this study (its drug, its mutant, its construct) is not wanted,
-unless the article presents it as a property of that named system. An article that
+unless the article presents it as a property of that named system.
+
+A VALUE IS A FINDING, NOT A DESCRIPTION OF THE STUDY'S MATERIAL. Report a value only where the
+article presents it as something it found: in its results, a table or a figure legend. Not
+wanted: the size, age or number of the particular specimens, animals or samples a study used,
+mentioned to describe or justify a method ("due to their small size (<1 mm), head regeneration
+was assayed upon bisection"; "for species ~5 mm in length, animals were cut into four pieces");
+a value for one named animal or specimen where the article reports several; and a description
+of a whole species or group that the article states in passing rather than establishes.
+
+An article that
 establishes many reusable values -- a quantitative survey, a model built on measured numbers --
 is wanted in full up to the bound: do not stop at the few most prominent. An article with no
 value of the wanted classes is NOTHING_TO_EXTRACT.

@@ -19,6 +19,7 @@ passed, what is wrong, and how sure the diagnosis is. Values and paper ids only;
 | 8 | PMC9054212 (chemistry) | Half-maximal inhibitory concentration of compound H4: 149.21, unit "nm" | The paper writes "nm" — nanometres — for a concentration it means in nanomolar. The quote is verbatim and the unit is the paper's own; only a reader who knows an inhibitory concentration is never a length catches it. | Unit as written, wrong |
 | 9 | PMC11786770 (biophysics) | Mean filament length of skeletal muscle actin: 6.7 ± 01 μm | The paper's own typo: "± 01" for what is surely ± 0.1. Verbatim, and the store would carry an error term of one micrometre. | The paper's typo, faithfully kept |
 | 10 | PMC7021822 (physics) | Predicted glass transition temperature: −120 °C, material "all atoms are completely mobile" | A fit extrapolated to a hypothetical limit (ζ = 1), not the property of any material; the model labelled the hypothesis as the material. | Not a property of anything |
+| 11 | PMC10697840 (planarians) | Body length: Prolecithophora "<1 mm"; *Procerodes littoralis*, *P. plebeius*, *Camerata robusta* "~5 mm" | Caught by Yoav. The sentences size the animals the authors happened to cut, to explain how they were cut; the species themselves span about 0.2 to 12 mm, and rare ones reach 50 mm. A verbatim quote of a passing description, entered as if it were the species' property. The instruction now asks only for findings (2026-10-09). | The study's material, not the species |
 
 ## How sure
 
