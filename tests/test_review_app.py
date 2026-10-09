@@ -521,7 +521,7 @@ def two_domains(engine):
 
 
 def _select(at: AppTest, key: str, value: str) -> AppTest:
-    (box,) = [s for s in at.sidebar.selectbox if s.key == key]
+    (box,) = [s for s in at.sidebar.selectbox if (s.key or "").startswith(key)]
     return box.set_value(value).run()
 
 
@@ -551,11 +551,37 @@ def test_no_topic_filter_is_offered_until_a_paper_carries_a_topic(page, two_doma
             .values(topic="crystals")
         )
     at = page.run()
-    (box,) = [s for s in at.sidebar.selectbox if s.key == TOPIC_KEY]
+    (box,) = [s for s in at.sidebar.selectbox if s.key.startswith(TOPIC_KEY)]
     assert box.options == [ANY, "crystals"]
     at = _select(at, TOPIC_KEY, "crystals")
     assert _on_screen(at, PHYSICS_SUPPORTING)
     assert _remaining(at) == 1
+
+
+def test_the_topics_offered_are_those_of_the_chosen_domain(page, two_domains):
+    with two_domains.begin() as conn:
+        conn.execute(
+            store.review_paper.update()
+            .where(store.review_paper.c.pmcid == "PMC2")
+            .values(topic="crystals")
+        )
+        conn.execute(
+            store.review_paper.update()
+            .where(store.review_paper.c.pmcid == "PMC1")
+            .values(topic="yeast")
+        )
+    at = page.run()
+    (box,) = [s for s in at.sidebar.selectbox if s.key.startswith(TOPIC_KEY)]
+    assert box.options == [ANY, "crystals", "yeast"]
+
+    at = _select(at, DOMAIN_KEY, "physics")
+
+    (box,) = [s for s in at.sidebar.selectbox if s.key.startswith(TOPIC_KEY)]
+    assert box.options == [ANY, "crystals"]
+    assert box.value == ANY, "a fresh topic choice for the new domain"
+    at = _select(at, DOMAIN_KEY, "biology")
+    (box,) = [s for s in at.sidebar.selectbox if s.key.startswith(TOPIC_KEY)]
+    assert box.options == [ANY, "yeast"]
 
 
 def test_skipping_a_paper_records_it_and_moves_to_another_paper(page, two_domains):

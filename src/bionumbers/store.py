@@ -540,14 +540,15 @@ def domains(engine: Any) -> list[str]:
         return sorted(conn.scalars(select(review_paper.c.domain).distinct()))
 
 
-def topics(engine: Any) -> list[str]:
-    """Every topic a loaded paper carries, sorted, the empty one left out."""
+def topics(engine: Any, domain: str | None = None) -> list[str]:
+    """Every topic a loaded paper carries, sorted, the empty one left out -- within one domain
+    when given, so a reviewer who chose physics is not offered planarians."""
+    statement = select(review_paper.c.topic).distinct().where(review_paper.c.topic != "")
+    if domain is not None:
+        statement = statement.where(review_paper.c.domain == domain)
     with engine.begin() as conn:
         _bound(conn)
-        found = conn.scalars(
-            select(review_paper.c.topic).distinct().where(review_paper.c.topic != "")
-        )
-        return sorted(found)
+        return sorted(conn.scalars(statement))
 
 
 def skip_paper(engine: Any, reviewer: str | None, *, run_id: str, pmcid: str) -> None:

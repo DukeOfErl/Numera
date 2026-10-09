@@ -100,11 +100,14 @@ with st.sidebar:
         # A person's choices (ADR-0980): the domain and topic they want, read off the papers
         # loaded, so an option is never offered that nothing matches.
         domain = st.selectbox("Domain", [ANY, *store.domains(engine)], key=DOMAIN_KEY)
-        topics = store.topics(engine)
-        topic = st.selectbox("Topic", [ANY, *topics], key=TOPIC_KEY) if topics else ANY
-        preference = store.Preference(
-            domain=None if domain == ANY else domain, topic=None if topic == ANY else topic
+        chosen_domain = None if domain == ANY else domain
+        # The topics of the chosen domain only, and a fresh widget per domain: a topic kept
+        # from another domain would name papers the filter can no longer reach.
+        topics = store.topics(engine, chosen_domain)
+        topic = (
+            st.selectbox("Topic", [ANY, *topics], key=f"{TOPIC_KEY}:{domain}") if topics else ANY
         )
+        preference = store.Preference(domain=chosen_domain, topic=None if topic == ANY else topic)
         # Read before the decision below is written, so the figure is what is left *including*
         # this item -- the count a reviewer watches go down as they save.
         st.caption(web.as_text(f"{store.remaining(engine, reviewer, preference)} left to review"))

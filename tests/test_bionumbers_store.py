@@ -494,6 +494,8 @@ def test_a_topic_preference_reads_the_paper_s_topic(engine):
         )
 
     assert store.topics(engine) == ["planarians"]
+    assert store.topics(engine, "physics") == ["planarians"]
+    assert store.topics(engine, "biology") == []
     assert store.next_item(engine, "alice", store.Preference(topic="planarians")).item_id == "i2"
     assert store.remaining(engine, "alice", store.Preference(topic="yeast")) == 0
 
