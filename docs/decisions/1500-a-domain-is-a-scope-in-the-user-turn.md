@@ -47,3 +47,13 @@ model said why each time: the numbers were about bodies, fossils or tissues, not
 scope, `organismal`, asks for organism-level sizes, counts, genomes, life-history times,
 physiological quantities and proportions, and sets aside phylogenetic support values and numbers
 of specimens examined. Nothing else changes; the decision above holds.
+
+## Amendment, 2026-10-09: each scope names its condition fields
+
+The trade-off above — the instruction's condition fields remain biological — did not survive the
+first review of the demo database: on a physics entry every field (strain, medium, growth phase)
+read "not stated", and the condition that mattered, the glass's preparation or pressure, appeared
+nowhere. Each scope now carries its condition fields, and they travel in the user turn with the
+classes; the harvest instruction says only "the condition fields the user turn names", and refuses
+to build if the question instruction's own list moves. Biology keeps the original eight. Entries
+extracted before this carry the biological fields.

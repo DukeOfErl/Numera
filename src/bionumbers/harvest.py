@@ -24,7 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from bionumbers.extraction import INSTRUCTION
-from bionumbers.records import Claim
+from bionumbers.records import CONDITION_FIELDS, Claim
 
 #: At most this many claims from one paper. A bound on cost before it is one on content: every
 #: claim buys a second-text call, and a paper's output has to fit the extraction call's cap.
@@ -115,6 +115,11 @@ class Scope:
 
     classes: tuple[tuple[str, str], ...]
     excluded: tuple[str, ...]
+    conditions: tuple[str, ...] = CONDITION_FIELDS
+    """The condition fields each claim reports, in the order a reviewer reads them. The
+    biological set by default; a glass has no strain or growth phase, and the condition that
+    matters for it -- its preparation, its pressure -- was nowhere on the list (Yoav, reviewing
+    the demo database, 2026-10-09)."""
 
 
 _MECHANICAL = (
@@ -142,6 +147,14 @@ BIOPHYSICS = Scope(
         "the amounts used to assemble a reconstituted network or to coat a probe: they are the "
         "conditions of a value, recorded with it, not values of their own",
         "properties of probe particles, beads and calibration samples",
+    ),
+    conditions=(
+        "organism",
+        "protein_or_construct",
+        "buffer",
+        "concentration",
+        "temperature",
+        "method",
     ),
 )
 
@@ -182,6 +195,7 @@ CHEMISTRY = Scope(
         "reusable value",
         _COUNTS,
     ),
+    conditions=("compound", "target", "solvent", "concentration", "temperature", "pH", "method"),
 )
 
 PHYSICS = Scope(
@@ -221,6 +235,7 @@ PHYSICS = Scope(
         "is the reusable one",
         _COUNTS,
     ),
+    conditions=("material", "preparation", "temperature", "pressure", "phase_or_state", "method"),
 )
 
 #: Organism-level biology: anatomy, physiology, life history, genomes, evolution. Written after the
@@ -270,6 +285,15 @@ ORGANISMAL = Scope(
         "where the summary value is the reusable one",
         _COUNTS,
     ),
+    conditions=(
+        "organism",
+        "population_or_strain",
+        "sex",
+        "developmental_stage",
+        "tissue",
+        "temperature",
+        "method",
+    ),
 )
 
 #: Every domain harvest can be asked in, by the name a run records. `biology` is the scope the
@@ -311,10 +335,11 @@ THREE LABELS ARE YOURS TO WRITE. They are labels, not quotes; everything else st
 - property_name: a short general name for the quantity, worded as a database heading,
   without the value or the organism. Where the article reports the quantity under more
   than one condition, the name of every value but the control ends with its condition,
-  named as a scientist would name it -- the growth state, genotype or construct, tissue,
-  developmental stage, or position ("third hyphal compartment from the tip", not "3rd
-  cell"); outside biology, the sample or state -- and never as a table's row or column
-  label. The value the article marks as its control or wild type carries no condition in
+  named as a scientist would name it -- the growth state, genotype or construct, genome
+  assembly ("haplotype 1 assembly"), tissue, developmental stage, or position ("third
+  hyphal compartment from the tip", not "3rd cell"); outside biology, the sample or state
+  -- and never as a table's row or column label, nor left to a heading that spans several
+  columns. The value the article marks as its control or wild type carries no condition in
   its name.
 - property_class: one of the class names in the user turn.
 - organism_name: the species the value belongs to, as the Latin binomial the article gives
@@ -323,10 +348,33 @@ THREE LABELS ARE YOURS TO WRITE. They are labels, not quotes; everything else st
   came from. A value that belongs to no organism -- a material, a compound, a model system --
   is labelled with that material or system, named as the article names it."""
 
+_QUESTION_CONDITIONS = f"For each claim report these fields: {', '.join(CONDITION_FIELDS)}."
+_SCOPE_CONDITIONS = "For each claim report the condition fields the user turn names."
+
+
+def _rules() -> str:
+    """The question instruction's rules with its fixed condition list replaced by the scope's.
+
+    Refuses to build if the sentence it replaces is not there, so a rewording of the question
+    instruction fails at import instead of leaving harvest asking for the biological fields.
+    """
+    rules = INSTRUCTION.split("\n\n", 1)[1]
+    if rules.count(_QUESTION_CONDITIONS) != 1:
+        raise RuntimeError("the extraction instruction no longer names its condition fields")
+    return rules.replace(_QUESTION_CONDITIONS, _SCOPE_CONDITIONS)
+
+
 #: The extraction instruction with its first paragraph replaced and the harvest rules added.
 #: Built from `extraction.INSTRUCTION` rather than restated, so the quoting rule, the claim
-#: categories, the citation-marker rule and the conditions cannot drift between the two modes.
-HARVEST_INSTRUCTION = "\n\n".join((_HEAD, INSTRUCTION.split("\n\n", 1)[1], _SELECTION))
+#: categories and the citation-marker rule cannot drift between the two modes; only the list of
+#: condition fields differs, and it travels in the user turn with the rest of the scope.
+HARVEST_INSTRUCTION = "\n\n".join((_HEAD, _rules(), _SELECTION))
+
+
+def condition_fields(scope: str = DEFAULT_SCOPE) -> tuple[str, ...]:
+    """The condition fields a claim harvested in `scope` reports, in the order to list them. A
+    scope recorded as "" -- a run from before scopes -- is biology."""
+    return SCOPES[scope or DEFAULT_SCOPE].conditions
 
 
 def class_names(scope: str = DEFAULT_SCOPE) -> frozenset[str]:
@@ -335,11 +383,19 @@ def class_names(scope: str = DEFAULT_SCOPE) -> frozenset[str]:
 
 
 def user_turn(scope: str = DEFAULT_SCOPE) -> dict:
-    """The scope: the wanted classes and the unwanted kinds. Nothing about any paper."""
+    """The scope: the wanted classes, the unwanted kinds, and the condition fields to report.
+    Nothing about any paper."""
     chosen = SCOPES[scope]
     wanted = "\n".join(f"- {name}: {covers}" for name, covers in chosen.classes)
     unwanted = "\n".join(f"- {kind}" for kind in chosen.excluded)
-    return {"role": "user", "content": f"Wanted classes:\n{wanted}\n\nNot wanted:\n{unwanted}"}
+    conditions = ", ".join(chosen.conditions)
+    return {
+        "role": "user",
+        "content": (
+            f"Wanted classes:\n{wanted}\n\nNot wanted:\n{unwanted}\n\n"
+            f"Condition fields: {conditions}"
+        ),
+    }
 
 
 def question_of(claim: Claim) -> str:

@@ -21,7 +21,7 @@ from bionumbers.extraction import (
     instruction_sha256,
 )
 from bionumbers.jats import read_jats
-from bionumbers.records import CandidateKind, ClaimKind, Paper, PaperState
+from bionumbers.records import CONDITION_FIELDS, CandidateKind, ClaimKind, Paper, PaperState
 from bionumbers.spend import Ceiling, Ledger
 
 FIXTURES = Path(__file__).parent / "fixtures" / "europepmc"
@@ -90,7 +90,12 @@ def test_the_harvest_instruction_keeps_every_rule_of_the_question_instruction_bu
     """Built from it, not restated: the quoting rule, the claim categories, the citation-marker
     rule and the conditions are the same text in both modes."""
     opening, rules = INSTRUCTION.split("\n\n", 1)
-    assert rules in harvest.HARVEST_INSTRUCTION
+    question_conditions = f"For each claim report these fields: {', '.join(CONDITION_FIELDS)}."
+    assert question_conditions in rules
+    assert rules.replace(question_conditions, "") in harvest.HARVEST_INSTRUCTION.replace(
+        "For each claim report the condition fields the user turn names.", ""
+    )
+    assert question_conditions not in harvest.HARVEST_INSTRUCTION
     assert opening not in harvest.HARVEST_INSTRUCTION
     assert "no single question" in harvest.HARVEST_INSTRUCTION
 
@@ -328,3 +333,24 @@ def test_a_class_outside_the_scope_loses_its_label_and_keeps_its_value(article, 
 def test_every_scope_s_class_names_are_its_own():
     for name, scope in harvest.SCOPES.items():
         assert harvest.class_names(name) == {cls for cls, _ in scope.classes}
+
+
+# --- conditions belong to the scope ---------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", sorted(harvest.SCOPES))
+def test_each_scope_names_its_own_condition_fields_in_the_user_turn(name):
+    content = harvest.user_turn(name)["content"]
+    assert f"Condition fields: {', '.join(harvest.condition_fields(name))}" in content
+    assert "method" in harvest.condition_fields(name)
+
+
+def test_a_glass_is_not_asked_its_strain_and_a_cell_is_not_asked_its_pressure():
+    """Yoav, reviewing the demo database (2026-10-09): every biological field read "not
+    stated" on a physics entry, and the condition that mattered was missing."""
+    physics = harvest.condition_fields("physics")
+    assert {"pressure", "preparation", "material"} <= set(physics)
+    assert not {"strain", "growth_phase", "culture_mode"} & set(physics)
+    assert harvest.condition_fields("biology") == CONDITION_FIELDS
+    assert harvest.condition_fields("") == CONDITION_FIELDS
+    assert {"solvent", "pH"} <= set(harvest.condition_fields("chemistry"))
