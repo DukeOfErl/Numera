@@ -169,7 +169,7 @@ def compare(read: str, value: str, unit: str = "") -> Agreement:
     precision = min(reading.precision, stored.precision)
     pairs = list(zip(reading.numbers, stored.numbers, strict=True))
     same_digits = all(_close(a, b, precision) for a, b in pairs)
-    if not reading.unit or not stored.unit or reading.unit == stored.unit:
+    if not reading.unit or not stored.unit or _same_unit(reading.unit, stored.unit):
         return Agreement.MATCHES if same_digits else Agreement.DIFFERS
 
     factor = _conversion(reading.unit, stored.unit)
@@ -231,10 +231,19 @@ def _close(a: Decimal, b: Decimal, precision: int) -> bool:
 def _unit(text: str) -> str:
     """The unit as written: folded, trimmed of punctuation, `per` as `/`, a keyboard `u` for
     micro as `μ`."""
-    unit = _UNIT_END.sub("", text.strip())
+    # `10-min`, `95-µm-sized`: a hyphen between the number and its unit is a space.
+    unit = _UNIT_END.sub("", text.strip().lstrip("-").strip())
     unit = re.sub(r"\s+", " ", unit.strip(",;:.()[]").strip())
     unit = re.sub(r"\s+per\s+", "/", unit)
     return _KEYBOARD_MICRO.sub("μ", unit)
+
+
+def _same_unit(read: str, stored: str) -> bool:
+    """The stored unit, or the stored unit inside what was read: `nm wide` and
+    `molecularly distinct segments` carry the unit and some of the sentence with it."""
+    if read == stored:
+        return True
+    return re.search(rf"(?<![\w/]){re.escape(stored)}(?![\w/])", read) is not None
 
 
 def _conversion(from_unit: str, to_unit: str) -> Decimal | None:

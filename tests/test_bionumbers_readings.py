@@ -66,6 +66,8 @@ M, U, D, X = (
         ("0.16 ± 0.10 μM ([ref 14]) and 0.17 μM", ["0.16"], "μM", "0.10", False),
         ("103 filaments per µm (sdm = 17; 20 measurements)", ["103"], "filaments/μm", None, False),
         ("570 ^+/− 260 s", ["570"], "s", "260", False),
+        ("~10-min", ["10"], "min", None, True),
+        ("95-µm–sized", ["95"], "μm-sized", None, False),
     ],
 )
 def test_a_value_as_a_person_writes_it_is_read(text, numbers, unit, uncertainty, approximate):
@@ -119,6 +121,13 @@ def test_precision_is_the_digits_written(text, precision):
             M,
         ),
         ("570 +/− 260 s", "570 ^+/− 260", "s", M),
+        # The unit and some of the sentence with it.
+        ("35–40 nm wide", "35–40", "nm", M),
+        ("6 molecularly distinct segments", "6", "segments", M),
+        ("∼10-min", "∼10", "min", M),
+        ("95-µm–sized", "95", "µm", M),
+        ("0.38 of a normalized cell length", "0.38", "normalized cell length", M),
+        ("39 nm/s", "39", "nm", U),
         # The reader's precision, or the paper's, whichever is coarser.
         ("39", "39.2", "min", M),
         ("39.2", "39", "min", M),
