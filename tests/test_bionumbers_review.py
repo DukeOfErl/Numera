@@ -558,3 +558,29 @@ class TestStoreEngine:
         monkeypatch.delenv(review.DB_URL_ENV, raising=False)
 
         assert review.store_engine() is None
+
+
+def test_outside_biology_only_the_conditions_the_paper_states_are_listed():
+    """A lattice constant has no growth medium. The eight biological fields read "not stated"
+    on every physics paper and say nothing; only what the extractor recorded is shown."""
+    stated = an_item().claim.model_copy(
+        update={
+            "conditions": (
+                ConditionField(
+                    name="temperature", provenance=Provenance.BESIDE_VALUE, quote="at 300 K"
+                ),
+                ConditionField(name="medium", provenance=Provenance.NOT_STATED),
+                ConditionField(
+                    name="pressure", provenance=Provenance.FROM_METHODS, quote="ambient"
+                ),
+            )
+        }
+    )
+
+    physics = review.condition_rows(stated, "physics")
+    biology = review.condition_rows(stated, "biology")
+
+    assert [row[0] for row in physics] == ["Temperature", "Pressure"]
+    assert [row[0] for row in biology][:3] == ["Organism", "Strain", "Medium"]
+    assert len(biology) == len(review.CONDITION_FIELDS) + 1
+    assert review.condition_rows(stated, "") == biology, "runs before scopes are biology"

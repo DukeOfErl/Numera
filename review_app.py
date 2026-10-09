@@ -57,13 +57,18 @@ ISSUE_KEY = "bionumbers.review.issue"
 #: time spent on the last.
 STARTED_KEY = "bionumbers.review.started"
 
-#: The buttons' labels. The issue button says what it is, so a reviewer who means to approve
-#: cannot click it by habit; the skip button names the paper, not the item, because that is
+#: The buttons' labels. Raising an issue is two clicks -- the button opens a box, and a second
+#: button confirms it -- so an issue is never one stray click away from a verdict, and the
+#: reviewer can take it back; the skip button names the paper, not the item, because that is
 #: what it sets aside.
 CONTINUE = "Continue"
 SAVE_AND_NEXT = "Save and next"
 RAISE_AN_ISSUE = "Raise an issue"
+CONFIRM_ISSUE = "Confirm the issue"
+CANCEL_ISSUE = "Take it back"
 SKIP_PAPER = "Skip this paper"
+#: The screen whose issue box is open, if any: `<item id>:<step>`.
+RAISING_KEY = "bionumbers.review.raising"
 
 #: The filters' keys and their "no filter" option. One selectbox each, in the sidebar, so the
 #: choice survives from item to item; `ANY` is a label, never a stored value.
@@ -180,11 +185,44 @@ def _next_screen() -> None:
     # The next screen brings its own widgets (see the key prefixes above); only the clock is
     # ours to reset.
     st.session_state.pop(STARTED_KEY, None)
+    st.session_state.pop(RAISING_KEY, None)
     st.rerun()
 
 
 def _elapsed() -> float:
     return time.monotonic() - started[2]
+
+
+def _issue_controls() -> bool:
+    """The issue control for this screen. Returns True while the issue box is open, so the
+    caller leaves its own save button out: with the box open the only question is whether to
+    confirm the issue or take it back."""
+    if st.session_state.get(RAISING_KEY) != key:
+        if st.button(RAISE_AN_ISSUE, key=f"issue-button:{key}"):
+            st.session_state[RAISING_KEY] = key
+            st.rerun()
+        return False
+    issue = st.text_area(
+        "What is wrong with this entry? It is recorded in place of a decision.",
+        key=f"{ISSUE_KEY}:{key}",
+    )
+    confirm, cancel = st.columns(2)
+    if confirm.button(CONFIRM_ISSUE, type="primary", key=f"confirm-issue:{key}"):
+        try:
+            text = review.issue_from(issue)
+        except review.Incomplete as incomplete:
+            st.warning(web.as_text(incomplete.message))
+        else:
+            _save(
+                lambda: store.record_issue(
+                    engine, item.item_id, reviewer=reviewer, issue=text, time_to_decide_s=_elapsed()
+                ),
+                on_saved=_next_screen,
+            )
+    if cancel.button(CANCEL_ISSUE, key=f"cancel-issue:{key}"):
+        st.session_state.pop(RAISING_KEY, None)
+        st.rerun()
+    return True
 
 
 if step == 1:
@@ -193,12 +231,8 @@ if step == 1:
     # every time -- a bias in the dataset with no trace of itself.
     picked = st.radio(review.CHOICE_QUESTION, ["A", "B"], index=None, key=f"{CHOICE_KEY}:{key}")
     value_read = st.text_input(review.VALUE_QUESTION, key=f"{VALUE_KEY}:{key}")
-    issue = st.text_area(
-        "Something wrong with this entry? Describe it here and raise an issue instead.",
-        key=f"{ISSUE_KEY}:{key}",
-    )
-    go, raise_issue = st.columns(2)
-    if go.button(CONTINUE, type="primary"):
+    raising = _issue_controls()
+    if not raising and st.button(CONTINUE, type="primary"):
         try:
             first = review.first_step_from(item, picked, value_read)
         except review.Incomplete as incomplete:
@@ -214,18 +248,6 @@ if step == 1:
                     chosen_supporting=first.chosen_supporting,
                     value_read=first.value_read,
                     time_to_decide_s=_elapsed(),
-                ),
-                on_saved=_next_screen,
-            )
-    if raise_issue.button(RAISE_AN_ISSUE, key=f"issue-button:{key}"):
-        try:
-            text = review.issue_from(issue)
-        except review.Incomplete as incomplete:
-            st.warning(web.as_text(incomplete.message))
-        else:
-            _save(
-                lambda: store.record_issue(
-                    engine, item.item_id, reviewer=reviewer, issue=text, time_to_decide_s=_elapsed()
                 ),
                 on_saved=_next_screen,
             )
@@ -246,7 +268,9 @@ else:
     st.table(
         [
             {"Condition": name, "Stated": provenance, "Quote": quote}
-            for name, provenance, quote in review.condition_rows(item.claim)
+            for name, provenance, quote in review.condition_rows(
+                item.claim, item.claim.fingerprint.scope
+            )
         ]
     )
     verdict = st.radio(
@@ -256,12 +280,8 @@ else:
         key=f"{VERDICT_KEY}:{key}",
     )
     comment = st.text_area("Comment (optional)", key=f"{COMMENT_KEY}:{key}")
-    issue = st.text_area(
-        "Something wrong with this entry? Describe it here and raise an issue instead.",
-        key=f"{ISSUE_KEY}:{key}",
-    )
-    go, raise_issue = st.columns(2)
-    if go.button(SAVE_AND_NEXT, type="primary"):
+    raising = _issue_controls()
+    if not raising and st.button(SAVE_AND_NEXT, type="primary"):
         try:
             approved = review.verdict_from(verdict)
         except review.Incomplete as incomplete:
@@ -275,18 +295,6 @@ else:
                     approved=approved,
                     comment=comment,
                     time_to_decide_s=_elapsed(),
-                ),
-                on_saved=_next_screen,
-            )
-    if raise_issue.button(RAISE_AN_ISSUE, key=f"issue-button:{key}"):
-        try:
-            text = review.issue_from(issue)
-        except review.Incomplete as incomplete:
-            st.warning(web.as_text(incomplete.message))
-        else:
-            _save(
-                lambda: store.record_issue(
-                    engine, item.item_id, reviewer=reviewer, issue=text, time_to_decide_s=_elapsed()
                 ),
                 on_saved=_next_screen,
             )

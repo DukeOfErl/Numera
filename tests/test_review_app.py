@@ -63,6 +63,8 @@ ISSUE_KEY = _constant("ISSUE_KEY")
 CONTINUE = _constant("CONTINUE")
 SAVE_AND_NEXT = _constant("SAVE_AND_NEXT")
 RAISE_AN_ISSUE = _constant("RAISE_AN_ISSUE")
+CONFIRM_ISSUE = _constant("CONFIRM_ISSUE")
+CANCEL_ISSUE = _constant("CANCEL_ISSUE")
 SKIP_PAPER = _constant("SKIP_PAPER")
 DOMAIN_KEY = _constant("DOMAIN_KEY")
 TOPIC_KEY = _constant("TOPIC_KEY")
@@ -233,9 +235,11 @@ def _judge(at: AppTest, *, verdict: str | None, comment: str | None = None) -> A
 
 
 def _raise(at: AppTest, text: str | None) -> AppTest:
+    """Open the issue box, write into it, confirm."""
+    at = _button(at, RAISE_AN_ISSUE).click().run()
     if text is not None:
         _widget(at.text_area, ISSUE_KEY).set_value(text)
-    return _button(at, RAISE_AN_ISSUE).click().run()
+    return _button(at, CONFIRM_ISSUE).click().run()
 
 
 def _decide(at: AppTest, *, choice: str, verdict: str, comment: str | None = None) -> AppTest:
@@ -355,7 +359,7 @@ def test_the_verdict_completes_the_item_and_the_next_one_starts_blank_at_the_fir
     # on 2026-09-22, when the widgets kept one key across items.
     assert all(radio.value is None for radio in at.radio)
     assert _widget(at.text_input, VALUE_KEY).value == ""
-    assert _widget(at.text_area, ISSUE_KEY).value == ""
+    assert not [w for w in at.text_area if (w.key or "").startswith(ISSUE_KEY)], "no box open"
 
 
 def test_a_verdict_without_approve_or_disapprove_is_refused_and_the_reveal_stays(page):
@@ -443,6 +447,25 @@ def test_an_issue_at_the_second_step_keeps_the_choice_and_the_value_read(page, e
     assert (row.approved, row.issue) == (None, "the stored unit is wrong")
     assert _remaining(at) == 1
     assert not _revealed(at), "on to the next item's first step"
+
+
+def test_raising_an_issue_opens_a_box_that_can_be_taken_back(page, engine):
+    """Two clicks, never one: the box appears on the first and replaces the save button; the
+    second confirms, or the reviewer takes it back and the save button returns."""
+    at = page.run()
+    assert not [w for w in at.text_area if (w.key or "").startswith(ISSUE_KEY)]
+    assert [b.label for b in at.button if b.label in (CONTINUE, CONFIRM_ISSUE)] == [CONTINUE]
+
+    at = _button(at, RAISE_AN_ISSUE).click().run()
+
+    assert not at.exception
+    assert _widget(at.text_area, ISSUE_KEY).value == ""
+    labels = [b.label for b in at.button]
+    assert CONFIRM_ISSUE in labels and CANCEL_ISSUE in labels and CONTINUE not in labels
+    at = _button(at, CANCEL_ISSUE).click().run()
+    assert not [w for w in at.text_area if (w.key or "").startswith(ISSUE_KEY)]
+    assert CONTINUE in [b.label for b in at.button]
+    assert _rows(engine) == []
 
 
 def test_an_issue_without_its_text_is_refused_and_nothing_is_written(page, engine):

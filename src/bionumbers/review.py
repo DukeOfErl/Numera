@@ -279,19 +279,37 @@ def location_line(location: Location) -> str:
     return " · ".join(parts)
 
 
-def condition_rows(claim: Claim) -> list[tuple[str, str, str]]:
+#: The harvest scopes whose papers the condition fields were written for. `CONDITION_FIELDS` --
+#: organism, strain, medium, growth phase -- are a biologist's; on a physics or chemistry paper
+#: every one of them reads "not stated" and the block says nothing about the paper.
+BIOLOGICAL_SCOPES = frozenset({"", "biology", "organismal"})
+
+
+def condition_rows(claim: Claim, scope: str = "") -> list[tuple[str, str, str]]:
     """Every condition and method field, as (field, where it came from, quote).
 
-    Every field, including the ones the paper never states. The reviewer is being asked whether the
-    value came from this paper *under these conditions*, which they cannot judge from a block
-    listing only what was found: an absent row and a row reading "not stated" are the same fact
-    about the paper, and only one of them is visible.
+    For a paper in a biological scope, every field, including the ones the paper never states.
+    The reviewer is being asked whether the value came from this paper *under these conditions*,
+    which they cannot judge from a block listing only what was found: an absent row and a row
+    reading "not stated" are the same fact about the paper, and only one of them is visible.
+
+    Outside biology the standard fields do not apply, so only what the extractor recorded is
+    listed -- a block of eight "not stated" rows about growth medium under a lattice constant
+    tells the reviewer nothing and buries the one field that matters. The schema those papers
+    need is the harvester's to define.
     """
     stated = {field.name: field for field in claim.conditions}
     # A name the extractor produced that `CONDITION_FIELDS` does not know goes after the known
     # ones rather than being dropped. A condition on the screen that does not belong there costs a
     # comment; one that never reached the screen costs a judgement made without it.
-    names = list(CONDITION_FIELDS) + [name for name in stated if name not in CONDITION_FIELDS]
+    if scope in BIOLOGICAL_SCOPES:
+        names = list(CONDITION_FIELDS) + [name for name in stated if name not in CONDITION_FIELDS]
+    else:
+        names = [
+            name
+            for name in list(CONDITION_FIELDS) + [n for n in stated if n not in CONDITION_FIELDS]
+            if name in stated and stated[name].provenance is not Provenance.NOT_STATED
+        ]
     rows = []
     for name in names:
         field = stated.get(name)

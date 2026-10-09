@@ -248,7 +248,9 @@ def reveal(item: ReviewItem, choice: store.Choice) -> str:
         f"The paper calls it: {item.claim.property_in_paper}",
         "Conditions (field | where the paper states it | the paper's words):",
     ]
-    lines += [" | ".join(row) for row in review.condition_rows(item.claim)]
+    lines += [
+        " | ".join(row) for row in review.condition_rows(item.claim, item.claim.fingerprint.scope)
+    ]
     return "\n".join(lines)
 
 
