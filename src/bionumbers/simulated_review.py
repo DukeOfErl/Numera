@@ -37,13 +37,12 @@ the `ask` extra as the review page does. `cli` therefore imports it inside its o
 from __future__ import annotations
 
 import hashlib
-import re
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from bionumbers import review, store
+from bionumbers import readings, review, store
 from bionumbers.extraction import ProviderRefused
 from bionumbers.records import Frozen, ReviewerRole, ReviewItem, SecondTextKind, TableView
 from bionumbers.spend import (
@@ -245,6 +244,7 @@ def reveal(item: ReviewItem, choice: store.Choice) -> str:
         "",
         "The entry as stored:",
         f"Value: {item.claim.value} {item.claim.unit}".rstrip(),
+        readings.line_for(choice.value_agreement),
         f"The paper calls it: {item.claim.property_in_paper}",
         "Conditions (field | where the paper states it | the paper's words):",
     ]
@@ -267,21 +267,6 @@ def _table_lines(table: TableView, marks: dict[str, str]) -> list[str]:
     if table.foot:
         lines.append(table.foot)
     return lines
-
-
-_NUMBER = re.compile(r"\d+(?:\.\d+)?")
-
-
-def value_agrees(read: str, stored: str) -> bool:
-    """Whether the value a reviewer read is the stored one, loosely: the stored value's first
-    number appears among the numbers in what was read, thousands separators dropped.
-
-    Loose on purpose -- "39 ± 1 min" against "39" agrees, "187,000" against "187000" agrees --
-    because the figure is a tally for the run's summary, not a verdict: the verdict is the
-    reviewer's, given with both values in front of them.
-    """
-    want = _NUMBER.findall(stored.replace(",", ""))
-    return bool(want) and want[0] in _NUMBER.findall(read.replace(",", ""))
 
 
 def ask(
@@ -430,18 +415,21 @@ def _review_one(
         # Through the page's own labelling (`texts_in_order`), so a person's "A" and a model's
         # "A" are recorded against the same arrangement.
         supports = {t.label: t.is_supporting for t in review.texts_in_order(item)}
-        choice = store.Choice(supports[chosen.choice], chosen.value_read)
         store.record_choice(
             engine,
             item.item_id,
-            chosen_supporting=choice.chosen_supporting,
-            value_read=choice.value_read,
+            chosen_supporting=supports[chosen.choice],
+            value_read=chosen.value_read,
             **opened,
         )
+        # Read back rather than built here: the store computed the agreement.
+        choice = store.open_choice(engine, item.item_id, reviewer.name)
+        if choice is None:  # pragma: no cover - the write above succeeded or raised
+            raise _StepFailed("the choice did not stay written")
         if item.second_kind is SecondTextKind.DISTRACTOR:
             tally.distractors += 1
             tally.distractors_caught += choice.chosen_supporting
-        if choice.chosen_supporting and value_agrees(choice.value_read, item.claim.value):
+        if choice.chosen_supporting and choice.value_agreement == readings.Agreement.MATCHES:
             tally.values_agreed += 1
 
     started = time.monotonic()

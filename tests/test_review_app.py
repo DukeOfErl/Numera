@@ -324,6 +324,7 @@ def test_the_choice_is_written_and_reveals_the_stored_entry_for_the_verdict(page
     everything = _texts(at)
     assert STORED[first[0]] in everything
     assert "You chose **A** and read the value as **39 min**" in everything
+    assert "Your reading" in everything, "how the reading stands to the stored value is said"
     assert "generation time" in everything
     assert "Condition" in everything
     assert {radio.key for radio in at.radio} == {f"{VERDICT_KEY}:{row.item_id}:2"}

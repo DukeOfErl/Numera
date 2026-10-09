@@ -725,7 +725,7 @@ def test_upgrade_store_brings_an_older_file_up_to_date(tmp_path, capsys):
                     nullable=c.nullable and c.name not in {"approved", "chosen_supporting"},
                 )
                 for c in table.columns
-                if c.name not in {"domain", "topic", "value_read", "answered_by"}
+                if c.name not in {"domain", "topic", "value_read", "answered_by", "value_agreement"}
             ],
         )
     old.create_all(engine)

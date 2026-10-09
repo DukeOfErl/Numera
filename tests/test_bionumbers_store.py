@@ -548,7 +548,7 @@ def an_old_database() -> tuple[Any, MetaData]:
     review_skip existed: the same tables, those columns and that table left out."""
     engine = create_engine("sqlite://")
     old = MetaData()
-    dropped = {"domain", "topic", "value_read", "answered_by"}
+    dropped = {"domain", "topic", "value_read", "answered_by", "value_agreement"}
     for table in store.METADATA.sorted_tables:
         if table.name == "review_skip":
             continue
@@ -629,7 +629,12 @@ def test_upgrade_adds_the_missing_columns_and_table_and_fills_domain_and_topic()
     done = store.upgrade(engine)
 
     # Two added by hand (domain, topic); value_read and answered_by came with the rebuild.
-    assert done == {"columns_added": 2, "papers_filled": 2, "tables_rebuilt": 1}
+    assert done == {
+        "columns_added": 2,
+        "papers_filled": 2,
+        "tables_rebuilt": 1,
+        "choices_compared": 1,
+    }
     by_pmcid = {row.pmcid: (row.domain, row.topic) for row in rows(engine, store.review_paper)}
     assert by_pmcid == {"PMC1": ("biology", ""), "PMC2": ("physics", "crystals")}
     (kept,) = rows(engine, store.review_decision)
@@ -639,6 +644,7 @@ def test_upgrade_adds_the_missing_columns_and_table_and_fills_domain_and_topic()
         "kept",
         "",
     )
+    assert kept.value_agreement == "UNREADABLE", "a one-step row read no value; said so, not null"
     # The upgraded file takes the writers that needed the new columns, the nullable verdict
     # and the new table.
     store.record_choice(engine, "i2", reviewer="alice", chosen_supporting=True, value_read="39")
@@ -648,6 +654,7 @@ def test_upgrade_adds_the_missing_columns_and_table_and_fills_domain_and_topic()
         "columns_added": 0,
         "papers_filled": 2,
         "tables_rebuilt": 0,
+        "choices_compared": 0,
     }, "idempotent"
 
 
@@ -676,13 +683,33 @@ def test_a_choice_opens_the_row_with_the_value_read_and_no_verdict(engine):
         None,
         "",
     )
+    assert row.value_agreement == "MATCHES", "computed by the store against the item's value"
     assert (row.reviewer_role, row.reviewer_model, row.answered_by) == (
         "STUDENT",
         "some/router",
         "some/model-a",
     )
-    assert store.open_choice(engine, "i1", "alice") == store.Choice(True, "39 min")
+    assert store.open_choice(engine, "i1", "alice") == store.Choice(True, "39 min", "MATCHES")
     assert store.open_choice(engine, "i1", "bob") is None
+
+
+@pytest.mark.parametrize(
+    ("value_read", "agreement"),
+    [
+        ("39", "MATCHES"),
+        ("39 h", "SAME_NUMBER_DIFFERENT_UNIT"),
+        ("21", "DIFFERS"),
+        ("", "UNREADABLE"),
+    ],
+)
+def test_the_agreement_is_whatever_the_reading_says_against_the_stored_value(
+    engine, value_read, agreement
+):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+
+    store.record_choice(engine, "i1", reviewer="a", chosen_supporting=True, value_read=value_read)
+
+    assert store.open_choice(engine, "i1", "a").value_agreement == agreement
 
 
 def test_a_verdict_completes_the_open_row_and_adds_its_time_and_its_answerer(engine):

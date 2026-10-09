@@ -55,7 +55,7 @@ from sqlalchemy import (
 )
 from sqlalchemy import inspect as sa_inspect
 
-from bionumbers import curated
+from bionumbers import curated, readings
 from bionumbers.curated import Refusal
 from bionumbers.records import UNLICENSED, PaperResult, ReviewerRole, ReviewItem
 
@@ -208,6 +208,10 @@ review_decision = Table(
     # names itself in the request and another model in the reply. Comma-joined when the two
     # steps were answered by different ones. Null for a person.
     Column("answered_by", Text),
+    # How `value_read` stands to the stored value (`readings.Agreement`), computed when the
+    # choice is written, so every driver records it the same way. Null on an issue raised before
+    # a choice, and on rows from before the two steps existed.
+    Column("value_agreement", Text),
 )
 
 
@@ -248,10 +252,12 @@ class Preference:
 
 @dataclass(frozen=True)
 class Choice:
-    """A reviewer's open first step on an item: which text, and the value they read from it."""
+    """A reviewer's open first step on an item: which text, the value they read from it, and
+    how that reading stands to the stored value."""
 
     chosen_supporting: bool
     value_read: str
+    value_agreement: str | None = None
 
 
 class DecisionNotSaved(RuntimeError):
@@ -280,13 +286,14 @@ def upgrade(engine: Any) -> dict[str, int]:
     `review_decision.value_read` or `review_paper.domain` existed keeps working for reads and
     fails on the first write. This adds each missing column with its default, then fills
     `domain` from the paper's fingerprint and `topic` from any of its items' records -- the two
-    facts the loader now writes on load and older rows never had. Idempotent: a second run adds
-    nothing and refills the same values. For Postgres the same statements live in
+    facts the loader now writes on load and older rows never had -- and `value_agreement` on
+    every choice written before it was computed. Idempotent: a second run adds nothing and
+    refills the same values. For Postgres the same statements live in
     `sql/review.sql`; this is for the local files the demo is reviewed from.
 
     Returns what it did, by name, so the caller can say so.
     """
-    done = {"columns_added": 0, "papers_filled": 0, "tables_rebuilt": 0}
+    done = {"columns_added": 0, "papers_filled": 0, "tables_rebuilt": 0, "choices_compared": 0}
     create_all(engine)
     # SQLite cannot drop a NOT NULL constraint, and the first schema declared `approved` and
     # `chosen_supporting` NOT NULL -- which an issue row and an open row both violate. The one
@@ -366,6 +373,26 @@ def upgrade(engine: Any) -> dict[str, int]:
                 .values(domain=scope or DEFAULT_DOMAIN, topic=topic)
             )
             done["papers_filled"] += 1
+        uncompared = conn.execute(
+            select(
+                review_decision.c.id,
+                review_decision.c.value_read,
+                review_item.c.value,
+                review_item.c.unit,
+            )
+            .join(review_item, review_item.c.item_id == review_decision.c.item_id)
+            .where(
+                review_decision.c.value_agreement.is_(None),
+                review_decision.c.chosen_supporting.is_not(None),
+            )
+        ).all()
+        for row_id, value_read, value, unit in uncompared:
+            conn.execute(
+                update(review_decision)
+                .where(review_decision.c.id == row_id)
+                .values(value_agreement=readings.compare(value_read or "", value, unit).value)
+            )
+            done["choices_compared"] += 1
     return done
 
 
@@ -573,7 +600,9 @@ def open_choice(engine: Any, item_id: str, reviewer: str | None) -> Choice | Non
     with engine.begin() as conn:
         _bound(conn)
         row = conn.execute(_open_row(item_id, reviewer)).first()
-    return None if row is None else Choice(bool(row.chosen_supporting), row.value_read)
+    if row is None:
+        return None
+    return Choice(bool(row.chosen_supporting), row.value_read, row.value_agreement)
 
 
 def remaining(engine: Any, reviewer: str | None, preference: Preference | None = None) -> int:
@@ -634,6 +663,9 @@ def record_choice(
         _known(conn, item_id)
         if conn.execute(_any_row(item_id, reviewer)).first() is not None:
             raise DecisionNotSaved(f"{reviewer!r} has already chosen on {item_id!r}")
+        stored = conn.execute(
+            select(review_item.c.value, review_item.c.unit).where(review_item.c.item_id == item_id)
+        ).one()
         conn.execute(
             insert(review_decision).values(
                 item_id=item_id,
@@ -643,6 +675,7 @@ def record_choice(
                 comment="",
                 issue="",
                 value_read=value_read,
+                value_agreement=readings.compare(value_read, stored.value, stored.unit).value,
                 decided_at=datetime.now(UTC),
                 time_to_decide_s=time_to_decide_s,
                 reviewer_role=reviewer_role.value if reviewer_role else None,

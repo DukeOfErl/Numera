@@ -42,7 +42,6 @@ from bionumbers.simulated_review import (
     assigned,
     reveal,
     screen,
-    value_agrees,
 )
 from bionumbers.spend import Ceiling, Unpriceable
 
@@ -191,7 +190,8 @@ def test_the_first_screen_is_the_same_whatever_kind_the_second_text_is():
 
 def test_the_reveal_repeats_the_choice_and_adds_the_stored_entry():
     item = an_item()
-    shown = reveal(item, store.Choice(chosen_supporting=True, value_read="39 min"))
+    shown = reveal(item, store.Choice(True, "39 min", "SAME_NUMBER_DIFFERENT_UNIT"))
+    assert "Your reading has the stored number but a different unit." in shown
 
     assert shown.startswith(screen(item))
     assert (
@@ -232,21 +232,6 @@ def test_a_table_is_drawn_whole_with_both_texts_cells_marked_alike():
     assert f"rich | 39 [{label_of(item, supporting=True)}]" in shown
     assert f"minimal | 21 [{label_of(item, supporting=False)}]" in shown
     assert "Mean of three cultures." in shown
-
-
-@pytest.mark.parametrize(
-    ("read", "stored", "agrees"),
-    [
-        ("39 min", "39", True),
-        ("39 ± 1 min", "39 ± 1", True),
-        ("187000", "187,000", True),
-        ("about 21 min", "39", False),
-        ("", "39", False),
-        ("39", "", False),
-    ],
-)
-def test_value_agreement_is_read_off_the_stored_value_s_first_number(read, stored, agrees):
-    assert value_agrees(read, stored) is agrees
 
 
 # --- which items a role reviews ------------------------------------------------------------
@@ -360,8 +345,9 @@ def test_the_second_step_is_asked_only_after_the_first_is_written_and_sees_the_r
     assert first["messages"] == [{"role": "user", "content": screen(item)}]
     assert second["system"] == simulated_review.VERDICT_INSTRUCTION
     assert second["messages"] == [
-        {"role": "user", "content": reveal(item, store.Choice(True, "39 min"))}
+        {"role": "user", "content": reveal(item, store.Choice(True, "39 min", "MATCHES"))}
     ]
+    assert "Your reading matches the stored value." in second["messages"][0]["content"]
     assert "Value: 39 min" not in first["messages"][0]["content"]
 
 

@@ -33,7 +33,7 @@ Each text SHALL be at most a few sentences.
 
 #### Scenario: The entry is revealed
 - **WHEN** a reviewer has chosen a text and written the value they read
-- **THEN** the value, the paper's term and the condition block appear on the same screen as the texts, and the reviewer's own choice and reading are repeated to them
+- **THEN** the value, the paper's term and the condition block appear on the same screen as the texts, the reviewer's own choice and reading are repeated to them, and one line says how their reading stands to the stored value
 
 #### Scenario: A cited sentence appears as a text
 - **WHEN** one of the two texts contains a bibliographic citation marker in the paper
@@ -126,7 +126,10 @@ its location, kind and type; the tables the texts sit in, as shown; every condit
 with its quote and provenance state; and the fingerprint of what produced the claim (model,
 instruction fingerprint, article, run). For
 every decision, the record SHALL hold: which text was chosen; whether it was the supporting text;
-the value the reviewer read from it, written before the stored value was shown; the approval or
+the value the reviewer read from it, written before the stored value was shown, and how that
+reading stands to the stored value (the same number, the same number in another unit, a different
+number, or no number), judged loosely at the reader's precision and across equivalent ways of
+writing a number; the approval or
 disapproval; the comment; the reviewer's account where one is signed in, and the absence of one
 otherwise; the reviewer's role where one is known; the model, where a model and not a person
 decided, and the model the provider says answered where that differs; and the time.

@@ -123,6 +123,9 @@ create table if not exists review_item (
 --
 -- `answered_by` is the model the provider says answered, where it differs from `reviewer_model`:
 -- a router names itself in the request and the routed model in the reply. Null for a person.
+-- `value_agreement` is how `value_read` stands to the stored value — MATCHES,
+-- SAME_NUMBER_DIFFERENT_UNIT, DIFFERS or UNREADABLE (`bionumbers.readings`) — computed when the
+-- choice is written, so a person's reading and a model's are compared the same way.
 --
 -- `reviewer_role` is the rung of the trust ladder the reviewer stands on (`AI`, `STUDENT`,
 -- `SCIENTIST`, `SENIOR_SCIENTIST`), null where none was recorded. `reviewer_model` is the model id
@@ -142,7 +145,8 @@ create table if not exists review_decision (
     reviewer_role     text,
     reviewer_model    text,
     value_read        text not null default '',
-    answered_by       text
+    answered_by       text,
+    value_agreement   text
 );
 
 -- The same, for a database created before the issue outcome and the reviewer's role existed.
@@ -153,6 +157,7 @@ alter table review_decision alter column chosen_supporting drop not null;
 alter table review_decision alter column approved drop not null;
 alter table review_decision add column if not exists value_read text not null default '';
 alter table review_decision add column if not exists answered_by text;
+alter table review_decision add column if not exists value_agreement text;
 
 -- Serving the next item asks, per item, whether this reviewer has a row for it. That is the query
 -- every page load makes, and it is the only one whose latency a person waits on.

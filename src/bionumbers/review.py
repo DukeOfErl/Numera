@@ -27,7 +27,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import Engine
 
-from bionumbers import harvest, store
+from bionumbers import harvest, readings, store
 from bionumbers.records import (
     CONDITION_FIELDS,
     Claim,
@@ -63,6 +63,10 @@ ISSUE_REQUIRED = "Describe the issue before raising it."
 CHOICE_QUESTION = "Which text states a value for this quantity?"
 VALUE_QUESTION = "The value that text states, as it is written"
 VERDICT_QUESTION = "Did this value come from this paper under these conditions?"
+#: Under the value box, and the one line at the reveal on how the reading stands to the stored
+#: value: both `readings`', named here because the page reaches only this module (design D9).
+VALUE_HINT = readings.HOW_TO_WRITE
+agreement_line = readings.line_for
 
 #: The failed write (ADR-0930). It says the item is still open, because the reviewer's natural
 #: reading of a page that did not move on is that their click missed -- and a reviewer who believes

@@ -65,7 +65,7 @@ CONTINUE = "Continue"
 SAVE_AND_NEXT = "Save and next"
 RAISE_AN_ISSUE = "Raise an issue"
 CONFIRM_ISSUE = "Confirm the issue"
-CANCEL_ISSUE = "Take it back"
+CANCEL_ISSUE = "Cancel issue"
 SKIP_PAPER = "Skip this paper"
 #: The screen whose issue box is open, if any: `<item id>:<step>`.
 RAISING_KEY = "bionumbers.review.raising"
@@ -230,7 +230,9 @@ if step == 1:
     # recorded verbatim by anyone who clicked straight past it, and it would be the same default
     # every time -- a bias in the dataset with no trace of itself.
     picked = st.radio(review.CHOICE_QUESTION, ["A", "B"], index=None, key=f"{CHOICE_KEY}:{key}")
-    value_read = st.text_input(review.VALUE_QUESTION, key=f"{VALUE_KEY}:{key}")
+    value_read = st.text_input(
+        review.VALUE_QUESTION, key=f"{VALUE_KEY}:{key}", help=review.VALUE_HINT
+    )
     raising = _issue_controls()
     if not raising and st.button(CONTINUE, type="primary"):
         try:
@@ -261,6 +263,9 @@ else:
         )
     )
     st.markdown(web.as_text(f"### Stored: {item.claim.value} {item.claim.unit}".rstrip()))
+    # One line on how the reading stands to the stored value, and no more: it is a hint, and the
+    # verdict below is the reviewer's.
+    st.caption(web.as_text(review.agreement_line(choice.value_agreement)))
     # The paper's own term beside the question's: the reviewer is judging whether this paper's
     # "generation time" is the question's "doubling time", and they cannot if only one is on
     # screen.

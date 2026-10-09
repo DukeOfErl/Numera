@@ -54,6 +54,13 @@ any release; `1.0.0` when it stabilizes.
   and only then is the stored entry — value, the paper's term, conditions — revealed for the
   verdict. The value read is recorded before the reveal. An issue can be raised at either step. The
   simulated reviewers take the same two steps as two calls and record which model answered each.
+- **The value a reviewer types is compared with the stored one**, loosely and the same way for a
+  person and a model: ±, ~ and "about", number words, thousands separators, exponents in either
+  notation, `um` for µm and convertible units are all read as the same number. The result (matches,
+  same number in another unit, differs, unreadable) is recorded with the choice and said in one
+  line at the reveal; raising an issue is now two clicks with a cancel; outside biology only the
+  conditions the paper states are listed, and each domain's own fields are listed once its papers
+  are extracted with them.
 - **A human reviewer can choose a domain or a topic, and set a paper aside** ([ADR-0980]). The
   page offers the domains and topics the loaded papers carry and a "Skip this paper" button; a
   skip is recorded and the paper is not offered to that reviewer again. The simulated reviewers
