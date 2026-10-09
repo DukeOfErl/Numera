@@ -608,7 +608,7 @@ COVERED.update(
             "test_bionumbers_review.py::test_the_chosen_label_is_recorded_as_whether_it_was_the_supporting_text",
             "test_bionumbers_review.py::test_the_first_step_needs_a_text_and_a_value",
             "test_review_app.py::test_continuing_without_a_choice_is_refused_and_the_item_stays",
-            "test_review_app.py::test_clicking_a_box_s_button_chooses_it_and_can_be_changed",
+            "test_review_app.py::test_clicking_a_box_chooses_it_and_can_be_changed",
             "test_review_app.py::test_raising_an_issue_opens_a_box_that_can_be_taken_back",
             "test_review_app.py::test_continuing_without_the_value_read_is_refused_and_nothing_is_revealed",
             "test_review_app.py::test_the_verdict_completes_the_item_and_the_next_one_starts_blank_at_the_first_step",
