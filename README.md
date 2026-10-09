@@ -339,10 +339,11 @@ streamlit run review_app.py
   reviewer will see. Each paper ends in one of six named states; the spend ceiling is **$2 per
   paper** and the call that would cross it is not made.
 - **The review page** shows one claim at a time, in two steps. First the question, the citation
-  and **two texts** from the paper, each as the paper wrote it with nothing in it emphasised; when
-  a text is a table cell, the whole table is drawn beneath the two texts with its caption, both
-  texts' cells marked alike. The reviewer chooses which text states a value for the quantity and
-  writes the value they read. Only then is the stored entry revealed — the value as the paper
+  and **two texts** from the paper side by side, each as the paper wrote it with nothing in it
+  emphasised; when a text is a table cell, the whole table is drawn beneath the two texts with its
+  caption, both texts' cells marked alike. The reviewer chooses the text that states a value for
+  the quantity by clicking it and writes the value they read; how that reading stands to the stored
+  value is said in one line once it is revealed. Only then is the stored entry revealed — the value as the paper
   states it, the paper's own term, the conditions and method each quoted with where it came from
   (beside the value, from Methods, by reference, supplementary only, not stated) — and the reviewer
   approves or disapproves. An issue can be raised at either step. The second text is a distractor

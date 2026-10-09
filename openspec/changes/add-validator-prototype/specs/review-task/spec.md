@@ -50,7 +50,9 @@ Each text SHALL be at most a few sentences.
 ### Requirement: The reviewer first chooses a text and reads its value, then gives a verdict
 
 A reviewer SHALL be required, with the stored value withheld, to choose which of the two texts
-states a value for the quantity under review and to write the value that text states, as written.
+states a value for the quantity under review -- the two shown side by side, the choice made on
+the text itself and changeable until the step is saved -- and to write the value that text
+states, as written.
 That choice and reading SHALL be recorded before the stored value is shown. The reviewer SHALL then
 record whether they approve or disapprove that this value, under the conditions shown, came from
 this paper, and SHALL be able to add a free-text comment. Both steps are required before the next
@@ -61,6 +63,7 @@ place of what remains, with its text.
 The choice is made every time, whether or not the second text is a distractor, so that the presence
 of a choice carries no information about the item. The value is written before the reveal so that
 the reviewer's reading is a measurement of the entry the extractor's answer cannot have steered.
+Raising an issue SHALL take a second confirming action and SHALL be cancellable before it.
 
 #### Scenario: A reviewer completes an item
 - **WHEN** a reviewer has chosen a text and written its value, and then, shown the stored entry, given a verdict
