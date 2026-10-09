@@ -560,27 +560,45 @@ class TestStoreEngine:
         assert review.store_engine() is None
 
 
-def test_outside_biology_only_the_conditions_the_paper_states_are_listed():
-    """A lattice constant has no growth medium. The eight biological fields read "not stated"
-    on every physics paper and say nothing; only what the extractor recorded is shown."""
-    stated = an_item().claim.model_copy(
-        update={
-            "conditions": (
-                ConditionField(
-                    name="temperature", provenance=Provenance.BESIDE_VALUE, quote="at 300 K"
-                ),
-                ConditionField(name="medium", provenance=Provenance.NOT_STATED),
-                ConditionField(
-                    name="pressure", provenance=Provenance.FROM_METHODS, quote="ambient"
-                ),
-            )
-        }
+def _with_conditions(*fields: ConditionField):
+    return an_item().claim.model_copy(update={"conditions": fields})
+
+
+def test_a_claim_lists_the_condition_fields_of_its_scope_stated_or_not():
+    """Each scope has its own fields (`harvest.condition_fields`); a physics claim extracted
+    under them lists the physics fields, the unstated ones included, the way biology always has."""
+    physics = _with_conditions(
+        ConditionField(name="material", provenance=Provenance.BESIDE_VALUE, quote="silicon"),
+        ConditionField(name="pressure", provenance=Provenance.NOT_STATED),
     )
 
-    physics = review.condition_rows(stated, "physics")
-    biology = review.condition_rows(stated, "biology")
+    rows = review.condition_rows(physics, "physics")
 
-    assert [row[0] for row in physics] == ["Temperature", "Pressure"]
+    assert [row[0] for row in rows] == [
+        "Material",
+        "Preparation",
+        "Temperature",
+        "Pressure",
+        "Phase or state",
+        "Method",
+    ]
+    assert rows[0][2] == "silicon"
+    assert rows[3][1] == "not stated"
+
+
+def test_a_claim_extracted_before_its_scope_had_fields_lists_only_what_was_stated():
+    """Every entry in the demo database was asked the biological questions. Under a lattice
+    constant the eight "not stated" rows about growth media say nothing, and listing the
+    physics fields as "not stated" would say the extractor looked for them."""
+    old_physics = _with_conditions(
+        ConditionField(name="temperature", provenance=Provenance.BESIDE_VALUE, quote="at 300 K"),
+        ConditionField(name="medium", provenance=Provenance.NOT_STATED),
+        ConditionField(name="organism", provenance=Provenance.NOT_STATED),
+    )
+
+    assert [row[0] for row in review.condition_rows(old_physics, "physics")] == ["Temperature"]
+    # The same claim under a biological scope lists every biological field, as before.
+    biology = review.condition_rows(old_physics, "biology")
     assert [row[0] for row in biology][:3] == ["Organism", "Strain", "Medium"]
-    assert len(biology) == len(review.CONDITION_FIELDS) + 1
-    assert review.condition_rows(stated, "") == biology, "runs before scopes are biology"
+    assert len(biology) == len(review.CONDITION_FIELDS)
+    assert review.condition_rows(old_physics, "") == biology, "runs before scopes are biology"

@@ -24,11 +24,8 @@ No Streamlit and nothing from `scinumbers_ask` (design D9): the page builds the 
 
 from __future__ import annotations
 
-from collections import Counter
 import json
-from collections.abc import Iterable, Iterator
-from contextlib import contextmanager
-from dataclasses import dataclass
+from collections import Counter
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass

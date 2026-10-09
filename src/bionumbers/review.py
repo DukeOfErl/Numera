@@ -27,7 +27,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import Engine
 
-from bionumbers import store
+from bionumbers import harvest, store
 from bionumbers.records import (
     CONDITION_FIELDS,
     Claim,
@@ -279,35 +279,41 @@ def location_line(location: Location) -> str:
     return " · ".join(parts)
 
 
-#: The harvest scopes whose papers the condition fields were written for. `CONDITION_FIELDS` --
-#: organism, strain, medium, growth phase -- are a biologist's; on a physics or chemistry paper
-#: every one of them reads "not stated" and the block says nothing about the paper.
-BIOLOGICAL_SCOPES = frozenset({"", "biology", "organismal"})
+#: The scopes whose standard fields are the biological list, `records.CONDITION_FIELDS` -- the
+#: list every entry was extracted with before each scope had its own (2026-10-09).
+BIOLOGICAL_SCOPES = frozenset({"", "biology"})
 
 
 def condition_rows(claim: Claim, scope: str = "") -> list[tuple[str, str, str]]:
     """Every condition and method field, as (field, where it came from, quote).
 
-    For a paper in a biological scope, every field, including the ones the paper never states.
-    The reviewer is being asked whether the value came from this paper *under these conditions*,
-    which they cannot judge from a block listing only what was found: an absent row and a row
-    reading "not stated" are the same fact about the paper, and only one of them is visible.
+    Every field of the paper's scope (`harvest.condition_fields`), including the ones the paper
+    never states. The reviewer is being asked whether the value came from this paper *under
+    these conditions*, which they cannot judge from a block listing only what was found: an
+    absent row and a row reading "not stated" are the same fact about the paper, and only one of
+    them is visible.
 
-    Outside biology the standard fields do not apply, so only what the extractor recorded is
-    listed -- a block of eight "not stated" rows about growth medium under a lattice constant
-    tells the reviewer nothing and buries the one field that matters. The schema those papers
-    need is the harvester's to define.
+    One exception, for the entries extracted before each scope had its own fields: a physics
+    claim whose conditions are all biological names was asked about growth media, and listing
+    the physics fields as "not stated" beside it would say the extractor looked for them. Such a
+    claim -- none of its scope's own fields present -- lists only what was stated, until the
+    paper is re-extracted.
     """
     stated = {field.name: field for field in claim.conditions}
-    # A name the extractor produced that `CONDITION_FIELDS` does not know goes after the known
-    # ones rather than being dropped. A condition on the screen that does not belong there costs a
+    standard = list(harvest.condition_fields(scope))
+    # A name the extractor produced that the scope does not know goes after the known ones
+    # rather than being dropped. A condition on the screen that does not belong there costs a
     # comment; one that never reached the screen costs a judgement made without it.
-    if scope in BIOLOGICAL_SCOPES:
-        names = list(CONDITION_FIELDS) + [name for name in stated if name not in CONDITION_FIELDS]
+    extras = [name for name in stated if name not in standard]
+    asked_in_this_scope = scope in BIOLOGICAL_SCOPES or any(
+        name in stated for name in standard if name not in CONDITION_FIELDS
+    )
+    if asked_in_this_scope:
+        names = standard + extras
     else:
         names = [
             name
-            for name in list(CONDITION_FIELDS) + [n for n in stated if n not in CONDITION_FIELDS]
+            for name in standard + extras
             if name in stated and stated[name].provenance is not Provenance.NOT_STATED
         ]
     rows = []
