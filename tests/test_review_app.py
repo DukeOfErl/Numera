@@ -63,8 +63,8 @@ ISSUE_KEY = _constant("ISSUE_KEY")
 CONTINUE = _constant("CONTINUE")
 SAVE_AND_NEXT = _constant("SAVE_AND_NEXT")
 RAISE_AN_ISSUE = _constant("RAISE_AN_ISSUE")
-CHOOSE = _constant("CHOOSE")
 CHOSEN = _constant("CHOSEN")
+CHOICE_KEY_STEP = "{item}:1"
 CONFIRM_ISSUE = _constant("CONFIRM_ISSUE")
 CANCEL_ISSUE = _constant("CANCEL_ISSUE")
 SKIP_PAPER = _constant("SKIP_PAPER")
@@ -202,6 +202,7 @@ def _remaining(at: AppTest) -> int:
 
 
 def _on_screen(at: AppTest, *texts: str) -> bool:
+    """The texts reach the page inside the boxes' data; the walk over the elements sees it."""
     page = _texts(at)
     return all(PHRASES[text] in page for text in texts)
 
@@ -218,20 +219,54 @@ def _button(at: AppTest, label: str):
     return found
 
 
+def _click_box(at: AppTest, label: str) -> AppTest:
+    """A click on a text box. The box is a custom component whose click `AppTest` cannot
+    deliver, so this does what the click does: it records the choice the page reads on the
+    next run (the page's `picked_key`)."""
+    (item_id,) = {_box_data_of(c)["item"] for c in _cards(at)}
+    at.session_state[f"{CHOICE_KEY}:{item_id}:1"] = label
+    return at.run()
+
+
+def _cards(at: AppTest):
+    """The two text boxes: the page's custom components, which `AppTest` shows as unknown
+    elements carrying a `BidiComponent` proto."""
+    return [
+        c
+        for c in _elements(at)
+        if type(c.proto).__name__ == "BidiComponent"
+        and c.proto.component_name == "scinumbers_text_card"
+    ]
+
+
+def _box_data_of(card) -> dict:
+    import json
+
+    return json.loads(card.proto.json)
+
+
 def _choose(at: AppTest, *, choice: str | None, value: str | None) -> AppTest:
-    """The first step: click the box's button, type the value read from it, then Continue."""
+    """The first step: click a box, type the value read from it, then Continue."""
     if choice is not None:
-        at = _button(at, CHOOSE.format(label=choice)).click().run()
+        at = _click_box(at, choice)
     if value is not None:
         _widget(at.text_input, VALUE_KEY).set_value(value)
     return _button(at, CONTINUE).click().run()
 
 
+def _box_data(at: AppTest) -> dict[str, dict]:
+    """What each box was handed to draw, by label: the content and whether it is chosen."""
+    found = {}
+    for card in _cards(at):
+        data = _box_data_of(card)
+        found[data["label"]] = data
+    return found
+
+
 def _chosen_box(at: AppTest) -> str | None:
-    """Which box says it is chosen, read off the page."""
-    page = _texts(at)
-    found = [label for label in ("A", "B") if f"**{label}** · {CHOSEN}" in page]
-    return found[0] if found else None
+    """Which box was told it is chosen."""
+    chosen = [label for label, data in _box_data(at).items() if data.get("chosen")]
+    return chosen[0] if chosen else None
 
 
 def _judge(at: AppTest, *, verdict: str | None, comment: str | None = None) -> AppTest:
@@ -284,8 +319,9 @@ def test_with_no_identity_configured_an_item_is_shown_with_both_texts_and_withou
     shown = _the_first_item(at)
     assert _on_screen(at, *shown)
     assert _remaining(at) == 2
-    assert not at.radio, "no verdict yet; the choice is a button in each box"
-    assert [b.label for b in at.button if b.label.startswith("Choose")] == ["Choose A", "Choose B"]
+    assert not at.radio, "no verdict yet; the choice is the box itself"
+    boxes = _box_data(at)
+    assert set(boxes) == {"A", "B"} and all(d["choosable"] for d in boxes.values())
     assert _chosen_box(at) is None
     assert _widget(at.text_input, VALUE_KEY).value == ""
     everything = _texts(at)
@@ -294,20 +330,21 @@ def test_with_no_identity_configured_an_item_is_shown_with_both_texts_and_withou
     assert "Condition" not in everything
 
 
-def test_clicking_a_box_s_button_chooses_it_and_can_be_changed(page):
+def test_clicking_a_box_chooses_it_and_can_be_changed(page):
     """The choice is the click on the box (Yoav, 2026-10-09), the chosen box says so, and a
-    second click on the other box moves it; both boxes are shown side by side."""
+    second click on the other box moves it; both boxes are shown side by side, each carrying
+    the text the page would otherwise have drawn."""
     at = page.run()
     assert len(at.columns) >= 2, "the two texts sit in two columns"
+    shown = _the_first_item(at)
+    boxes = _box_data(at)
+    assert {d["text"] for d in boxes.values()} == set(shown)
 
-    at = _button(at, "Choose B").click().run()
+    at = _click_box(at, "B")
     assert not at.exception
     assert _chosen_box(at) == "B"
-    at = _button(at, "Choose A").click().run()
+    at = _click_box(at, "A")
     assert _chosen_box(at) == "A"
-    (a,) = [b for b in at.button if b.label == "Choose A"]
-    (b,) = [b for b in at.button if b.label == "Choose B"]
-    assert (a.proto.type, b.proto.type) == ("primary", "secondary"), "the chosen one is lit"
 
 
 def test_continuing_without_a_choice_is_refused_and_the_item_stays(page):
@@ -356,7 +393,7 @@ def test_the_choice_is_written_and_reveals_the_stored_entry_for_the_verdict(page
     assert {radio.key for radio in at.radio} == {f"{VERDICT_KEY}:{row.item_id}:2"}
     assert at.radio[0].value is None
     assert _chosen_box(at) == "A", "the reveal keeps the chosen box marked"
-    assert not [b for b in at.button if b.label.startswith("Choose")], "no choosing at step 2"
+    assert not any(d["choosable"] for d in _box_data(at).values()), "no choosing at step 2"
 
 
 def test_the_verdict_completes_the_item_and_the_next_one_starts_blank_at_the_first_step(

@@ -40,10 +40,79 @@ NO_STORE = (
     "secrets and create the tables from sql/review.sql. There is nothing to review until then."
 )
 
-#: The two texts' choose buttons, one in each box. Clicking a box's button is the choice; the
-#: label is the box's letter so a reviewer reads "Choose A" under the text they mean.
-CHOOSE = "Choose {label}"
+#: The chosen box says so in its heading; the other says nothing.
 CHOSEN = "chosen"
+
+#: Each text is one box, and at the first step the whole box is the control (Yoav, 2026-10-09):
+#: a click anywhere on it is the choice. Streamlit has no clickable container, so this is a small
+#: custom component -- one `<button>` carrying the label, the location line and the text, drawn
+#: in the theme's colours -- that reports a click as a trigger. Only the click crosses back;
+#: the content is handed down on every run and set as text, never as markup.
+_CARD_HTML = """
+<button class="card" type="button">
+  <span class="head"><span class="label"></span><span class="mark"></span></span>
+  <span class="where"></span>
+  <span class="text"></span>
+</button>
+"""
+_CARD_CSS = """
+.card {
+  display: flex; flex-direction: column; gap: 0.5rem; width: 100%; box-sizing: border-box;
+  text-align: left; padding: 1rem 1.1rem; border-radius: 0.5rem; cursor: pointer;
+  border: 1px solid var(--st-border-color, #d6d6d9);
+  background: var(--st-background-color, #fff); color: var(--st-text-color, #262730);
+  font-family: var(--st-font, inherit); font-size: 1rem; line-height: 1.5;
+}
+.card:hover { border-color: var(--st-primary-color, #ff4b4b); }
+.card:focus-visible { outline: 2px solid var(--st-primary-color, #ff4b4b); outline-offset: 2px; }
+.card.chosen {
+  border: 2px solid var(--st-primary-color, #ff4b4b);
+  padding: calc(1rem - 1px) calc(1.1rem - 1px);
+}
+.card.still { cursor: default; }
+.head { display: flex; justify-content: space-between; font-weight: 700; }
+.mark { color: var(--st-primary-color, #ff4b4b); font-weight: 600; }
+.where { font-size: 0.85rem; opacity: 0.7; }
+.text { white-space: pre-wrap; }
+"""
+_CARD_JS = """
+export default function (component) {
+  const { data, parentElement, setTriggerValue } = component
+  const card = parentElement.querySelector(".card")
+  if (!card) return
+  parentElement.querySelector(".label").textContent = data.label
+  parentElement.querySelector(".mark").textContent = data.chosen ? data.mark : ""
+  parentElement.querySelector(".where").textContent = data.where
+  parentElement.querySelector(".text").textContent = data.text
+  card.classList.toggle("chosen", Boolean(data.chosen))
+  card.classList.toggle("still", !data.choosable)
+  card.disabled = !data.choosable
+  card.onclick = () => { if (data.choosable) setTriggerValue("clicked", data.label) }
+}
+"""
+_CARD = st.components.v2.component(
+    "scinumbers_text_card", html=_CARD_HTML, css=_CARD_CSS, js=_CARD_JS
+)
+
+
+def _text_card(shown, *, chosen: bool, choosable: bool, key: str) -> bool:
+    """One text as a box, the whole of it a button while `choosable`. Returns whether it was
+    clicked on this run."""
+    result = _CARD(
+        key=key,
+        data={
+            "item": item.item_id,
+            "label": shown.label,
+            "where": shown.location_line,
+            "text": shown.text,
+            "chosen": chosen,
+            "choosable": choosable,
+            "mark": CHOSEN,
+        },
+        on_clicked_change=lambda: None,
+    )
+    return result.clicked == shown.label
+
 
 #: The widget key prefixes. Each widget's key is the prefix, the item id and the step, so a new
 #: item -- or the same item's next step -- is a new set of widgets and starts blank -- a choice or
@@ -173,17 +242,14 @@ picked = (
     else review.chosen_label(item, choice.chosen_supporting)
 )
 for shown, column in zip(review.texts_in_order(item), st.columns(2), strict=True):
-    with column, st.container(border=True):
-        heading = f"**{shown.label}**" + (f" · {CHOSEN}" if picked == shown.label else "")
-        st.markdown(heading)
-        st.caption(web.as_text(shown.location_line))
-        st.markdown(review.as_markdown(shown.text))
-        if choice is None and st.button(
-            CHOOSE.format(label=shown.label),
-            key=f"choose:{item.item_id}:{shown.label}",
-            type="primary" if picked == shown.label else "secondary",
-            width="stretch",
-        ):
+    with column:
+        clicked = _text_card(
+            shown,
+            chosen=picked == shown.label,
+            choosable=choice is None,
+            key=f"card:{item.item_id}:{shown.label}",
+        )
+        if clicked and choice is None:
             st.session_state[picked_key] = shown.label
             st.rerun()
 
