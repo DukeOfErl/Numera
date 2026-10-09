@@ -395,6 +395,31 @@ def test_discover_takes_the_licence_from_the_index_too(provider, dirs):
     assert papers[A_KEPT_PMCID].licence == "cc by"
 
 
+def test_a_harvest_topic_rides_on_the_paper_into_every_item(monkeypatch, provider, dirs):
+    """The review page offers it to a person choosing what to review; it travels in the item's
+    copy of the paper, so no table changes."""
+    cli.main(["harvest", "h1", "--pmcids", TABLES_PMCID, "--topic", "planarians", *common(dirs)])
+    draft = claim_draft(APERTURE_SENTENCE, "100", "μm")
+    seen: list[dict] = []
+    model = scripted(
+        monkeypatch, ExtractionOutput(state="CLAIMS_FOUND", claims=[draft]), distractor_output()
+    )
+    original = model.parse
+
+    def recording(**kwargs):
+        seen.append(kwargs)
+        return original(**kwargs)
+
+    model.parse = recording
+
+    assert cli.main(["extract", "h1", *common(dirs)]) == 0
+
+    (paper,) = read_jsonl(dirs.runs / "h1" / cli.PAPERS_FILE, Paper)
+    (item,) = read_jsonl(dirs.runs / "h1" / cli.ITEMS_FILE, ReviewItem)
+    assert paper.topic == item.paper.topic == "planarians"
+    assert not any("planarians" in str(call["messages"]) for call in seen)
+
+
 def test_harvest_without_a_pmcid_says_so_and_writes_nothing(provider, dirs, capsys):
     code = cli.main(["harvest", "h1", *common(dirs)])
 

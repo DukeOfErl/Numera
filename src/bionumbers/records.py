@@ -248,6 +248,10 @@ class Paper(Frozen):
     """Where the full text came from, empty when none was obtained."""
     full_text_status: str = ""
     """Discovery's typed reason when no full text was obtained, e.g. `no XML (HTTP 500)`."""
+    topic: str = ""
+    """Harvest mode only: what the paper is about, as whoever chose it named it ("planarians",
+    "cytoskeleton"). Free text, finer than the scope, and never shown to the model; the review
+    page offers it to a person choosing what to review."""
 
 
 class PaperResult(Frozen):

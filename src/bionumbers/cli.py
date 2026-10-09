@@ -274,16 +274,21 @@ def harvest_run(args: argparse.Namespace) -> int:
     for pmcid in dict.fromkeys(pmcids):
         fetched = provider.fetch(pmcid)
         if not isinstance(fetched, FullText):
-            papers.append(Paper(pmcid=pmcid, full_text_status=_status_of(fetched)))
+            papers.append(
+                Paper(pmcid=pmcid, topic=args.topic, full_text_status=_status_of(fetched))
+            )
             continue
         try:
             doc = read_jats(fetched.xml)
         except JatsUnreadable as why:
-            papers.append(Paper(pmcid=pmcid, full_text_status=f"not a JATS article: {why}"))
+            papers.append(
+                Paper(pmcid=pmcid, topic=args.topic, full_text_status=f"not a JATS article: {why}")
+            )
             continue
         papers.append(
             Paper(
                 pmcid=pmcid,
+                topic=args.topic,
                 pmid=doc.pmid,
                 doi=doc.doi,
                 title=doc.title,
@@ -634,6 +639,9 @@ def _parser() -> argparse.ArgumentParser:
         choices=sorted(harvest.SCOPES),
         default=harvest.DEFAULT_SCOPE,
         help="the domain whose classes of value are wanted",
+    )
+    harvest_cmd.add_argument(
+        "--topic", default="", help="what the papers are about, for a reviewer to choose by"
     )
     data_dir(harvest_cmd)
     run_dirs(harvest_cmd)
