@@ -25,6 +25,10 @@ No Streamlit and nothing from `scinumbers_ask` (design D9): the page builds the 
 from __future__ import annotations
 
 from collections import Counter
+import json
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -52,6 +56,7 @@ from sqlalchemy import (
     true,
     update,
 )
+from sqlalchemy import inspect as sa_inspect
 
 from bionumbers import curated
 from bionumbers.curated import Refusal
@@ -269,6 +274,69 @@ def create_all(engine: Any) -> None:
     `sql/review.sql`, which carries the comments an operator needs and is not generated from here.
     """
     METADATA.create_all(engine)
+
+
+def upgrade(engine: Any) -> dict[str, int]:
+    """Bring a database loaded under an earlier schema up to this one, in place.
+
+    `create_all` adds missing *tables* and nothing else, so a SQLite file loaded before
+    `review_decision.value_read` or `review_paper.domain` existed keeps working for reads and
+    fails on the first write. This adds each missing column with its default, then fills
+    `domain` from the paper's fingerprint and `topic` from any of its items' records -- the two
+    facts the loader now writes on load and older rows never had. Idempotent: a second run adds
+    nothing and refills the same values. For Postgres the same statements live in
+    `sql/review.sql`; this is for the local files the demo is reviewed from.
+
+    Returns what it did, by name, so the caller can say so.
+    """
+    done = {"columns_added": 0, "papers_filled": 0}
+    create_all(engine)
+    present = {
+        table.name: {column["name"] for column in sa_inspect(engine).get_columns(table.name)}
+        for table in METADATA.sorted_tables
+    }
+    with engine.begin() as conn:
+        for table in METADATA.sorted_tables:
+            for column in table.columns:
+                if column.name in present[table.name]:
+                    continue
+                typename = column.type.compile(engine.dialect)
+                default = column.default.arg if column.default is not None else None
+                clause = f"alter table {table.name} add column {column.name} {typename}"
+                if default is not None:
+                    clause += (
+                        f" not null default {default!r}"
+                        if isinstance(default, str)
+                        else f" default {default!r}"
+                    )
+                conn.execute(text(clause))
+                done["columns_added"] += 1
+        papers = conn.execute(
+            select(review_paper.c.run_id, review_paper.c.pmcid, review_paper.c.fingerprint_json)
+        ).all()
+        for run_id, pmcid, fingerprint_json in papers:
+            try:
+                scope = json.loads(fingerprint_json or "{}").get("scope") or ""
+            except ValueError:
+                scope = ""
+            topic = ""
+            item_json = conn.execute(
+                select(review_item.c.item_json)
+                .where(review_item.c.run_id == run_id, review_item.c.pmcid == pmcid)
+                .limit(1)
+            ).scalar()
+            if item_json:
+                try:
+                    topic = json.loads(item_json).get("paper", {}).get("topic") or ""
+                except ValueError:
+                    topic = ""
+            conn.execute(
+                update(review_paper)
+                .where(review_paper.c.run_id == run_id, review_paper.c.pmcid == pmcid)
+                .values(domain=scope or DEFAULT_DOMAIN, topic=topic)
+            )
+            done["papers_filled"] += 1
+    return done
 
 
 def engine_from_url(url: str, **kwargs: Any) -> Engine:

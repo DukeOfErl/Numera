@@ -57,7 +57,8 @@ any release; `1.0.0` when it stabilizes.
 - **A human reviewer can choose a domain or a topic, and set a paper aside** ([ADR-0980]). The
   page offers the domains and topics the loaded papers carry and a "Skip this paper" button; a
   skip is recorded and the paper is not offered to that reviewer again. The simulated reviewers
-  get none of this and keep reviewing their assigned subsets.
+  get none of this and keep reviewing their assigned subsets. `bionumbers upgrade-store` brings a
+  review database loaded under an earlier schema up to date in place.
 - **Every OpenRouter price is a price at one provider, and the request is pinned to it.** A model
   served by several providers at several rates is otherwise projected at one price and billed at
   another; the request now names the provider the price table was read from and allows no fallback.

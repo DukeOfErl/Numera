@@ -701,3 +701,34 @@ def test_the_model_is_pinned_to_the_provider_its_price_was_read_from(monkeypatch
     built = cli._model("nvidia/nemotron-3-ultra-550b-a55b")
     assert built._provider == "deepinfra"
     assert cli._model("typesafe/jev-router")._provider is None
+
+
+def test_upgrade_store_brings_an_older_file_up_to_date(tmp_path, capsys):
+    """A file written by `create_all` before the newer columns existed; the command adds them
+    and says how many it added."""
+    from sqlalchemy import Column, MetaData, Table
+
+    url = f"sqlite:///{tmp_path}/old.sqlite"
+    engine = store.engine_from_url(url)
+    old = MetaData()
+    for table in store.METADATA.sorted_tables:
+        if table.name == "review_skip":
+            continue
+        Table(
+            table.name,
+            old,
+            *[
+                Column(c.name, c.type, primary_key=c.primary_key, nullable=c.nullable)
+                for c in table.columns
+                if c.name not in {"domain", "topic", "value_read", "answered_by"}
+            ],
+        )
+    old.create_all(engine)
+    engine.dispose()
+
+    code = cli.main(["upgrade-store", "--db-url", url])
+
+    assert code == 0
+    assert "4 column(s) added, 0 paper(s) filled" in capsys.readouterr().out
+    assert cli.main(["upgrade-store", "--db-url", url]) == 0
+    assert "0 column(s) added" in capsys.readouterr().out

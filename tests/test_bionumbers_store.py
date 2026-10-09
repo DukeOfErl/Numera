@@ -13,9 +13,10 @@ import tomllib
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
-from sqlalchemy import create_engine, insert, select, text
+from sqlalchemy import Column, MetaData, Table, create_engine, insert, select, text
 from sqlalchemy.exc import OperationalError
 
 from bionumbers import store
@@ -535,6 +536,89 @@ def test_skipping_a_paper_that_is_not_there_is_refused(engine):
         store.skip_paper(engine, "alice", run_id=RUN, pmcid="PMC9")
 
     assert rows(engine, store.review_skip) == []
+
+
+# --- upgrading an older file -------------------------------------------------------------------
+
+
+def an_old_database() -> tuple[Any, MetaData]:
+    """A SQLite file as `create_all` wrote it before domain, topic, value_read, answered_by and
+    review_skip existed: the same tables, those columns and that table left out."""
+    engine = create_engine("sqlite://")
+    old = MetaData()
+    dropped = {"domain", "topic", "value_read", "answered_by"}
+    for table in store.METADATA.sorted_tables:
+        if table.name == "review_skip":
+            continue
+        Table(
+            table.name,
+            old,
+            *[
+                Column(
+                    column.name,
+                    column.type,
+                    primary_key=column.primary_key,
+                    nullable=column.nullable,
+                    default=column.default.arg if column.default is not None else None,
+                )
+                for column in table.columns
+                if column.name not in dropped
+            ],
+        )
+    old.create_all(engine)
+    return engine, old
+
+
+def test_upgrade_adds_the_missing_columns_and_table_and_fills_domain_and_topic():
+    engine, old = an_old_database()
+    item = an_item("i2", paper=a_paper("PMC2").model_copy(update={"topic": "crystals"}))
+    with engine.begin() as conn:
+        now = datetime.now(UTC)
+        conn.execute(
+            insert(old.tables["review_paper"]),
+            [
+                {
+                    "run_id": RUN,
+                    "pmcid": "PMC2",
+                    "question": "q",
+                    "state": "CLAIMS_FOUND",
+                    "fingerprint_json": '{"scope": "physics"}',
+                    "loaded_at": now,
+                },
+                {
+                    "run_id": RUN,
+                    "pmcid": "PMC1",
+                    "question": "q",
+                    "state": "CLAIMS_FOUND",
+                    "fingerprint_json": "{}",
+                    "loaded_at": now,
+                },
+            ],
+        )
+        conn.execute(
+            insert(old.tables["review_item"]).values(
+                item_id="i2",
+                run_id=RUN,
+                question="q",
+                pmcid="PMC2",
+                claim_id="c1",
+                value="39",
+                claim_kind="SINGLE",
+                second_kind="DISTRACTOR",
+                item_json=item.model_dump_json(),
+                created_at=now,
+            )
+        )
+
+    done = store.upgrade(engine)
+
+    assert done == {"columns_added": 4, "papers_filled": 2}
+    by_pmcid = {row.pmcid: (row.domain, row.topic) for row in rows(engine, store.review_paper)}
+    assert by_pmcid == {"PMC1": ("biology", ""), "PMC2": ("physics", "crystals")}
+    # The upgraded file takes the writers that needed the new columns and table.
+    store.record_choice(engine, "i2", reviewer="alice", chosen_supporting=True, value_read="39")
+    store.skip_paper(engine, "alice", run_id=RUN, pmcid="PMC1")
+    assert store.upgrade(engine) == {"columns_added": 0, "papers_filled": 2}, "idempotent"
 
 
 # --- two steps -----------------------------------------------------------------------------

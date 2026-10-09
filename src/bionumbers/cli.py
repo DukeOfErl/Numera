@@ -603,6 +603,17 @@ def status(args: argparse.Namespace) -> int:
     return 0
 
 
+def upgrade_store(args: argparse.Namespace) -> int:
+    """Bring a review database loaded under an earlier schema up to date, in place."""
+    url = args.db_url or os.environ.get(DB_URL_ENV, "")
+    if not url:
+        print(f"Give --db-url or set {DB_URL_ENV} to the review database.", file=sys.stderr)
+        return 2
+    done = store.upgrade(_engine(url))
+    print(f"{done['columns_added']} column(s) added, {done['papers_filled']} paper(s) filled")
+    return 0
+
+
 # --- simulate-review --------------------------------------------------------------------------
 
 
@@ -737,6 +748,12 @@ def _parser() -> argparse.ArgumentParser:
     status_cmd.add_argument("run_id")
     run_dirs(status_cmd)
     status_cmd.set_defaults(command=status)
+
+    upgrade_cmd = commands.add_parser(
+        "upgrade-store", help="add the columns and tables a database loaded earlier lacks"
+    )
+    upgrade_cmd.add_argument("--db-url", default=None, help=f"else {DB_URL_ENV}")
+    upgrade_cmd.set_defaults(command=upgrade_store)
 
     simulate_cmd = commands.add_parser(
         "simulate-review", help="models review the loaded items in place of people"

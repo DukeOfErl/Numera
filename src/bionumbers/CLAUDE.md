@@ -21,7 +21,7 @@ tool; if the extractor seems to need to search the paper, give it the whole pape
 | `review.py` | Presentation: the two texts in an uninformative order and as the paper wrote them, the whole table a cell sits in (ADR-0940), the condition rows, each step's completeness rule |
 | `harvest.py` | Harvest mode (ADR-0950): the classes of number wanted and not wanted, the instruction built from extraction's, the three model-written labels, the twenty-claim bound, one scope per domain (ADR-1500), `organismal` among them |
 | `curated.py` | The curated tier (ADR-1510): which BioNumbers entries in the slice nothing marks doubtful, and why each other one is left out |
-| `cli.py` | `bionumbers discover \| harvest \| extract \| load \| curate \| status \| simulate-review` |
+| `cli.py` | `bionumbers discover \| harvest \| extract \| load \| curate \| status \| simulate-review \| upgrade-store` |
 | `paths.py` | `data/europepmc/`, `data/runs/`; a test asks git that both stay ignored |
 | `simulated_review.py` | Models standing in for reviewers (ADR-0960): the two screens as text, built from `review.py`'s own functions; each role's subset by hash; two calls per decision under a ledger; rows that say a model wrote them and which model answered. A second **driver** over the review task, not a pipeline step |
 
