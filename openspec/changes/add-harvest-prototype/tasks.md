@@ -38,8 +38,11 @@
 - [x] 6.4 A numbered "4.1 Experimental" heading counts as methods
 - [ ] 6.5 Enforce the twenty-claim bound in code, not only in the instruction (finding 3)
 - [ ] 6.6 Serve one paper's items apart across runs, not only within one (finding 1); and link the entries that several runs extracted from the same paper, so a reader sees that a paper was read more than once and where the readings differ
-- [ ] 6.7 The distractor's exclusion reads the value's numbers through `quotes`, not its own copy, which misses "+-" (finding 9)
+- [x] 6.7 The distractor's exclusion reads the value's numbers through `quotes.value_numbers`, not its own copy, which missed "+-" (finding 9)
 - [ ] 6.8 The review page caches its engine when the URL comes from the environment (finding 8)
+- [x] 6.10 A refused harvest paper's ending carries the harvest instruction's fingerprint (finding 4)
+- [x] 6.11 A class outside the scope's list loses its label and keeps its value (finding 6)
+- [x] 6.12 `store.load_curated` runs the refusal itself on corpus lines (finding 10)
 - [ ] 6.9 An indented `#` line in a PMCID file is a comment; one run-path guard instead of two
 
 ## 7. Before hand-over

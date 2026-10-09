@@ -329,6 +329,11 @@ THREE LABELS ARE YOURS TO WRITE. They are labels, not quotes; everything else st
 HARVEST_INSTRUCTION = "\n\n".join((_HEAD, INSTRUCTION.split("\n\n", 1)[1], _SELECTION))
 
 
+def class_names(scope: str = DEFAULT_SCOPE) -> frozenset[str]:
+    """The class names a claim harvested in `scope` may carry."""
+    return frozenset(name for name, _ in SCOPES[scope].classes)
+
+
 def user_turn(scope: str = DEFAULT_SCOPE) -> dict:
     """The scope: the wanted classes and the unwanted kinds. Nothing about any paper."""
     chosen = SCOPES[scope]

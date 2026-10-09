@@ -602,6 +602,7 @@ def _assemble(
     paper: Paper,
     question: str,
     fingerprint: Fingerprint,
+    classes: frozenset[str] = frozenset(),
 ) -> tuple[tuple[Claim, ...], tuple[RejectedCandidate, ...], tuple[str, ...]]:
     """Build the records out of what verified, and account for what did not.
 
@@ -648,7 +649,12 @@ def _assemble(
                 # the quantity, falling back to the article's own term.
                 property_asked=question or draft.property_name or draft.property_in_paper,
                 property_in_paper=draft.property_in_paper,
-                property_class=draft.property_class,
+                # A class outside the scope's list is a label the model invented or borrowed
+                # from another domain; the value is still verified, so the label goes, not the
+                # claim (code review of 2026-10-07, finding 6).
+                property_class=(
+                    draft.property_class if not classes or draft.property_class in classes else ""
+                ),
                 organism_name=draft.organism_name,
                 value=draft.value,
                 unit=draft.unit,
@@ -700,6 +706,7 @@ def extract(
     user: dict | None = None,
     max_tokens: int = MAX_TOKENS,
     scope: str = "",
+    classes: frozenset[str] = frozenset(),
 ) -> PaperResult:
     """One paper, one named ending, whatever happened.
 
@@ -711,7 +718,9 @@ def extract(
     instruction over the same paper, and a user turn that states a scope instead of a
     question. With an empty `question` each claim is named by the model's own label.
     `max_tokens` is harvest's too: twenty claims do not fit the bound three were sized for.
-    `scope` names the domain `user` states, for the fingerprint only.
+    `scope` names the domain `user` states, for the fingerprint only; `classes` are that
+    domain's class names, and a claim labelled with any other class keeps its value and loses
+    the label.
     """
     fingerprint = Fingerprint(
         model=model_id,
@@ -804,7 +813,9 @@ def extract(
         # alone cannot be triaged.
         return ending(PaperState.FAILED, reason=f"{type(failure).__name__}: {failure}")
 
-    claims, rejected, unverifiable = _assemble(output, checked, doc, paper, question, fingerprint)
+    claims, rejected, unverifiable = _assemble(
+        output, checked, doc, paper, question, fingerprint, classes
+    )
     if not claims:
         # Decided by what survived verification, not by what the model called its answer:
         # a claim that verified is what CLAIMS_FOUND means, and a paper whose every claim

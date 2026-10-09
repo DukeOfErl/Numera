@@ -294,3 +294,37 @@ def test_a_provider_that_names_no_model_leaves_the_field_empty(article):
     result = harvested(ScriptedModel(ExtractionOutput(state="NOTHING_TO_EXTRACT")), article)
 
     assert result.fingerprint.answered_by == ""
+
+
+# --- the class belongs to the scope --------------------------------------------------------
+
+
+@pytest.mark.parametrize(("label", "kept"), [("TIME", "TIME"), ("VISCOSITY", ""), ("BINDING", "")])
+def test_a_class_outside_the_scope_loses_its_label_and_keeps_its_value(article, label, kept):
+    """Code review of 2026-10-07, finding 6: a label invented, or borrowed from another domain's
+    list, would be counted on the dashboards as a class of this one. The value is verified, so
+    the claim stays; only the label goes."""
+    draft = a_draft(
+        article, property_name="replisome lifetime", organism_name="E. coli", property_class=label
+    )
+    result = extract(
+        ScriptedModel(ExtractionOutput(state="CLAIMS_FOUND", claims=[draft])),
+        article,
+        PAPER,
+        question="",
+        organism="",
+        run_id="h1",
+        ledger=Ledger(Ceiling()),
+        instruction=harvest.HARVEST_INSTRUCTION,
+        user=harvest.user_turn(),
+        classes=harvest.class_names(),
+    )
+
+    (claim,) = result.claims
+    assert claim.property_class == kept
+    assert claim.value == "65"
+
+
+def test_every_scope_s_class_names_are_its_own():
+    for name, scope in harvest.SCOPES.items():
+        assert harvest.class_names(name) == {cls for cls, _ in scope.classes}

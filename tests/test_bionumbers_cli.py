@@ -321,6 +321,27 @@ def test_a_refusal_of_the_account_stops_the_run_and_leaves_the_rest_unread(
     assert len(model.calls) == 2, "no call was made for the third paper"
 
 
+def test_a_harvest_refused_by_the_provider_records_the_harvest_instruction(
+    monkeypatch, provider, dirs
+):
+    """Code review of 2026-10-07, finding 4: the ending written on a refusal named the question
+    instruction, so a harvested paper's FAILED record grouped with the question runs."""
+
+    class Refusing(ScriptedModel):
+        def parse(self, **kwargs):
+            raise ProviderRefused("HTTP 402 from OpenRouter: Insufficient credits")
+
+    cli.main(["harvest", "h1", "--pmcids", TABLES_PMCID, *common(dirs)])
+    monkeypatch.setattr(cli, "_model", lambda model_id: Refusing())
+
+    assert cli.main(["extract", "h1", *common(dirs)]) == 3
+
+    (result,) = read_results(dirs.runs / "h1" / "results.jsonl")
+    assert result.state == PaperState.FAILED
+    assert result.fingerprint.instruction_sha256 == instruction_sha256(harvest.HARVEST_INSTRUCTION)
+    assert result.fingerprint.scope == harvest.DEFAULT_SCOPE
+
+
 # --- harvest ----------------------------------------------------------------------------------
 
 

@@ -30,14 +30,13 @@ input.
 
 from __future__ import annotations
 
-import re
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Protocol
 
 import pint
 
 from bionumbers.jats import Document, render_for_model
-from bionumbers.quotes import Verified, cell_text, fold, verify
+from bionumbers.quotes import Verified, cell_text, fold, value_numbers, verify
 from bionumbers.records import (
     DISTRACTOR_PREFERENCE,
     Claim,
@@ -169,13 +168,6 @@ _PREFERENCE_RANK: dict[DistractorType, int] = {
     kind: rank for rank, kind in enumerate(DISTRACTOR_PREFERENCE)
 }
 
-_NUMBER = re.compile(r"\d+(?:\.\d+)?")
-
-# Both the typographic and the ASCII way a value's uncertainty is written. Everything after it is
-# dropped: "39 +/- 1 min" is a claim about 39, and excluding "1" would refuse every candidate
-# mentioning a single anything.
-_UNCERTAINTY = re.compile(r"±|\+/-")
-
 # The units a converted form is offered in: the common members of each dimension this prototype has
 # met in a life-science paper. The list is tried whole and mismatched dimensions fall out of
 # `Quantity.to`, so adding a family costs one line and no dispatch. A unit that pint does not know
@@ -234,11 +226,13 @@ def _registry() -> Any:
 def _numbers_as_written(value: str) -> tuple[str, ...]:
     """The numbers a value asserts: the central value, or both ends of a range.
 
-    An uncertainty is not one of them (see `_UNCERTAINTY`); a range's endpoints both are, because a
-    candidate restating either end is restating the claim.
+    An uncertainty is not one of them: "39 +- 1 min" is a claim about 39, and excluding "1" would
+    refuse every candidate mentioning a single anything. A range's endpoints both are, because a
+    candidate restating either end is restating the claim. Read through `quotes.value_numbers`,
+    the quote check's own reading: a copy here missed "+-" (code review of 2026-10-07, finding 9).
+    Unsigned on purpose: a candidate stating 16.6 for a claim of -16.6 still restates it.
     """
-    head = _UNCERTAINTY.split(fold(value), maxsplit=1)[0]
-    return tuple(match.group(0) for match in _NUMBER.finditer(head))
+    return value_numbers(value)
 
 
 def _significant_digits(number: str) -> int:

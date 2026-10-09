@@ -614,3 +614,13 @@ def test_the_kind_and_type_are_on_the_item_and_in_neither_text(occurrences):
             assert kind.value not in text
         for distractor_type in DistractorType:
             assert distractor_type.value not in text
+
+
+def test_an_ascii_plus_minus_starts_the_uncertainty_here_as_in_the_quote_check():
+    """Code review of 2026-10-07, finding 9: this step read a value's numbers with its own copy
+    of the parsing, which missed "+-", made "1" an excluded form, and refused every candidate
+    mentioning a single anything."""
+    for written in ("39 +- 1", "39 +/- 1", "39 ± 1"):
+        forms = excluded_forms(written, "min")
+        assert "39" in forms
+        assert "1" not in forms

@@ -213,6 +213,14 @@ def _signed_numbers(folded: str) -> tuple[str, ...]:
     return tuple(found)
 
 
+def value_numbers(value: str) -> tuple[str, ...]:
+    """The numbers a value asserts, unsigned: its central figure or both ends of a range, never
+    what follows a plus-minus sign. The one reading of a value's numbers; the second-text step's
+    exclusion uses it too, so the two cannot drift apart over which marker starts an uncertainty.
+    """
+    return numbers_in(_UNCERTAINTY.split(fold(value), maxsplit=1)[0])
+
+
 def states_value(text: str, value: str) -> bool:
     """Does the text state every number the value asserts?
 

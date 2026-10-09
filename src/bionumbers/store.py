@@ -24,6 +24,7 @@ No Streamlit and nothing from `scinumbers_ask` (design D9): the page builds the 
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Any
@@ -48,7 +49,8 @@ from sqlalchemy import (
     text,
 )
 
-from bionumbers.curated import CuratedEntry
+from bionumbers import curated
+from bionumbers.curated import Refusal
 from bionumbers.records import UNLICENSED, PaperResult, ReviewItem
 
 #: Seconds to wait for a connection to be established.
@@ -280,19 +282,23 @@ def load_run(
     return len(new_items)
 
 
-def load_curated(engine: Any, entries: Iterable[CuratedEntry]) -> int:
-    """Replace the curated tier with `entries`. Returns how many rows it now holds.
+def load_curated(engine: Any, corpus: Iterable[dict]) -> tuple[int, Counter[Refusal]]:
+    """Replace the curated tier with the corpus entries that pass `curated.refusal`.
 
-    Takes `CuratedEntry` rather than raw corpus lines, so nothing reaches the table without
-    passing `curated.refusal`: the type is the guard, and only `curated.entry` builds one.
+    Returns how many rows the tier now holds and how many entries were refused for each reason.
+    Takes the corpus's own lines and runs the refusal here, in the operation, rather than taking
+    already-built entries: a `CuratedEntry` is a plain model any caller can construct, so a
+    loader that trusted the type would admit whatever a second caller built by hand (code review
+    of 2026-10-07, finding 10).
     """
+    kept, refused = curated.select(corpus)
     now = datetime.now(UTC)
-    rows = [{**entry.model_dump(), "loaded_at": now} for entry in entries]
+    rows = [{**entry.model_dump(), "loaded_at": now} for entry in kept]
     with engine.begin() as conn:
         conn.execute(curated_entry.delete())
         if rows:
             conn.execute(insert(curated_entry), rows)
-    return len(rows)
+    return len(rows), refused
 
 
 def next_item(engine: Any, reviewer: str | None) -> ReviewItem | None:

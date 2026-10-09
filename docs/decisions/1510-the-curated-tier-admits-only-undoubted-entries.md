@@ -31,7 +31,9 @@ table whole: no decision points at a curated entry.
 An approximate value ("~60,000") is admitted and carries `approximate`: the hedge is the source's
 own, recorded faithfully, and harvested entries carry the same hedges.
 
-The guard is in `refusal`, and `store.load_curated` takes only `CuratedEntry`, which only
+The guard is in `refusal`, and `store.load_curated` runs it itself on the corpus's own lines
+(amended 2026-10-09: it first took built entries and trusted the type, which any caller can
+construct). Before that amendment the sentence read: `store.load_curated` takes only `CuratedEntry`, which only
 `curated.entry` builds and which refuses by the same rule — so a second caller cannot load an entry
 that skipped it.
 

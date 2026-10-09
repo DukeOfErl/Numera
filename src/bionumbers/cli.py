@@ -391,6 +391,7 @@ def _one_paper(
         user=harvest.user_turn(scope) if harvesting else None,
         max_tokens=harvest.MAX_TOKENS if harvesting else MAX_TOKENS,
         scope=scope,
+        classes=harvest.class_names(scope) if harvesting else frozenset(),
     )
     if paper.licence == UNLICENSED:
         # Extraction ran and its spend stands, but nothing quoted leaves the cache: the spec's
@@ -494,7 +495,11 @@ def extract_run(args: argparse.Namespace) -> int:
                     spend=ledger.paper(paper.pmcid),
                     fingerprint=Fingerprint(
                         model=args.model,
-                        instruction_sha256=instruction_sha256(),
+                        # The run's own instruction, so the ending groups with its run's papers
+                        # (code review of 2026-10-07, finding 4).
+                        instruction_sha256=instruction_sha256(
+                            harvest.HARVEST_INSTRUCTION if harvesting else INSTRUCTION
+                        ),
                         article_id=paper.pmcid,
                         run_id=args.run_id,
                         scope=scope,
@@ -563,8 +568,7 @@ def curate(args: argparse.Namespace) -> int:
     if not url or not corpus:
         print(f"Give --db-url (or {DB_URL_ENV}) and --corpus (or {CORPUS_ENV}).", file=sys.stderr)
         return 2
-    kept, refused = curated.select(curated.read_corpus(corpus))
-    loaded = store.load_curated(_engine(url), kept)
+    loaded, refused = store.load_curated(_engine(url), curated.read_corpus(corpus))
     in_slice = loaded + sum(n for r, n in refused.items() if r != curated.Refusal.OUT_OF_SCOPE)
     print(f"{loaded} curated entr{'y' if loaded == 1 else 'ies'} of {in_slice} in the slice")
     for reason, count in refused.most_common():

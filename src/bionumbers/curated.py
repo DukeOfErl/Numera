@@ -81,7 +81,10 @@ class Refusal(StrEnum):
 
 
 class CuratedEntry(Frozen):
-    """One BioNumbers entry as the curated tier shows it."""
+    """One BioNumbers entry as the curated tier shows it.
+
+    Building one checks nothing: `entry` and `select` refuse, and `store.load_curated` calls
+    `select` itself, so the tier admits only what passed whatever a caller built."""
 
     entry_id: int
     property: str

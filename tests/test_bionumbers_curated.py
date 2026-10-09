@@ -108,6 +108,23 @@ def test_select_keeps_the_curated_and_counts_the_rest_by_reason():
     assert refused == {Refusal.FUSED_RANGE: 1, Refusal.NO_UNIT: 1}
 
 
+def test_the_loader_refuses_by_itself_whatever_its_caller_passed(engine):
+    """The refusal belongs to the operation: a caller handing the loader corpus lines directly,
+    without the command's selection, still cannot put a doubted entry in the tier."""
+    loaded, refused = store.load_curated(
+        engine,
+        [
+            an_entry(),
+            an_entry(entry_id=2, range_fused=True),
+            an_entry(entry_id=3, comments="As a rule of thumb, about 7.2"),
+        ],
+    )
+    assert loaded == 1
+    assert refused == {Refusal.FUSED_RANGE: 1, Refusal.DOUBT: 1}
+    with engine.connect() as conn:
+        assert list(conn.scalars(select(store.curated_entry.c.entry_id))) == [100267]
+
+
 # --- the table and the command -------------------------------------------------------------
 
 
@@ -119,9 +136,8 @@ def engine(tmp_path):
 
 
 def test_a_load_replaces_the_tier_rather_than_adding_to_it(engine):
-    first = [curated.entry(an_entry()), curated.entry(an_entry(entry_id=2))]
-    assert store.load_curated(engine, first) == 2
-    assert store.load_curated(engine, [curated.entry(an_entry(entry_id=3))]) == 1
+    assert store.load_curated(engine, [an_entry(), an_entry(entry_id=2)])[0] == 2
+    assert store.load_curated(engine, [an_entry(entry_id=3)])[0] == 1
 
     with engine.connect() as conn:
         ids = list(conn.scalars(select(store.curated_entry.c.entry_id)))
