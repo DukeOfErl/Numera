@@ -62,6 +62,10 @@ M, U, D, X = (
         ("39 um", ["39"], "μm", None, False),
         ("0.7 uM", ["0.7"], "μM", None, False),
         ("lower than 20 nM", ["20"], "nM", None, False),
+        ("increased from 70 to 150 dyn/cm²", ["70", "150"], "dyn/cm^2", None, False),
+        ("0.16 ± 0.10 μM ([ref 14]) and 0.17 μM", ["0.16"], "μM", "0.10", False),
+        ("103 filaments per µm (sdm = 17; 20 measurements)", ["103"], "filaments/μm", None, False),
+        ("570 ^+/− 260 s", ["570"], "s", "260", False),
     ],
 )
 def test_a_value_as_a_person_writes_it_is_read(text, numbers, unit, uncertainty, approximate):
@@ -106,6 +110,15 @@ def test_precision_is_the_digits_written(text, precision):
         ("0.5 m", "5 × 10⁻¹", "m", M),
         ("20–40", "20-40", "s", M),
         ("20 to 40 s", "20–40", "s", M),
+        ("increased from 70 to 150 dyn/cm²", "70 to 150", "dyn/cm²", M),
+        ("0.16 ± 0.10 μM ([ref 14]) and 0.17 μM ([ref 15])", "0.16 ± 0.10", "μM", M),
+        (
+            "103 filaments per µm (sdm = 17; 20 measurements in 5 cells)",
+            "103",
+            "filaments per µm",
+            M,
+        ),
+        ("570 +/− 260 s", "570 ^+/− 260", "s", M),
         # The reader's precision, or the paper's, whichever is coarser.
         ("39", "39.2", "min", M),
         ("39.2", "39", "min", M),

@@ -77,11 +77,15 @@ class Reading:
 _APPROX = re.compile(
     r"^\s*(?:~|≈|about|approximately|approx\.?|circa|ca\.|roughly|around|some)\s*", re.I
 )
-_UNCERTAINTY = re.compile(r"\s*(?:±|\+/-|\+-)\s*")
+#: The optional caret is the fold's: a paper's superscript `+/-` comes back as `^+/-`.
+_UNCERTAINTY = re.compile(r"\s*\^?\s*(?:±|\+/-|\+-)\s*")
 _SCIENTIFIC = re.compile(
     r"(?P<mantissa>[+-]?\d+(?:\.\d+)?)\s*(?:x\s*10\s*\^?\s*|e)(?P<exponent>[+-]?\d+)", re.I
 )
-_RANGE = re.compile(r"^\s*(?P<low>[+-]?\d+(?:\.\d+)?)\s*(?:-|to|–)\s*(?P<high>[+-]?\d+(?:\.\d+)?)")
+#: Anywhere in the text, not only at its start: "increased from 70 to 150" is a range.
+_RANGE = re.compile(r"(?P<low>[+-]?\d+(?:\.\d+)?)\s*(?:-|to)\s*(?P<high>[+-]?\d+(?:\.\d+)?)")
+#: Where a unit ends: a parenthesis, a bracket, a semicolon, or an "and" joining a second value.
+_UNIT_END = re.compile(r"\s*(?:\(|\[|;|\band\b).*$", re.S)
 _NUMBER = re.compile(r"[+-]?\d+(?:\.\d+)?")
 _THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}\b)")
 
@@ -129,7 +133,7 @@ def parse(text: str) -> Reading | None:
         else:
             tail = after
 
-    span = _RANGE.match(rest)
+    span = _RANGE.search(rest)
     if span:
         numbers = [_decimal(span["low"]), _decimal(span["high"])]
         remainder = rest[span.end() :]
@@ -227,7 +231,8 @@ def _close(a: Decimal, b: Decimal, precision: int) -> bool:
 def _unit(text: str) -> str:
     """The unit as written: folded, trimmed of punctuation, `per` as `/`, a keyboard `u` for
     micro as `μ`."""
-    unit = re.sub(r"\s+", " ", text.strip().strip(",;:.()[]").strip())
+    unit = _UNIT_END.sub("", text.strip())
+    unit = re.sub(r"\s+", " ", unit.strip(",;:.()[]").strip())
     unit = re.sub(r"\s+per\s+", "/", unit)
     return _KEYBOARD_MICRO.sub("μ", unit)
 
