@@ -38,3 +38,12 @@ The scopes for chemistry and physics are written from a handful of papers, not r
 corpus as the biology one was, so they are guesses about what a chemist or physicist would look up.
 The instruction's condition fields remain biological (strain, medium, growth phase); a physics
 claim records its own conditions under names the model chooses, which nothing yet normalises.
+
+## Amendment, 2026-10-09: an organism-level scope
+
+The biology scope, read off yeast and the cytoskeleton, returned nothing from eight of ten papers
+by the demo's reviewers — zoology, palaeontology, regeneration and cardiac physiology — and the
+model said why each time: the numbers were about bodies, fossils or tissues, not cells. A fifth
+scope, `organismal`, asks for organism-level sizes, counts, genomes, life-history times,
+physiological quantities and proportions, and sets aside phylogenetic support values and numbers
+of specimens examined. Nothing else changes; the decision above holds.

@@ -29,8 +29,8 @@ other work SHALL NOT.
 
 ### Requirement: A harvest asks in one named domain, and the domain is on every entry
 
-A harvest SHALL be asked in one of a fixed set of domains — biology, biophysics, chemistry,
-physics — each stating the classes of value wanted and the kinds not wanted. The domain SHALL
+A harvest SHALL be asked in one of a fixed set of domains — biology (cells and molecules),
+organismal biology, biophysics, chemistry, physics — each stating the classes of value wanted and the kinds not wanted. The domain SHALL
 change nothing else about extraction. The statement of a domain SHALL name no unit and no
 magnitude. The domain SHALL be recorded with the run and on every article's and entry's record of
 what produced it; a harvested run recorded before domains existed SHALL be read as biology.

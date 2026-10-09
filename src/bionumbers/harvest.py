@@ -223,11 +223,61 @@ PHYSICS = Scope(
     ),
 )
 
+#: Organism-level biology: anatomy, physiology, life history, genomes, evolution. Written after the
+#: biology scope -- read off yeast and the cytoskeleton -- returned nothing from eight of ten
+#: zoology and physiology papers (2026-10-09), the model saying each time that the paper's numbers
+#: were about bodies, fossils or tissues rather than cells.
+ORGANISMAL = Scope(
+    classes=(
+        (
+            "SIZE",
+            "sizes, lengths, areas and volumes of whole organisms, body parts, tissues, "
+            "extracellular particles and fossils",
+        ),
+        (
+            "COUNT",
+            "numbers of segments, body parts, cells of a kind, chromosomes or genes in an "
+            "organism, and of species in a named group",
+        ),
+        ("GENOME", "genome sizes, base composition, and the gene and repeat content of genomes"),
+        (
+            "TIME",
+            "durations of life-history and developmental events -- regeneration, development, "
+            "generation time, lifespan -- and the ages of fossils and lineages",
+        ),
+        (
+            "RATE",
+            "rates of growth, regeneration, reproduction and locomotion, and physiological rates "
+            "such as heart rate",
+        ),
+        (
+            "PHYSIOLOGICAL",
+            "physiological quantities of organisms and tissues: concentrations in blood or tissue, "
+            "densities of vessels or cells per area, pressures, body temperatures",
+        ),
+        (
+            "FRACTION",
+            "proportions within an organism or a population: survival, sex ratios, the share of a "
+            "tissue or a cell type",
+        ),
+    ),
+    excluded=(
+        _STATISTICS,
+        _SETTINGS,
+        "phylogenetic support values, branch lengths and alignment lengths",
+        "numbers of specimens, animals or samples examined",
+        "values for single genes or single samples out of a genome-wide or large-scale dataset, "
+        "where the summary value is the reusable one",
+        _COUNTS,
+    ),
+)
+
 #: Every domain harvest can be asked in, by the name a run records. `biology` is the scope the
 #: classes above were read for and the one an unnamed run used before scopes existed.
 SCOPES: dict[str, Scope] = {
     "biology": Scope(classes=PROPERTY_CLASSES, excluded=EXCLUDED),
     "biophysics": BIOPHYSICS,
+    "organismal": ORGANISMAL,
     "chemistry": CHEMISTRY,
     "physics": PHYSICS,
 }

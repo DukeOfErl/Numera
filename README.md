@@ -321,7 +321,8 @@ streamlit run review_app.py
 - **Harvest** is the other way in (ADR-0950): `bionumbers harvest <run-id> --pmcids PMC1,PMC2`
   starts a run from papers chosen ahead of any question, and `extract` then asks each one for
   the numbers worth reusing, at most twenty per paper. `--scope` names the domain whose classes
-  of value are wanted — `biology` (the default), `biophysics`, `chemistry` or `physics`
+  of value are wanted — `biology` (the default, cells and molecules), `organismal` (bodies,
+  physiology, life history, genomes), `biophysics`, `chemistry` or `physics`
   (ADR-1500).
 - **Curate** loads BioNumbers' own entries as the top trust tier, beside the harvested ones:
   `bionumbers curate --corpus ~/bionumbers/bionumbers.jsonl` keeps the yeast and cytoskeleton

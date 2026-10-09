@@ -19,7 +19,7 @@ tool; if the extractor seems to need to search the paper, give it the whole pape
 | `distractor.py` | The second text: candidates of five types, mechanical exclusion of the value in every form, preference order, second-occurrence fallback (ADR-1540) |
 | `store.py` | `review_paper`, `review_item`, `review_decision`, `curated_entry` in SQLAlchemy Core; `record_decision` **fails closed** (ADR-0930). DDL in `sql/review.sql` |
 | `review.py` | Presentation: the two texts in an uninformative order and as the paper wrote them, the whole table a cell sits in (ADR-0940), the condition rows, the decision's completeness rule |
-| `harvest.py` | Harvest mode (ADR-0950): the classes of number wanted and not wanted, the instruction built from extraction's, the three model-written labels, the twenty-claim bound, one scope per domain (ADR-1500) |
+| `harvest.py` | Harvest mode (ADR-0950): the classes of number wanted and not wanted, the instruction built from extraction's, the three model-written labels, the twenty-claim bound, one scope per domain (ADR-1500), `organismal` among them |
 | `curated.py` | The curated tier (ADR-1510): which BioNumbers entries in the slice nothing marks doubtful, and why each other one is left out |
 | `cli.py` | `bionumbers discover \| harvest \| extract \| load \| curate \| status` |
 | `paths.py` | `data/europepmc/`, `data/runs/`; a test asks git that both stay ignored |
