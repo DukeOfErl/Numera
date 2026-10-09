@@ -718,7 +718,12 @@ def test_upgrade_store_brings_an_older_file_up_to_date(tmp_path, capsys):
             table.name,
             old,
             *[
-                Column(c.name, c.type, primary_key=c.primary_key, nullable=c.nullable)
+                Column(
+                    c.name,
+                    c.type,
+                    primary_key=c.primary_key,
+                    nullable=c.nullable and c.name not in {"approved", "chosen_supporting"},
+                )
                 for c in table.columns
                 if c.name not in {"domain", "topic", "value_read", "answered_by"}
             ],
@@ -729,6 +734,6 @@ def test_upgrade_store_brings_an_older_file_up_to_date(tmp_path, capsys):
     code = cli.main(["upgrade-store", "--db-url", url])
 
     assert code == 0
-    assert "4 column(s) added, 0 paper(s) filled" in capsys.readouterr().out
+    assert "2 column(s) added, 0 paper(s) filled" in capsys.readouterr().out
     assert cli.main(["upgrade-store", "--db-url", url]) == 0
     assert "0 column(s) added" in capsys.readouterr().out

@@ -558,7 +558,9 @@ def an_old_database() -> tuple[Any, MetaData]:
                     column.name,
                     column.type,
                     primary_key=column.primary_key,
-                    nullable=column.nullable,
+                    # The first schema required a verdict and a choice on every row.
+                    nullable=column.nullable
+                    and column.name not in {"approved", "chosen_supporting"},
                     default=column.default.arg if column.default is not None else None,
                 )
                 for column in table.columns
@@ -610,15 +612,41 @@ def test_upgrade_adds_the_missing_columns_and_table_and_fills_domain_and_topic()
             )
         )
 
+        conn.execute(
+            insert(old.tables["review_decision"]).values(
+                item_id="i2",
+                reviewer="bob",
+                chosen_supporting=True,
+                approved=True,
+                comment="kept",
+                decided_at=now,
+                issue="",
+            )
+        )
+
     done = store.upgrade(engine)
 
-    assert done == {"columns_added": 4, "papers_filled": 2}
+    # Two added by hand (domain, topic); value_read and answered_by came with the rebuild.
+    assert done == {"columns_added": 2, "papers_filled": 2, "tables_rebuilt": 1}
     by_pmcid = {row.pmcid: (row.domain, row.topic) for row in rows(engine, store.review_paper)}
     assert by_pmcid == {"PMC1": ("biology", ""), "PMC2": ("physics", "crystals")}
-    # The upgraded file takes the writers that needed the new columns and table.
+    (kept,) = rows(engine, store.review_decision)
+    assert (kept.reviewer, kept.approved, kept.comment, kept.value_read) == (
+        "bob",
+        True,
+        "kept",
+        "",
+    )
+    # The upgraded file takes the writers that needed the new columns, the nullable verdict
+    # and the new table.
     store.record_choice(engine, "i2", reviewer="alice", chosen_supporting=True, value_read="39")
+    store.record_issue(engine, "i2", reviewer="carol", issue="garbled")
     store.skip_paper(engine, "alice", run_id=RUN, pmcid="PMC1")
-    assert store.upgrade(engine) == {"columns_added": 0, "papers_filled": 2}, "idempotent"
+    assert store.upgrade(engine) == {
+        "columns_added": 0,
+        "papers_filled": 2,
+        "tables_rebuilt": 0,
+    }, "idempotent"
 
 
 # --- two steps -----------------------------------------------------------------------------

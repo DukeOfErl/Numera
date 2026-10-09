@@ -289,8 +289,41 @@ def upgrade(engine: Any) -> dict[str, int]:
 
     Returns what it did, by name, so the caller can say so.
     """
-    done = {"columns_added": 0, "papers_filled": 0}
+    done = {"columns_added": 0, "papers_filled": 0, "tables_rebuilt": 0}
     create_all(engine)
+    # SQLite cannot drop a NOT NULL constraint, and the first schema declared `approved` and
+    # `chosen_supporting` NOT NULL -- which an issue row and an open row both violate. The one
+    # way is the documented one: rename the table aside, create it afresh, copy, drop.
+    if engine.dialect.name == "sqlite":
+        present = {c["name"]: c for c in sa_inspect(engine).get_columns(review_decision.name)}
+        if any(
+            not present[name]["nullable"]
+            for name in ("approved", "chosen_supporting")
+            if name in present
+        ):
+            with engine.begin() as conn:
+                conn.execute(text("alter table review_decision rename to review_decision__old"))
+            review_decision.create(engine)
+            with engine.begin() as conn:
+                # Every column the new table has: the old ones copied, the new ones at their
+                # defaults, since a Core default is Python-side and the insert below is not.
+                names, values = [], []
+                for column in review_decision.columns:
+                    names.append(column.name)
+                    if column.name in present:
+                        values.append(column.name)
+                    elif column.default is not None and isinstance(column.default.arg, str):
+                        values.append(repr(column.default.arg))
+                    else:
+                        values.append("NULL")
+                conn.execute(
+                    text(
+                        f"insert into review_decision ({', '.join(names)}) "
+                        f"select {', '.join(values)} from review_decision__old"
+                    )
+                )
+                conn.execute(text("drop table review_decision__old"))
+            done["tables_rebuilt"] += 1
     present = {
         table.name: {column["name"] for column in sa_inspect(engine).get_columns(table.name)}
         for table in METADATA.sorted_tables
