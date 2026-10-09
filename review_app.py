@@ -40,6 +40,11 @@ NO_STORE = (
     "secrets and create the tables from sql/review.sql. There is nothing to review until then."
 )
 
+#: The two texts' choose buttons, one in each box. Clicking a box's button is the choice; the
+#: label is the box's letter so a reviewer reads "Choose A" under the text they mean.
+CHOOSE = "Choose {label}"
+CHOSEN = "chosen"
+
 #: The widget key prefixes. Each widget's key is the prefix, the item id and the step, so a new
 #: item -- or the same item's next step -- is a new set of widgets and starts blank -- a choice or
 #: a comment carried over from the last screen is a decision nobody made. Popping the keys from
@@ -76,7 +81,9 @@ DOMAIN_KEY = "bionumbers.review.domain"
 TOPIC_KEY = "bionumbers.review.topic"
 ANY = "All"
 
-st.set_page_config(page_title=review.TITLE, page_icon=":material/fact_check:")
+# Wide, because the two texts sit side by side (Yoav, 2026-10-09): a reviewer compares them, and
+# comparison across a gap is easier than down a column.
+st.set_page_config(page_title=review.TITLE, page_icon=":material/fact_check:", layout="wide")
 
 # The token in the URL, and this browser session's own identity. Same two as the ask app, because
 # `admit` and `draw_identity` are the ask app's and expect them (ADR-0830).
@@ -154,15 +161,31 @@ if aside.button(SKIP_PAPER, key=f"skip:{item.item_id}"):
         st.session_state.pop(STARTED_KEY, None)
         st.rerun()
 
-# Both texts, in the order `texts_in_order` gives and never sorted, filtered or labelled further
-# here: which is which is the question being asked. Each text as the paper wrote it, nothing in
-# it emphasised (ADR-0940). Shown at both steps: the verdict is a judgement of the text against
-# the stored entry, and a reviewer should not have to hold the text in memory across a click.
-for shown in review.texts_in_order(item):
-    with st.container(border=True):
-        st.markdown(f"**{shown.label}**")
+# Both texts side by side, in the order `texts_in_order` gives and never sorted, filtered or
+# labelled further here: which is which is the question being asked. Each text as the paper wrote
+# it, nothing in it emphasised (ADR-0940). Shown at both steps: the verdict is a judgement of the
+# text against the stored entry, and a reviewer should not have to hold the text in memory across
+# a click. At the first step each box carries its own choose button; the chosen box says so.
+picked_key = f"{CHOICE_KEY}:{item.item_id}:1"
+picked = (
+    st.session_state.get(picked_key)
+    if choice is None
+    else review.chosen_label(item, choice.chosen_supporting)
+)
+for shown, column in zip(review.texts_in_order(item), st.columns(2), strict=True):
+    with column, st.container(border=True):
+        heading = f"**{shown.label}**" + (f" · {CHOSEN}" if picked == shown.label else "")
+        st.markdown(heading)
         st.caption(web.as_text(shown.location_line))
         st.markdown(review.as_markdown(shown.text))
+        if choice is None and st.button(
+            CHOOSE.format(label=shown.label),
+            key=f"choose:{item.item_id}:{shown.label}",
+            type="primary" if picked == shown.label else "secondary",
+            width="stretch",
+        ):
+            st.session_state[picked_key] = shown.label
+            st.rerun()
 
 # The table a cell came from, whole and with its caption, both cells marked alike. Our own HTML,
 # because `st.table` cannot draw a spanning header and the paper's layout is the point.
@@ -182,10 +205,11 @@ def _save(write, *, on_saved) -> None:
 
 
 def _next_screen() -> None:
-    # The next screen brings its own widgets (see the key prefixes above); only the clock is
-    # ours to reset.
+    # The next screen brings its own widgets (see the key prefixes above); only the clock, the
+    # open issue box and the remembered choice are ours to reset.
     st.session_state.pop(STARTED_KEY, None)
     st.session_state.pop(RAISING_KEY, None)
+    st.session_state.pop(picked_key, None)
     st.rerun()
 
 
@@ -226,10 +250,10 @@ def _issue_controls() -> bool:
 
 
 if step == 1:
-    # `index=None`, so the radio carries no answer the reviewer did not give. A default would be
-    # recorded verbatim by anyone who clicked straight past it, and it would be the same default
-    # every time -- a bias in the dataset with no trace of itself.
-    picked = st.radio(review.CHOICE_QUESTION, ["A", "B"], index=None, key=f"{CHOICE_KEY}:{key}")
+    # No default: `picked` is None until a box's button was clicked. A default would be recorded
+    # verbatim by anyone who clicked straight past it, and it would be the same default every
+    # time -- a bias in the dataset with no trace of itself.
+    st.markdown(web.as_text(review.CHOICE_QUESTION))
     value_read = st.text_input(
         review.VALUE_QUESTION, key=f"{VALUE_KEY}:{key}", help=review.VALUE_HINT
     )

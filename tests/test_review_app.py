@@ -63,6 +63,8 @@ ISSUE_KEY = _constant("ISSUE_KEY")
 CONTINUE = _constant("CONTINUE")
 SAVE_AND_NEXT = _constant("SAVE_AND_NEXT")
 RAISE_AN_ISSUE = _constant("RAISE_AN_ISSUE")
+CHOOSE = _constant("CHOOSE")
+CHOSEN = _constant("CHOSEN")
 CONFIRM_ISSUE = _constant("CONFIRM_ISSUE")
 CANCEL_ISSUE = _constant("CANCEL_ISSUE")
 SKIP_PAPER = _constant("SKIP_PAPER")
@@ -217,12 +219,19 @@ def _button(at: AppTest, label: str):
 
 
 def _choose(at: AppTest, *, choice: str | None, value: str | None) -> AppTest:
-    """The first step: a text and the value read from it, then Continue."""
+    """The first step: click the box's button, type the value read from it, then Continue."""
     if choice is not None:
-        _widget(at.radio, CHOICE_KEY).set_value(choice)
+        at = _button(at, CHOOSE.format(label=choice)).click().run()
     if value is not None:
         _widget(at.text_input, VALUE_KEY).set_value(value)
     return _button(at, CONTINUE).click().run()
+
+
+def _chosen_box(at: AppTest) -> str | None:
+    """Which box says it is chosen, read off the page."""
+    page = _texts(at)
+    found = [label for label in ("A", "B") if f"**{label}** · {CHOSEN}" in page]
+    return found[0] if found else None
 
 
 def _judge(at: AppTest, *, verdict: str | None, comment: str | None = None) -> AppTest:
@@ -275,13 +284,30 @@ def test_with_no_identity_configured_an_item_is_shown_with_both_texts_and_withou
     shown = _the_first_item(at)
     assert _on_screen(at, *shown)
     assert _remaining(at) == 2
-    assert len(at.radio) == 1, "the choice alone; the verdict waits for the reveal"
-    assert at.radio[0].value is None
+    assert not at.radio, "no verdict yet; the choice is a button in each box"
+    assert [b.label for b in at.button if b.label.startswith("Choose")] == ["Choose A", "Choose B"]
+    assert _chosen_box(at) is None
     assert _widget(at.text_input, VALUE_KEY).value == ""
     everything = _texts(at)
     assert not _revealed(at)
     assert "generation time" not in everything
     assert "Condition" not in everything
+
+
+def test_clicking_a_box_s_button_chooses_it_and_can_be_changed(page):
+    """The choice is the click on the box (Yoav, 2026-10-09), the chosen box says so, and a
+    second click on the other box moves it; both boxes are shown side by side."""
+    at = page.run()
+    assert len(at.columns) >= 2, "the two texts sit in two columns"
+
+    at = _button(at, "Choose B").click().run()
+    assert not at.exception
+    assert _chosen_box(at) == "B"
+    at = _button(at, "Choose A").click().run()
+    assert _chosen_box(at) == "A"
+    (a,) = [b for b in at.button if b.label == "Choose A"]
+    (b,) = [b for b in at.button if b.label == "Choose B"]
+    assert (a.proto.type, b.proto.type) == ("primary", "secondary"), "the chosen one is lit"
 
 
 def test_continuing_without_a_choice_is_refused_and_the_item_stays(page):
@@ -306,7 +332,7 @@ def test_continuing_without_the_value_read_is_refused_and_nothing_is_revealed(pa
     assert not at.exception
     assert any(review.VALUE_REQUIRED in w.value for w in at.warning)
     assert not _revealed(at)
-    assert _widget(at.radio, CHOICE_KEY).value == "A"
+    assert _chosen_box(at) == "A", "the half given is kept"
 
 
 def test_the_choice_is_written_and_reveals_the_stored_entry_for_the_verdict(page, engine):
@@ -329,6 +355,8 @@ def test_the_choice_is_written_and_reveals_the_stored_entry_for_the_verdict(page
     assert "Condition" in everything
     assert {radio.key for radio in at.radio} == {f"{VERDICT_KEY}:{row.item_id}:2"}
     assert at.radio[0].value is None
+    assert _chosen_box(at) == "A", "the reveal keeps the chosen box marked"
+    assert not [b for b in at.button if b.label.startswith("Choose")], "no choosing at step 2"
 
 
 def test_the_verdict_completes_the_item_and_the_next_one_starts_blank_at_the_first_step(
