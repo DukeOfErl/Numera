@@ -94,6 +94,10 @@ def test_experimental_procedures_counts_as_methods(replisome):
         ("Experimental", True),
         ("2. Experimental Section", True),
         ("Experimental details", True),
+        # Numbered the way journals number subsections (code review of 2026-10-07).
+        ("4.1 Experimental", True),
+        ("4.1. Experimental section", True),
+        ("IV. Experimental", True),
         # The same word heading something else: a results subsection with its methods in the
         # supplement (PMC8146688), a review chapter (PMC2883084), the supplement itself.
         ("Experimental configuration", False),

@@ -347,6 +347,15 @@ class EuropePMC:
             return NoFullText(pmcid, "unreachable", None)
         return outcome
 
+    def licence(self, pmcid: str, xml: str | None) -> str:
+        """The article's licence: the index's word for it, else the document's (`licence_of`).
+
+        Every path that records a paper's licence comes through here, so discovery and harvest
+        cannot disagree about one -- the prose-only fix first went into harvest alone (code review
+        of 2026-10-07, finding 7).
+        """
+        return licence_of(self.index_record(pmcid), xml)
+
     def index_record(self, pmcid: str) -> dict | None:
         """The index's core record for one article, as the service wrote it, or None.
 

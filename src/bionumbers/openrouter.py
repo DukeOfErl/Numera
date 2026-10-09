@@ -47,7 +47,10 @@ OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 #: (2026-09-22): the prototype's spend is to be readable on its own key. There is no fallback to
 #: the ask app's variable -- one would bill the wrong key silently, which is the thing to prevent.
 API_KEY_ENV = "BIONUMBERS_OPENROUTER_API_KEY"
-DEFAULT_MODEL = "anthropic/claude-opus-4.7"
+#: GPT-6.1 Sol since 2026-10-04 (the harvest seed's model, ADR-0950's comparison): Opus 4.7 at
+#: harvest's twenty second-text calls a paper meets the $2 per-paper ceiling before the last claims
+#: (code review of 2026-10-07), and Sol does not.
+DEFAULT_MODEL = "openai/gpt-6.1-sol"
 
 #: Characters per token assumed when projecting spend. Opus 4.7's tokenizer yields roughly 3.2 to
 #: 3.6 characters per token on English prose and fewer on the JSON and rendered tables this

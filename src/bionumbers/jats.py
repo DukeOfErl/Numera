@@ -83,7 +83,7 @@ _METHODS_WORDS = ("method", "materials", "experimental procedure")
 _METHODS_TITLES = frozenset(
     ("experimental", "experimental section", "experimental details", "experimental part")
 )
-_NUMBERING = re.compile(r"^[\divx]+[.)]?\s+")
+_NUMBERING = re.compile(r"^(?:\d+|[ivx]+)(?:\.(?:\d+|[ivx]+))*[.)]?\s+")
 
 #: Units a paragraph's text must not swallow: each becomes passages of its own, so leaving its
 #: text in the enclosing `<p>` would make every table cell quotable twice, once with headers and

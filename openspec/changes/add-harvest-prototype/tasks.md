@@ -30,7 +30,19 @@
 - [x] 5.2 Five papers in each new domain (planarians, cytoskeletal mechanics, cytoskeleton chemistry, the glass transition): 152 claims from 15 papers, $3.77; three set aside for no methods section; the two first left unread by the run budget read on 2026-10-07 (8 claims, $0.25)
 - [x] 5.3 The curated tier loaded into `harvest-demo.sqlite` (423 entries)
 
-## 6. Before hand-over
+## 6. From the code review of 2026-10-07
 
-- [x] 6.1 Conformance mapping for every requirement in this change
-- [x] 6.2 Full suite green (2069 passed, 2026-10-07)
+- [x] 6.1 The value check compares signed numbers (finding 2); measured over the 523 verified claims: none newly refused
+- [x] 6.2 Discovery takes the licence from the index too (finding 7)
+- [x] 6.3 The default model is GPT-6.1 Sol (finding 5)
+- [x] 6.4 A numbered "4.1 Experimental" heading counts as methods
+- [ ] 6.5 Enforce the twenty-claim bound in code, not only in the instruction (finding 3)
+- [ ] 6.6 Serve one paper's items apart across runs, not only within one (finding 1); and link the entries that several runs extracted from the same paper, so a reader sees that a paper was read more than once and where the readings differ
+- [ ] 6.7 The distractor's exclusion reads the value's numbers through `quotes`, not its own copy, which misses "+-" (finding 9)
+- [ ] 6.8 The review page caches its engine when the URL comes from the environment (finding 8)
+- [ ] 6.9 An indented `#` line in a PMCID file is a comment; one run-path guard instead of two
+
+## 7. Before hand-over
+
+- [x] 7.1 Conformance mapping for every requirement in this change
+- [x] 7.2 Full suite green (2069 passed, 2026-10-07)

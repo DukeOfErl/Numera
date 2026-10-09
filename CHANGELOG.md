@@ -32,6 +32,9 @@ any release; `1.0.0` when it stabilizes.
   domain is recorded on every claim ([ADR-1500]). A value reported beside others of its kind is
   named by its condition (growth state, construct, tissue, position), the control by nothing; and
   every paper and claim records the model the provider says answered, beside the one asked for.
+- **The quote check reads signs**: a value of "−16.6" is no longer verified by a quote reading
+  "16.6", nor "10^-3" by "10^3". None of the 523 claims verified so far changes. Discovery takes a
+  paper's licence from Europe PMC's index as harvest does, and the default model is GPT-6.1 Sol.
 - **The curated tier** (`bionumbers curate`): BioNumbers' yeast and cytoskeleton entries that are
   measured, referenced and undoubted — 423 of 492 — loaded beside the harvested entries as the
   top of the trust order ([ADR-1510]).

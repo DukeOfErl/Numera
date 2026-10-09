@@ -365,6 +365,36 @@ def test_harvest_takes_the_licence_from_the_index_when_the_document_states_it_in
     assert any(query == f"PMCID:{TABLES_PMCID}" for query in provider.queries)
 
 
+def test_discover_takes_the_licence_from_the_index_too(provider, dirs):
+    """The prose-only fix went into harvest first and left discovery calling the same papers
+    UNLICENSED (code review of 2026-10-07, finding 7)."""
+    prose_only = re.sub(
+        r"<license\b.*?</license>",
+        "<license><license-p>Open.</license-p></license>",
+        ARTICLE_XML,
+        flags=re.DOTALL,
+    )
+    provider.full_text_overrides[A_KEPT_PMCID] = httpx.Response(200, text=prose_only)
+    provider.index_licences[A_KEPT_PMCID] = "cc by"
+
+    cli.main(
+        [
+            "discover",
+            "doubling time",
+            "--organism",
+            "Escherichia coli",
+            "--limit",
+            "8",
+            "--run-id",
+            RUN,
+            *common(dirs),
+        ]
+    )
+
+    papers = {p.pmcid: p for p in read_jsonl(dirs.runs / RUN / cli.PAPERS_FILE, Paper)}
+    assert papers[A_KEPT_PMCID].licence == "cc by"
+
+
 def test_harvest_without_a_pmcid_says_so_and_writes_nothing(provider, dirs, capsys):
     code = cli.main(["harvest", "h1", *common(dirs)])
 

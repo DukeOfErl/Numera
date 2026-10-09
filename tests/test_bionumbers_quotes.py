@@ -378,5 +378,27 @@ class TestStatesValue:
         quote = "NLC-CIP increasing doubling time by nearly 200-fold at the highest concentration"
         assert not states_value(quote, "346.0")
 
+    def test_a_sign_is_part_of_the_value(self):
+        """A wrong sign is a wrong value that looks verified (code review of 2026-10-07): the
+        negative case differs from the positive only in the sign."""
+        assert states_value("ΔH = −16.6 kcal mol⁻¹", "−16.6")
+        assert not states_value("ΔH = 16.6 kcal mol⁻¹", "−16.6")
+        assert not states_value("a binding enthalpy of −16.6 kcal", "16.6")
+        assert not states_value("+0.32 V", "-0.32")
+        assert states_value("+0.32 V", "0.32")
+
+    def test_an_exponent_keeps_its_sign(self):
+        assert states_value("a rate of 1.2 × 10⁻³ s⁻¹", "1.2 × 10^-3")
+        assert not states_value("a rate of 1.2 × 10³ s⁻¹", "1.2 × 10^-3")
+        assert not states_value("a rate of 1.2 × 10⁻³ s⁻¹", "1.2 × 10^3")
+
+    def test_a_dash_between_numbers_or_inside_a_name_is_not_a_sign(self):
+        assert states_value("doubling times (10 – 50 min)", "10–50")
+        # A dash spaced on one side only still joins two numbers when a digit precedes it.
+        assert states_value("a cytoplasmic pH of 7.2 -7.4", "7.2–7.4")
+        assert states_value("after IL-6 at 5 ng/ml", "5")
+        assert states_value("39 +/- 1 min", "39 ± 1")
+        assert states_value("from −5 to −10 °C", "−5 to −10")
+
     def test_a_value_with_no_number_is_stated_by_nothing(self):
         assert not states_value("some text", "n.d.")

@@ -91,6 +91,8 @@ class FakeEuropePMC:
         # Lets a test dictate the full-text response for one article, to vary the status and
         # the body independently — the two dimensions `_fetch_full_text` has to tell apart.
         self.full_text_overrides: dict[str, httpx.Response] = {}
+        # PMCID -> licence the index states for it, for an article with no recorded core record.
+        self.index_licences: dict[str, str] = {}
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         url = str(request.url)
@@ -107,6 +109,9 @@ class FakeEuropePMC:
                 # failing, which is the case a limit-free walk has to terminate on.
                 self.cursors.append(cursor)
                 return httpx.Response(200, text=self.search_pages.get(cursor, EMPTY_RESULT))
+            if query.startswith("PMCID:") and query[6:] in self.index_licences:
+                record = {"pmcid": query[6:], "license": self.index_licences[query[6:]]}
+                return httpx.Response(200, text=json.dumps({"resultList": {"result": [record]}}))
             if "SRC:PPR" in query and "TITLE:" in query and self.preprint_title_search is not None:
                 return httpx.Response(200, text=self.preprint_title_search)
             return httpx.Response(200, text=_search_fixture_for(query))

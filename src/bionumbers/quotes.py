@@ -188,21 +188,48 @@ def numbers_in(text: str) -> tuple[str, ...]:
     return tuple(match.group(0) for match in _NUMBER.finditer(fold(text)))
 
 
+#: Characters after which a hyphen directly before a number is a minus sign: an opening bracket,
+#: an equals sign, a caret (`10^-3`), a comparison. After a digit or a closing bracket the hyphen
+#: is a range ("10-50", "10 - 50"); after a letter with no space it names something ("IL-6", the
+#: "-" of "+/-"). After a space and anything but a digit it is a sign ("of -9.1").
+_SIGN_AFTER = frozenset("([{=^~<>:;,")
+
+
+def _signed_numbers(folded: str) -> tuple[str, ...]:
+    """Every standalone number in already folded text, with its minus sign where it has one."""
+    found = []
+    for match in _NUMBER.finditer(folded):
+        number, start = match.group(0), match.start()
+        if start and folded[start - 1] == "-":
+            before = folded[: start - 1]
+            last = before.rstrip()[-1:]
+            if not last:
+                number = "-" + number
+            elif last.isdigit() or last in ")]}":
+                pass  # a range dash
+            elif before[-1:].isspace() or before[-1:] in _SIGN_AFTER:
+                number = "-" + number
+        found.append(number)
+    return tuple(found)
+
+
 def states_value(text: str, value: str) -> bool:
     """Does the text state every number the value asserts?
 
     The numbers of a value are its central figure or both ends of a range; what follows a plus-minus
     sign is an uncertainty and is not required. Equality is numeric on standalone numbers, so a
     value written "346.0" is stated by a cell reading "346", and "39" is not stated by "139" or by
-    "39.4" -- the paper's digits, not a prefix of them. A value with no number in it is stated by
+    "39.4" -- the paper's digits, not a prefix of them. Signs count: "-16.6" is not stated by
+    "16.6", nor "10^-3" by "10^3" (code review of 2026-10-07; a wrong sign is a wrong value that
+    looks verified, the expensive direction). A value with no number in it is stated by
     nothing: a claim has to carry a figure.
     """
     from decimal import Decimal, InvalidOperation
 
-    asserted = numbers_in(_UNCERTAINTY.split(fold(value), maxsplit=1)[0])
+    asserted = _signed_numbers(_UNCERTAINTY.split(fold(value), maxsplit=1)[0])
     if not asserted:
         return False
-    present = numbers_in(text)
+    present = _signed_numbers(fold(text))
 
     def same(a: str, b: str) -> bool:
         try:

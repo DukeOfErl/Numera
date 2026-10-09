@@ -16,6 +16,7 @@ from bionumbers.extraction import ProviderRefused
 from bionumbers.openrouter import (
     API_KEY_ENV,
     CHARS_PER_TOKEN,
+    DEFAULT_MODEL,
     ModelRefused,
     NoCredential,
     OpenRouterModel,
@@ -80,7 +81,7 @@ class TestRequest:
         assert body["messages"][0]["content"][0]["cache_control"] == {"type": "ephemeral"}
         assert body["messages"][1:] == MESSAGES
         assert body["max_tokens"] == 99
-        assert body["model"] == OPENROUTER_MODEL
+        assert body["model"] == DEFAULT_MODEL == "openai/gpt-6.1-sol"
 
     def test_structured_output_is_requested_strictly_and_routed_to_enforcing_providers(self):
         seen, client = _server(_reply(json.dumps({"state": "ok"})))

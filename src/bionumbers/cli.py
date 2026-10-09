@@ -36,7 +36,6 @@ from bionumbers.europepmc import (
     FullText,
     NoFullText,
     http_client,
-    licence_of,
 )
 from bionumbers.extraction import (
     INSTRUCTION,
@@ -216,7 +215,10 @@ def discover(args: argparse.Namespace) -> int:
         if isinstance(fetched, FullText):
             papers.append(
                 paper.model_copy(
-                    update={"licence": licence_of(None, fetched.xml), "source_url": fetched.url}
+                    update={
+                        "licence": provider.licence(paper.pmcid, fetched.xml),
+                        "source_url": fetched.url,
+                    }
                 )
             )
         else:
@@ -286,7 +288,7 @@ def harvest_run(args: argparse.Namespace) -> int:
                 doi=doc.doi,
                 title=doc.title,
                 year=doc.year,
-                licence=licence_of(provider.index_record(pmcid), fetched.xml),
+                licence=provider.licence(pmcid, fetched.xml),
                 source_url=fetched.url,
             )
         )
