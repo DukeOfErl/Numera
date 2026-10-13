@@ -1,0 +1,105 @@
+ADR block: `1600`–`1690` (reserved in `CLAUDE.md`, the source of truth — widen there first).
+Write each ADR with the task that makes its decision, not at the end.
+
+Test data is **invented**: a small SQLite store built in a fixture with the real schema
+(`bionumbers.store`) and made-up passages. Paper text and corpus text never enter the repository —
+some of the store's papers are NC/ND. The real store is read only in local checks, never committed.
+
+## 1. Base and plumbing
+
+- [ ] 1.1 Rebase onto `feat/simulated-review` (or `dev`, if harvest and review have merged) and
+      confirm `bionumbers.tiers` is present and its tests pass
+- [ ] 1.2 Name `pydantic` in the `ask` extra; add a test that importing `scinumbers_ask.corpus`,
+      `repository`, `tools` and `agent` with a corpus file does not import `bionumbers` (D8)
+- [ ] 1.3 ADR-1600: the ask package depends on `bionumbers` for the tier rule and the value
+      parser — the direction, the import footprint measured, the alternatives rejected (D8)
+
+## 2. Entry and identifiers
+
+- [ ] 2.1 `EntryId = int | str`; widen every entry-identifier annotation (`repository.get`,
+      `tools.get_entry`, `trace`, `events`, `scoring`); suite green with no behaviour change
+- [ ] 2.2 `Harvest` and `Condition` records, and `Entry.harvest` / `Entry.trust` defaulting to
+      `None`; a corpus-file load yields both `None` (D2)
+- [ ] 2.3 `citations` reads `[[PMC2652108-1]]` as the string identifier, before the digit rules;
+      tests for that form, a list of two such, a mixed list with a BNID, and that `[[PMC1-2-3]]`
+      and `[[Table 1]]` are still refused (D3)
+- [ ] 2.4 `bionumbers.label` labels only integers as BNIDs; a string identifier is shown as itself
+- [ ] 2.5 ADR-1610: harvested entries are identified as `PMCID-n`, cited in the existing delimited
+      form; the opaque-id and integer-range alternatives and why they lost (D3)
+
+## 3. The store loader
+
+- [ ] 3.1 Fixture: a store built with `bionumbers.store`'s tables, holding invented curated entries,
+      harvested items of each `kind` and `candidate_kind`, items in two domains, and decisions
+      that exercise every tier, a dispute and a simulated tier
+- [ ] 3.2 `store_corpus.load(url)` opens the store read-only (`mode=ro`) and returns curated and
+      harvested entries; a test proves a write through its connection fails, and that the store
+      file is byte-identical after a load
+- [ ] 3.3 Curated rows become `Entry` with their BNID and `Trust` of tier `CURATED`
+- [ ] 3.4 Harvested items become `Entry` with the flat fields mapped as D2 says, `Harvest` filled
+      (quote, stated conditions, not-stated names, paper, domain, topic, origin, inputs) and
+      `trust` from `tiers.trust_of`; items with no decision get tier `NONE`
+- [ ] 3.5 Value reading against `kind` per D4's table: fitting readings set value or range;
+      disagreements set `reading_uncertain` and leave the numbers `None`; `value_display` returns
+      the paper's text for a harvested entry. Assertions come from D4's table, not from running
+      the loader
+- [ ] 3.6 Duplicate identifier → the load stops naming it; missing or unreadable store → a
+      `CorpusUnavailable` naming what was configured, nothing substituted
+- [ ] 3.7 A test that the loaded entries carry none of: the review's test text (`second`),
+      `distractor_type`, `property_asked`, any reviewer's comment, issue or value read — asserted
+      over every string field of every entry, using marker strings planted in the fixture
+- [ ] 3.8 Local check against the real store (not committed): 875 entries, 452 harvested with
+      unique identifiers, 38 `reading_uncertain`, five domains; record the command and its output
+      in the PR description
+
+## 4. Search and the model's view
+
+- [ ] 4.1 `keywords` carry domain, topic, the quote and the stated conditions' quotes; a keyword
+      found only in a passage finds the entry. Check the repository's keyword match on passages
+      that long before relying on it, and say what was found
+- [ ] 4.2 `get_entry` shows a harvested entry's quote, conditions, not-stated list, paper, origin,
+      calculated-from passages and tier text (D5); a corpus-file entry's output is unchanged
+      (snapshot of today's output taken before the change, not after)
+- [ ] 4.3 `_caveats` adds the `reading_uncertain` caution and a calculated-value line
+- [ ] 4.4 Search rows carry the tier token for store entries and nothing new for file entries
+- [ ] 4.5 System prompt: prefer better-reviewed entries where entries conflict; say when an answer
+      rests on a disputed or unreviewed entry; no instruction to write stars. Regenerate the agent
+      graph diagram only if middleware changed (it should not)
+- [ ] 4.6 ADR-1620: harvested values are stated as the paper wrote them, and numbers are trusted
+      only where the reading fits the recorded kind — which direction is cheap (D4)
+
+## 5. Stars on both drivers
+
+- [ ] 5.1 Presentation module: tier → stars per D6's table, `†` for simulated, `⚠` for disputed,
+      empty for `None`, and the legend text; add it to `PRESENTATION` in
+      `test_driver_independence.py`
+- [ ] 5.2 Answer rendering puts the drawn stars after each `[[id]]` in both drivers; the stored and
+      recorded answer text is unchanged; stars the model wrote do not change the tier shown
+- [ ] 5.3 Entries table: a trust column on CLI and web; the legend under the answer whenever any
+      shown entry has a tier; nothing shown for a corpus file
+- [ ] 5.4 Through a whole script run (`.claude/rules/streamlit-driver.md`): the web page shows
+      stars beside citations and in the table, with the legend, for a fixture store
+- [ ] 5.5 ADR-1630: tiers are drawn by the application and never written by the model; the scale,
+      the separate dispute and simulated marks (D6), citing ADR-0990 and ADR-0960
+
+## 6. Configuration
+
+- [ ] 6.1 `SCINUMBERS_STORE` / `--store`; both it and `SCINUMBERS_CORPUS` set → refusal naming both;
+      `autobuild` bypassed for the store (D7)
+- [ ] 6.2 The Streamlit app loads the store under the same cache as the corpus; restart picks up
+      new decisions
+- [ ] 6.3 Evaluation and the answer sheet refuse a store with a message saying they read a corpus
+      file (non-goal, stated rather than silently half-working)
+
+## 7. Verification and documentation
+
+- [ ] 7.1 Map every new requirement in `tests/test_spec_conformance.py`
+- [ ] 7.2 Fault seeding over `store_corpus.py` and the `citations` change (copies, never the working
+      tree): drop a condition's quote, swap `MEASURED`/`DERIVED`, let a disagreeing reading through
+      as a number, leak `second` into a field, read `PMC…-n` as an integer — each must fail exactly
+      the intended test
+- [ ] 7.3 Ask the demo's questions against the real store in the web app and look at the stars,
+      legend and cautions; probe the OpenRouter key's remaining credit before any live call
+- [ ] 7.4 README, `docs/diagrams/architecture.md` (a store adapter beside the corpus file),
+      `CLAUDE.md`'s module table (`store_corpus.py`, the presentation module), CHANGELOG
+- [ ] 7.5 `openspec validate --all --strict`; full suite green

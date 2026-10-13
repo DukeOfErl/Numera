@@ -1005,11 +1005,24 @@ AWAITING_THE_PROMPT = (
     "Leading with a figure does not displace what qualifies it",
 )
 
+# Proposed, not built: each moves to COVERED with the task that implements it.
+AWAITING_THE_STORE = (
+    "The store is a corpus the agent can be pointed at, and is only read",
+    "The store's entries are its curated entries and its harvested values",
+    "A harvested entry carries what a reader needs to judge it",
+    "A harvested value is stated as the paper wrote it, "
+    "and as a number only where its reading is sure",
+    "Nothing written for the review reaches the agent",
+    "The agent is told each entry's trust tier",
+    "A cited entry from the store is shown with its trust tier as stars",
+)
+
 
 UNMAPPED: dict[str, str] = {
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),
+    **dict.fromkeys(AWAITING_THE_STORE, "add-ask-over-store is proposed; nothing is built yet"),
 }
 
 

@@ -1,0 +1,208 @@
+## Context
+
+The ask agent reads a JSONL corpus into `Entry` records (`corpus.load`), indexes them
+(`repository.CorpusRepository`) and hands them to the model through three tools (`tools.py`). Every
+`Entry` today is a BioNumbers record: an integer identifier, numeric value or range, method and
+comments.
+
+The harvest store (`BioNumbers-review/harvest-demo.sqlite`, owned by the entry-review session and
+written by it while we run) holds something shaped differently:
+
+| Table | Rows (2026-10-13) | What it is |
+|---|---|---|
+| `curated_entry` | 423 | BioNumbers entries that passed `curated.refusal` (ADR-1510) — nearly the `Entry` shape |
+| `review_item` | 452 | One harvested value each, from 48 papers in five domains; `item_json` holds the claim, the paper, and the review's test text |
+| `review_decision` | 967 | Simulated reviewers' verdicts, read by `bionumbers.tiers` (ADR-0990) |
+| `review_paper` | 66 | Paper metadata, `domain`, `topic` |
+
+A harvested claim's value is text (`488`, `7.1 ± 0.4`, `1,100–2,100`, `62 (40–100)`, `3.2∶1`), its
+context is a supporting quote, a list of named conditions each with a quote or `NOT_STATED`, the
+paper, and `candidate_kind` (`MEASURED` 203, `DERIVED` 200, `DERIVED_FROM_PUBLISHED` 49) with the
+`inputs` passages a calculated value came from. Condition names vary by domain but share one shape,
+and `method` is a condition in every domain.
+
+## Goals / Non-Goals
+
+**Goals:**
+- The agent answers from the store, all domains, read-only, with the JSONL path unchanged.
+- Each harvested value is one entry, cited as `[[PMC2652108-1]]`.
+- A reader sees each cited entry's trust tier as stars, from the store, with a caution where
+  disputed and a mark where simulated.
+- The tier rule and the value parser each keep one definition.
+
+**Non-Goals:**
+- Authors, emails and an author tier (deferred by decision, not forgotten).
+- Live tiers: decisions made after the store was loaded appear after a restart.
+- Evaluation runs and the answer sheet over the store; they keep reading a corpus file.
+- Changing the value parser (`bionumbers.readings`); disagreements are cautioned, not repaired.
+- Writing to the store, or copying it into any repository.
+
+## Decisions
+
+### D1. A second loader, producing the same `Entry`, not a second agent
+
+`store_corpus.load(url)` returns `tuple[Entry, ...]`, exactly like `corpus.load(path)`. Everything
+downstream — repository, tools, middleware, drivers — keeps one code path; only what an `Entry`
+may carry grows. The alternative, a store-specific repository and tool set, would fork the tool
+surface the specs describe as deliberately small, and two tool sets drift.
+
+It opens SQLite with `mode=ro` (a URI `file:…?mode=ro`), reads once at start and closes. Read-only
+is enforced by the connection, not by the loader's good behaviour: a second caller gets the same
+refusal (the guard belongs to the operation).
+
+**Pattern:** this is the *adapter* side of ports and adapters for the corpus — the store is a second
+adapter onto the one `Entry` port.
+
+### D2. Two optional parts on `Entry`, not a wider flat record
+
+`Entry` gains `harvest: Harvest | None` and `trust: Trust | None`, both default `None`.
+
+- `Harvest` (frozen): `value_text`, `quote`, `conditions: tuple[Condition, ...]` (stated, each with
+  its quote), `not_stated: tuple[str, ...]`, `origin` (`measured` / `calculated` /
+  `calculated_from_published`), `inputs: tuple[str, ...]`, `paper` (title, year, DOI, PMID, licence),
+  `domain`, `topic`, `reading_uncertain: bool`.
+- `trust` is `bionumbers.tiers.Trust` itself, not a copy — one type, one rule.
+
+The flat fields are filled so existing code keeps working unchanged: `property` ←
+`property_in_paper`; `organism` ← `organism_name`; `units` ← unit; `value`/`range_low`/`range_high`
+← the reading (D4); `reference` ← "title (year). doi"; `reference_pubmed_id` ← PMID;
+`measurement_method` ← the `method` condition's quote, or empty — so the existing "no method
+recorded" mark (grounded-answering) applies to harvested entries for free; `keywords` ← domain,
+topic, the supporting quote and each stated condition's quote — so a keyword search for
+"lamellipodial" reaches an entry whose property, as the paper words it, is only "F-actin
+concentration". Whether the repository's keyword match suits passages that long is checked in the
+first task that indexes them, not assumed.
+
+A corpus-file `Entry` has both parts `None`, which is what lets every surface tell "no tier" from
+"zero stars". Rejected: adding ~15 flat optional fields — every reader of `Entry` would have to know
+which belong to which source.
+
+`ingest`'s contract test restates `Entry`'s twelve keys. The two new fields are optional and absent
+from the JSONL, so the contract with `add-corpus-ingestion` is unchanged; the docstring's
+"message to that branch" clause does not trigger.
+
+### D3. Identifiers are `int | str`; the harvested form is recognised by shape, in one place
+
+A curated entry keeps its integer BNID. A harvested entry's identifier is the string
+`f"{pmcid}-{n}"`, where `n` is the claim's ordinal suffix within its run (`claim_id` minus
+`run_id` and `pmcid`). All 452 are unique today; the loader raises on a duplicate (spec).
+
+`citations._identifiers` today refuses a group with two digit runs, which is exactly what
+`PMC2652108-1` is. It gains one recognised shape, `PMC\d+-\d+`, read *before* the digit rules, and
+returned as a string. Nothing else in the file changes: a group matching neither shape is still
+refused. `bionumbers.label` returns `BNID n` only for integers; a string identifier is shown as
+itself — it is not a BNID and must not be labelled one (ADR-0420's attribution would become a false
+one).
+
+Every `int` annotation on an entry identifier (`tools.get_entry`, `repository.get`, `trace`,
+`events`, `scoring`) becomes `EntryId = int | str`. The tool's argument schema is what the model
+sees; it changes from integer to string-or-integer.
+
+Rejected: synthetic integers in a range BNIDs do not use (no citation change, but a reader cannot
+tell a harvested entry from a BNID — the user preferred the PMCID form); a project-wide opaque
+`SN…` id (stable, but needs a persisted mapping table in a store this branch must not write).
+
+### D4. Value: the paper's text is stated; numbers are used only where the reading fits
+
+`bionumbers.readings.parse(value + " " + unit)` gives `numbers`, `uncertainty`, `approximate`. The
+loader compares the reading's shape with the claim's `kind`:
+
+| `kind` | Fits when | Otherwise |
+|---|---|---|
+| `SINGLE` | one number | `reading_uncertain` |
+| `WITH_UNCERTAINTY` | one number and an uncertainty | `reading_uncertain` |
+| `RANGE_OVER_CONDITIONS` | two numbers | `reading_uncertain` |
+
+Over today's store that cautions 38 of 452 (21 `SINGLE` read as two numbers, 13 `WITH_UNCERTAINTY`
+read as a range, 3 with no uncertainty read — one of them the ratio `3.2∶1` —, 1 range read as one
+number). Where it fits, `value` or
+`range_low`/`range_high` are set from the reading; where it does not, all three stay `None` and
+`value_display` returns `value_text`. `tools._caveats` adds one caution for `reading_uncertain`.
+
+**Which direction is cheap, said in the code:** a correct reading cautioned costs a sentence; a
+misread number stated with confidence is a wrong answer that looks like a right one. So any
+disagreement cautions, whichever side is wrong.
+
+`value_text` is what is *shown* in every case, so `7.1 ± 0.4 nm` keeps its uncertainty in the table
+and in the model's view.
+
+### D5. What the model is shown, and what never reaches it
+
+`get_entry` for a harvested entry adds: `quote`, one `condition: name — "quote"` line per stated
+condition, `not stated: temperature, medium…`, `paper: …`, `domain/topic`, `origin`, and for a
+calculated value `calculated from:` with the input passages. Search rows add the tier only (one
+short token), so a search costs little more than today.
+
+The tier reaches the model as text, e.g. `trust: 3 of 5 (scientist, simulated review); disputed`.
+The system prompt gains two sentences: prefer better-reviewed entries where entries conflict; say so
+when an answer rests on a disputed or unreviewed entry. It is **not** told to write stars.
+
+Never loaded at all, so no later tool can leak them: `item_json.second` (the review's test text),
+`distractor_type`, `supporting` (equal to the claim's quote in all 452 items, checked 2026-10-13; kept out so there is
+one source),
+`property_asked`, and every column of `review_decision` other than what `tiers.trust_of` reads. The
+model sees `disputed`, never a reviewer's issue or comment — the same line `feedback.py` draws.
+
+### D6. Stars are drawn by one presentation function, used by both drivers
+
+A presentation module (beside `entries_table`) owns the scale:
+
+| Tier | Stars |
+|---|---|
+| `CURATED` | ★★★★★ |
+| `SENIOR_SCIENTIST` | ★★★★☆ |
+| `SCIENTIST` | ★★★☆☆ |
+| `STUDENT` | ★★☆☆☆ |
+| `AI` | ★☆☆☆☆ |
+| `NONE` | ☆☆☆☆☆ |
+
+`†` after the stars marks a simulated tier; `⚠` marks a dispute. A legend under the answer states
+the scale, `†` and `⚠`. `None` trust renders as the empty string.
+
+Answers are rendered with `[[id]]` followed by the stars, by substituting over `citations.DELIMITED`
+in the drivers — the model's text is not altered where it is stored or recorded, only where it is
+displayed. Star characters the model writes are left as written; the drawn ones follow the citation.
+The entries table gains a trust column on both drivers. Stars only, per the user's choice, with the
+legend carrying the role words.
+
+`test_driver_independence` gets the new module under `PRESENTATION`.
+
+### D7. Configuration: a separate setting, never both
+
+`SCINUMBERS_STORE` (and `--store` on the CLI) names the store. Setting it together with
+`SCINUMBERS_CORPUS` is a refusal naming both, not a precedence rule: a reader who set both did not
+mean one of them, and silently answering from the other is a wrong-corpus answer that looks right.
+`autobuild` is bypassed for the store. The Streamlit app caches the loaded corpus as it does now.
+
+### D8. The new dependency direction, and its import footprint
+
+`scinumbers_ask` imports `bionumbers.tiers` and `bionumbers.readings`. Measured on 2026-10-13: those
+pull in `bionumbers.store`, `curated`, `records`, `quotes` — SQLAlchemy and pydantic, no
+`anthropic`, `httpx`, `lxml`, `pint` or Streamlit. SQLAlchemy is already in `ask`; pydantic is
+transitive through LangChain and is named in `ask` explicitly so a resolver cannot drop it.
+
+The imports are confined to `store_corpus.py` and the presentation module, so a JSONL-only run
+never imports `bionumbers`. The reverse rule (`bionumbers` core never imports `scinumbers_ask`)
+is untouched. An ADR records the direction and why (one rule, one parser).
+
+## Risks / Trade-offs
+
+- **The store moves under us** (entry-review keeps writing) → read once at start; tiers are a
+  snapshot; the legend says "as of" the load time.
+- **`PMCxxx-n` collides on a re-harvest of the same paper** → the loader refuses duplicates by name
+  rather than overwrite; a real fix (a persisted id) waits for the store to be ours to write.
+- **The parser misreads a value the kind check passes** (e.g. a `SINGLE` read as one wrong number)
+  → `value_text` is always what is shown; the parsed numbers only feed search and unit comparison.
+- **Base branch is rebased again** (onto `dev` after harvest/review merge) → no code depends on a
+  commit hash; rebase before implementing past the loader.
+- **Shown tiers are simulated** → `†` on every simulated tier and the legend, per ADR-0960.
+
+## Migration Plan
+
+None for corpus-file users: the store is opt-in through a new setting. Rollback is unsetting
+`SCINUMBERS_STORE`.
+
+## Open Questions
+
+- The answer sheet and evaluation harness over the store — deferred; they refuse a store for now
+  rather than render it without tiers.
