@@ -218,8 +218,10 @@ st.subheader(web.as_text(item.question))
 paper_line, aside = st.columns([5, 1])
 paper_line.caption(web.as_text(review.citation_line(item.paper)))
 # Beside the paper, because it is the paper that is set aside: every item of it, for this
-# reviewer, recorded (ADR-0980). Keyed per item so the click belongs to this screen.
-if aside.button(SKIP_PAPER, key=f"skip:{item.item_id}"):
+# reviewer, recorded (ADR-0980). Keyed per item so the click belongs to this screen. Not at the
+# second step: a choice is written by then, and a paper set aside with an open row on it would
+# leave that row open for ever -- the reveal is the point to finish or raise an issue.
+if step == 1 and aside.button(SKIP_PAPER, key=f"skip:{item.item_id}"):
     try:
         store.skip_paper(
             engine, reviewer, run_id=item.claim.fingerprint.run_id, pmcid=item.paper.pmcid

@@ -75,18 +75,22 @@ class Reading:
 
 
 _APPROX = re.compile(
-    r"^\s*(?:~|≈|about|approximately|approx\.?|circa|ca\.|roughly|around|some)\s*", re.I
+    r"^\s*(?:~|∼|≈|about|approximately|approx\.?|circa|ca\.|roughly|around|some)\s*", re.I
 )
 #: The optional caret is the fold's: a paper's superscript `+/-` comes back as `^+/-`.
 _UNCERTAINTY = re.compile(r"\s*\^?\s*(?:±|\+/-|\+-)\s*")
+#: `5 x 10^-1`, `5e-1`, and a bare `10^-3` (a mantissa of one). The fold has already turned `×`
+#: into `x` and a superscript into `^`.
 _SCIENTIFIC = re.compile(
-    r"(?P<mantissa>[+-]?\d+(?:\.\d+)?)\s*(?:x\s*10\s*\^?\s*|e)(?P<exponent>[+-]?\d+)", re.I
+    r"(?:(?P<mantissa>[+-]?\d+(?:\.\d+)?)\s*(?:x\s*10\s*\^?\s*|e)|\b10\s*\^\s*)"
+    r"(?P<exponent>[+-]?\d+)",
+    re.I,
 )
-#: Anywhere in the text, not only at its start: "increased from 70 to 150" is a range.
-_RANGE = re.compile(r"(?P<low>[+-]?\d+(?:\.\d+)?)\s*(?:-|to)\s*(?P<high>[+-]?\d+(?:\.\d+)?)")
+_DIGITS = r"[+-]?\d+(?:\.\d+)?(?:E[+-]?\d+)?"
+_RANGE = re.compile(rf"(?P<low>{_DIGITS})\s*(?:-|to)\s*(?P<high>{_DIGITS})")
 #: Where a unit ends: a parenthesis, a bracket, a semicolon, or an "and" joining a second value.
 _UNIT_END = re.compile(r"\s*(?:\(|\[|;|\band\b).*$", re.S)
-_NUMBER = re.compile(r"[+-]?\d+(?:\.\d+)?")
+_NUMBER = re.compile(_DIGITS)
 _THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}\b)")
 
 _SMALL: dict[str, Decimal] = {
@@ -120,6 +124,9 @@ def parse(text: str) -> Reading | None:
     rest = _words_to_digits(rest)
     rest = _THOUSANDS.sub("", rest)
     rest = _SCIENTIFIC.sub(_plain, rest)
+    first = _NUMBER.search(rest)
+    if not first:
+        return None
 
     uncertainty: Decimal | None = None
     tail = ""
@@ -133,16 +140,15 @@ def parse(text: str) -> Reading | None:
         else:
             tail = after
 
-    span = _RANGE.search(rest)
+    # A range starts at the first number: `increased from 70 to 150` is one, and a later
+    # `30–80` in the sentence after the value is not.
+    span = _RANGE.match(rest, first.start())
     if span:
         numbers = [_decimal(span["low"]), _decimal(span["high"])]
         remainder = rest[span.end() :]
     else:
-        found = _NUMBER.search(rest)
-        if not found:
-            return None
-        numbers = [_decimal(found.group(0))]
-        remainder = rest[found.end() :]
+        numbers = [_decimal(first.group(0))]
+        remainder = rest[first.end() :]
     precision = min(_digits(n) for n in numbers)
 
     remainder = f"{remainder} {tail}"
@@ -187,8 +193,9 @@ def line_for(agreement: Agreement | str | None) -> str:
 
 
 def _plain(match: re.Match) -> str:
-    """`5 x 10^-1` as `0.5`, in plain digits: `str()` of a Decimal would give `5E-1` back."""
-    return format(Decimal(match["mantissa"]).scaleb(int(match["exponent"])), "f")
+    """`5 x 10^-1` as `5E-1`, `10^-3` as `1E-3`: the form `_NUMBER` reads and `Decimal` keeps
+    the written digits of, so `1.2e9` stays two digits of precision and not ten."""
+    return f"{match['mantissa'] or '1'}E{match['exponent']}"
 
 
 def _words_to_digits(text: str) -> str:
@@ -212,9 +219,9 @@ def _decimal(text: str) -> Decimal:
 
 
 def _digits(number: Decimal) -> int:
-    """Significant digits as written: `39` is 2, `39.0` is 3, `0.045` is 2, `187000` is 6."""
-    digits = str(abs(number)).replace(".", "").lstrip("0")
-    return max(len(digits), 1)
+    """Significant digits as written: `39` is 2, `39.0` is 3, `0.045` is 2, `187000` is 6,
+    `1.2E9` is 2."""
+    return max(len(number.as_tuple().digits), 1)
 
 
 def _close(a: Decimal, b: Decimal, precision: int) -> bool:

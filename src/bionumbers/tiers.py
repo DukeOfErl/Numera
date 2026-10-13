@@ -28,7 +28,7 @@ from typing import Any
 from sqlalchemy import select
 
 from bionumbers.records import ReviewerRole
-from bionumbers.store import review_decision
+from bionumbers.store import _bound, review_decision
 
 
 class Tier(StrEnum):
@@ -94,7 +94,8 @@ def by_item(engine: Any) -> dict[str, Trust]:
         review_decision.c.reviewer_model,
     )
     grouped: dict[str, list[Any]] = {}
-    with engine.connect() as connection:
-        for row in connection.execute(rows):
+    with engine.begin() as conn:
+        _bound(conn)  # the store's statement timeout, like every other read of its tables
+        for row in conn.execute(rows):
             grouped.setdefault(row.item_id, []).append(row)
     return {item_id: trust_of(decisions) for item_id, decisions in grouped.items()}

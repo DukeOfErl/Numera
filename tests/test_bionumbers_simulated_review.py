@@ -429,6 +429,21 @@ def test_an_issue_with_no_text_writes_no_issue_and_is_reported(engine, answers):
     assert summary.tallies[0].issues == 0
 
 
+def test_a_choice_with_no_value_read_is_refused_as_a_person_s_is(engine):
+    """The page refuses the first step without a value (ADR-0970); the runner goes through the
+    same rule, so no row opens with nothing read and a UNREADABLE agreement beside it."""
+    item = an_item()
+    load(engine, item)
+    label = next(t.label for t in review.texts_in_order(item) if t.is_supporting)
+    model = Scripted(Chosen(choice=label, value_read="  ", comment=""))
+
+    summary = simulated_review.run(engine, [STUDENT], lambda model_id: model)
+
+    assert decisions(engine) == []
+    assert summary.tallies[0].failures == [("i1", review.VALUE_REQUIRED)]
+    assert len(model.calls) == 1, "the second step is never asked"
+
+
 def test_the_model_is_shown_no_one_s_decision_and_no_role(engine):
     item = an_item()
     load(engine, item)

@@ -279,6 +279,12 @@ def create_all(engine: Any) -> None:
     METADATA.create_all(engine)
 
 
+#: The two names a SQLite rebuild of `review_decision` goes through. `__old` is what the first
+#: version of `upgrade` renamed the table to; a file holding one was left mid-rebuild by it.
+_OLD_DECISIONS = "review_decision__old"
+_NEW_DECISIONS = "review_decision__new"
+
+
 def upgrade(engine: Any) -> dict[str, int]:
     """Bring a database loaded under an earlier schema up to this one, in place.
 
@@ -287,7 +293,7 @@ def upgrade(engine: Any) -> dict[str, int]:
     fails on the first write. This adds each missing column with its default, then fills
     `domain` from the paper's fingerprint and `topic` from any of its items' records -- the two
     facts the loader now writes on load and older rows never had -- and `value_agreement` on
-    every choice written before it was computed. Idempotent: a second run adds nothing and
+    every choice that read a value before it was computed. Idempotent: a second run adds nothing and
     refills the same values. For Postgres the same statements live in
     `sql/review.sql`; this is for the local files the demo is reviewed from.
 
@@ -297,17 +303,30 @@ def upgrade(engine: Any) -> dict[str, int]:
     create_all(engine)
     # SQLite cannot drop a NOT NULL constraint, and the first schema declared `approved` and
     # `chosen_supporting` NOT NULL -- which an issue row and an open row both violate. The one
-    # way is the documented one: rename the table aside, create it afresh, copy, drop.
+    # way is the documented one: a fresh table, copy, drop the old, rename the new.
     if engine.dialect.name == "sqlite":
-        present = {c["name"]: c for c in sa_inspect(engine).get_columns(review_decision.name)}
+        inspector = sa_inspect(engine)
+        leftover = [n for n in (_OLD_DECISIONS, _NEW_DECISIONS) if inspector.has_table(n)]
+        if leftover:
+            # An earlier rebuild stopped between its steps. Every decision may be in that table
+            # and nowhere else; refusing is the only answer that cannot lose them.
+            raise RuntimeError(
+                f"{leftover[0]} exists: a previous upgrade was interrupted; recover the "
+                "decisions from it by hand before running again"
+            )
+        present = {c["name"]: c for c in inspector.get_columns(review_decision.name)}
         if any(
             not present[name]["nullable"]
             for name in ("approved", "chosen_supporting")
             if name in present
         ):
-            with engine.begin() as conn:
-                conn.execute(text("alter table review_decision rename to review_decision__old"))
-            review_decision.create(engine)
+            # Built beside the old table and swapped in last, so the old table stands until the
+            # copy is complete: a failure before the drop leaves everything where it was, and a
+            # failure after it leaves the copy, which the refusal above then names.
+            fresh = MetaData()
+            review_item.to_metadata(fresh)
+            new_table = review_decision.to_metadata(fresh, name=_NEW_DECISIONS)
+            new_table.create(engine)
             with engine.begin() as conn:
                 # Every column the new table has: the old ones copied, the new ones at their
                 # defaults, since a Core default is Python-side and the insert below is not.
@@ -322,11 +341,13 @@ def upgrade(engine: Any) -> dict[str, int]:
                         values.append("NULL")
                 conn.execute(
                     text(
-                        f"insert into review_decision ({', '.join(names)}) "
-                        f"select {', '.join(values)} from review_decision__old"
+                        f"insert into {_NEW_DECISIONS} ({', '.join(names)}) "
+                        f"select {', '.join(values)} from {review_decision.name}"
                     )
                 )
-                conn.execute(text("drop table review_decision__old"))
+            with engine.begin() as conn:
+                conn.execute(text(f"drop table {review_decision.name}"))
+                conn.execute(text(f"alter table {_NEW_DECISIONS} rename to {review_decision.name}"))
             done["tables_rebuilt"] += 1
     present = {
         table.name: {column["name"] for column in sa_inspect(engine).get_columns(table.name)}
@@ -384,13 +405,15 @@ def upgrade(engine: Any) -> dict[str, int]:
             .where(
                 review_decision.c.value_agreement.is_(None),
                 review_decision.c.chosen_supporting.is_not(None),
+                # A row from before the two steps read no value; that is null, not UNREADABLE.
+                review_decision.c.value_read != "",
             )
         ).all()
         for row_id, value_read, value, unit in uncompared:
             conn.execute(
                 update(review_decision)
                 .where(review_decision.c.id == row_id)
-                .values(value_agreement=readings.compare(value_read or "", value, unit).value)
+                .values(value_agreement=readings.compare(value_read, value, unit).value)
             )
             done["choices_compared"] += 1
     return done
@@ -792,6 +815,11 @@ def record_issue(
                 )
             )
             return
+        # No open row: either nothing yet, or a completed one. A second row for one reviewer
+        # would read as approving and disputing at once (`tiers`), so the operation refuses it
+        # as `record_choice` does.
+        if conn.execute(_any_row(item_id, reviewer)).first() is not None:
+            raise DecisionNotSaved(f"{reviewer!r} has already decided {item_id!r}")
         conn.execute(
             insert(review_decision).values(
                 item_id=item_id,
@@ -958,9 +986,8 @@ def _paper_row(result: PaperResult, *, question: str, run_id: str, now: datetime
         "spend_json": result.spend.model_dump_json(),
         "fingerprint_json": result.fingerprint.model_dump_json(),
         "loaded_at": now,
-        "domain": getattr(result.fingerprint, "scope", "") or DEFAULT_DOMAIN,
-        # `Paper.topic` is the harvester's to add; read softly until it exists.
-        "topic": getattr(paper, "topic", "") or "",
+        "domain": result.fingerprint.scope or DEFAULT_DOMAIN,
+        "topic": paper.topic,
     }
 
 

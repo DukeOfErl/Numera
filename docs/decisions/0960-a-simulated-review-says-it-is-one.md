@@ -51,7 +51,8 @@ offered to them again.
 `bionumbers.simulated_review` is a second driver over the review task, beside the page. It builds
 the screen from `bionumbers.review`'s own functions, so a model is shown what a person is shown —
 never the second text's kind or type, never another reviewer's decision — and turns the model's
-"A" into `chosen_supporting` through the page's own `decision_from`. One instruction serves every
+"A" into `chosen_supporting` through the page's own `first_step_from` (ADR-0970), which also
+refuses a choice with no value read, as it does a person's. One instruction serves every
 role and names none. `assigned` draws each role's subset from `sha256(role:item_id)` against the
 role's share.
 
@@ -69,8 +70,8 @@ Because every item has a known supporting text, a run does yield one real figure
 often it picked the supporting text over a distractor — which is the first measurement of whether
 a model is usable as the AI-reviewed tier at all.
 
-The review page does not yet offer the issue outcome; only the simulated driver does. Until it
-does, issues exist only in simulated rows. Independent subsets mean a small item set can leave a
+The review page offers the issue outcome too (two clicks, with a confirm), so issues come from
+people and models alike. Independent subsets mean a small item set can leave a
 role with very few items or an entry with no rating; that is the shape of real coverage and is
 left visible.
 

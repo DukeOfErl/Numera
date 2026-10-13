@@ -692,6 +692,18 @@ def test_skipping_a_paper_records_it_and_moves_to_another_paper(page, two_domain
     assert _rows(two_domains) == [], "a skip is not a decision"
 
 
+def test_the_skip_is_not_offered_once_a_choice_is_written(page):
+    """A paper set aside with an open row on it would leave that row open for ever: the reveal
+    is the point to give the verdict or raise an issue, not to change paper."""
+    at = page.run()
+    assert any(b.label == SKIP_PAPER for b in at.button)
+
+    at = _choose(at, choice="A", value="39")
+
+    assert _revealed(at)
+    assert not any(b.label == SKIP_PAPER for b in at.button)
+
+
 # --- the closed door, and no store --------------------------------------------------------------
 
 

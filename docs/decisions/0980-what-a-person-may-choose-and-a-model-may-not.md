@@ -36,5 +36,4 @@ the loaded papers actually carry, and a "Skip this paper" button beside the cita
 A person's view of the pool and a model's now differ, by design: coverage figures for human
 roles will reflect choices, and the dashboards must say so where they compare roles. A skipped
 paper is not a decision and counts toward no tier; it is a row for the operator. Two more
-columns the loader fills from records that may not yet carry them (`topic` is read softly until
-`Paper.topic` exists), and one more table in a store that already has four.
+columns the loader fills from the records (`Fingerprint.scope`, `Paper.topic`), and one more table in a store that already has four.

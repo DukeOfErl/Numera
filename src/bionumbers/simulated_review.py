@@ -234,9 +234,7 @@ def screen(item: ReviewItem) -> str:
 def reveal(item: ReviewItem, choice: store.Choice) -> str:
     """The second step's screen: the first step's, what the reviewer answered, and the entry as
     stored -- value, the paper's name for it, every condition row the page shows."""
-    label = next(
-        t.label for t in review.texts_in_order(item) if t.is_supporting == choice.chosen_supporting
-    )
+    label = review.chosen_label(item, choice.chosen_supporting)
     lines = [
         screen(item),
         "",
@@ -412,14 +410,18 @@ def _review_one(
             store.record_issue(engine, item.item_id, issue=chosen.comment, **opened)
             tally.issues += 1
             return
-        # Through the page's own labelling (`texts_in_order`), so a person's "A" and a model's
-        # "A" are recorded against the same arrangement.
-        supports = {t.label: t.is_supporting for t in review.texts_in_order(item)}
+        # Through the page's own rule (`first_step_from`), so a person's "A" and a model's "A"
+        # are recorded against the same arrangement, and a model that chose a text but read no
+        # value is refused exactly as a person is.
+        try:
+            first = review.first_step_from(item, chosen.choice, chosen.value_read)
+        except review.Incomplete as incomplete:
+            raise _StepFailed(incomplete.message) from incomplete
         store.record_choice(
             engine,
             item.item_id,
-            chosen_supporting=supports[chosen.choice],
-            value_read=chosen.value_read,
+            chosen_supporting=first.chosen_supporting,
+            value_read=first.value_read,
             **opened,
         )
         # Read back rather than built here: the store computed the agreement.

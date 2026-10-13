@@ -414,6 +414,31 @@ def test_an_issue_on_an_unknown_item_is_not_saved_and_says_so(engine):
     assert rows(engine, store.review_decision) == []
 
 
+def test_an_issue_after_a_verdict_is_refused_and_the_row_stands(engine):
+    """Once per item per reviewer holds for an issue too: a second row would make one reviewer
+    both approve and dispute the entry, which no tier rule can read."""
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+    store.record_choice(engine, "i1", reviewer="a", chosen_supporting=True, value_read="39")
+    store.record_verdict(engine, "i1", reviewer="a", approved=True)
+
+    with pytest.raises(store.DecisionNotSaved, match="already decided"):
+        store.record_issue(engine, "i1", reviewer="a", issue="garbled after all")
+
+    (row,) = rows(engine, store.review_decision)
+    assert (row.approved, row.issue) == (True, "")
+
+
+def test_an_interrupted_rebuild_is_refused_rather_than_read_as_empty():
+    """A file left mid-rebuild holds every decision in the side table and none in the real one;
+    an upgrade that created an empty table and reported success would be the silent loss."""
+    engine, old = an_old_database()
+    with engine.begin() as conn:
+        conn.execute(text("alter table review_decision rename to review_decision__old"))
+
+    with pytest.raises(RuntimeError, match="review_decision__old"):
+        store.upgrade(engine)
+
+
 def test_an_item_a_reviewer_raised_an_issue_on_is_not_offered_to_them_again(engine):
     store.load_run(
         engine, [a_result()], [an_item("i1"), an_item("i2")], question=QUESTION, run_id=RUN
@@ -633,7 +658,7 @@ def test_upgrade_adds_the_missing_columns_and_table_and_fills_domain_and_topic()
         "columns_added": 2,
         "papers_filled": 2,
         "tables_rebuilt": 1,
-        "choices_compared": 1,
+        "choices_compared": 0,
     }
     by_pmcid = {row.pmcid: (row.domain, row.topic) for row in rows(engine, store.review_paper)}
     assert by_pmcid == {"PMC1": ("biology", ""), "PMC2": ("physics", "crystals")}
@@ -644,7 +669,7 @@ def test_upgrade_adds_the_missing_columns_and_table_and_fills_domain_and_topic()
         "kept",
         "",
     )
-    assert kept.value_agreement == "UNREADABLE", "a one-step row read no value; said so, not null"
+    assert kept.value_agreement is None, "a one-step row read no value: nothing to compare"
     # The upgraded file takes the writers that needed the new columns, the nullable verdict
     # and the new table.
     store.record_choice(engine, "i2", reviewer="alice", chosen_supporting=True, value_read="39")

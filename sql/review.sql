@@ -56,6 +56,20 @@ create table if not exists review_paper (
 -- paper was read under, in `fingerprint_json` as `scope`; runs from before scopes are biology.
 alter table review_paper add column if not exists domain text not null default 'biology';
 alter table review_paper add column if not exists topic text not null default '';
+-- ... and filled, as `store.upgrade` fills them for SQLite: a paper the loader filed before the
+-- columns existed sits at the default, which would show a physics harvest under biology.
+update review_paper
+   set domain = fingerprint_json::json ->> 'scope'
+ where coalesce(fingerprint_json::json ->> 'scope', '') <> ''
+   and domain <> fingerprint_json::json ->> 'scope';
+update review_paper p
+   set topic = i.topic
+  from (
+        select distinct on (run_id, pmcid) run_id, pmcid,
+               coalesce(item_json::json -> 'paper' ->> 'topic', '') as topic
+          from review_item
+       ) i
+ where p.run_id = i.run_id and p.pmcid = i.pmcid and p.topic = '' and i.topic <> '';
 
 -- A paper a reviewer set aside — "not my field" — and is not offered to them again. Kept rather
 -- than dropped: a paper nobody wanted is a finding about the pool. Only a person skips; the

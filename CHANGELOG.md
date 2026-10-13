@@ -191,6 +191,13 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **A reading in scientific notation, or beside a parenthesis, is compared at its written
+  precision**: `1.2 x 10^9` against a stored `1.23 × 10⁹` matches (it was two digits against
+  ten), a bare `10⁻³` is read, and `39 min (n = 3-5)` or a stored `39 (30–45)` is 39 and not the
+  range in the parenthesis. Over the demo database 21 readings move from "differs" to "matches"
+  and none the other way. A row from before the two steps keeps no agreement rather than
+  "unreadable"; an issue after a verdict is refused like a second choice; an interrupted SQLite
+  rebuild is refused rather than read as an empty store; the skip is not offered at the reveal.
 - A session pruned for idleness and returned to kept drawing "signed in as" while
   recording no account at all; identity is re-established on every rerun.
 - Signing out cleared the identity but left the dev panel's rows, so the next

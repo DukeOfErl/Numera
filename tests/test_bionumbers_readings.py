@@ -68,6 +68,13 @@ M, U, D, X = (
         ("570 ^+/− 260 s", ["570"], "s", "260", False),
         ("~10-min", ["10"], "min", None, True),
         ("95-µm–sized", ["95"], "μm-sized", None, False),
+        ("10⁻³ M", ["0.001"], "M", None, False),
+        ("10^6 cells", ["1000000"], "cells", None, False),
+        ("39 min (n = 3-5)", ["39"], "min", None, False),
+        ("39 (30–45) min", ["39"], "", None, False),
+        ("(94 ± 7) °C", ["94"], "°C", "7", False),
+        ("T = (170 ± 2) K", ["170"], "K", "2", False),
+        ("∼(5 × 10²) nm²/s", ["500"], "nm^2/s", None, True),
     ],
 )
 def test_a_value_as_a_person_writes_it_is_read(text, numbers, unit, uncertainty, approximate):
@@ -85,7 +92,8 @@ def test_text_with_no_number_is_not_a_reading(text):
 
 
 @pytest.mark.parametrize(
-    ("text", "precision"), [("39", 2), ("39.0", 3), ("0.045", 2), ("187000", 6), ("1", 1)]
+    ("text", "precision"),
+    [("39", 2), ("39.0", 3), ("0.045", 2), ("187000", 6), ("1", 1), ("1.2e9", 2), ("5 × 10⁵", 1)],
 )
 def test_precision_is_the_digits_written(text, precision):
     assert parse(text).precision == precision
@@ -110,6 +118,20 @@ def test_precision_is_the_digits_written(text, precision):
         ("60.3 million protein molecules per cell", "60.3 million", "protein molecules/cell", M),
         ("5e-1", "5 × 10⁻¹", "m", M),
         ("0.5 m", "5 × 10⁻¹", "m", M),
+        ("1.2 x 10^9", "1.23 × 10⁹", "bp", M),
+        ("5 × 10⁵", "4.8 × 10⁵", "cells", M),
+        ("0.001", "10⁻³", "M", M),
+        ("1e-6 M", "10⁻⁶", "M", M),
+        ("39", "39 (30–45)", "min", M),
+        ("39 min (n = 3-5)", "39", "min", M),
+        ("(94 ± 7) °C", "94 ± 7", "°C", M),
+        (
+            "about 53 million proteins, with 90% confidence limits of 30–80 million",
+            "53 million (30–80 million)",
+            "proteins per cell",
+            M,
+        ),
+        ("3.72 pg per cell", "3.72 (1.9–5.6)", "pg per cell", M),
         ("20–40", "20-40", "s", M),
         ("20 to 40 s", "20–40", "s", M),
         ("increased from 70 to 150 dyn/cm²", "70 to 150", "dyn/cm²", M),
@@ -152,6 +174,7 @@ def test_precision_is_the_digits_written(text, precision):
         ("20–40", "30", "s", D),
         ("819,865,861", "840,173,815", "bp", D),
         ("1.43", "2.3–2.5", "μm", D),
+        ("1.1 x 10^9", "1.23 × 10⁹", "bp", D),
         ("~1 μM", "0.02 ± 0.01", "μM", D),
         # Nothing to compare.
         ("", "39", "min", X),
