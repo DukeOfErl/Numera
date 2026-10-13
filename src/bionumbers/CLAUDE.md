@@ -24,6 +24,7 @@ tool; if the extractor seems to need to search the paper, give it the whole pape
 | `cli.py` | `bionumbers discover \| harvest \| extract \| load \| curate \| status \| simulate-review \| upgrade-store` |
 | `paths.py` | `data/europepmc/`, `data/runs/`; a test asks git that both stay ignored |
 | `readings.py` | A reviewer's typed value against the stored one: both parsed through `quotes.fold` and pint (±, ~, number words, thousands, exponents, `u` for µ), compared at the reader's precision; four closed states, a hint and no verdict. `store.record_choice` computes it |
+| `tiers.py` | The trust tier rule (ADR-0990), pure over decision rows: the highest approving role is the tier, any disapproval or issue is a separate `disputed` flag, a model in a person's role marks it `simulated`; `CURATED` for curated entries. The dashboard and the ask agent both read it and render it differently |
 | `simulated_review.py` | Models standing in for reviewers (ADR-0960): the two screens as text, built from `review.py`'s own functions; each role's subset by hash; two calls per decision under a ledger; rows that say a model wrote them and which model answered. A second **driver** over the review task, not a pipeline step |
 
 **The dependency direction holds here too.** Core modules import no Streamlit and nothing from

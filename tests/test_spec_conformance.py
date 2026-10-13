@@ -679,6 +679,15 @@ COVERED.update(
             "test_bionumbers_simulated_review.py::test_a_refusal_of_the_account_stops_the_run_and_every_later_reviewer",
             "test_bionumbers_simulated_review.py::test_the_command_runs_each_reviewer_and_prints_a_summary_marked_simulated",
         ),
+        "An entry's trust tier is read off its decisions by one rule": (
+            "test_bionumbers_tiers.py::test_the_tier_is_the_highest_role_that_approved",
+            "test_bionumbers_tiers.py::test_any_disapproval_or_issue_disputes_the_entry",
+            "test_bionumbers_tiers.py::test_a_dispute_does_not_lower_the_tier",
+            "test_bionumbers_tiers.py::test_approved_and_disputed_by_no_one_is_none_and_disputed",
+            "test_bionumbers_tiers.py::test_a_tier_set_by_a_model_in_a_person_s_role_is_marked_simulated",
+            "test_bionumbers_tiers.py::test_a_curated_entry_is_the_top_tier_and_never_disputed",
+            "test_bionumbers_tiers.py::test_the_store_s_rows_are_read_item_by_item",
+        ),
     }
 )
 

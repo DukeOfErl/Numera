@@ -262,3 +262,32 @@ again on the next run. A refusal of the provider account, or the run's bound, SH
 #### Scenario: A call fails
 - **WHEN** the model's answer to one item cannot be read
 - **THEN** no decision is recorded for it, the cost reported for the call is still counted, and the next item is reviewed
+### Requirement: An entry's trust tier is read off its decisions by one rule
+
+Every reader that says how far an entry is trusted -- a dashboard, the ask agent, a page --
+SHALL take it from one rule, and the rule SHALL return two things. The **tier** SHALL be
+`curated` for a curated entry; otherwise the highest reviewer role among the decisions that
+approved the entry with no issue beside them; otherwise none, nobody having approved it. The entry
+SHALL be **disputed** when any decision disapproved it or raised an issue on it, and a dispute SHALL
+NOT lower the tier: a reader is told both. An open row -- a choice awaiting its verdict -- SHALL
+count as nothing. A tier set by a model standing in for a person SHALL be marked as simulated.
+
+How the two are shown is each reader's: a dashboard MAY show a disputed entry as "issue raised" and
+an unapproved one as "not yet reviewed"; the ask agent MAY show the tier as stars with a caution
+when disputed. The rule itself SHALL be the same.
+
+#### Scenario: The highest approving role sets the tier
+- **WHEN** an entry was approved by the AI and by a scientist
+- **THEN** its tier is scientist
+
+#### Scenario: A dispute beside an approval
+- **WHEN** a senior scientist approved an entry and a student disapproved it, or raised an issue
+- **THEN** its tier is senior scientist and it is disputed
+
+#### Scenario: Objected to and approved by no one
+- **WHEN** an entry's only decision is a disapproval
+- **THEN** its tier is none and it is disputed
+
+#### Scenario: A simulated approval
+- **WHEN** the highest approving decision was written by a model in the student's role
+- **THEN** the tier is student and is marked simulated

@@ -61,6 +61,10 @@ any release; `1.0.0` when it stabilizes.
   line at the reveal; raising an issue is now two clicks with a cancel; outside biology only the
   conditions the paper states are listed, and each domain's own fields are listed once its papers
   are extracted with them.
+- **One trust-tier rule for every reader** (`bionumbers.tiers`, [ADR-0990]): an entry's tier is
+  the highest role that approved it with no issue, or curated, or none; whether anyone disapproved
+  or raised an issue is a separate flag that does not lower the tier. The dashboards and the ask
+  agent both read this one function, and a tier set by a simulated reviewer says so.
 - **A human reviewer can choose a domain or a topic, and set a paper aside** ([ADR-0980]). The
   page offers the domains and topics the loaded papers carry and a "Skip this paper" button; a
   skip is recorded and the paper is not offered to that reviewer again. The simulated reviewers
@@ -538,3 +542,4 @@ number rather than an error:
 [ADR-0960]: docs/decisions/0960-a-simulated-review-says-it-is-one.md
 [ADR-0970]: docs/decisions/0970-the-value-is-withheld-until-the-text-is-chosen.md
 [ADR-0980]: docs/decisions/0980-what-a-person-may-choose-and-a-model-may-not.md
+[ADR-0990]: docs/decisions/0990-one-trust-tier-rule-with-a-separate-dispute-flag.md
