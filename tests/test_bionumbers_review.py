@@ -29,11 +29,14 @@ from bionumbers.records import (
     Paper,
     Provenance,
     Quote,
+    ReviewerRole,
     ReviewItem,
     SecondTextKind,
     TableCell,
     TableView,
 )
+from scinumbers_ask.accounts import Account
+from scinumbers_ask.permissions import Role
 
 QUESTION = "doubling time of Escherichia coli"
 FP = Fingerprint(model="opus", instruction_sha256="abc123", article_id="PMC1", run_id="run-1")
@@ -602,3 +605,22 @@ def test_a_claim_extracted_before_its_scope_had_fields_lists_only_what_was_state
     assert [row[0] for row in biology][:3] == ["Organism", "Strain", "Medium"]
     assert len(biology) == len(review.CONDITION_FIELDS)
     assert review.condition_rows(old_physics, "") == biology, "runs before scopes are biology"
+
+
+@pytest.mark.parametrize(
+    ("role", "rung"),
+    [
+        (Role.STUDENT, ReviewerRole.STUDENT),
+        (Role.SCIENTIST, ReviewerRole.SCIENTIST),
+        (Role.SENIOR_SCIENTIST, ReviewerRole.SENIOR_SCIENTIST),
+        (Role.DEV, None),
+        (Role.ADMIN, None),
+    ],
+)
+def test_the_account_s_role_is_the_rung_a_person_s_decisions_count_on(role, rung):
+    account = Account(email="r@example.org", role=role, openrouter_key=None)
+    assert review.reviewer_role_of(account) is rung
+
+
+def test_no_account_is_no_rung():
+    assert review.reviewer_role_of(None) is None

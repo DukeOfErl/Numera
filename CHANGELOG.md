@@ -61,6 +61,10 @@ any release; `1.0.0` when it stabilizes.
   line at the reveal; raising an issue is now two clicks with a cancel; outside biology only the
   conditions the paper states are listed, and each domain's own fields are listed once its papers
   are extracted with them.
+- **A person's decisions count on their account's rung**: the review page records the
+  signed-in reviewer's role (student, scientist, senior scientist) from the account table on every
+  choice and issue, so a person's approval sets a tier as a model's does; `dev` and `admin`
+  record none.
 - **One trust-tier rule for every reader** (`bionumbers.tiers`, [ADR-0990]): an entry's tier is
   the highest role that approved it with no issue, or curated, or none; whether anyone disapproved
   or raised an issue is a separate flag that does not lower the tier. The dashboards and the ask

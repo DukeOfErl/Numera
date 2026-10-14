@@ -34,10 +34,13 @@ from bionumbers.records import (
     Location,
     Paper,
     Provenance,
+    ReviewerRole,
     ReviewItem,
     TableView,
 )
 from scinumbers_ask import web
+from scinumbers_ask.accounts import Account
+from scinumbers_ask.permissions import Role
 
 DB_URL_ENV = "BIONUMBERS_REVIEW_DB_URL"
 
@@ -387,6 +390,22 @@ def issue_from(text: str) -> str:
     if not text.strip():
         raise Incomplete(ISSUE_REQUIRED)
     return text
+
+
+#: The account's role as a rung of the trust ladder. `dev` and `admin` are not rungs: a decision
+#: from one is recorded without a role and sets no tier, so a developer clicking through the
+#: page to test it cannot rate an entry.
+_RUNG_OF: dict[Role, ReviewerRole] = {
+    Role.STUDENT: ReviewerRole.STUDENT,
+    Role.SCIENTIST: ReviewerRole.SCIENTIST,
+    Role.SENIOR_SCIENTIST: ReviewerRole.SENIOR_SCIENTIST,
+}
+
+
+def reviewer_role_of(account: Account | None) -> ReviewerRole | None:
+    """The rung a signed-in reviewer's decisions are recorded on, from the account table; None
+    with no identity configured, and for a role that is not a rung."""
+    return _RUNG_OF.get(account.role) if account else None
 
 
 def chosen_label(item: ReviewItem, chosen_supporting: bool) -> str:

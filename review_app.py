@@ -171,6 +171,9 @@ session = web.effective_session(admission, url_session)
 # with no account and nothing else about it differs. It is also what `next_item` serves on, so an
 # unconfigured deployment has exactly one reviewer.
 reviewer = admission.account.email if admission.account else None
+# The rung their decisions count on (ADR-0990): from the account's role, so a person's approval
+# can set a tier as a model's does.
+reviewer_role = review.reviewer_role_of(admission.account)
 
 engine = review.store_engine()
 
@@ -307,7 +310,12 @@ def _issue_controls() -> bool:
         else:
             _save(
                 lambda: store.record_issue(
-                    engine, item.item_id, reviewer=reviewer, issue=text, time_to_decide_s=_elapsed()
+                    engine,
+                    item.item_id,
+                    reviewer=reviewer,
+                    issue=text,
+                    time_to_decide_s=_elapsed(),
+                    reviewer_role=reviewer_role,
                 ),
                 on_saved=_next_screen,
             )
@@ -342,6 +350,7 @@ if step == 1:
                     chosen_supporting=first.chosen_supporting,
                     value_read=first.value_read,
                     time_to_decide_s=_elapsed(),
+                    reviewer_role=reviewer_role,
                 ),
                 on_saved=_next_screen,
             )

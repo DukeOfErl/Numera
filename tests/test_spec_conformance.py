@@ -628,6 +628,8 @@ COVERED.update(
             "test_bionumbers_store.py::test_a_run_loads_its_papers_and_items",
             "test_bionumbers_store.py::test_a_decision_holds_the_choice_the_verdict_the_comment_the_reviewer_and_a_time",
             "test_bionumbers_store.py::test_a_decision_without_sign_in_records_no_account_and_nothing_else_differs",
+            "test_review_app.py::test_a_signed_in_reviewer_s_decisions_carry_the_account_s_role",
+            "test_bionumbers_review.py::test_the_account_s_role_is_the_rung_a_person_s_decisions_count_on",
             "test_bionumbers_store.py::test_a_decision_that_cannot_reach_the_database_raises_with_the_cause",
             "test_bionumbers_store.py::test_a_failure_of_any_kind_becomes_a_refusal_and_is_never_swallowed",
             "test_review_app.py::test_a_choice_the_store_refuses_is_reported_and_the_item_stays",

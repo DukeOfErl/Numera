@@ -38,6 +38,8 @@ from bionumbers.records import (
     SecondTextKind,
 )
 from scinumbers_ask import messages, web
+from scinumbers_ask.accounts import Account
+from scinumbers_ask.permissions import Role
 
 APP = Path(__file__).resolve().parents[1] / "review_app.py"
 TIMEOUT = 30
@@ -702,6 +704,28 @@ def test_the_skip_is_not_offered_once_a_choice_is_written(page):
 
     assert _revealed(at)
     assert not any(b.label == SKIP_PAPER for b in at.button)
+
+
+def test_a_signed_in_reviewer_s_decisions_carry_the_account_s_role(page, monkeypatch, engine):
+    """The rung a person's approval counts on comes from the account table (ADR-0990): a
+    scientist's row says SCIENTIST, with no model, on the choice and on an issue alike."""
+    monkeypatch.setattr(web, "identity_configured", lambda: True)
+    monkeypatch.setattr(web, "signed_in_email", lambda: "s@example.org")
+    monkeypatch.setattr(web, "trail_destination", lambda: engine)
+    # A key, because the shared door closes on an account without one before `check_key` is
+    # consulted -- a reviewer needs none, and that is a finding for the door, not this test.
+    scientist = Account(email="s@example.org", role=Role.SCIENTIST, openrouter_key="sk-or-x")
+    monkeypatch.setattr(web.accounts, "lookup", lambda engine, who, **kwargs: scientist)
+
+    at = _judge(_choose(page.run(), choice="A", value="39"), verdict=review.APPROVE)
+    at = _raise(at, "the second item is garbled")
+
+    assert not at.exception
+    by_item = {row.item_id: row for row in _rows(engine)}
+    assert len(by_item) == 2
+    assert {(row.reviewer, row.reviewer_role, row.reviewer_model) for row in by_item.values()} == {
+        ("s@example.org", "SCIENTIST", None)
+    }
 
 
 # --- the closed door, and no store --------------------------------------------------------------

@@ -159,6 +159,10 @@ which is the opposite of the trail's case, where a lost row costs one row.
 - **WHEN** a deployment has no identity configured and a reviewer completes an item
 - **THEN** the decision is recorded with no account, and nothing else about it differs
 
+#### Scenario: A decision by a signed-in reviewer carries their role
+- **WHEN** a reviewer enrolled as a student, scientist or senior scientist completes an item or raises an issue
+- **THEN** the row records that role, so the entry's tier can be read from it; a developer or administrator account records none
+
 #### Scenario: An issue is raised before any text is chosen
 - **WHEN** a reviewer raises an issue on an item at the first step and gives its text
 - **THEN** the row holds the text, no choice and no verdict, and the item is not offered to that reviewer again
