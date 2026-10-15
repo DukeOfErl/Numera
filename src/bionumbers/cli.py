@@ -1,4 +1,4 @@
-"""The `bionumbers` command: discover, extract, load, status.
+"""The `bionumbers` command: discover, extract, load, status, simulate-review.
 
 One driver over the pipeline's steps, in the order the design fixes them (D1, ADR-1520):
 discovery writes what may be read, extraction reads it under the two ceilings and writes what
@@ -58,10 +58,13 @@ from bionumbers.records import (
     Paper,
     PaperResult,
     PaperState,
+    ReviewerRole,
     ReviewItem,
     Spend,
 )
-from bionumbers.spend import PRICES, Ceiling, CeilingReached, Ledger
+from bionumbers.simulated_review import Reviewer
+from bionumbers.simulated_review import run as run_simulated_review
+from bionumbers.spend import PRICES, Ceiling, CeilingReached, Ledger, Unpriceable
 
 DB_URL_ENV = "BIONUMBERS_REVIEW_DB_URL"
 
@@ -110,7 +113,10 @@ def _model(model_id: str) -> Any:
     default. Raises `NoCredential` when no key is in the environment, which the command turns
     into one sentence before any paper is fetched.
     """
-    return OpenRouterModel(model=model_id)
+    # Pinned to the provider the price table was read from (`spend.Prices.provider`); a model
+    # with no price has no pin, and `extract` has already refused it.
+    prices = PRICES.get(model_id)
+    return OpenRouterModel(model=model_id, provider=prices.provider or None if prices else None)
 
 
 def _engine(url: str) -> Any:
@@ -600,6 +606,62 @@ def status(args: argparse.Namespace) -> int:
     return 0
 
 
+def upgrade_store(args: argparse.Namespace) -> int:
+    """Bring a review database loaded under an earlier schema up to date, in place."""
+    url = args.db_url or os.environ.get(DB_URL_ENV, "")
+    if not url:
+        print(f"Give --db-url or set {DB_URL_ENV} to the review database.", file=sys.stderr)
+        return 2
+    done = store.upgrade(_engine(url))
+    print(f"{done['columns_added']} column(s) added, {done['papers_filled']} paper(s) filled")
+    return 0
+
+
+# --- simulate-review --------------------------------------------------------------------------
+
+
+def _reviewer_from(spec: str) -> Any:
+    """`ROLE=MODEL[@SHARE]`, e.g. `student=anthropic/claude-haiku-4.5@0.6`. The share is set
+    off by `@` because a model id may itself hold a colon. Raises `ValueError` saying what is
+    wrong with the spec."""
+    role_name, _, rest = spec.partition("=")
+    model_id, _, share = rest.partition("@")
+    roles = {role.value.lower(): role for role in ReviewerRole}
+    if role_name.lower() not in roles or not model_id:
+        raise ValueError(
+            f"not a reviewer: {spec!r}. Write ROLE=MODEL[@SHARE] with a role from "
+            f"{', '.join(roles)}."
+        )
+    return Reviewer(role=roles[role_name.lower()], model=model_id, share=float(share or 1.0))
+
+
+def simulate_review(args: argparse.Namespace) -> int:
+    """Models answer the review task in place of people, each role over its share of the items."""
+    url = args.db_url or os.environ.get(DB_URL_ENV, "")
+    if not url:
+        print(f"Give --db-url or set {DB_URL_ENV} to the review database.", file=sys.stderr)
+        return 2
+    try:
+        reviewers = [_reviewer_from(spec) for spec in args.reviewer]
+        summary = run_simulated_review(
+            _engine(url),
+            reviewers,
+            _model,
+            ceiling=Ceiling(per_paper=args.ceiling, per_run=args.budget),
+        )
+    except (ValueError, Unpriceable) as refused:
+        print(str(refused), file=sys.stderr)
+        return 2
+    except NoCredential:
+        print(f"Set {API_KEY_ENV} in the environment before simulating a review.", file=sys.stderr)
+        return 2
+    print(json.dumps(summary.as_dict(), indent=2))
+    if summary.stopped:
+        print(f"Stopped: {summary.stopped}. Run it again to continue.", file=sys.stderr)
+        return 3
+    return 0
+
+
 # --- the parser -------------------------------------------------------------------------------
 
 
@@ -679,6 +741,27 @@ def _parser() -> argparse.ArgumentParser:
     status_cmd.add_argument("run_id")
     run_dirs(status_cmd)
     status_cmd.set_defaults(command=status)
+
+    upgrade_cmd = commands.add_parser(
+        "upgrade-store", help="add the columns and tables a database loaded earlier lacks"
+    )
+    upgrade_cmd.add_argument("--db-url", default=None, help=f"else {DB_URL_ENV}")
+    upgrade_cmd.set_defaults(command=upgrade_store)
+
+    simulate_cmd = commands.add_parser(
+        "simulate-review", help="models review the loaded items in place of people"
+    )
+    simulate_cmd.add_argument(
+        "--reviewer",
+        action="append",
+        required=True,
+        metavar="ROLE=MODEL[@SHARE]",
+        help="one simulated reviewer, e.g. student=anthropic/claude-haiku-4.5@0.6; repeatable",
+    )
+    simulate_cmd.add_argument("--db-url", default=None, help=f"else {DB_URL_ENV}")
+    simulate_cmd.add_argument("--ceiling", type=float, default=0.10, help="USD per decision")
+    simulate_cmd.add_argument("--budget", type=float, default=2.00, help="USD per run")
+    simulate_cmd.set_defaults(command=simulate_review)
     return parser
 
 

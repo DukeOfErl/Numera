@@ -12,6 +12,13 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **One model call under the ledger.** The extractor and the simulated review made the same
+  eight-step call in two copies; both now go through `spend.call`, so a guard fixed in one is
+  fixed in the other. The two things the review page takes from its deployment, the database and
+  a person's rung, moved to `bionumbers.deployment`, so the review module is core and the
+  simulated review installs without the ask extra. The runner filters items by share before
+  parsing them rather than after.
+
 - **Citations in an answer are grey superscripts.** A run of `[[nnnnnn]]` is drawn as one small grey superscript, its identifiers comma-separated, so the prose reads through them; the stored answer, the trail and the evaluation still use `[[nnnnnn]]`. HTML is turned on for these alone, after the answer is escaped, in one function (`web.answer_markdown`). Same style as the sign-in door's demo (ADR-1240).
 - The test loop's default is three parallel workers, not six: six is faster with memory free but was killed for lack of memory once on an 8 GB machine, mid-commit. `SCINUMBERS_TEST_WORKERS` still overrides. See ADR-1300.
 - The test loop is two tiers. A commit runs only the tests it reaches (pytest-testmon), falling back to the full suite when a staged file is not Python under `src/` or `tests/` and is not known to be read by no test; push, merge and CI run the full suite in parallel (pytest-xdist, six workers by default). `bin/testloop.py` carries both. `uv run pre-commit install` again in an existing clone to pick up the push and merge hooks.
@@ -56,6 +63,42 @@ any release; `1.0.0` when it stabilizes.
 - **The curated tier** (`bionumbers curate`): BioNumbers' yeast and cytoskeleton entries that are
   measured, referenced and undoubted — 423 of 492 — loaded beside the harvested entries as the
   top of the trust order ([ADR-1510]).
+- **A simulated review: models stand in for reviewers** (`bionumbers simulate-review --reviewer
+  ROLE=MODEL@SHARE`). Each role (AI, student, scientist, senior scientist) is played by a model
+  over its own fixed share of the items; a model is shown exactly what the review page shows a
+  person and answers the same two questions. Every row it writes records the role and the model,
+  and its reviewer name begins `simulated-`, so no figure can pass these off as people's. A
+  reviewer can now also **raise an issue** in place of a choice and a verdict; the store records
+  it with its text ([ADR-0960]).
+- **A decision is taken in two steps, and the value is withheld until the text is chosen**
+  ([ADR-0970]). The review page first shows the quantity, the paper and the two texts; the
+  reviewer chooses the text that states a value for the quantity and writes the value they read,
+  and only then is the stored entry — value, the paper's term, conditions — revealed for the
+  verdict. The value read is recorded before the reveal. An issue can be raised at either step. The
+  simulated reviewers take the same two steps as two calls and record which model answered each.
+- **The value a reviewer types is compared with the stored one**, loosely and the same way for a
+  person and a model: ±, ~ and "about", number words, thousands separators, exponents in either
+  notation, `um` for µm and convertible units are all read as the same number. The result (matches,
+  same number in another unit, differs, unreadable) is recorded with the choice and said in one
+  line at the reveal; raising an issue is now two clicks with a cancel; outside biology only the
+  conditions the paper states are listed, and each domain's own fields are listed once its papers
+  are extracted with them.
+- **A person's decisions count on their account's rung**: the review page records the
+  signed-in reviewer's role (student, scientist, senior scientist) from the account table on every
+  choice and issue, so a person's approval sets a tier as a model's does; `dev` and `admin`
+  record none.
+- **One trust-tier rule for every reader** (`bionumbers.tiers`, [ADR-0990]): an entry's tier is
+  the highest role that approved it with no issue, or curated, or none; whether anyone disapproved
+  or raised an issue is a separate flag that does not lower the tier. The dashboards and the ask
+  agent both read this one function, and a tier set by a simulated reviewer says so.
+- **A human reviewer can choose a domain or a topic, and set a paper aside** ([ADR-0980]). The
+  page offers the domains and topics the loaded papers carry and a "Skip this paper" button; a
+  skip is recorded and the paper is not offered to that reviewer again. The simulated reviewers
+  get none of this and keep reviewing their assigned subsets. `bionumbers upgrade-store` brings a
+  review database loaded under an earlier schema up to date in place.
+- **Every OpenRouter price is a price at one provider, and the request is pinned to it.** A model
+  served by several providers at several rates is otherwise projected at one price and billed at
+  another; the request now names the provider the price table was read from and allows no fallback.
 - **The Europe PMC client from the feasibility branch, ported and corrected**: an article without
   XML is now recognised from the response body rather than a 404 status, because the service
   answers 500 today; and the article check reads the root element rather than searching for
@@ -354,6 +397,16 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **A reviewer needs no API key**: the shared door admits an enrolled account without one to the
+  review page, which makes no model call, and the ask page's refusal now says that reviewing is
+  still open to the account. Before, a reviewer had to hold a key they would never use.
+- **A reading in scientific notation, or beside a parenthesis, is compared at its written
+  precision**: `1.2 x 10^9` against a stored `1.23 × 10⁹` matches (it was two digits against
+  ten), a bare `10⁻³` is read, and `39 min (n = 3-5)` or a stored `39 (30–45)` is 39 and not the
+  range in the parenthesis. Over the demo database 21 readings move from "differs" to "matches"
+  and none the other way. A row from before the two steps keeps no agreement rather than
+  "unreadable"; an issue after a verdict is refused like a second choice; an interrupted SQLite
+  rebuild is refused rather than read as an empty store; the skip is not offered at the reveal.
 - **`LANGSMITH_TRACING` no longer sends anything.** `langsmith` arrives with
   `langchain-core`, and that one variable, set by anyone, used to ship prompts and
   corpus text to a third party. It is now refused inside the agent for every caller
@@ -707,6 +760,10 @@ number rather than an error:
 [ADR-0950]: docs/decisions/0950-harvest-first-ask-later.md
 [ADR-1500]: docs/decisions/1500-a-domain-is-a-scope-in-the-user-turn.md
 [ADR-1510]: docs/decisions/1510-the-curated-tier-admits-only-undoubted-entries.md
+[ADR-0960]: docs/decisions/0960-a-simulated-review-says-it-is-one.md
+[ADR-0970]: docs/decisions/0970-the-value-is-withheld-until-the-text-is-chosen.md
+[ADR-0980]: docs/decisions/0980-what-a-person-may-choose-and-a-model-may-not.md
+[ADR-0990]: docs/decisions/0990-one-trust-tier-rule-with-a-separate-dispute-flag.md
 [ADR-1000]: docs/decisions/1000-langfuse-cloud-eu-over-langsmith.md
 [ADR-1010]: docs/decisions/1010-tracing-is-a-project-setting.md
 [ADR-1020]: docs/decisions/1020-attribution-is-an-opaque-digest-attached-by-the-driver.md

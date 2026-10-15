@@ -95,6 +95,30 @@ class TestRequest:
         assert fmt["json_schema"]["name"] == "Answer"
         assert seen[0]["body"]["provider"] == {"require_parameters": True}
 
+    def test_a_pinned_provider_is_the_only_one_allowed_and_no_fallback_is_taken(self):
+        """A model served by many providers at many prices: the pin keeps the price the ledger
+        projected from. `only`, not `order`, and fallbacks off, so "that provider is down" is a
+        failed call rather than a dearer one."""
+        seen, client = _server(_reply(json.dumps({"state": "ok"})))
+        OpenRouterModel("k", client=client, provider="deepinfra").parse(
+            system=SYSTEM, messages=MESSAGES, output_format=Answer, max_tokens=9
+        )
+
+        assert seen[0]["body"]["provider"] == {
+            "require_parameters": True,
+            "only": ["deepinfra"],
+            "allow_fallbacks": False,
+        }
+
+    def test_a_null_content_is_an_empty_answer_not_the_word_none(self):
+        """Opus 5.5 answered one item on 2026-10-07 with `content: null`; read as `str(None)` it
+        was reported as invalid JSON, which sends whoever triages it after a schema fault."""
+        seen, client = _server(_reply(None))
+        with pytest.raises(ModelRefused, match="empty structured output"):
+            OpenRouterModel("k", client=client).parse(
+                system=SYSTEM, messages=MESSAGES, output_format=Answer, max_tokens=9
+            )
+
     @pytest.mark.parametrize("status", [401, 402, 403, 429])
     def test_a_refusal_of_the_account_is_named_so_the_run_can_stop(self, status):
         """A 402 on 2026-09-22 (the OpenRouter balance ran out) ended ten papers FAILED at $0 one

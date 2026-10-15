@@ -16,6 +16,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from bionumbers import spend
 from bionumbers.records import Spend
 from bionumbers.spend import (
     MODEL,
@@ -220,6 +221,88 @@ def a_ledger(**bounds) -> Ledger:
     return Ledger(Ceiling(**bounds))
 
 
+# --- the one call under the ledger -------------------------------------------------------------
+
+
+class _Model:
+    """A provider that answers once: a parsed output, a usage block, and what `raw` says."""
+
+    def __init__(self, *, answer="parsed", raw=None, failure=None, count=10) -> None:
+        self.answer, self.raw, self.failure, self.count = answer, raw, failure, count
+        self.parsed: list[dict] = []
+
+    def count_tokens(self, **request):
+        return SimpleNamespace(input_tokens=self.count)
+
+    def parse(self, **request):
+        self.parsed.append(request)
+        if self.failure is not None:
+            raise self.failure
+        return SimpleNamespace(
+            parsed_output=self.answer, usage=usage(input_tokens=10, output_tokens=5), raw=self.raw
+        )
+
+
+def _call(model, ledger, **overrides):
+    request = dict(
+        system=SYSTEM,
+        messages=MESSAGES,
+        output_format=dict,
+        max_tokens=100,
+        entry="p1",
+        model_id=MODEL,
+    )
+    request.update(overrides)
+    return spend.call(model, ledger=ledger, **request)
+
+
+def test_the_call_is_made_as_requested_and_its_spend_is_recorded_against_the_entry():
+    model = _Model(raw={"model": "some/routed-model"})
+    ledger = a_ledger()
+
+    output, answered = _call(model, ledger)
+
+    assert output == "parsed" and answered == "some/routed-model"
+    assert model.parsed == [
+        {"system": SYSTEM, "messages": MESSAGES, "output_format": dict, "max_tokens": 100}
+    ]
+    assert ledger.paper("p1") == cost(MODEL, usage(input_tokens=10, output_tokens=5))
+
+
+def test_a_provider_that_names_no_model_answers_as_nothing():
+    _, answered = _call(_Model(raw=None), a_ledger())
+    assert answered == ""
+
+
+def test_the_ledger_is_asked_before_the_call_and_a_ceiling_stops_it():
+    model = _Model(count=1_000_000)
+
+    with pytest.raises(CeilingReached):
+        _call(model, a_ledger(per_paper=0.01))
+
+    assert model.parsed == [], "the call was made after the ceiling refused it"
+
+
+def test_a_failed_call_that_was_billed_is_recorded_before_the_failure_goes_on():
+    """The one figure a ceiling must never under-count: a response the adapter could not read
+    was still billed, and the adapter says so on the error."""
+    failure = RuntimeError("unreadable")
+    failure.usage = usage(input_tokens=10, output_tokens=5)
+    ledger = a_ledger()
+
+    with pytest.raises(RuntimeError):
+        _call(_Model(failure=failure), ledger)
+
+    assert ledger.paper("p1") == cost(MODEL, failure.usage)
+
+
+def test_a_failed_call_with_no_usage_on_it_records_nothing_and_still_fails():
+    ledger = a_ledger()
+    with pytest.raises(RuntimeError):
+        _call(_Model(failure=RuntimeError("timed out")), ledger)
+    assert ledger.paper("p1") == Spend()
+
+
 def test_the_default_per_paper_ceiling_is_two_dollars():
     """The user's decision of 2026-09-18. Recorded as an assertion because it is a decision,
     not a tuning constant somebody may round."""
@@ -319,3 +402,15 @@ def test_a_run_that_never_hit_the_cache_reports_no_cached_fraction():
 
     assert empty.cached_fraction() == 0.0
     assert uncached.cached_fraction() == 0.0
+
+
+def test_every_openrouter_price_is_pinned_to_the_provider_it_was_read_from():
+    """A row without a pin is a projection against whichever provider OpenRouter picks. The
+    router is the one exception, by its nature; Anthropic's own id is not an OpenRouter route."""
+    unpinned = sorted(
+        model
+        for model, prices in spend.PRICES.items()
+        if "/" in model and not prices.provider and model != "typesafe/jev-router"
+    )
+    assert unpinned == []
+    assert spend.PRICES["anthropic/claude-opus-5.5"].provider == "anthropic"

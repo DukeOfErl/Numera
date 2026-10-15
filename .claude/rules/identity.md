@@ -26,6 +26,8 @@ deliberate inverse of the trail's fail-open, because a tolerance here would let
 a database outage admit everyone (ADR-0780). An enrolled account with no
 credential meets a door of its own, so the page has exactly one gate and
 `agent_for` can never return an agent that falls back to the environment's key.
+The review page alone passes `credential_required=False`: it makes no model
+call, so a key is not its business and that account is admitted there.
 
 **The agent is handed a credential and nothing else about the person.** Not the
 account, not the role. `agent.py`, `trace.py` and `feedback.py` name none of

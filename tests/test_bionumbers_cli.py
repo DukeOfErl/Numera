@@ -692,3 +692,48 @@ def test_load_without_a_database_says_which_variable(monkeypatch, dirs, capsys):
 
     assert code == 2
     assert cli.DB_URL_ENV in capsys.readouterr().err
+
+
+def test_the_model_is_pinned_to_the_provider_its_price_was_read_from(monkeypatch):
+    """`_model` is the one place the pin is attached; a reviewer or an extraction built without
+    it is priced at one provider and served by another."""
+    monkeypatch.setenv(API_KEY_ENV, "k")
+    built = cli._model("nvidia/nemotron-3-ultra-550b-a55b")
+    assert built._provider == "deepinfra"
+    assert cli._model("typesafe/jev-router")._provider is None
+
+
+def test_upgrade_store_brings_an_older_file_up_to_date(tmp_path, capsys):
+    """A file written by `create_all` before the newer columns existed; the command adds them
+    and says how many it added."""
+    from sqlalchemy import Column, MetaData, Table
+
+    url = f"sqlite:///{tmp_path}/old.sqlite"
+    engine = store.engine_from_url(url)
+    old = MetaData()
+    for table in store.METADATA.sorted_tables:
+        if table.name == "review_skip":
+            continue
+        Table(
+            table.name,
+            old,
+            *[
+                Column(
+                    c.name,
+                    c.type,
+                    primary_key=c.primary_key,
+                    nullable=c.nullable and c.name not in {"approved", "chosen_supporting"},
+                )
+                for c in table.columns
+                if c.name not in {"domain", "topic", "value_read", "answered_by", "value_agreement"}
+            ],
+        )
+    old.create_all(engine)
+    engine.dispose()
+
+    code = cli.main(["upgrade-store", "--db-url", url])
+
+    assert code == 0
+    assert "2 column(s) added, 0 paper(s) filled" in capsys.readouterr().out
+    assert cli.main(["upgrade-store", "--db-url", url]) == 0
+    assert "0 column(s) added" in capsys.readouterr().out

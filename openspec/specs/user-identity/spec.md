@@ -234,7 +234,8 @@ A question whose credential has no allowance left SHALL end the way a spent key
 already ends, naming the condition, and SHALL leave every other tester's
 questions unaffected. An enrolled account with no credential issued SHALL be
 refused asking, and told that no credential has been issued for it — an operator
-action, not a reader's.
+action, not a reader's — and that reviewing, which needs no credential, remains open
+to it.
 
 #### Scenario: Two testers spend separately
 - **WHEN** two enrolled accounts each ask a question
@@ -252,6 +253,7 @@ action, not a reader's.
 #### Scenario: An enrolled account has no credential
 - **WHEN** an enrolled account with no credential issued asks a question
 - **THEN** the question is refused, naming the missing credential as the operator's to issue
+- **AND** the refusal says that reviewing remains open to the account
 
 ### Requirement: Concurrent sessions are capped for the whole deployment, not per client address
 

@@ -72,7 +72,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-user-identity` | `0780`–`0830` — all written |
 | `add-question-and-answer-records` | `0840`–`0870` |
 | `add-open-enrolment` | `0880`–`0920` — `0880`, `0890`, `0900` written |
-| `add-validator-prototype` | `0930`–`0990` — `0930`, `0940`, `0950` written. Its first three, written as `0900`–`0920`, collided with `add-open-enrolment` on `dev` and were renumbered `1520`, `1530`, `1540` on 2026-10-07, inside `add-harvest-prototype`'s block |
+| `add-validator-prototype` | `0930`–`0990` — all written, block full; archived 2026-10-15. Its first three, written as `0900`–`0920`, collided with `add-open-enrolment` on `dev` and were renumbered `1520`, `1530`, `1540` on 2026-10-07, inside `add-harvest-prototype`'s block |
 | `add-hosted-tracing` | `1000`–`1040` — clear of `0880`–`0940`, spent on other branches |
 | `add-one-way-in` | `1100`–`1140` — `1100`, `1110` written; archived 2026-09-29 |
 | `add-account-withdrawal` | `1150`–`1190` — `1150` written; archived 2026-09-29 |
@@ -233,7 +233,7 @@ and reported when it is reached (ADR-0180).
 A **fixed pipeline, not an agent** (ADR-1520): discovery → fetch → JATS reader → one structured
 extraction call → mechanical quote check → one retry → one second-text call → JSONL → Postgres → a
 review page. Its own `CLAUDE.md` lives in `src/bionumbers/` with the module table and the four
-rules a module will not tell you — the dependency direction holds there too, and only `review.py`
+rules a module will not tell you — the dependency direction holds there too, and only `deployment.py`
 and the root `review_app.py` may import Streamlit or the ask package.
 
 ### `bionumbers_ingest` — the corpus pipeline

@@ -651,9 +651,9 @@ is the branch *this checkout* writes to.
    withdrawn again
    ([ADR-0900](docs/decisions/0900-enrolment-mints-then-inserts-and-compensates.md)).
    Each tester's questions are then charged to their own key and capped by it; an
-   enrolled account with no key can sign in but is told no credential has been
-   issued. Nobody but the operator ever sees a key — not even in what the command
-   prints
+   enrolled account with no key can sign in and review, but is told no key has been
+   assigned and so cannot ask. Nobody but the operator ever sees a key — not even in
+   what the command prints
    ([ADR-0780](docs/decisions/0780-accounts-live-in-the-trail-database.md),
    [ADR-0820](docs/decisions/0820-one-agent-per-session-handed-a-credential-not-an-identity.md)).
 
@@ -887,7 +887,7 @@ The ask agent answers from a curated corpus. The validator goes the other way: f
 question** to the open-access literature, out of which it extracts candidate numbers with their
 verbatim evidence and puts each one in front of a person. It is a prototype, built to be rebuilt
 against what reviewers and papers actually do; what it must get right is the review screen and the
-record it leaves behind ([`proposal.md`](openspec/changes/add-validator-prototype/proposal.md)).
+record it leaves behind ([`proposal.md`](openspec/changes/archive/2026-10-15-add-validator-prototype/proposal.md)).
 
 Three commands and a page:
 
@@ -922,15 +922,26 @@ streamlit run review_app.py
   back to the model once, a second failure drops the claim. A second call picks the other text a
   reviewer will see. Each paper ends in one of six named states; the spend ceiling is **$2 per
   paper** and the call that would cross it is not made.
-- **The review page** shows one claim at a time: the question, the value as the paper states it,
-  the citation, the conditions and method each quoted with where it came from (beside the value,
-  from Methods, by reference, supplementary only, not stated), and **two texts** from the paper,
-  each as the paper wrote it with nothing in it emphasised. When a text is a table cell, the whole
-  table is drawn beneath the two texts with its caption, both texts' cells marked alike. The
-  reviewer must choose which text fits the value and, separately, approve or disapprove. The second
-  text is a distractor or a second legitimate occurrence; which it was is stored and never shown.
-  Decisions are written the moment they are given and the write fails closed: a reviewer whose
-  decision could not be saved is told so and keeps the item.
+- **The review page** shows one claim at a time, in two steps. First the question, the citation
+  and **two texts** from the paper side by side, each as the paper wrote it with nothing in it
+  emphasised; when a text is a table cell, the whole table is drawn beneath the two texts with its
+  caption, both texts' cells marked alike. The reviewer chooses the text that states a value for
+  the quantity by clicking it and writes the value they read; how that reading stands to the stored
+  value is said in one line once it is revealed. Only then is the stored entry revealed — the value as the paper
+  states it, the paper's own term, the conditions and method each quoted with where it came from
+  (beside the value, from Methods, by reference, supplementary only, not stated) — and the reviewer
+  approves or disapproves. An issue can be raised at either step. The second text is a distractor
+  or a second legitimate occurrence; which it was is stored and never shown. Each step is written
+  the moment it is given and the write fails closed: a reviewer whose step could not be saved is
+  told so and keeps the item. A reviewer can narrow the pool to one domain or topic and can set a
+  paper aside; those choices are a person's, and the simulated reviewers never get them.
+- **A simulated review** (`bionumbers simulate-review --reviewer student=<model>@0.6 --reviewer
+  scientist=<model>@0.35 ...`) lets models stand in for reviewers until there are people: each
+  role reviews its own fixed share of the items, is shown exactly what the page shows a person
+  step by step, and may raise an issue instead of deciding. Every row it writes records the role,
+  the model and the model that actually answered, and anything built on those rows must be
+  labelled as simulated. It is bounded at $0.10 per decision
+  and $2 per run by default, and running it again continues where it stopped.
 
 What it does not read: supplementary files, figure images, PDFs. What it does not do: verify an
 existing BioNumbers entry (that is `add-grounding-validator`), score reviewer agreement, or route to

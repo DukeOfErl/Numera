@@ -420,6 +420,49 @@ def test_the_chosen_label_is_recorded_as_whether_it_was_the_supporting_text():
     assert review.decision_from(as_b, "B", review.APPROVE, "").chosen_supporting is True
 
 
+def test_the_first_step_needs_a_text_and_a_value():
+    """The choice first, then the value: each refusal names the half missing, and the value is
+    refused before anything is revealed (ADR-0970)."""
+    with pytest.raises(review.Incomplete) as no_choice:
+        review.first_step_from(an_item(), None, "39 min")
+    assert no_choice.value.message == review.CHOICE_REQUIRED
+
+    for blank in ("", "   "):
+        with pytest.raises(review.Incomplete) as no_value:
+            review.first_step_from(an_item(), "A", blank)
+        assert no_value.value.message == review.VALUE_REQUIRED
+
+
+def test_the_first_step_records_the_label_as_whether_it_was_the_supporting_text():
+    as_a = an_item(an_id_showing_the_supporting_text_as("A"))
+    as_b = an_item(an_id_showing_the_supporting_text_as("B"))
+
+    first = review.first_step_from(as_a, "A", "39 min")
+    assert (first.chosen_label, first.chosen_supporting, first.value_read) == ("A", True, "39 min")
+    assert review.first_step_from(as_a, "B", "x").chosen_supporting is False
+    assert review.first_step_from(as_b, "A", "x").chosen_supporting is False
+    assert review.first_step_from(as_b, "B", "x").chosen_supporting is True
+    assert review.chosen_label(as_a, True) == "A"
+    assert review.chosen_label(as_b, True) == "B"
+
+
+def test_a_verdict_is_approve_or_disapprove_and_nothing_else():
+    assert review.verdict_from(review.APPROVE) is True
+    assert review.verdict_from(review.DISAPPROVE) is False
+    with pytest.raises(review.Incomplete) as none:
+        review.verdict_from(None)
+    assert none.value.message == review.VERDICT_REQUIRED
+    with pytest.raises(ValueError):
+        review.verdict_from("Maybe")
+
+
+def test_an_issue_needs_its_text():
+    assert review.issue_from("the unit is wrong") == "the unit is wrong"
+    with pytest.raises(review.Incomplete) as blank:
+        review.issue_from("  ")
+    assert blank.value.message == review.ISSUE_REQUIRED
+
+
 def test_a_disapproval_is_recorded_as_one_and_keeps_the_comment():
     decision = review.decision_from(an_item(), "A", review.DISAPPROVE, "the strain differs")
 
@@ -486,32 +529,45 @@ def test_the_shown_text_carries_no_field_that_could_leak_the_kind():
     assert fields == {"label", "text", "location_line", "is_supporting", "passage_id"}
 
 
-class TestStoreEngine:
-    """Where the page finds its database: secrets first, a plain URL from the environment second."""
+def _with_conditions(*fields: ConditionField):
+    return an_item().claim.model_copy(update={"conditions": fields})
 
-    def test_a_plain_url_serves_a_machine_with_no_secrets(self, monkeypatch, tmp_path):
-        from bionumbers import review
 
-        monkeypatch.setattr(review.web, "trail_destination", lambda: None)
-        monkeypatch.setenv(review.DB_URL_ENV, f"sqlite:///{tmp_path}/review.sqlite")
+def test_a_claim_lists_the_condition_fields_of_its_scope_stated_or_not():
+    """Each scope has its own fields (`harvest.condition_fields`); a physics claim extracted
+    under them lists the physics fields, the unstated ones included, the way biology always has."""
+    physics = _with_conditions(
+        ConditionField(name="material", provenance=Provenance.BESIDE_VALUE, quote="silicon"),
+        ConditionField(name="pressure", provenance=Provenance.NOT_STATED),
+    )
 
-        engine = review.store_engine()
+    rows = review.condition_rows(physics, "physics")
 
-        assert engine is not None and engine.url.get_backend_name() == "sqlite"
+    assert [row[0] for row in rows] == [
+        "Material",
+        "Preparation",
+        "Temperature",
+        "Pressure",
+        "Phase or state",
+        "Method",
+    ]
+    assert rows[0][2] == "silicon"
+    assert rows[3][1] == "not stated"
 
-    def test_secrets_win_over_the_environment(self, monkeypatch, tmp_path):
-        from bionumbers import review
 
-        configured = object()
-        monkeypatch.setattr(review.web, "trail_destination", lambda: configured)
-        monkeypatch.setenv(review.DB_URL_ENV, f"sqlite:///{tmp_path}/other.sqlite")
+def test_a_claim_extracted_before_its_scope_had_fields_lists_only_what_was_stated():
+    """Every entry in the demo database was asked the biological questions. Under a lattice
+    constant the eight "not stated" rows about growth media say nothing, and listing the
+    physics fields as "not stated" would say the extractor looked for them."""
+    old_physics = _with_conditions(
+        ConditionField(name="temperature", provenance=Provenance.BESIDE_VALUE, quote="at 300 K"),
+        ConditionField(name="medium", provenance=Provenance.NOT_STATED),
+        ConditionField(name="organism", provenance=Provenance.NOT_STATED),
+    )
 
-        assert review.store_engine() is configured
-
-    def test_neither_means_none(self, monkeypatch):
-        from bionumbers import review
-
-        monkeypatch.setattr(review.web, "trail_destination", lambda: None)
-        monkeypatch.delenv(review.DB_URL_ENV, raising=False)
-
-        assert review.store_engine() is None
+    assert [row[0] for row in review.condition_rows(old_physics, "physics")] == ["Temperature"]
+    # The same claim under a biological scope lists every biological field, as before.
+    biology = review.condition_rows(old_physics, "biology")
+    assert [row[0] for row in biology][:3] == ["Organism", "Strain", "Medium"]
+    assert len(biology) == len(review.CONDITION_FIELDS)
+    assert review.condition_rows(old_physics, "") == biology, "runs before scopes are biology"

@@ -47,7 +47,40 @@ create table if not exists review_paper (
     spend_json       text not null default '{}',
     fingerprint_json text not null default '{}',
     loaded_at        timestamptz not null default now(),
+    domain           text not null default 'biology',
+    topic            text not null default '',
     primary key (run_id, pmcid)
+);
+
+-- The same two for a database that predates them (ADR-0980). `domain` is the harvest scope the
+-- paper was read under, in `fingerprint_json` as `scope`; runs from before scopes are biology.
+alter table review_paper add column if not exists domain text not null default 'biology';
+alter table review_paper add column if not exists topic text not null default '';
+-- ... and filled, as `store.upgrade` fills them for SQLite: a paper the loader filed before the
+-- columns existed sits at the default, which would show a physics harvest under biology.
+update review_paper
+   set domain = fingerprint_json::json ->> 'scope'
+ where coalesce(fingerprint_json::json ->> 'scope', '') <> ''
+   and domain <> fingerprint_json::json ->> 'scope';
+update review_paper p
+   set topic = i.topic
+  from (
+        select distinct on (run_id, pmcid) run_id, pmcid,
+               coalesce(item_json::json -> 'paper' ->> 'topic', '') as topic
+          from review_item
+       ) i
+ where p.run_id = i.run_id and p.pmcid = i.pmcid and p.topic = '' and i.topic <> '';
+
+-- A paper a reviewer set aside — "not my field" — and is not offered to them again. Kept rather
+-- than dropped: a paper nobody wanted is a finding about the pool. Only a person skips; the
+-- simulated reviewers never read this table.
+create table if not exists review_skip (
+    id         bigserial primary key,
+    reviewer   text,
+    run_id     text not null,
+    pmcid      text not null,
+    skipped_at timestamptz not null default now(),
+    foreign key (run_id, pmcid) references review_paper (run_id, pmcid)
 );
 
 -- One row per screen. `item_json` is the whole `ReviewItem` and is what the page renders from; the
@@ -86,16 +119,59 @@ create table if not exists review_item (
 -- `time_to_decide_s` is nullable because the page may not have a start time to subtract from — a
 -- reloaded tab, a session resumed. It is here because it costs one column and the rebuild's
 -- attention analysis cannot be reconstructed later from rows that never carried it.
+--
+-- A decision is taken in two steps (ADR-0970), on one row. First the reviewer chooses a text and
+-- writes the value they read from it, *before* the stored value is shown: `chosen_supporting` and
+-- `value_read` are set, `approved` is null — an *open* row, and the item is still theirs to
+-- finish. Then the stored value and conditions are revealed and they approve or disapprove:
+-- `approved` is set and the row is complete. `value_read` is the one figure here the extractor's
+-- answer cannot have steered, and the reviewer's agreement with the stored value is read by
+-- comparing the two.
+--
+-- A reviewer may raise an issue instead at either step: the item cannot be judged as it stands.
+-- `issue` holds the text and `approved` stays null; `chosen_supporting` is null if no text had
+-- been chosen yet. A verdict is never stored beside an issue. `bionumbers.store` has one writer
+-- per step and no other way in; there is no check constraint, since one cannot be added to a
+-- deployed table by an idempotent statement and a rule only fresh databases enforce reads as one
+-- they all do.
+--
+-- `answered_by` is the model the provider says answered, where it differs from `reviewer_model`:
+-- a router names itself in the request and the routed model in the reply. Null for a person.
+-- `value_agreement` is how `value_read` stands to the stored value — MATCHES,
+-- SAME_NUMBER_DIFFERENT_UNIT, DIFFERS or UNREADABLE (`bionumbers.readings`) — computed when the
+-- choice is written, so a person's reading and a model's are compared the same way.
+--
+-- `reviewer_role` is the rung of the trust ladder the reviewer stands on (`AI`, `STUDENT`,
+-- `SCIENTIST`, `SENIOR_SCIENTIST`), null where none was recorded. `reviewer_model` is the model id
+-- when a model decided, null for a person. **A row with a model and a role other than `AI` is a
+-- simulated review** — a model standing in for a person of that role (ADR-0960) — and any figure
+-- drawn from such rows has to say so. An entry's trust tier is read off these rows, never stored.
 create table if not exists review_decision (
     id                bigserial primary key,
     item_id           text not null references review_item (item_id),
     reviewer          text,
-    chosen_supporting boolean not null,
-    approved          boolean not null,
+    chosen_supporting boolean,
+    approved          boolean,
     comment           text not null default '',
     decided_at        timestamptz not null default now(),
-    time_to_decide_s  double precision
+    time_to_decide_s  double precision,
+    issue             text not null default '',
+    reviewer_role     text,
+    reviewer_model    text,
+    value_read        text not null default '',
+    answered_by       text,
+    value_agreement   text
 );
+
+-- The same, for a database created before the issue outcome and the reviewer's role existed.
+alter table review_decision add column if not exists issue text not null default '';
+alter table review_decision add column if not exists reviewer_role text;
+alter table review_decision add column if not exists reviewer_model text;
+alter table review_decision alter column chosen_supporting drop not null;
+alter table review_decision alter column approved drop not null;
+alter table review_decision add column if not exists value_read text not null default '';
+alter table review_decision add column if not exists answered_by text;
+alter table review_decision add column if not exists value_agreement text;
 
 -- Serving the next item asks, per item, whether this reviewer has a row for it. That is the query
 -- every page load makes, and it is the only one whose latency a person waits on.
@@ -136,3 +212,11 @@ create table if not exists curated_entry (
 -- select d.decided_at, d.reviewer, d.chosen_supporting, d.comment, i.value, i.unit, i.pmcid
 -- from review_decision d join review_item i on i.item_id = d.item_id
 -- where not d.approved order by d.decided_at desc;
+
+-- What each rung of the ladder has said about each item. `simulated` is the label a figure built
+-- on this must carry.
+--
+-- select d.item_id, d.reviewer_role, d.reviewer_model,
+--        d.reviewer_model is not null and d.reviewer_role <> 'AI' as simulated,
+--        d.approved, d.chosen_supporting, d.issue
+-- from review_decision d order by d.item_id, d.decided_at;

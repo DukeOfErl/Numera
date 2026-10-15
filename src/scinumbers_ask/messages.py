@@ -224,8 +224,9 @@ ENROLMENT_CHECK_UNAVAILABLE = (
     "Enrolment cannot be checked right now, so nobody can be admitted. Try again shortly."
 )
 NO_CREDENTIAL = (
-    "No credential has been issued for this account yet, so it cannot ask a question. "
-    "Ask whoever runs this deployment to issue one — it is theirs to do, and nothing "
+    "No API key has been assigned to this account yet, so it cannot ask a question. "
+    "Reviewing entries is still open to you: only asking needs a key. "
+    "Ask whoever runs this deployment to assign one — it is theirs to do, and nothing "
     "here can."
 )
 CREDENTIAL_REJECTED = (

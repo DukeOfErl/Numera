@@ -13,9 +13,10 @@ import tomllib
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
-from sqlalchemy import create_engine, insert, select, text
+from sqlalchemy import Column, MetaData, Table, create_engine, insert, select, text
 from sqlalchemy.exc import OperationalError
 
 from bionumbers import store
@@ -31,6 +32,7 @@ from bionumbers.records import (
     PaperResult,
     PaperState,
     Quote,
+    ReviewerRole,
     ReviewItem,
     SecondTextKind,
     Spend,
@@ -339,6 +341,537 @@ def test_a_decision_without_sign_in_records_no_account_and_nothing_else_differs(
     (row,) = rows(engine, store.review_decision)
     assert row.reviewer is None
     assert (row.chosen_supporting, row.approved, row.comment) == (True, True, "clear")
+
+
+def test_a_decision_made_by_a_person_records_no_role_no_model_and_no_issue(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+
+    store.record_decision(
+        engine, "i1", reviewer="alice@example.org", chosen_supporting=True, approved=True
+    )
+
+    (row,) = rows(engine, store.review_decision)
+    assert (row.reviewer_role, row.reviewer_model, row.issue) == (None, None, "")
+
+
+def test_a_decision_holds_the_role_and_the_model_that_made_it(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+
+    store.record_decision(
+        engine,
+        "i1",
+        reviewer="simulated-student:some/model",
+        chosen_supporting=True,
+        approved=False,
+        reviewer_role=ReviewerRole.STUDENT,
+        reviewer_model="some/model",
+    )
+
+    (row,) = rows(engine, store.review_decision)
+    assert (row.reviewer_role, row.reviewer_model) == ("STUDENT", "some/model")
+    assert (row.chosen_supporting, row.approved) == (True, False)
+
+
+def test_an_issue_holds_its_text_and_neither_a_choice_nor_a_verdict(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+
+    store.record_issue(
+        engine,
+        "i1",
+        reviewer="alice@example.org",
+        issue="neither text states 39 min",
+        time_to_decide_s=12.0,
+        reviewer_role=ReviewerRole.SCIENTIST,
+    )
+
+    (row,) = rows(engine, store.review_decision)
+    assert row.issue == "neither text states 39 min"
+    assert row.chosen_supporting is None
+    assert row.approved is None
+    assert row.comment == ""
+    assert (row.reviewer, row.reviewer_role, row.reviewer_model) == (
+        "alice@example.org",
+        "SCIENTIST",
+        None,
+    )
+    assert row.time_to_decide_s == pytest.approx(12.0)
+
+
+@pytest.mark.parametrize("empty", ["", "   ", "\n"])
+def test_an_issue_with_no_text_is_refused_and_writes_nothing(engine, empty):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+
+    with pytest.raises(ValueError, match="needs its text"):
+        store.record_issue(engine, "i1", reviewer="alice@example.org", issue=empty)
+
+    assert rows(engine, store.review_decision) == []
+
+
+def test_an_issue_on_an_unknown_item_is_not_saved_and_says_so(engine):
+    with pytest.raises(store.DecisionNotSaved, match="i-nope"):
+        store.record_issue(engine, "i-nope", reviewer="alice@example.org", issue="garbled unit")
+
+    assert rows(engine, store.review_decision) == []
+
+
+def test_an_issue_after_a_verdict_is_refused_and_the_row_stands(engine):
+    """Once per item per reviewer holds for an issue too: a second row would make one reviewer
+    both approve and dispute the entry, which no tier rule can read."""
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+    store.record_choice(engine, "i1", reviewer="a", chosen_supporting=True, value_read="39")
+    store.record_verdict(engine, "i1", reviewer="a", approved=True)
+
+    with pytest.raises(store.DecisionNotSaved, match="already decided"):
+        store.record_issue(engine, "i1", reviewer="a", issue="garbled after all")
+
+    (row,) = rows(engine, store.review_decision)
+    assert (row.approved, row.issue) == (True, "")
+
+
+def test_an_interrupted_rebuild_is_refused_rather_than_read_as_empty():
+    """A file left mid-rebuild holds every decision in the side table and none in the real one;
+    an upgrade that created an empty table and reported success would be the silent loss."""
+    engine, old = an_old_database()
+    with engine.begin() as conn:
+        conn.execute(text("alter table review_decision rename to review_decision__old"))
+
+    with pytest.raises(RuntimeError, match="review_decision__old"):
+        store.upgrade(engine)
+
+
+def test_an_item_a_reviewer_raised_an_issue_on_is_not_offered_to_them_again(engine):
+    store.load_run(
+        engine, [a_result()], [an_item("i1"), an_item("i2")], question=QUESTION, run_id=RUN
+    )
+
+    store.record_issue(engine, "i1", reviewer="alice@example.org", issue="garbled unit")
+
+    assert store.next_item(engine, "alice@example.org").item_id == "i2"
+    assert store.next_item(engine, "bob@example.org").item_id == "i1"
+
+
+def test_undecided_items_are_all_of_a_reviewer_s_open_items_and_no_one_else_s(engine):
+    store.load_run(
+        engine,
+        [a_result()],
+        [an_item("i3"), an_item("i1"), an_item("i2")],
+        question=QUESTION,
+        run_id=RUN,
+    )
+    store.record_decision(engine, "i2", reviewer="alice", chosen_supporting=True, approved=True)
+    store.record_issue(engine, "i3", reviewer="bob", issue="garbled unit")
+
+    assert [item.item_id for item in store.undecided_items(engine, "alice")] == ["i1", "i3"]
+    assert [item.item_id for item in store.undecided_items(engine, "bob")] == ["i1", "i2"]
+    assert [item.item_id for item in store.undecided_items(engine, None)] == ["i1", "i2", "i3"]
+
+
+def test_undecided_items_parses_only_the_items_kept(engine, monkeypatch):
+    """The runner's share filter runs on the id, before the record is read: a role with a tenth
+    of the items must not pay to parse the other nine tenths on every resumed run."""
+    store.load_run(
+        engine,
+        [a_result()],
+        [an_item("i1"), an_item("i2", claim_id="c2"), an_item("i3", claim_id="c3")],
+        question=QUESTION,
+        run_id=RUN,
+    )
+    parsed: list[str] = []
+    real = store.ReviewItem.model_validate_json
+
+    def counting(raw):
+        item = real(raw)
+        parsed.append(item.item_id)
+        return item
+
+    monkeypatch.setattr(store.ReviewItem, "model_validate_json", counting)
+
+    kept = store.undecided_items(engine, "alice", keep=lambda item_id: item_id != "i2")
+
+    assert [item.item_id for item in kept] == ["i1", "i3"]
+    assert parsed == ["i1", "i3"], "the item not kept was parsed anyway"
+
+
+# --- what a person may choose, and a model may not --------------------------------------------
+
+
+def a_physics_result(pmcid: str = "PMC2") -> PaperResult:
+    return PaperResult(
+        paper=a_paper(pmcid),
+        state=PaperState.CLAIMS_FOUND,
+        fingerprint=Fingerprint(
+            model="opus", instruction_sha256="abc", article_id=pmcid, run_id=RUN, scope="physics"
+        ),
+    )
+
+
+def two_domains(engine) -> None:
+    """PMC1 under the default domain (a fingerprint with no scope), PMC2 under physics."""
+    store.load_run(
+        engine,
+        [a_result(), a_physics_result()],
+        [an_item("i1"), an_item("i2", paper=a_paper("PMC2"))],
+        question=QUESTION,
+        run_id=RUN,
+    )
+
+
+def test_a_paper_s_domain_is_its_harvest_scope_and_biology_where_the_run_predates_scopes(engine):
+    two_domains(engine)
+
+    by_pmcid = {row.pmcid: row.domain for row in rows(engine, store.review_paper)}
+    assert by_pmcid == {"PMC1": "biology", "PMC2": "physics"}
+    assert store.domains(engine) == ["biology", "physics"]
+    assert store.topics(engine) == []
+
+
+def test_a_domain_preference_narrows_what_is_served_and_counted(engine):
+    two_domains(engine)
+    physics = store.Preference(domain="physics")
+
+    assert store.next_item(engine, "alice", physics).item_id == "i2"
+    assert store.remaining(engine, "alice", physics) == 1
+    assert store.remaining(engine, "alice", store.Preference()) == 2
+    assert store.next_item(engine, "alice", store.Preference(domain="chemistry")) is None
+
+
+def test_a_topic_preference_reads_the_paper_s_topic(engine):
+    two_domains(engine)
+    with engine.begin() as conn:
+        conn.execute(
+            store.review_paper.update()
+            .where(store.review_paper.c.pmcid == "PMC2")
+            .values(topic="planarians")
+        )
+
+    assert store.topics(engine) == ["planarians"]
+    assert store.topics(engine, "physics") == ["planarians"]
+    assert store.topics(engine, "biology") == []
+    assert store.next_item(engine, "alice", store.Preference(topic="planarians")).item_id == "i2"
+    assert store.remaining(engine, "alice", store.Preference(topic="yeast")) == 0
+
+
+def test_a_skipped_paper_is_not_offered_to_that_reviewer_again_and_still_is_to_others(engine):
+    two_domains(engine)
+
+    store.skip_paper(engine, "alice", run_id=RUN, pmcid="PMC1")
+
+    assert store.next_item(engine, "alice", store.Preference()).item_id == "i2"
+    assert store.remaining(engine, "alice", store.Preference()) == 1
+    assert store.next_item(engine, "bob", store.Preference()).item_id == "i1"
+    (skip,) = rows(engine, store.review_skip)
+    assert (skip.reviewer, skip.run_id, skip.pmcid) == ("alice", RUN, "PMC1")
+    assert skip.skipped_at is not None
+
+
+def test_without_a_preference_a_skip_changes_nothing(engine):
+    """The simulated review passes none: a model is never handed a person's choices."""
+    two_domains(engine)
+    store.skip_paper(engine, "alice", run_id=RUN, pmcid="PMC1")
+
+    assert store.next_item(engine, "alice").item_id == "i1"
+    assert store.remaining(engine, "alice") == 2
+    assert [i.item_id for i in store.undecided_items(engine, "alice")] == ["i1", "i2"]
+
+
+def test_the_unsigned_in_reviewer_s_skips_are_their_own(engine):
+    two_domains(engine)
+    store.skip_paper(engine, None, run_id=RUN, pmcid="PMC1")
+
+    assert store.next_item(engine, None, store.Preference()).item_id == "i2"
+    assert store.next_item(engine, "alice", store.Preference()).item_id == "i1"
+
+
+def test_skipping_a_paper_that_is_not_there_is_refused(engine):
+    two_domains(engine)
+
+    with pytest.raises(store.DecisionNotSaved, match="PMC9"):
+        store.skip_paper(engine, "alice", run_id=RUN, pmcid="PMC9")
+
+    assert rows(engine, store.review_skip) == []
+
+
+# --- upgrading an older file -------------------------------------------------------------------
+
+
+def an_old_database() -> tuple[Any, MetaData]:
+    """A SQLite file as `create_all` wrote it before domain, topic, value_read, answered_by and
+    review_skip existed: the same tables, those columns and that table left out."""
+    engine = create_engine("sqlite://")
+    old = MetaData()
+    dropped = {"domain", "topic", "value_read", "answered_by", "value_agreement"}
+    for table in store.METADATA.sorted_tables:
+        if table.name == "review_skip":
+            continue
+        Table(
+            table.name,
+            old,
+            *[
+                Column(
+                    column.name,
+                    column.type,
+                    primary_key=column.primary_key,
+                    # The first schema required a verdict and a choice on every row.
+                    nullable=column.nullable
+                    and column.name not in {"approved", "chosen_supporting"},
+                    default=column.default.arg if column.default is not None else None,
+                )
+                for column in table.columns
+                if column.name not in dropped
+            ],
+        )
+    old.create_all(engine)
+    return engine, old
+
+
+def test_upgrade_adds_the_missing_columns_and_table_and_fills_domain_and_topic():
+    engine, old = an_old_database()
+    item = an_item("i2", paper=a_paper("PMC2").model_copy(update={"topic": "crystals"}))
+    with engine.begin() as conn:
+        now = datetime.now(UTC)
+        conn.execute(
+            insert(old.tables["review_paper"]),
+            [
+                {
+                    "run_id": RUN,
+                    "pmcid": "PMC2",
+                    "question": "q",
+                    "state": "CLAIMS_FOUND",
+                    "fingerprint_json": '{"scope": "physics"}',
+                    "loaded_at": now,
+                },
+                {
+                    "run_id": RUN,
+                    "pmcid": "PMC1",
+                    "question": "q",
+                    "state": "CLAIMS_FOUND",
+                    "fingerprint_json": "{}",
+                    "loaded_at": now,
+                },
+            ],
+        )
+        conn.execute(
+            insert(old.tables["review_item"]).values(
+                item_id="i2",
+                run_id=RUN,
+                question="q",
+                pmcid="PMC2",
+                claim_id="c1",
+                value="39",
+                claim_kind="SINGLE",
+                second_kind="DISTRACTOR",
+                item_json=item.model_dump_json(),
+                created_at=now,
+            )
+        )
+
+        conn.execute(
+            insert(old.tables["review_decision"]).values(
+                item_id="i2",
+                reviewer="bob",
+                chosen_supporting=True,
+                approved=True,
+                comment="kept",
+                decided_at=now,
+                issue="",
+            )
+        )
+
+    done = store.upgrade(engine)
+
+    # Two added by hand (domain, topic); value_read and answered_by came with the rebuild.
+    assert done == {
+        "columns_added": 2,
+        "papers_filled": 2,
+        "tables_rebuilt": 1,
+        "choices_compared": 0,
+    }
+    by_pmcid = {row.pmcid: (row.domain, row.topic) for row in rows(engine, store.review_paper)}
+    assert by_pmcid == {"PMC1": ("biology", ""), "PMC2": ("physics", "crystals")}
+    (kept,) = rows(engine, store.review_decision)
+    assert (kept.reviewer, kept.approved, kept.comment, kept.value_read) == (
+        "bob",
+        True,
+        "kept",
+        "",
+    )
+    assert kept.value_agreement is None, "a one-step row read no value: nothing to compare"
+    # The upgraded file takes the writers that needed the new columns, the nullable verdict
+    # and the new table.
+    store.record_choice(engine, "i2", reviewer="alice", chosen_supporting=True, value_read="39")
+    store.record_issue(engine, "i2", reviewer="carol", issue="garbled")
+    store.skip_paper(engine, "alice", run_id=RUN, pmcid="PMC1")
+    assert store.upgrade(engine) == {
+        "columns_added": 0,
+        "papers_filled": 2,
+        "tables_rebuilt": 0,
+        "choices_compared": 0,
+    }, "idempotent"
+
+
+# --- two steps -----------------------------------------------------------------------------
+
+
+def test_a_choice_opens_the_row_with_the_value_read_and_no_verdict(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+
+    store.record_choice(
+        engine,
+        "i1",
+        reviewer="alice",
+        chosen_supporting=True,
+        value_read="39 min",
+        time_to_decide_s=20.0,
+        reviewer_role=ReviewerRole.STUDENT,
+        reviewer_model="some/router",
+        answered_by="some/model-a",
+    )
+
+    (row,) = rows(engine, store.review_decision)
+    assert (row.chosen_supporting, row.value_read, row.approved, row.issue) == (
+        True,
+        "39 min",
+        None,
+        "",
+    )
+    assert row.value_agreement == "MATCHES", "computed by the store against the item's value"
+    assert (row.reviewer_role, row.reviewer_model, row.answered_by) == (
+        "STUDENT",
+        "some/router",
+        "some/model-a",
+    )
+    assert store.open_choice(engine, "i1", "alice") == store.Choice(True, "39 min", "MATCHES")
+    assert store.open_choice(engine, "i1", "bob") is None
+
+
+@pytest.mark.parametrize(
+    ("value_read", "agreement"),
+    [
+        ("39", "MATCHES"),
+        ("39 h", "SAME_NUMBER_DIFFERENT_UNIT"),
+        ("21", "DIFFERS"),
+        ("", "UNREADABLE"),
+    ],
+)
+def test_the_agreement_is_whatever_the_reading_says_against_the_stored_value(
+    engine, value_read, agreement
+):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+
+    store.record_choice(engine, "i1", reviewer="a", chosen_supporting=True, value_read=value_read)
+
+    assert store.open_choice(engine, "i1", "a").value_agreement == agreement
+
+
+def test_a_verdict_completes_the_open_row_and_adds_its_time_and_its_answerer(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+    store.record_choice(
+        engine,
+        "i1",
+        reviewer="alice",
+        chosen_supporting=False,
+        value_read="21 min",
+        time_to_decide_s=20.0,
+        answered_by="some/model-a",
+    )
+
+    store.record_verdict(
+        engine,
+        "i1",
+        reviewer="alice",
+        approved=False,
+        comment="wrong medium",
+        time_to_decide_s=5.0,
+        answered_by="some/model-b",
+    )
+
+    (row,) = rows(engine, store.review_decision)
+    assert (row.chosen_supporting, row.value_read) == (False, "21 min")
+    assert (row.approved, row.comment) == (False, "wrong medium")
+    assert row.time_to_decide_s == pytest.approx(25.0)
+    assert row.answered_by == "some/model-a, some/model-b"
+    assert store.open_choice(engine, "i1", "alice") is None
+
+
+def test_the_same_answerer_twice_is_named_once(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+    store.record_choice(
+        engine, "i1", reviewer="alice", chosen_supporting=True, value_read="39", answered_by="m"
+    )
+    store.record_verdict(engine, "i1", reviewer="alice", approved=True, answered_by="m")
+
+    (row,) = rows(engine, store.review_decision)
+    assert row.answered_by == "m"
+
+
+def test_a_verdict_without_a_choice_before_it_is_refused(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+
+    with pytest.raises(store.DecisionNotSaved, match="no open choice"):
+        store.record_verdict(engine, "i1", reviewer="alice", approved=True)
+
+    assert rows(engine, store.review_decision) == []
+
+
+def test_a_second_choice_on_the_same_item_is_refused(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+    store.record_choice(engine, "i1", reviewer="alice", chosen_supporting=True, value_read="39")
+
+    with pytest.raises(store.DecisionNotSaved, match="already chosen"):
+        store.record_choice(
+            engine, "i1", reviewer="alice", chosen_supporting=False, value_read="21"
+        )
+
+    assert len(rows(engine, store.review_decision)) == 1
+    # Another reviewer's first step on the same item is not a second choice.
+    store.record_choice(engine, "i1", reviewer="bob", chosen_supporting=False, value_read="21")
+    assert len(rows(engine, store.review_decision)) == 2
+
+
+def test_an_item_with_an_open_choice_is_still_the_reviewer_s_and_is_served_first(engine):
+    store.load_run(
+        engine,
+        [a_result()],
+        [an_item("i1"), an_item("i2"), an_item("i3")],
+        question=QUESTION,
+        run_id=RUN,
+    )
+    store.record_choice(engine, "i3", reviewer="alice", chosen_supporting=True, value_read="39")
+
+    assert store.next_item(engine, "alice").item_id == "i3"
+    assert store.remaining(engine, "alice") == 3
+    assert [i.item_id for i in store.undecided_items(engine, "alice")] == ["i1", "i2", "i3"]
+    store.record_verdict(engine, "i3", reviewer="alice", approved=True)
+    assert store.next_item(engine, "alice").item_id == "i1"
+    assert store.remaining(engine, "alice") == 2
+
+
+def test_an_issue_after_the_choice_keeps_the_choice_and_leaves_no_verdict(engine):
+    store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
+    store.record_choice(
+        engine,
+        "i1",
+        reviewer="alice",
+        chosen_supporting=True,
+        value_read="39 min",
+        time_to_decide_s=10.0,
+    )
+
+    store.record_issue(
+        engine,
+        "i1",
+        reviewer="alice",
+        issue="the stored value is 93, the text says 39",
+        time_to_decide_s=4.0,
+    )
+
+    (row,) = rows(engine, store.review_decision)
+    assert (row.chosen_supporting, row.value_read) == (True, "39 min")
+    assert row.approved is None
+    assert row.issue == "the stored value is 93, the text says 39"
+    assert row.time_to_decide_s == pytest.approx(14.0)
+    assert store.open_choice(engine, "i1", "alice") is None
+    assert store.next_item(engine, "alice") is None
 
 
 def test_a_decision_on_an_unknown_item_is_not_saved_and_says_so(engine):

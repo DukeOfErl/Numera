@@ -913,6 +913,25 @@ def test_the_no_credential_door_is_its_own_state_not_an_open_one(monkeypatch):
     assert admission.account == KEYLESS, "enrolled, and the page can say so"
 
 
+def test_a_page_that_needs_no_credential_admits_a_keyless_account(monkeypatch):
+    """The review page makes no model call, so a reviewer needs no key: enrolled is enough
+    there, and the key check is not even asked. The ask page keeps the default, and
+    `agent_for` keeps its raise, so the environment's key is still never a tester's."""
+    _configured(monkeypatch, KEYLESS.email)
+    monkeypatch.setattr(web.accounts, "lookup", lambda e, who, **k: KEYLESS)
+    asked: list = []
+    admission = web.admit(
+        {},
+        object(),
+        "s1",
+        check_key=lambda key: asked.append(key) or web.allowance.Probe(rejected=True),
+        credential_required=False,
+    )
+    assert admission.door is web.Door.OPEN
+    assert admission.account == KEYLESS
+    assert asked == []
+
+
 def test_agent_for_refuses_rather_than_falling_back_to_the_environment(repo):
     """Defence behind the door: if a configured account without a credential ever
     reached here, building with `api_key=None` would quietly spend the
@@ -1205,8 +1224,9 @@ def test_a_signed_in_tester_is_told_whom_to_ask_when_the_allowance_is_spent():
     assert messages.run_over_advice(EndReason.RUN_BUDGET, signed_in=True) is None
 
 
-def test_the_no_credential_sentence_says_whom_to_ask():
+def test_the_no_credential_sentence_says_whom_to_ask_and_that_review_is_still_open():
     assert "Ask whoever runs this deployment" in messages.NO_CREDENTIAL
+    assert "Reviewing entries is still open" in messages.NO_CREDENTIAL
 
 
 def test_the_page_shows_a_tester_the_tester_s_wording_and_a_developer_the_neutral_one(
