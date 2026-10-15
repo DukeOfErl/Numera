@@ -33,7 +33,8 @@ and `method` is a condition in every domain.
 **Non-Goals:**
 - Authors, emails and an author tier (deferred by decision, not forgotten).
 - Live tiers: decisions made after the store was loaded appear after a restart.
-- Evaluation runs and the answer sheet over the store; they keep reading a corpus file.
+- Evaluation runs and the answer sheet over the store; they keep reading a corpus file. The plan
+  for them is a separate work package, recorded in `docs/roadmap.md` ("Evaluation over the store").
 - Changing the value parser (`bionumbers.readings`); disagreements are cautioned, not repaired.
 - Writing to the store, or copying it into any repository.
 
@@ -81,26 +82,45 @@ which belong to which source.
 from the JSONL, so the contract with `add-corpus-ingestion` is unchanged; the docstring's
 "message to that branch" clause does not trigger.
 
-### D3. Identifiers are `int | str`; the harvested form is recognised by shape, in one place
+### D3. Two identifiers: a label the model types, the store's id that is saved
 
-A curated entry keeps its integer BNID. A harvested entry's identifier is the string
-`f"{pmcid}-{n}"`, where `n` is the claim's ordinal suffix within its run (`claim_id` minus
-`run_id` and `pmcid`). All 452 are unique today; the loader raises on a duplicate (spec).
+A curated entry keeps its integer BNID, which is both its label and its saved id.
 
-`citations._identifiers` today refuses a group with two digit runs, which is exactly what
-`PMC2652108-1` is. It gains one recognised shape, `PMC\d+-\d+`, read *before* the digit rules, and
-returned as a string. Nothing else in the file changes: a group matching neither shape is still
-refused. `bionumbers.label` returns `BNID n` only for integers; a string identifier is shown as
-itself — it is not a BNID and must not be labelled one (ADR-0420's attribution would become a false
-one).
+A harvested entry has a **label** — `entry_id`, what the repository is keyed by, what the model sees
+and cites — and `Harvest.item_id`, the store's own `review_item.item_id`
+(`{run_id}-{pmcid}-{n}-item`), which names one value forever. The store is insert-only and a
+re-extraction is a new run with new item ids (confirmed with the seeding session, 2026-10-15), so
+the saved id is stable by construction; the label is not, because a re-extraction reuses `n`.
 
-Every `int` annotation on an entry identifier (`tools.get_entry`, `repository.get`, `trace`,
-`events`, `scoring`) becomes `EntryId = int | str`. The tool's argument schema is what the model
-sees; it changes from integer to string-or-integer.
+**Labels.** `f"{pmcid}-{n}"`, `n` being the claim's counter within its run. The loader groups a
+paper's items by run, orders runs by creation time, and gives the first run bare labels and the
+k-th run `f"{pmcid}-{n}.{k}"`. Runs are only ever added, and a later run cannot sort before an
+earlier one, so a label once given keeps naming the same value. All 452 are bare today (no paper
+has two runs). A duplicate label after this rule is a bug, and stops the load by name.
 
-Rejected: synthetic integers in a range BNIDs do not use (no citation change, but a reader cannot
-tell a harvested entry from a BNID — the user preferred the PMCID form); a project-wide opaque
-`SN…` id (stable, but needs a persisted mapping table in a store this branch must not write).
+**Saved records.** `Entry.record_id` returns `harvest.item_id` for a harvested entry and the BNID
+otherwise — one property, so no recorder computes it. Wherever an identifier leaves the process —
+the `Answer` event's `cited` and `retrieved`, the trail's per-entry rows, the question-and-answer
+records — it is written as `record_id`, with the label beside it for a reader. Resolution from
+label to entry happens once, in the agent, against the repository as loaded, at the point
+`citations()` returns: a label naming nothing is `unknown`, as today; nothing is matched loosely.
+
+**Parsing.** `citations._identifiers` today refuses a group with two digit runs, which is exactly
+what `PMC2652108-1` is. It gains one recognised shape, `PMC\d+-\d+(\.\d+)?`, read *before* the
+digit rules and returned as a string. A group matching neither shape is still refused.
+`bionumbers.label` returns `BNID n` only for integers; a label is shown as itself — it is not a BNID
+and must not be labelled one (ADR-0420's attribution would become a false one).
+
+Every `int` annotation and `int(...)` coercion on an entry identifier (`tools.get_entry`,
+`repository.get`, `agent`'s retrieval tracking, `trace`, `events`, `scoring`) becomes
+`EntryId = int | str`. The tool's argument schema is what the model sees; it changes from integer
+to string-or-integer.
+
+Rejected: the model citing the full item id (about 50 characters naming the run and the model;
+models copy long ids unreliably, and each miscopy is a citation of nothing — the seeding session
+proposed it and withdrew it for this design); synthetic integers in a range BNIDs do not use (a
+reader cannot tell a harvested entry from a BNID — the user preferred the PMCID form); refusing to
+load on a re-extraction (the first re-extraction would stop the app).
 
 ### D4. Value: the paper's text is stated; numbers are used only where the reading fits
 
@@ -189,8 +209,8 @@ is untouched. An ADR records the direction and why (one rule, one parser).
 
 - **The store moves under us** (entry-review keeps writing) → read once at start; tiers are a
   snapshot; the legend says "as of" the load time.
-- **`PMCxxx-n` collides on a re-harvest of the same paper** → the loader refuses duplicates by name
-  rather than overwrite; a real fix (a persisted id) waits for the store to be ours to write.
+- **A re-extraction reuses a paper's value numbers** → later runs are suffixed (D3), and only the
+  store's item id is saved, so an old record never comes to name a new value.
 - **The parser misreads a value the kind check passes** (e.g. a `SINGLE` read as one wrong number)
   → `value_text` is always what is shown; the parsed numbers only feed search and unit comparison.
 - **Base branch is rebased again** (onto `dev` after harvest/review merge) → no code depends on a
@@ -204,5 +224,5 @@ None for corpus-file users: the store is opt-in through a new setting. Rollback 
 
 ## Open Questions
 
-- The answer sheet and evaluation harness over the store — deferred; they refuse a store for now
-  rather than render it without tiers.
+None blocking. Evaluation and the answer sheet over the store are deferred to their own work
+package (`docs/roadmap.md`); until then they refuse a store with a message rather than run over it.

@@ -20,12 +20,17 @@ some of the store's papers are NC/ND. The real store is read only in local check
       `tools.get_entry`, `trace`, `events`, `scoring`); suite green with no behaviour change
 - [ ] 2.2 `Harvest` and `Condition` records, and `Entry.harvest` / `Entry.trust` defaulting to
       `None`; a corpus-file load yields both `None` (D2)
-- [ ] 2.3 `citations` reads `[[PMC2652108-1]]` as the string identifier, before the digit rules;
-      tests for that form, a list of two such, a mixed list with a BNID, and that `[[PMC1-2-3]]`
-      and `[[Table 1]]` are still refused (D3)
+- [ ] 2.3 `citations` reads `[[PMC2652108-1]]` and `[[PMC2652108-1.2]]` as string labels, before
+      the digit rules; tests for both forms, a list of two, a mixed list with a BNID, and that
+      `[[PMC1-2-3]]` and `[[Table 1]]` are still refused (D3)
 - [ ] 2.4 `bionumbers.label` labels only integers as BNIDs; a string identifier is shown as itself
-- [ ] 2.5 ADR-1610: harvested entries are identified as `PMCID-n`, cited in the existing delimited
-      form; the opaque-id and integer-range alternatives and why they lost (D3)
+- [ ] 2.5 `Entry.record_id`: the store's item id for a harvested entry, the BNID otherwise. The
+      `Answer` event, the trail's per-entry rows and the question-and-answer records write
+      `record_id` with the label beside it; a test per record kind that a harvested citation is
+      saved under its item id, and that a corpus-file run's records are unchanged
+- [ ] 2.6 ADR-1610: two identifiers — a short label the model types, the store's item id that is
+      saved; the suffix rule for re-extractions; the full-id, integer-range and refuse-on-duplicate
+      alternatives and why they lost (D3)
 
 ## 3. The store loader
 
@@ -43,12 +48,17 @@ some of the store's papers are NC/ND. The real store is read only in local check
       disagreements set `reading_uncertain` and leave the numbers `None`; `value_display` returns
       the paper's text for a harvested entry. Assertions come from D4's table, not from running
       the loader
-- [ ] 3.6 Duplicate identifier → the load stops naming it; missing or unreadable store → a
-      `CorpusUnavailable` naming what was configured, nothing substituted
-- [ ] 3.7 A test that the loaded entries carry none of: the review's test text (`second`),
+- [ ] 3.6 Labels per D3: the fixture holds one paper under two runs with different values for the
+      same counter; the earlier run's value is `PMC…-1`, the later `PMC…-1.2`; both are entries.
+      A duplicate label (forced in the fixture) stops the load naming it; missing or unreadable
+      store → a `CorpusUnavailable` naming what was configured, nothing substituted
+- [ ] 3.7 A record saved citing the first run's value, then a reload with the second run added:
+      the saved item id still resolves to the first run's value. A cited label no loaded entry
+      carries is reported unknown, never matched to a near one
+- [ ] 3.8 A test that the loaded entries carry none of: the review's test text (`second`),
       `distractor_type`, `property_asked`, any reviewer's comment, issue or value read — asserted
       over every string field of every entry, using marker strings planted in the fixture
-- [ ] 3.8 Local check against the real store (not committed): 875 entries, 452 harvested with
+- [ ] 3.9 Local check against the real store (not committed): 875 entries, 452 harvested with
       unique identifiers, 38 `reading_uncertain`, five domains; record the command and its output
       in the PR description
 
@@ -89,15 +99,16 @@ some of the store's papers are NC/ND. The real store is read only in local check
 - [ ] 6.2 The Streamlit app loads the store under the same cache as the corpus; restart picks up
       new decisions
 - [ ] 6.3 Evaluation and the answer sheet refuse a store with a message saying they read a corpus
-      file (non-goal, stated rather than silently half-working)
+      file and naming the roadmap's "Evaluation over the store" (non-goal, stated rather than
+      silently half-working)
 
 ## 7. Verification and documentation
 
 - [ ] 7.1 Map every new requirement in `tests/test_spec_conformance.py`
 - [ ] 7.2 Fault seeding over `store_corpus.py` and the `citations` change (copies, never the working
       tree): drop a condition's quote, swap `MEASURED`/`DERIVED`, let a disagreeing reading through
-      as a number, leak `second` into a field, read `PMC…-n` as an integer — each must fail exactly
-      the intended test
+      as a number, leak `second` into a field, read `PMC…-n` as an integer, order runs newest
+      first, save the label instead of the item id — each must fail exactly the intended test
 - [ ] 7.3 Ask the demo's questions against the real store in the web app and look at the stars,
       legend and cautions; probe the OpenRouter key's remaining credit before any live call
 - [ ] 7.4 README, `docs/diagrams/architecture.md` (a store adapter beside the corpus file),

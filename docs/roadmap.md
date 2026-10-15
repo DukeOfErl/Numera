@@ -266,7 +266,54 @@ change that is not happening.
 
 | Item | Why it is waiting |
 |---|---|
+| Authors and an author tier | Deferred entirely from `add-ask-over-store` on 2026-10-13: authors with a listed email reviewing their own papers' values, a tier equivalent to curated. Needs the JATS reader to extract contributors, and emails are personal data that may live only in the private data repo |
 | Per-entry ratings | Gated on what WP2's comments actually say |
 | Grey thumbs | Cosmetic; the colour rule may not be matching. Raised 2026-09-15 |
 | `ToolCallLimitMiddleware` | Deferred in `add-ask-agent` for unexpected consequences seen in `interv_preper`. Worth re-checking against the stock middleware, since the project prefers the library's own components |
 | Terraform | Mentioned for a Google Cloud deploy; no decision taken |
+
+
+### Evaluation over the store
+
+Deferred from `add-ask-over-store` on 2026-10-15; its own work package, not part
+of that one. Until it lands, the evaluation command and the answer sheet refuse a
+store with a message naming this section, rather than run over it and report
+figures that mean something else.
+
+**Why it cannot simply be pointed at the store.** Nothing technical stops a run;
+what it reports would be wrong in three ways:
+
+- **The question set expects BNIDs from the full corpus.** Most are not among the
+  store's 423 curated entries and none is a harvested value, so a score would
+  measure what the store lacks, not how the agent answers.
+- **The corpus fingerprint is a digest of the file**, and the store's file changes
+  with every review decision. Every run would count as a different corpus, and
+  `report` — rightly — would combine none of them.
+- **The answer sheet draws no stars**, so a reader of it would lose the tier that
+  every other surface shows.
+
+**The plan, in order:**
+
+1. **Freeze what a run reads.** Copy the store to a snapshot beside the results,
+   read-only, and fingerprint the snapshot. A run is then reproducible, and two
+   runs over one snapshot combine. Decisions made later belong to the next
+   snapshot, not to this run.
+2. **A question set written for the store.** Questions whose expected and
+   admissible entries are store entries — curated by BNID, harvested by the
+   store's item id (never the label, which is display) — including questions
+   where entries of different tiers conflict, where the only entry is disputed,
+   and where the only entry's value could not be read with certainty. Same tiers
+   (`basic` / `compound` / `declining`) as today's set.
+3. **Scores the store makes possible, deterministic first:** whether the agent
+   cited the better-reviewed entry where entries conflict; whether it stated a
+   cautioned value as a number. Whether its prose *says* an entry is disputed
+   needs the judged layer, and waits for `add-judged-faithfulness`.
+4. **The answer sheet draws stars** with the same presentation code the drivers
+   use, legend and simulated mark included.
+
+**Unchanged and still binding:** results hold retrieval output verbatim, which
+from the store means paper passages, some under NC/ND licences — the results path
+guard (ADR-0170, ADR-0250) applies exactly as it does to corpus text.
+
+**Start when:** `add-ask-over-store` has merged, and either the demo is past or a
+claim about the store's answers needs a figure behind it.

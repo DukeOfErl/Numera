@@ -13,7 +13,10 @@ answer from the harvest store and say, beside every citation, how well reviewed 
 - From the store the agent sees two kinds of entry: the curated BioNumbers entries (cited by their
   BNID, as now) and every harvested entry from every domain the store holds — biology, organismal,
   biophysics, physics, chemistry — one entry per extracted value, cited as `[[PMC2652108-1]]`
-  (the paper's PMCID and the value's number within it).
+  (the paper's PMCID and the value's number within it). That short label is what the model types;
+  what is saved about an answer is the store's own identifier for the value, which never comes to
+  name another one. A paper extracted again keeps both readings, the later labelled
+  `PMC2652108-1.2`.
 - A harvested entry carries what a reader needs to judge it: the property as the paper words it, the
   organism, the value as the paper wrote it and the numbers read from it, the supporting quote,
   each condition the paper states (method among them) and each it does not, the paper itself, and
@@ -31,7 +34,8 @@ answer from the harvest store and say, beside every citation, how well reviewed 
   402 of 452 items) never reaches the agent.
 
 Out of scope: authors and an author tier (deferred entirely); review by the ask agent's readers;
-evaluation runs over the store; a live view of decisions made after the store was loaded.
+evaluation runs over the store (planned separately in `docs/roadmap.md`); a live view of decisions
+made after the store was loaded.
 
 ## Capabilities
 

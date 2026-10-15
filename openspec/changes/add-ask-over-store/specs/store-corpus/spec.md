@@ -38,14 +38,30 @@ The corpus read from the store SHALL hold every curated entry and every harveste
 domain the store holds. A harvested entry SHALL be one extracted value — not a paper — so that a
 question about a property finds the value rather than the paper it came from.
 
-A curated entry SHALL keep its BioNumbers identifier. A harvested entry SHALL be identified by its
-paper's PMCID and the value's number within that paper (`PMC2652108-1`), and cited in the same
-delimited form as every other entry (`[[PMC2652108-1]]`). An identifier SHALL NOT name the
-extraction run or the model that produced the value.
+A curated entry SHALL keep its BioNumbers identifier. A harvested entry SHALL carry two
+identifiers, with different jobs:
 
-Two harvested values with the same identifier SHALL stop the load with a message naming the
-identifier. Silently keeping one would leave a citation pointing at whichever value happened to
-load last.
+- **A label the model writes**: the paper's PMCID and the value's number within its extraction
+  (`PMC2652108-1`), cited in the same delimited form as every other entry (`[[PMC2652108-1]]`). A
+  label SHALL NOT name the extraction run or the model that produced the value.
+- **The store's own identifier for the value**, which never changes and names one value forever.
+  Everything saved about an answer — the trail and the question-and-answer records — SHALL hold this identifier for every harvested entry it cites, beside the label. A label SHALL NOT
+  be the key anything is saved under.
+
+A label is short because a model copies short identifiers reliably and long ones not; it is safe
+only because it is resolved at once, against the store as loaded, and never saved alone. A paper
+extracted again reuses its value numbers, so a label saved alone could later name a different
+value.
+
+Where one paper has been extracted more than once, each extraction's values SHALL be separate
+entries — never merged, never silently dropped — and SHALL receive distinct labels: the earliest
+extraction keeps `PMC2652108-1`, and each later one is told apart by a suffix in the order the
+extractions were made (`PMC2652108-1.2`). Extractions are only ever added to the store, so a label
+once given keeps naming the same value.
+
+A cited label that resolves to no loaded entry SHALL be reported as such, never matched to the
+nearest one. Two loaded values with the same label SHALL stop the load with a message naming the
+label; by the rule above it cannot happen, and if it does a guess would cite the wrong value.
 
 #### Scenario: The store is loaded
 - **WHEN** the agent's corpus is read from the store
@@ -54,12 +70,28 @@ load last.
 
 #### Scenario: An answer cites a harvested value
 - **WHEN** an answer rests on a harvested value
-- **THEN** it cites it as the paper's PMCID and the value's number, in the delimited form
+- **THEN** it cites it by its label, in the delimited form
 - **AND** the citation is read back as that entry
+- **AND** what is saved about the answer holds the store's identifier for that value
 
-#### Scenario: Two values claim one identifier
-- **WHEN** two harvested values in the store would receive the same identifier
-- **THEN** the load stops and names the identifier
+#### Scenario: One paper extracted twice
+- **WHEN** the store holds two extractions of one paper, each with a first value
+- **THEN** both values are entries, with distinct labels
+- **AND** the earlier extraction's value keeps the unsuffixed label
+
+#### Scenario: A saved answer outlives a later extraction
+- **WHEN** an answer citing a harvested value was saved, and the same paper is extracted again
+- **THEN** the saved answer still names the value it cited, by the store's identifier
+- **AND** that identifier still resolves to the value as it was when the answer was given
+
+#### Scenario: A label that names nothing
+- **WHEN** an answer cites a label no loaded entry carries
+- **THEN** the citation is reported as naming no entry
+- **AND** no other entry is substituted for it
+
+#### Scenario: Two values claim one label
+- **WHEN** two loaded harvested values would carry the same label
+- **THEN** the load stops and names the label
 - **AND** neither value is silently dropped
 
 ### Requirement: A harvested entry carries what a reader needs to judge it
