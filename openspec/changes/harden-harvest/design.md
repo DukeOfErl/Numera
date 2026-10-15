@@ -32,6 +32,12 @@ Open. Two shapes, to be measured against the store when a paper has actually bee
   matching rule (or a reviewer) says they are the same property. Survives relabelling; needs a
   rule, and a rule that classifies things moves records in both directions.
 
+`add-ask-over-store` (its D3, confirmed by that session on 2026-10-15) constrains neither shape:
+each reading is its own entry, anything saved is keyed by `item_id`, and its `-n.2` suffix is
+display order by run creation time within one load, not a relation between readings. With a
+recorded link the agent could later say "also read in run X"; with a derived one nothing there
+changes.
+
 Serving together is independent of the choice: `next_item` partitions by `(run_id, pmcid)` today
 and partitions by `pmcid` afterwards. Record the decision as an ADR from the `1700`–`1740` block.
 
