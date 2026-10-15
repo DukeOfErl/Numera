@@ -317,3 +317,42 @@ guard (ADR-0170, ADR-0250) applies exactly as it does to corpus text.
 
 **Start when:** `add-ask-over-store` has merged, and either the demo is past or a
 claim about the store's answers needs a figure behind it.
+
+### Relevance before trust
+
+Raised 2026-10-15, after `add-ask-over-store` was proposed; its own work package.
+
+**The risk.** Once the agent is told each entry's tier, a high tier can pull an
+entry into an answer it does not belong in: a five-star curated value about a
+neighbouring quantity cited ahead of the two-star harvested value that actually
+answers the question. Trust is a property of an entry; relevance is a property
+of an entry *and the question*, and the second has to be decided first.
+`add-ask-over-store` only tells the model to prefer the better-reviewed entry
+"where entries conflict" — it does not separate the two decisions.
+
+**The plan: two steps, in this order.**
+
+1. **Relevance, with trust hidden or ignored.** The model decides which retrieved
+   entries bear on the question and returns that shortlist explicitly (a
+   structured step, not prose), each with what it measures and under which
+   conditions. An entry not on the shortlist is never cited, whatever its tier.
+2. **Selection and order by trust, within the shortlist only.** Which shortlisted
+   entries the answer leads with, and the order of citations and table rows,
+   follow the tier — higher first, disputed ones flagged. The order is data, so
+   the application can apply it rather than the model; the model keeps the job
+   of saying *why* a lower-tier entry still matters when it does.
+
+**What to decide when it starts:** whether step 1 is a separate model call or a
+structured output inside the same turn (cost against the agent's call limits and
+spend gate); whether the model sees tiers at all during step 1; and how the
+entries table's existing relevance ordering (grounded-answering) and the
+shortlist relate, so the table and the answer cannot disagree about what was
+relevant.
+
+**How it will be measured:** questions where a high-tier entry is about an
+adjacent quantity and a lower-tier one answers the question — added to the store
+question set in *Evaluation over the store*, step 2. Without them a change here
+cannot be shown to help.
+
+**Start when:** `add-ask-over-store` has merged; best done with or after
+*Evaluation over the store*, so the gain is a figure rather than an impression.
