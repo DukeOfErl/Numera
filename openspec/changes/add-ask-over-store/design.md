@@ -191,7 +191,7 @@ A presentation module (beside `entries_table`) owns the scale:
 | `AI` | ★☆☆☆☆ |
 | `NONE` | ☆☆☆☆☆ |
 
-`#` after the stars marks a simulated tier; `⚠` marks a dispute. Both qualify the *tier*, so they
+`#` before the stars marks a simulated tier (`#★★★☆☆`); `⚠` after them marks a dispute. Both qualify the *tier*, so they
 travel with the stars — beside a citation in the prose and in the trust column alike. A legend under
 the answer states the scale, `#` and `⚠`. `None` trust renders as the empty string. (`†` was the
 first choice and is taken: it already means "no measurement method recorded". `#` came next and
@@ -208,7 +208,7 @@ already draws an answer's citations as grey superscripts (ADR-1240, `web.answer_
 `[[nnnnnn]]` becomes one `<sup>` with its identifiers comma-separated, after escaping. This branch's
 base predates that merge, which is why the first draft of this design said `[[id]]` — the design was
 read against a stale `web.py`. Built on `dev`, the superscript carries each identifier followed by
-its stars and tier marks — one `<sup>` holding `100002 ★★★★★, PMC2652108-1 ★★★☆☆#⚠` — all in the
+its stars and tier marks — one `<sup>` holding `100002 ★★★★★, PMC2652108-1 #★★★☆☆⚠` — all in the
 same grey, smaller size.
 Two changes to `answer_markdown` follow:
 
