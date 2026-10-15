@@ -28,7 +28,7 @@ some of the store's papers are NC/ND. The real store is read only in local check
       the digit rules; tests for both forms, a list of two, a mixed list with a BNID, and that
       `[[PMC1-2-3]]` and `[[Table 1]]` are still refused (D3)
 - [x] 2.4 `bionumbers.label` labels only integers as BNIDs; a string identifier is shown as itself
-- [ ] 2.5 `Entry.record_id`: the store's item id for a harvested entry, the BNID otherwise. The
+- [x] 2.5 `Entry.record_id`: the store's item id for a harvested entry, the BNID otherwise. The
       `Answer` event, the trail's per-entry rows and the question-and-answer records write
       `record_id` with the label beside it; a test per record kind that a harvested citation is
       saved under its item id, and that a corpus-file run's records are unchanged
@@ -38,34 +38,36 @@ some of the store's papers are NC/ND. The real store is read only in local check
 
 ## 3. The store loader
 
-- [ ] 3.1 Fixture: a store built with `bionumbers.store`'s tables, holding invented curated entries,
+- [x] 3.1 Fixture: a store built with `bionumbers.store`'s tables, holding invented curated entries,
       harvested items of each `kind` and `candidate_kind`, items in two domains, and decisions
       that exercise every tier, a dispute and a simulated tier
-- [ ] 3.2 `store_corpus.load(url)` opens the store read-only (`mode=ro`) and returns curated and
+- [x] 3.2 `store_corpus.load(url)` opens the store read-only (`mode=ro`) and returns curated and
       harvested entries; a test proves a write through its connection fails, and that the store
       file is byte-identical after a load
-- [ ] 3.3 Curated rows become `Entry` with their BNID and `Trust` of tier `CURATED`
-- [ ] 3.4 Harvested items become `Entry` with the flat fields mapped as D2 says, `Harvest` filled
+- [x] 3.3 Curated rows become `Entry` with their BNID and `Trust` of tier `CURATED`
+- [x] 3.4 Harvested items become `Entry` with the flat fields mapped as D2 says, `Harvest` filled
       (quote, stated conditions, not-stated names, paper, domain, topic, origin, inputs) and
       `trust` from `tiers.trust_of`; items with no decision get tier `NONE`
-- [ ] 3.5 Value reading against `kind` per D4's table: fitting readings set value or range;
+- [x] 3.5 Value reading against `kind` per D4's table: fitting readings set value or range;
       disagreements set `reading_uncertain` and leave the numbers `None`; `value_display` returns
       the paper's text for a harvested entry. Assertions come from D4's table, not from running
       the loader
-- [ ] 3.6 Labels per D3: the fixture holds one paper under two runs with different values for the
+- [x] 3.6 Labels per D3: the fixture holds one paper under two runs with different values for the
       same counter; the earlier run's value is `PMC…-1`, the later `PMC…-1.2`; both are entries.
       A duplicate label (forced in the fixture) stops the load naming it; missing or unreadable
       store → a `CorpusUnavailable` naming what was configured, nothing substituted
-- [ ] 3.7 A record saved citing the first run's value, then a reload with the second run added:
+- [x] 3.7 A record saved citing the first run's value, then a reload with the second run added:
       the saved item id still resolves to the first run's value; and with an *older* run added
-      later (labels shift), the saved item id still resolves to the value it cited. A cited label no loaded entry
+      later, the cited value keeps its label (load order) and the saved item id still resolves. A cited label no loaded entry
       carries is reported unknown, never matched to a near one
-- [ ] 3.8 A test that the loaded entries carry none of: the review's test text (`second`),
+- [x] 3.8 A test that the loaded entries carry none of: the review's test text (`second`),
       `distractor_type`, `property_asked`, any reviewer's comment, issue or value read — asserted
       over every string field of every entry, using marker strings planted in the fixture
-- [ ] 3.9 Local check against the real store (not committed): 875 entries, 452 harvested with
+- [x] 3.9 Local check against the real store (not committed): 875 entries, 452 harvested with
       unique identifiers, 38 `reading_uncertain`, five domains; record the command and its output
-      in the PR description
+      in the PR description. Run 2026-10-15: 875 entries (423 curated, 452 harvested), 452 unique
+      labels, none suffixed, 38 uncertain, five domains (191/133/44/43/41), origins 203/200/49,
+      tiers 321 approved unopposed / 76 approved and disputed / 55 disputed only
 
 ## 4. Search and the model's view
 

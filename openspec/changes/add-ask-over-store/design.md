@@ -93,20 +93,23 @@ re-extraction is a new run with new item ids (confirmed with the seeding session
 the saved id is stable by construction; the label is not, because a re-extraction reuses `n`.
 
 **Labels.** `f"{pmcid}-{n}"`, `n` being the claim's counter within its run. The loader groups a
-paper's items by run, orders runs by creation time, and gives the first run bare labels and the
-k-th run `f"{pmcid}-{n}.{k}"`. All 452 are bare today (no paper has two runs). A duplicate label
-after this rule is a bug, and stops the load by name.
+paper's items by run, orders runs by **when they were loaded into the store** (the earliest
+`review_item.created_at` of that run's items for the paper, then `run_id` to break a tie), and gives
+the first run bare labels and the k-th run `f"{pmcid}-{n}.{k}"`. All 452 are bare today (no paper
+has two runs). A duplicate label after this rule is a bug, and stops the load by name.
 
-**A label is valid for one load and is never resolved again.** Ordering by creation time is stable
-only while runs arrive in the order they were made. A restore, a backfill, or a run copied in from
-`~/scinumbers-data/runs` can add a run older than one already loaded; it then takes the bare labels
-and the existing entries become `.2` (pointed out by the seeding session, 2026-10-15). That is
-harmless only because nothing saved is ever looked up by its label — the item id is the key, and
-the saved label records what the reader was shown. **Do not add a path that re-resolves a saved
-label** (a "cited entries" view over old answers, a trail replay, an evaluation reading old
-results): resolve by `record_id`. Rejected: ordering by load time instead, which would keep labels
-fixed but needs a load timestamp per run that the store does not keep and this branch must not
-write.
+Load time, not the date a run was made. The first draft ordered by when a run was made and
+rejected load time as unrecorded; reading the store while building the loader showed `created_at`
+on every item, one value per run (20 runs, 20 distinct values, 2026-10-15). The store is
+insert-only, so a run loaded later always sorts later and an existing label never moves — even when
+an older run is restored or backfilled, which under the first rule would have taken the bare labels
+(pointed out by the seeding session, 2026-10-15).
+
+**A label is still never resolved again.** Load order is stable while the store is only added to;
+a store *rebuilt* by loading its runs in another order would relabel. So the rule stands: nothing
+saved is ever looked up by its label — the item id is the key, and the saved label records what the
+reader was shown. **Do not add a path that re-resolves a saved label** (a "cited entries" view over
+old answers, a trail replay, an evaluation reading old results): resolve by `record_id`.
 
 **Saved records.** `Entry.record_id` returns `harvest.item_id` for a harvested entry and the BNID
 otherwise — one property, so no recorder computes it. Wherever an identifier is *saved* — the

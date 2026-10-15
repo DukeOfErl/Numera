@@ -32,20 +32,22 @@ Options considered:
 Option 4.
 
 - **The label** is `PMCID-n` (`PMC2652108-1`), cited as `[[PMC2652108-1]]`. When a paper has been
-  extracted more than once, the earliest extraction keeps bare labels and the k-th is suffixed
-  `.k` (`PMC2652108-1.2`), runs ordered by when they were made. Each extraction's values stay
-  separate entries; none is merged or dropped. A duplicate label after that rule stops the load.
+  extracted more than once, the extraction loaded first keeps bare labels and the k-th is suffixed
+  `.k` (`PMC2652108-1.2`), runs ordered by when they were loaded into the store
+  (`review_item.created_at`). The store is insert-only, so an existing label never moves. Each
+  extraction's values stay separate entries; none is merged or dropped. A duplicate label after that rule stops the load.
   The citation parser recognises exactly this shape (`citations.LABEL`), and the loader checks every
   label it makes against the same pattern.
 - **The saved id** is the item id. `Entry.record_id` returns it, and every record that is saved —
   the trail's `search` and `entry.retrieved` rows and the question-and-answer record
   `answer.evidence` — carries it beside the label. A corpus-file entry's BNID is both, so those
   records are unchanged for it.
-- **A label is valid for one load and is never resolved again.** Ordering by run date holds only
-  while runs arrive in the order they were made; restoring an older run would give it the bare
-  labels and move the existing ones to `.2`. That is harmless only because nothing saved is ever
-  looked up by its label. Anything that reads old answers — a view of past citations, a trail
-  replay, an evaluation over old results — resolves by the saved id.
+- **A label is never resolved again.** Load order is stable while the store is only added to, but a
+  store rebuilt by loading its runs in another order would relabel them. Ordering by the date a run
+  was made — the first draft — would have relabelled on any restore or backfill of an older run.
+  Either way it is harmless only because nothing saved is ever looked up by its label. Anything
+  that reads old answers — a view of past citations, a trail replay, an evaluation over old
+  results — resolves by the saved id.
 
 `bionumbers.label` names only an integer a BNID; a label is shown as itself.
 
