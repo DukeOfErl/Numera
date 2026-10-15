@@ -887,7 +887,7 @@ The ask agent answers from a curated corpus. The validator goes the other way: f
 question** to the open-access literature, out of which it extracts candidate numbers with their
 verbatim evidence and puts each one in front of a person. It is a prototype, built to be rebuilt
 against what reviewers and papers actually do; what it must get right is the review screen and the
-record it leaves behind ([`proposal.md`](openspec/changes/add-validator-prototype/proposal.md)).
+record it leaves behind ([`proposal.md`](openspec/changes/archive/2026-10-15-add-validator-prototype/proposal.md)).
 
 Three commands and a page:
 

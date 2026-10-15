@@ -72,7 +72,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-user-identity` | `0780`–`0830` — all written |
 | `add-question-and-answer-records` | `0840`–`0870` |
 | `add-open-enrolment` | `0880`–`0920` — `0880`, `0890`, `0900` written |
-| `add-validator-prototype` | `0930`–`0990` — `0930`, `0940`, `0950`, `0960`, `0970`, `0980`, `0990` written: block full, widen before the next. Its first three, written as `0900`–`0920`, collided with `add-open-enrolment` on `dev` and were renumbered `1520`, `1530`, `1540` on 2026-10-07, inside `add-harvest-prototype`'s block |
+| `add-validator-prototype` | `0930`–`0990` — all written, block full; archived 2026-10-15. Its first three, written as `0900`–`0920`, collided with `add-open-enrolment` on `dev` and were renumbered `1520`, `1530`, `1540` on 2026-10-07, inside `add-harvest-prototype`'s block |
 | `add-hosted-tracing` | `1000`–`1040` — clear of `0880`–`0940`, spent on other branches |
 | `add-one-way-in` | `1100`–`1140` — `1100`, `1110` written; archived 2026-09-29 |
 | `add-account-withdrawal` | `1150`–`1190` — `1150` written; archived 2026-09-29 |
