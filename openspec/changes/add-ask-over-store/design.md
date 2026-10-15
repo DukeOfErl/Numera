@@ -94,9 +94,19 @@ the saved id is stable by construction; the label is not, because a re-extractio
 
 **Labels.** `f"{pmcid}-{n}"`, `n` being the claim's counter within its run. The loader groups a
 paper's items by run, orders runs by creation time, and gives the first run bare labels and the
-k-th run `f"{pmcid}-{n}.{k}"`. Runs are only ever added, and a later run cannot sort before an
-earlier one, so a label once given keeps naming the same value. All 452 are bare today (no paper
-has two runs). A duplicate label after this rule is a bug, and stops the load by name.
+k-th run `f"{pmcid}-{n}.{k}"`. All 452 are bare today (no paper has two runs). A duplicate label
+after this rule is a bug, and stops the load by name.
+
+**A label is valid for one load and is never resolved again.** Ordering by creation time is stable
+only while runs arrive in the order they were made. A restore, a backfill, or a run copied in from
+`~/scinumbers-data/runs` can add a run older than one already loaded; it then takes the bare labels
+and the existing entries become `.2` (pointed out by the seeding session, 2026-10-15). That is
+harmless only because nothing saved is ever looked up by its label — the item id is the key, and
+the saved label records what the reader was shown. **Do not add a path that re-resolves a saved
+label** (a "cited entries" view over old answers, a trail replay, an evaluation reading old
+results): resolve by `record_id`. Rejected: ordering by load time instead, which would keep labels
+fixed but needs a load timestamp per run that the store does not keep and this branch must not
+write.
 
 **Saved records.** `Entry.record_id` returns `harvest.item_id` for a harvested entry and the BNID
 otherwise — one property, so no recorder computes it. Wherever an identifier leaves the process —

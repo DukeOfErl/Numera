@@ -56,8 +56,13 @@ value.
 Where one paper has been extracted more than once, each extraction's values SHALL be separate
 entries — never merged, never silently dropped — and SHALL receive distinct labels: the earliest
 extraction keeps `PMC2652108-1`, and each later one is told apart by a suffix in the order the
-extractions were made (`PMC2652108-1.2`). Extractions are only ever added to the store, so a label
-once given keeps naming the same value.
+extractions were made (`PMC2652108-1.2`).
+
+A label is valid only within the load it was given in. An older extraction restored or copied in
+later can shift a paper's labels, so a label shown in an earlier answer may name a different value
+after a reload. Nothing saved SHALL ever be resolved again by its label; a saved answer is resolved
+by the store's identifier it holds, and the label beside it is a record of what the reader was
+shown.
 
 A cited label that resolves to no loaded entry SHALL be reported as such, never matched to the
 nearest one. Two loaded values with the same label SHALL stop the load with a message naming the
@@ -83,6 +88,12 @@ label; by the rule above it cannot happen, and if it does a guess would cite the
 - **WHEN** an answer citing a harvested value was saved, and the same paper is extracted again
 - **THEN** the saved answer still names the value it cited, by the store's identifier
 - **AND** that identifier still resolves to the value as it was when the answer was given
+
+#### Scenario: An older extraction arrives later
+- **WHEN** an answer was saved citing a value, and an extraction of the same paper made earlier than
+  that value's is then added to the store and loaded
+- **THEN** the labels of that paper may shift
+- **AND** the saved answer still resolves, by the store's identifier, to the value it cited
 
 #### Scenario: A label that names nothing
 - **WHEN** an answer cites a label no loaded entry carries

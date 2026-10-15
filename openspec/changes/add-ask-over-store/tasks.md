@@ -53,7 +53,8 @@ some of the store's papers are NC/ND. The real store is read only in local check
       A duplicate label (forced in the fixture) stops the load naming it; missing or unreadable
       store → a `CorpusUnavailable` naming what was configured, nothing substituted
 - [ ] 3.7 A record saved citing the first run's value, then a reload with the second run added:
-      the saved item id still resolves to the first run's value. A cited label no loaded entry
+      the saved item id still resolves to the first run's value; and with an *older* run added
+      later (labels shift), the saved item id still resolves to the value it cited. A cited label no loaded entry
       carries is reported unknown, never matched to a near one
 - [ ] 3.8 A test that the loaded entries carry none of: the review's test text (`second`),
       `distractor_type`, `property_asked`, any reviewer's comment, issue or value read — asserted
