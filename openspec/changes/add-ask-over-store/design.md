@@ -191,17 +191,25 @@ A presentation module (beside `entries_table`) owns the scale:
 | `AI` | ★☆☆☆☆ |
 | `NONE` | ☆☆☆☆☆ |
 
-`◊` after the stars marks a simulated tier; `⚠` marks a dispute. Both qualify the *tier*, so they
+`$` after the stars marks a simulated tier; `⚠` marks a dispute. Both qualify the *tier*, so they
 travel with the stars — beside a citation in the prose and in the trust column alike. A legend under
-the answer states the scale, `◊` and `⚠`. `None` trust renders as the empty string. (`†` was the
-first choice and is taken: it already means "no measurement method recorded".)
+the answer states the scale, `$` and `⚠`. `None` trust renders as the empty string. (`†` was the
+first choice and is taken: it already means "no measurement method recorded". `$` was chosen by
+the user, for its likeness to an *s*.)
+
+`$` needs care on the web: Streamlit's markdown reads a `$` as the start of inline mathematics, and
+an answer that also mentions a cost would pair the two and typeset what lies between. `as_text`
+already escapes `$` in text the drivers write; the `$` this module puts inside the citation
+superscript is inserted *after* that escaping, so it is written as the HTML entity `&#36;`, which
+markdown does not read as a delimiter. A reader may also take `$` for a price in an app that shows
+spend; the legend says what it means wherever it appears.
 
 **In the web app, the stars go inside the citation's grey superscript.** On `dev` the web driver
 already draws an answer's citations as grey superscripts (ADR-1240, `web.answer_markdown`): a run of
 `[[nnnnnn]]` becomes one `<sup>` with its identifiers comma-separated, after escaping. This branch's
 base predates that merge, which is why the first draft of this design said `[[id]]` — the design was
 read against a stale `web.py`. Built on `dev`, the superscript carries each identifier followed by
-its stars and tier marks — one `<sup>` holding `100002 ★★★★★, PMC2652108-1 ★★★☆☆◊⚠` — all in the
+its stars and tier marks — one `<sup>` holding `100002 ★★★★★, PMC2652108-1 ★★★☆☆$⚠` — all in the
 same grey, smaller size.
 Two changes to `answer_markdown` follow:
 
@@ -239,7 +247,7 @@ Two marks are added to `Row.markers()` for harvested entries, each with a legend
 | `?` | the value could not be read with certainty; the paper's text is shown (`reading_uncertain`, D4) |
 | `∴` | calculated, not measured — by the paper's authors or from values published elsewhere |
 
-The tier marks (`◊`, `⚠`) stay with the stars and do not go in this column: they qualify the tier,
+The tier marks (`$`, `⚠`) stay with the stars and do not go in this column: they qualify the tier,
 not the entry's value, and splitting them from the stars would leave the stars unqualified.
 
 The side panel's one-line collapsed label (`web._row_label`) is not a table and keeps its prefix.
@@ -265,6 +273,25 @@ The imports are confined to `store_corpus.py` and the presentation module, so a 
 never imports `bionumbers`. The reverse rule (`bionumbers` core never imports `scinumbers_ask`)
 is untouched. An ADR records the direction and why (one rule, one parser).
 
+## Checked against `dev` (2026-10-15)
+
+This branch's base is 134 commits behind `dev`. Every module this design names was compared
+between the common ancestor (`f934cfe`) and `dev`:
+
+| Module | On `dev` | Effect on this design |
+|---|---|---|
+| `corpus`, `citations`, `tools`, `repository`, `entries_table`, `cli`, `trace` | unchanged | none — D1–D6a stand as written |
+| `web.py` | grey superscript citations (ADR-1240), the door, sign-in | D6 rewritten to put the stars inside the superscript; `_CITATION_RUN` reads digits only and must be widened. The entries table and its markers are unchanged, so D6a stands |
+| `door_demo.py` | new; its own copy of the superscript pattern, for two recorded BNID-only answers | untouched: the door shows recorded examples, no store and no stars |
+| `agent.py` | the stream runs inside `hosted_trace.Isolated`; the tracer is attached per question | none for the agent's logic; see the tracer below |
+| `hosted_trace.py` | new: Langfuse, off unless `SCINUMBERS_TRACING=langfuse` (ADR-1000–1020) | when on, the model's inputs — tool results included — go to Langfuse Cloud, so paper passages from the store would too, as BioNumbers text does today. Nothing is changed for it; it is stated in ADR-1600 so the choice is visible. Reviewer text cannot reach it, because it never reaches the model (spec) |
+| `test_driver_independence.py` | `HARNESS`, `PRESENTATION` and `IDENTITY_FREE` widened | the new presentation module joins `PRESENTATION`; `store_corpus` is core |
+| `evaluation.py`, `eval_cli.py` | tracer cost and approval | the store refusal (6.3) goes in `eval_cli` beside them |
+| `pyproject.toml` | `langfuse` in `ask`, test tooling | none beyond naming `pydantic` |
+| `messages.py`, `feedback.py`, `trail_store.py`, `accounts.py`, new `enrol`/`pending`/`first_use`/`neon` | sign-in, enrolment, notices | none |
+| `docs/roadmap.md` | other sections | this branch's additions are in "Deferred, deliberately"; a textual merge at rebase, no conflict of substance |
+| `openspec/specs/grounded-answering`, `corpus-query` | unchanged | the deltas apply as written |
+
 ## Risks / Trade-offs
 
 - **The store moves under us** (entry-review keeps writing) → read once at start; tiers are a
@@ -275,7 +302,7 @@ is untouched. An ADR records the direction and why (one rule, one parser).
   → `value_text` is always what is shown; the parsed numbers only feed search and unit comparison.
 - **Base branch is rebased again** (onto `dev` after harvest/review merge) → no code depends on a
   commit hash; rebase before implementing past the loader.
-- **Shown tiers are simulated** → `◊` on every simulated tier and the legend, per ADR-0960.
+- **Shown tiers are simulated** → `$` on every simulated tier and the legend, per ADR-0960.
 
 ## Migration Plan
 

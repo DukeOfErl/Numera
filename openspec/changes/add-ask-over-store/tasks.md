@@ -15,7 +15,8 @@ some of the store's papers are NC/ND. The real store is read only in local check
 - [ ] 1.2 Name `pydantic` in the `ask` extra; add a test that importing `scinumbers_ask.corpus`,
       `repository`, `tools` and `agent` with a corpus file does not import `bionumbers` (D8)
 - [ ] 1.3 ADR-1600: the ask package depends on `bionumbers` for the tier rule and the value
-      parser — the direction, the import footprint measured, the alternatives rejected (D8)
+      parser — the direction, the import footprint measured, the alternatives rejected (D8); and
+      that with hosted tracing on, store passages reach the tracer as corpus text does today
 
 ## 2. Entry and identifiers
 
@@ -85,14 +86,16 @@ some of the store's papers are NC/ND. The real store is read only in local check
 
 ## 5. Stars on both drivers
 
-- [ ] 5.1 Presentation module: tier → stars per D6's table, `◊` for simulated, `⚠` for disputed,
+- [ ] 5.1 Presentation module: tier → stars per D6's table, `$` for simulated, `⚠` for disputed,
       empty for `None`, and the legend text; add it to `PRESENTATION` in
       `test_driver_independence.py`
 - [ ] 5.2 Web: `answer_markdown`'s citation run reads every form `citations` reads (built from
       `citations.DELIMITED`, not a second pattern), so `[[PMC2652108-1]]` becomes a superscript; each
       identifier in the superscript is followed by its stars and tier marks. Terminal: stars after
       each `[[id]]`. The stored and recorded answer text is unchanged; stars the model wrote do not
-      change the tier shown; with no store both drivers draw exactly what they drew before
+      change the tier shown; with no store both drivers draw exactly what they drew before. The `$`
+      in a superscript is `&#36;`: a test with an answer that also states a cost shows both, and
+      no mathematics
 - [ ] 5.3 Entries table: a trust column on CLI and web; the legend under the answer whenever any
       shown entry has a tier; nothing shown for a corpus file
 - [ ] 5.3a Caveat column (D6a): markers move from the property's prefix to a narrow first column
