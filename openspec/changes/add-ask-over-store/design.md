@@ -191,25 +191,24 @@ A presentation module (beside `entries_table`) owns the scale:
 | `AI` | ★☆☆☆☆ |
 | `NONE` | ☆☆☆☆☆ |
 
-`$` after the stars marks a simulated tier; `⚠` marks a dispute. Both qualify the *tier*, so they
+`#` after the stars marks a simulated tier; `⚠` marks a dispute. Both qualify the *tier*, so they
 travel with the stars — beside a citation in the prose and in the trust column alike. A legend under
-the answer states the scale, `$` and `⚠`. `None` trust renders as the empty string. (`†` was the
-first choice and is taken: it already means "no measurement method recorded". `$` was chosen by
-the user, for its likeness to an *s*.)
+the answer states the scale, `#` and `⚠`. `None` trust renders as the empty string. (`†` was the
+first choice and is taken: it already means "no measurement method recorded". `#` came next and
+was dropped: Streamlit reads it as the start of inline mathematics, and a reader could take it for a
+price in an app that shows spend. `#` was the user's choice after that.)
 
-`$` needs care on the web: Streamlit's markdown reads a `$` as the start of inline mathematics, and
-an answer that also mentions a cost would pair the two and typeset what lies between. `as_text`
-already escapes `$` in text the drivers write; the `$` this module puts inside the citation
-superscript is inserted *after* that escaping, so it is written as the HTML entity `&#36;`, which
-markdown does not read as a delimiter. A reader may also take `$` for a price in an app that shows
-spend; the legend says what it means wherever it appears.
+`#` needs one escape on the web: legend lines begin with their mark and are drawn with
+`st.caption`, which renders markdown, so a line starting `# ` would become a heading. The legend
+line is written `\#`. Inside the citation superscript a `#` sits mid-line and markdown leaves it
+alone; in the terminal and in the dataframe cells it is plain text.
 
 **In the web app, the stars go inside the citation's grey superscript.** On `dev` the web driver
 already draws an answer's citations as grey superscripts (ADR-1240, `web.answer_markdown`): a run of
 `[[nnnnnn]]` becomes one `<sup>` with its identifiers comma-separated, after escaping. This branch's
 base predates that merge, which is why the first draft of this design said `[[id]]` — the design was
 read against a stale `web.py`. Built on `dev`, the superscript carries each identifier followed by
-its stars and tier marks — one `<sup>` holding `100002 ★★★★★, PMC2652108-1 ★★★☆☆$⚠` — all in the
+its stars and tier marks — one `<sup>` holding `100002 ★★★★★, PMC2652108-1 ★★★☆☆#⚠` — all in the
 same grey, smaller size.
 Two changes to `answer_markdown` follow:
 
@@ -247,7 +246,7 @@ Two marks are added to `Row.markers()` for harvested entries, each with a legend
 | `?` | the value could not be read with certainty; the paper's text is shown (`reading_uncertain`, D4) |
 | `∴` | calculated, not measured — by the paper's authors or from values published elsewhere |
 
-The tier marks (`$`, `⚠`) stay with the stars and do not go in this column: they qualify the tier,
+The tier marks (`#`, `⚠`) stay with the stars and do not go in this column: they qualify the tier,
 not the entry's value, and splitting them from the stars would leave the stars unqualified.
 
 The side panel's one-line collapsed label (`web._row_label`) is not a table and keeps its prefix.
@@ -302,7 +301,7 @@ between the common ancestor (`f934cfe`) and `dev`:
   → `value_text` is always what is shown; the parsed numbers only feed search and unit comparison.
 - **Base branch is rebased again** (onto `dev` after harvest/review merge) → no code depends on a
   commit hash; rebase before implementing past the loader.
-- **Shown tiers are simulated** → `$` on every simulated tier and the legend, per ADR-0960.
+- **Shown tiers are simulated** → `#` on every simulated tier and the legend, per ADR-0960.
 
 ## Migration Plan
 
