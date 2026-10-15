@@ -10,6 +10,18 @@ any release; `1.0.0` when it stabilizes.
 
 ## [Unreleased]
 
+### Changed
+
+- **Citations in an answer are grey superscripts.** A run of `[[nnnnnn]]` is drawn as one small grey superscript, its identifiers comma-separated, so the prose reads through them; the stored answer, the trail and the evaluation still use `[[nnnnnn]]`. HTML is turned on for these alone, after the answer is escaped, in one function (`web.answer_markdown`). Same style as the sign-in door's demo (ADR-1240).
+- The test loop's default is three parallel workers, not six: six is faster with memory free but was killed for lack of memory once on an 8 GB machine, mid-commit. `SCINUMBERS_TEST_WORKERS` still overrides. See ADR-1300.
+- The test loop is two tiers. A commit runs only the tests it reaches (pytest-testmon), falling back to the full suite when a staged file is not Python under `src/` or `tests/` and is not known to be read by no test; push, merge and CI run the full suite in parallel (pytest-xdist, six workers by default). `bin/testloop.py` carries both. `uv run pre-commit install` again in an existing clone to pick up the push and merge hooks.
+
+### Fixed
+
+- The commit hook no longer fails a commit made from a worktree. Git sets `GIT_DIR` for its hooks, and `bin/testloop.py` handed it on to pytest, so every test asking git about a temporary directory got an answer about this repository: 61 false failures whenever the full suite ran. Pytest now starts without the variables `git rev-parse --local-env-vars` names.
+- The first-use notice's window follows GitHub's real schedule: it looks back to the start of the previous successful run (plus six minutes) instead of a fixed 70 minutes, which saw about a quarter of arrivals because the "hourly" schedule fires every 4-7 hours. The command's own default is now seven hours. See ADR-1290.
+- The keepalive no longer reports a failure when a page reload lands mid-poll after waking the app, installs its browser from the same pinned Playwright it then runs under (`--install-browser`), runs on `ubuntu-24.04` rather than the floating `ubuntu-latest` that migrates to Ubuntu 26 on 2026-10-19, and its comments no longer promise a per-run failure mail.
+
 ### Added
 
 - **A validator prototype: from a property question to reviewed numbers** (`bionumbers`,
@@ -45,6 +57,167 @@ any release; `1.0.0` when it stabilizes.
   XML is now recognised from the response body rather than a 404 status, because the service
   answers 500 today; and the article check reads the root element rather than searching for
   `<article`, which an HTML error page also contains.
+- The first-use check sends one message after seven days with nothing delivered, saying it found no new readers (with its own time and how many checks completed), so a quiet week can be told apart from a broken check. Measured from the standing issue's last comment; the command itself still prints nothing when nobody is new. See ADR-1350.
+- `scinumbers-first-use`, and an hourly workflow that runs it: the operator is told once per reader when they are first seen signing in and when they first ask a question (one line when both fall in the same window), by a comment on one standing issue that opens with an @mention of the owner, and hears nothing when nobody is new. It holds a read-only database role (`sql/first_use_reader.sql`), not the Neon API key. `keepalive-digest` now also covers this workflow, so a failing or silent run is reported once a day. See ADR-1250 to ADR-1280.
+- An hourly keepalive (`.github/workflows/keepalive.yml`, `bin/keepalive.py`): a headless browser visits the deployed app, clicks the sleep screen's button if it is showing, and fails unless the door renders, so Community Cloud's 12-hour hibernation no longer costs the first reader a cold start. A scheduled workflow runs from `main` only, so it starts once merged there. A daily `keepalive-digest` workflow replaces GitHub's per-run failure mail with one comment on a standing issue, and also reports a day with no runs at all.
+
+### Changed
+
+- **The door says why there is a door, and offers one way in.** It reads "Use of
+  this app is by invitation only since you are using the developer's budget" — the
+  button already says what to do, and a stranger needs the reason. The Google button
+  is withdrawn because Auth0 signs a reader in with their Google account anyway, so
+  the remaining button says just "Sign in". **The Google client stays configured and
+  none of the multi-provider machinery is removed**; which providers the door draws
+  is one tuple, and restoring it is that tuple
+  ([ADR-1100](docs/decisions/1100-one-way-in-with-the-others-kept.md)).
+
+### Fixed
+
+- **The privacy policy now names every store and every recipient.** It said the
+  material is kept in a hosted Postgres database, while the conversation's own
+  checkpoints and the trail's log file sit on the app's filesystem — so a reader
+  exercising the deletion right it grants would have had their database rows
+  removed and those files left. Its list of services named the four the code calls
+  by name and missed the three it does not: the host (Streamlit Community Cloud),
+  the provider behind the provider (Google, which Auth0 federates sign-in to), and
+  those two files. Google was the omission that mattered most, being the party whose
+  consent screen the policy exists to satisfy.
+
+- **The policy is reachable from the session-cap page too.** That page refuses a
+  reader *after* their sign-in has been recorded, and it was the one door with no
+  statement on it.
+
+- **A sign-in button's label follows the number of buttons**, rather than being
+  written for today's arrangement. Auth0's label had been shortened to "Sign in" in
+  place, which made the promise that restoring the Google button is one tuple false:
+  it would have drawn "Sign in with Google" beside an unqualified "Sign in".
+
+- **A provider configured without its `client_id` is reported.** Half a credential
+  in the secrets box is invisible to `providers()`, so the door widened back to the
+  withdrawn Google button with nothing said in the app or the trail. It still widens
+  — a door with no button is never right — but the operator is now told.
+
+- **An address that nothing could ever match can no longer be enrolled.** A
+  trailing newline off a heredoc, or spaces off a pasted line, went into the
+  accounts table verbatim — producing an account that exists, is enabled, looks
+  right in every listing that prints it unquoted, and admits nobody, because no
+  provider will assert a claim that matches it. The person meets "not enrolled",
+  the operator sees their row sitting there, and neither side is told why.
+  Surrounding whitespace is now trimmed; whitespace or a control character inside
+  an address, or something that is not an address at all, is refused with a
+  sentence that quotes it so an invisible character is visible. The guard is in
+  `accounts.insert`, so every caller gets it, and in `enrol` before the key is
+  minted, so a typo costs no live call.
+
+### Added
+
+- **The sign-in door shows what is behind it.** Under the button, an example
+  plays on a loop: a question is typed into a mock input letter by letter, and a
+  real answer streams back. The first example takes back the last three words of
+  its question and retypes them as a comparison with budding yeast. It is headed
+  "What can SciNumbers do?". Each finished answer stays up for 7 s with the caret
+  blinking, so a visitor can see the next question is coming. Every example is a
+  question actually put to the agent and its answer, shortened for the door with
+  every edit recorded beside it. Reduced motion shows each example whole. The third
+  example shows cell volumes across mouse cell types as a text chart. The figures
+  come from a live run, but the chart is drawn by a script, because the model drew
+  every bar of one in the wrong place; a red note says charts are an upcoming feature. Citations on the door are grey superscripts, a run of them comma-separated, and every example ends "*The app itself provides full citations" (ADR-1240)
+  (ADR-1200, ADR-1210, ADR-1220, ADR-1230).
+
+- **Enrolling an address that was withdrawn says so**, rather than "already
+  enrolled" — which is true of a withdrawn row and reads as though the person has
+  access. It names the state and the next step, in one line.
+  Reinstating from the command is deferred deliberately: as a side effect of
+  enrolling, a mistyped address matching a withdrawn one would issue a credential
+  nobody meant to.
+
+- **`scinumbers-withdraw`, one command to end one account's access.** It disables
+  the row and revokes the credential at OpenRouter, in that order — either alone
+  leaves access open, since a key held in the clear and handed to a tester can be
+  spent without the app, and a revoked key under an admitted account reads as the
+  app being broken. The row is kept rather than deleted, so the trail rows that
+  account wrote keep their attribution. This needed a new column: OpenRouter
+  deletes a key by a handle returned once, at creation, which enrolment used for
+  its compensating revoke and then discarded
+  ([ADR-1150](docs/decisions/1150-withdrawing-an-account-keeps-the-row.md)).
+
+
+- **The page says what is kept about a reader, in full.** Every door carries a
+  collapsed statement: what is recorded, what it is used for, which services it
+  passes through, how long it is kept, and where to write to see it or have it
+  deleted. **Every** door, so a visitor who has not signed in — and a reader who was
+  refused, whose address the attempt already recorded — can read it. Not the side
+  panel, which is where a reader works. It is served by the app at its own address
+  rather than by a second host, because the door was always the public page
+  ([ADR-1110](docs/decisions/1110-the-privacy-policy-is-the-door-itself.md)).
+
+- **A successful sign-in is recorded.** The trail held only refusals at the door, so
+  "nobody tried today" and "everybody got in" looked the same, and a reader who
+  signed in without asking anything left no trace of having got through. It is
+  written once per arrival and carries the account and role like every other record
+  of a signed-in session.
+
+- **`scinumbers-pending`, a daily check for readers stuck at the door.** It reads
+  the trail for people who said their confirmation email never came and for
+  verified accounts waiting to be enrolled, and **prints nothing when nothing is
+  waiting** — which is what makes it usable from `cron`, since a monitor that
+  reports a quiet day every morning is one whose output stops being read. A problem
+  that resolved itself stops appearing, and nothing is tracked to achieve that:
+  whether a reader got past verification is derived from records the app already
+  writes, and whether an account is enrolled is read from the accounts table rather
+  than inferred from the reader returning — which they may never do.
+
+- **The sign-in buttons can be put in any order.** A provider is "the default",
+  and therefore drawn first, only because its credentials sit among `[auth]`'s own
+  keys; moving them into a sub-table of its own makes it an ordinary named
+  provider and secrets order decides. A secrets change with no code change, and
+  the Google button keeps its label either way.
+
+- **Sign-in with any address, not only a Google one.** Any OpenID Connect
+  provider is a sub-table in secrets and gets its own button on the door; the
+  Google client stays exactly where it was, and a tester who signs in through a
+  second provider keeps the role and the conversation they had, because the
+  address is the identity
+  ([ADR-0880](docs/decisions/0880-a-second-provider-beside-the-first.md)).
+
+- **A refused operator credential says which one and what to do.** A 401 or 403
+  from OpenRouter names the management key and where to make a new one, and adds
+  the consequence nobody guesses: the same key withdraws a tester's credential,
+  so that stops working too while it is refused. One from Neon names
+  `NEON_API_KEY` and `NEON_PROJECT_ID` rather than blaming the branch name. Any
+  other status is still reported as itself, because a 502 read as an expired key
+  sends the operator to replace a key that is fine. The README also says where
+  to keep those three values, and why not on the command line or in `~/.bashrc`.
+
+- **README says where the console scripts are and how to reach them.** `uv sync`
+  installs them into the project's virtualenv rather than onto `PATH`, so a bare
+  `scinumbers-enrol` is `command not found` until you say otherwise — the three
+  ways are listed, and the table notes that `bionumbers` is a declared entry
+  point for a package this repository does not yet contain.
+
+- **`scinumbers-enrol`, one command to enrol a tester.** It mints a capped
+  OpenRouter key and inserts the accounts row in one step, naming the database
+  branch every time and resolving it through Neon's API so no database URL is
+  kept on disk. Nothing is issued without a positive cap, an address already
+  enrolled keeps its row, and a key minted for a row that could not be written is
+  withdrawn again
+  ([ADR-0900](docs/decisions/0900-enrolment-mints-then-inserts-and-compensates.md)).
+
+
+- **Hosted tracing to Langfuse Cloud, off unless the project says so.** With
+  `SCINUMBERS_TRACING=langfuse` and the three Langfuse keys, each question becomes
+  one trace — its model turns, tool calls, tokens and timings — whose id is derived
+  from the question's own identifier, so a trail row or a rating leads straight to
+  it. Readers appear only as an opaque per-account digest; ratings are copied as
+  scores; evaluation runs are tagged `eval`. Anything short of the setting sends
+  nothing, and a tracer that fails costs traces and never an answer
+  ([ADR-1000], [ADR-1010], [ADR-1020]).
+- **An evaluation run shows the tracer's monthly usage and its own estimated cost
+  before asking anything,** and waits for a typed `yes` when more than half the
+  free allowance is used, when the run would not fit, or when a figure cannot be
+  counted. Anything else ends it with nothing asked or recorded.
+
 - **The SciNumbers mark, beside the page's title** — on the conversation and on
   the sign-in and refusal pages, so the app looks like itself before a reader is
   admitted. Inlined rather than linked, so its strokes take the reader's own text
@@ -85,6 +258,25 @@ any release; `1.0.0` when it stabilizes.
   each tester's credential already bounds ([ADR-0790]).
 
 ### Changed
+
+- **The unverified-address refusal is a way back in, not a dead end.** It asks the
+  reader to confirm their address and offers one button to continue with — no
+  signing out and no password to retype, because a fresh login through the same
+  provider is enough. Sign out stays beside it, as the only way back for someone
+  who signed in with the wrong address.
+
+- **A reader whose confirmation email never arrived can say so**, and the request
+  reaches the durable trail where the operator finds it (`sql/signin.sql`, which
+  also lists those who gave up without asking, and the enrolment queue). Nothing is
+  sent from the app: resending needs a provider credential that could also create
+  accounts, which is not a trade worth making for one message.
+
+- **Only an address the identity provider says it has verified is admitted**, and
+  a provider that says nothing counts as unverified. Where sign-up is open this is
+  the one thing standing between an enrolled tester and anyone who registers their
+  address. The refusal has its own sentence, separate from "not enrolled", because
+  the reader's next step is different
+  ([ADR-0890](docs/decisions/0890-only-a-verified-address-opens-the-door.md)).
 
 - **The default model is `anthropic/claude-opus-4.7`**, where it was
   `anthropic/claude-haiku-4.5`. Development ran on a cheap instruction-follower
@@ -158,6 +350,11 @@ any release; `1.0.0` when it stabilizes.
   shows what the model provider says is left on that tester's key.
 
 ### Fixed
+
+- **`LANGSMITH_TRACING` no longer sends anything.** `langsmith` arrives with
+  `langchain-core`, and that one variable, set by anyone, used to ship prompts and
+  corpus text to a third party. It is now refused inside the agent for every caller
+  ([ADR-1010]).
 
 - A session pruned for idleness and returned to kept drawing "signed in as" while
   recording no account at all; identity is re-established on every rerun.
@@ -507,3 +704,6 @@ number rather than an error:
 [ADR-0950]: docs/decisions/0950-harvest-first-ask-later.md
 [ADR-1500]: docs/decisions/1500-a-domain-is-a-scope-in-the-user-turn.md
 [ADR-1510]: docs/decisions/1510-the-curated-tier-admits-only-undoubted-entries.md
+[ADR-1000]: docs/decisions/1000-langfuse-cloud-eu-over-langsmith.md
+[ADR-1010]: docs/decisions/1010-tracing-is-a-project-setting.md
+[ADR-1020]: docs/decisions/1020-attribution-is-an-opaque-digest-attached-by-the-driver.md

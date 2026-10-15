@@ -13,6 +13,12 @@
 # files came to be unformatted while `ruff check` stayed green. Both say 0.16.6, and
 # the tree was formatted by 0.16.6; 0.16.3, the version installed when this landed,
 # agrees on every file here, which is how the pin was chosen without a flag day.
+# `pre-commit install` with no flags installs these three, so one install covers the
+# commit hook and the two full-suite ones. A checkout that installed before they were
+# added needs `uv run pre-commit install` again -- the hooks live in `.git/hooks`,
+# which worktrees share, so once per clone.
+default_install_hook_types: [pre-commit, pre-push, pre-merge-commit]
+
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.6
@@ -41,3 +47,34 @@ repos:
     hooks:
       - id: check-added-large-files
         args: [--maxkb=1024]
+
+  # The test loop, in two tiers. See `bin/testloop.py` for the reasoning; the short
+  # version is that testmon makes a commit cheap by running only what the change
+  # reaches, and is blind to files a test merely reads, so it is never the last word.
+  #
+  # `language: system` and not a mirror, unlike ruff above: tests need this project's
+  # own environment. That is the cost the ruff comment warns about, paid here
+  # deliberately, and `bin/testloop.py` is stdlib-only and says "NOT RUN" rather than
+  # failing in the checkout that has no venv -- so the first person to commit from
+  # there is told, not blocked into disabling the hook.
+  - repo: local
+    hooks:
+      - id: testloop-commit
+        name: tests the change reaches (testmon; full suite if a non-Python file changed)
+        entry: bin/testloop.py commit
+        language: system
+        pass_filenames: true
+        require_serial: true
+        verbose: true
+      # The full suite, in parallel, where a mistake leaves the machine or lands on
+      # an integration branch. CI runs the same thing on the pushed commit; this
+      # catches it a minute earlier and without a round trip.
+      - id: testloop-full
+        name: full test suite (parallel)
+        entry: bin/testloop.py full
+        language: system
+        pass_filenames: false
+        always_run: true
+        require_serial: true
+        verbose: true
+        stages: [pre-push, pre-merge-commit]

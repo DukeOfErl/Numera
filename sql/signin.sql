@@ -1,0 +1,48 @@
+-- Who is stuck at the door, and who asked for help.
+--
+-- Read against the branch the deployment writes to (`[connections.usage]`), not a
+-- development one. These are queries only; nothing here changes a row.
+--
+-- **Two populations, and only one of them is a problem.** Every reader is
+-- unverified for the minute between signing up and clicking the link, so
+-- `signin.unverified` on its own is a list of people who are mostly fine. The
+-- request is the signal: it fires when somebody says the email never arrived.
+
+-- 1. Asked for the confirmation email again. **Act on these.** Resend from the
+--    identity provider's dashboard -- for Auth0, User Management → Users → the
+--    user → Actions → Send Verification Email -- then nothing here needs updating,
+--    because the door reads the provider's claim and not this table.
+--
+-- select detail->>'email' as address,
+--        min(at) as first_asked,
+--        max(at) as last_asked,
+--        count(*) as times
+-- from trail
+-- where event = 'signin.resend_requested'
+-- group by 1
+-- order by max(at) desc;
+
+-- 2. Stuck and never asked. Seen unverified more than once, over more than a day,
+--    and never admitted since -- somebody who gave up rather than complained, which
+--    is the group a request-only view cannot see. Wider than query 1 on purpose,
+--    and noisier: read it occasionally, not as an alert.
+--
+-- select detail->>'email' as address,
+--        count(*) as refusals,
+--        min(at) as first_seen,
+--        max(at) as last_seen
+-- from trail
+-- where event = 'signin.unverified'
+-- group by 1
+-- having count(*) > 1
+--    and max(at) - min(at) > interval '1 day'
+-- order by max(at) desc;
+
+-- 3. Signed in, verified, and not enrolled: the enrolment queue. These are people
+--    who got through the provider and are waiting on `scinumbers-enrol`.
+--
+-- select detail->>'email' as address, min(at) as first_tried, max(at) as last_tried
+-- from trail
+-- where event = 'signin.refused'
+-- group by 1
+-- order by max(at) desc;

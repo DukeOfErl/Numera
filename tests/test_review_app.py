@@ -326,7 +326,7 @@ def test_with_identity_configured_a_visitor_not_signed_in_sees_the_door_and_no_i
     page, monkeypatch
 ):
     monkeypatch.setattr(web, "identity_configured", lambda: True)
-    monkeypatch.setattr(web, "signed_in_email", lambda: None)
+    monkeypatch.setattr(web, "signed_in_claims", lambda: None)
 
     at = page.run()
 
