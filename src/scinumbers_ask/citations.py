@@ -29,11 +29,12 @@ import re
 from typing import TYPE_CHECKING
 
 from .bionumbers import cross_references, occurrences
+from .corpus import EntryId
 
 if TYPE_CHECKING:
     from .trace import QuestionTrace
 
-__all__ = ["DELIMITED", "FORM", "citations", "cross_references", "format_citation"]
+__all__ = ["DELIMITED", "FORM", "LABEL", "citations", "cross_references", "format_citation"]
 
 # The delimiters are the whole contract. Nothing about the identifier's shape is
 # asserted here -- `[^\[\]]+` is "whatever is between them" -- so the only thing a
@@ -45,7 +46,24 @@ __all__ = ["DELIMITED", "FORM", "citations", "cross_references", "format_citatio
 DELIMITED = re.compile(r"\[\[([^\[\]]+)\]\]")
 
 
-def format_citation(entry_id: int) -> str:
+#: A harvested value's label: the paper's PMCID and the value's number within its extraction, with
+#: a suffix telling a later extraction of the same paper apart (`PMC2652108-1.2`, ADR-1610). The one
+#: identifier shape this file knows, because a label holds two digit runs and the rules below refuse
+#: exactly that. The store's loader checks every label it makes against this pattern, so the form
+#: written and the form read cannot drift.
+LABEL = re.compile(r"PMC\d+-\d+(?:\.\d+)?")
+
+
+def _identifier(part: str) -> EntryId | None:
+    """One identifier, or None: all digits is a number, a label is itself, the rest is neither."""
+    if part.isdigit():
+        return int(part)
+    if LABEL.fullmatch(part):
+        return part
+    return None
+
+
+def format_citation(entry_id: EntryId) -> str:
     """The form the model is asked to write, and the only form this file promises."""
     return f"[[{entry_id}]]"
 
@@ -63,7 +81,7 @@ FORM = format_citation(100002)
 _LIST = re.compile(r"\s*(?:,|;|&|\band\b)\s+")
 
 
-def _identifiers(inner: str) -> tuple[int, ...] | None:
+def _identifiers(inner: str) -> tuple[EntryId, ...] | None:
     """The identifiers inside one pair of delimiters, or None if it holds none.
 
     Plural, because a model listing entries writes `[[100002, 100003]]` without
@@ -89,13 +107,14 @@ def _identifiers(inner: str) -> tuple[int, ...] | None:
     reading the 1 out of it would invent one.
     """
     text = inner.strip()
-    if text.isdigit():
-        return (int(text),)
-    parts = [part.strip() for part in _LIST.split(text)]
-    # `> 1` cannot fail here -- a single all-digit part would have returned above --
+    single = _identifier(text)
+    if single is not None:
+        return (single,)
+    parts = [_identifier(part.strip()) for part in _LIST.split(text)]
+    # `> 1` cannot fail here -- a single readable part would have returned above --
     # but it states what a list is, and a reader should not have to prove that.
-    if len(parts) > 1 and all(part.isdigit() for part in parts):
-        return tuple(int(part) for part in parts)
+    if len(parts) > 1 and all(part is not None for part in parts):
+        return tuple(parts)
     # Not redundant with the tolerance in `citations`, though it looks it: that union
     # would find this identifier anyway. What this prevents is the group being
     # *recorded as unparsable* while its identifier is counted -- a trace line saying
@@ -104,7 +123,7 @@ def _identifiers(inner: str) -> tuple[int, ...] | None:
     return marked or None
 
 
-def citations(text: str, *, trace: QuestionTrace | None = None) -> tuple[int, ...]:
+def citations(text: str, *, trace: QuestionTrace | None = None) -> tuple[EntryId, ...]:
     """Identifiers cited in a piece of text, in order, without repeats.
 
     Order is kept because it is the order a reader meets them in, which is the
@@ -113,7 +132,7 @@ def citations(text: str, *, trace: QuestionTrace | None = None) -> tuple[int, ..
     a citation the reader met first after every citation written the other way.
     """
     text = text or ""
-    found: list[tuple[int, int]] = []
+    found: list[tuple[int, EntryId]] = []
     for match in DELIMITED.finditer(text):
         group = _identifiers(match.group(1))
         if group is None:
@@ -128,7 +147,7 @@ def citations(text: str, *, trace: QuestionTrace | None = None) -> tuple[int, ..
         # their written order among the citations around them.
         found.extend((match.start() + offset, entry_id) for offset, entry_id in enumerate(group))
     found.extend(occurrences(text))
-    seen: dict[int, None] = {}
+    seen: dict[EntryId, None] = {}
     # Plain tuple order: position first, and the identifier only where two share a
     # position, which cannot happen. An explicit key here was equivalent, and
     # mutation testing could not tell the two apart -- which is the finding.

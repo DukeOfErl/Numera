@@ -30,6 +30,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from . import run_ledger
 from .citations import FORM, citations
 from .config import Config, NotConfigured, format_usd, warning_for
+from .corpus import EntryId, entry_key
 from .events import (
     Answer,
     AnswerEntries,
@@ -386,7 +387,7 @@ def _middleware(gate: SpendGate) -> list:
 class _Retrieved:
     """What a question put in front of the model, and how much it passed over."""
 
-    entry_ids: dict[int, None] = field(default_factory=dict)
+    entry_ids: dict[EntryId, None] = field(default_factory=dict)
     matched: int = 0
     searches: int = 0
 
@@ -402,13 +403,13 @@ def _collect(retrieved: _Retrieved, event: Retrieval) -> None:
         retrieved.matched += int(event.detail["matched"])
         retrieved.searches += 1
     for entry_id in event.detail.get("entry_ids") or ():
-        retrieved.entry_ids.setdefault(int(entry_id), None)
+        retrieved.entry_ids.setdefault(entry_key(entry_id), None)
     # Both keys are required. `found` alone is not a fetch marker: list_values
     # reports how many vocabulary values it found under the same key, and reading
     # a entry_id off that raises.
     entry_id = event.detail.get("entry_id")
     if entry_id is not None and event.detail.get("found"):
-        retrieved.entry_ids.setdefault(int(entry_id), None)
+        retrieved.entry_ids.setdefault(entry_key(entry_id), None)
 
 
 def _persisted(saver: SqliteSaver, session_id: str) -> dict:
@@ -558,10 +559,16 @@ class AskAgent:
                 # Cited and retrieved stay separable: "the answer stood on this"
                 # and "this was in front of it" are different statements, and
                 # merging them cannot be undone by a query.
+                #
+                # A harvested entry's label is valid for one load only, so the store's
+                # id goes beside it: a saved answer is resolved by that, never by the
+                # label (ADR-1610). Absent for a corpus file, whose BNIDs are both.
+                saved = self._repo.saved_ids((*event.cited, *event.retrieved))
                 trace.record(
                     "answer.evidence",
                     cited=list(event.cited),
                     retrieved=list(event.retrieved),
+                    **({"saved_ids": saved} if saved else {}),
                 )
             yield event
 

@@ -169,7 +169,8 @@ def test_the_repository_exposes_no_way_to_change_the_corpus(repo):
     asked organism" with the same resolution `search` uses -- comparing the strings
     instead would score a search for "E. coli" as not a search for "Escherichia
     coli", reporting the resolution's success as the agent's failure. Neither
-    touches the corpus.
+    touches the corpus. `saved_ids` reads the store's id for a harvested label, so a
+    record can carry the id that never moves (ADR-1610).
     """
     public = [n for n in dir(repo) if not n.startswith("_")]
     assert sorted(public) == [
@@ -177,6 +178,7 @@ def test_the_repository_exposes_no_way_to_change_the_corpus(repo):
         "get",
         "resolve_organism",
         "resolve_property",
+        "saved_ids",
         "search",
         "vocabulary",
     ]
@@ -347,3 +349,13 @@ def test_resolution_is_what_search_uses_not_a_copy_of_it(repo):
         found = repo.search(organism=term)
         stored = {row.organism for row in found.rows}
         assert stored <= repo.resolve_organism(term)
+
+
+def test_an_identifier_sent_as_text_reaches_the_entry_it_names(repo):
+    """The tool's argument is typed string-or-number so a label can be sent (ADR-1610); a model
+    may then send a BNID as text, and a lookup keyed by the integer must still find it."""
+    some = next(iter(repo.search(limit=1).rows)).entry_id
+    assert isinstance(some, int)
+    assert repo.get(str(some)).entry.entry_id == some
+    assert repo.get(f" {some} ").entry.entry_id == some
+    assert repo.get("PMC2652108-1") is None

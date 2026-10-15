@@ -14,6 +14,7 @@ import textwrap
 from dataclasses import dataclass
 
 from . import bionumbers
+from .corpus import EntryId
 from .repository import CorpusRepository
 from .units import dimensions_of
 
@@ -114,7 +115,7 @@ def _topic_words(text: str) -> frozenset[str]:
 
 @dataclass(frozen=True)
 class Row:
-    entry_id: int
+    entry_id: EntryId
     property: str
     organism: str
     value: str
@@ -153,7 +154,7 @@ class Row:
         return str(getattr(self, field))
 
 
-def _relevance(repo: CorpusRepository, cited: tuple[int, ...], question: str):
+def _relevance(repo: CorpusRepository, cited: tuple[EntryId, ...], question: str):
     """Score an uncited entry by how much of the topic's wording its property shares.
 
     The topic is the question plus the properties of the entries the answer cited:
@@ -173,7 +174,7 @@ def _relevance(repo: CorpusRepository, cited: tuple[int, ...], question: str):
         if found is not None:
             vocabulary |= _topic_words(found.entry.property)
 
-    def score(entry_id: int) -> int:
+    def score(entry_id: EntryId) -> int:
         found = repo.get(entry_id)
         if found is None:  # pragma: no cover - filtered before scoring
             return 0
@@ -185,8 +186,8 @@ def _relevance(repo: CorpusRepository, cited: tuple[int, ...], question: str):
 
 def rows_for(
     repo: CorpusRepository,
-    cited: tuple[int, ...],
-    retrieved: tuple[int, ...],
+    cited: tuple[EntryId, ...],
+    retrieved: tuple[EntryId, ...],
     question: str = "",
 ) -> tuple[Row, ...]:
     """Cited entries first, then the rest by how close their wording is to the topic.
@@ -197,7 +198,7 @@ def rows_for(
     corpus's own identifier order and so carries no relevance at all -- it is what
     put a 490 um chromosome in the top five of a question about a 1 um cell.
     """
-    ordered: list[int] = [b for b in cited if repo.get(b) is not None]
+    ordered: list[EntryId] = [b for b in cited if repo.get(b) is not None]
     seen = set(ordered)
     rest = []
     for entry_id in retrieved:

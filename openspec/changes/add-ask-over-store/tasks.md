@@ -20,19 +20,19 @@ some of the store's papers are NC/ND. The real store is read only in local check
 
 ## 2. Entry and identifiers
 
-- [ ] 2.1 `EntryId = int | str`; widen every entry-identifier annotation (`repository.get`,
+- [x] 2.1 `EntryId = int | str`; widen every entry-identifier annotation (`repository.get`,
       `tools.get_entry`, `trace`, `events`, `scoring`); suite green with no behaviour change
-- [ ] 2.2 `Harvest` and `Condition` records, and `Entry.harvest` / `Entry.trust` defaulting to
+- [x] 2.2 `Harvest` and `Condition` records, and `Entry.harvest` / `Entry.trust` defaulting to
       `None`; a corpus-file load yields both `None` (D2)
-- [ ] 2.3 `citations` reads `[[PMC2652108-1]]` and `[[PMC2652108-1.2]]` as string labels, before
+- [x] 2.3 `citations` reads `[[PMC2652108-1]]` and `[[PMC2652108-1.2]]` as string labels, before
       the digit rules; tests for both forms, a list of two, a mixed list with a BNID, and that
       `[[PMC1-2-3]]` and `[[Table 1]]` are still refused (D3)
-- [ ] 2.4 `bionumbers.label` labels only integers as BNIDs; a string identifier is shown as itself
+- [x] 2.4 `bionumbers.label` labels only integers as BNIDs; a string identifier is shown as itself
 - [ ] 2.5 `Entry.record_id`: the store's item id for a harvested entry, the BNID otherwise. The
       `Answer` event, the trail's per-entry rows and the question-and-answer records write
       `record_id` with the label beside it; a test per record kind that a harvested citation is
       saved under its item id, and that a corpus-file run's records are unchanged
-- [ ] 2.6 ADR-1610: two identifiers — a short label the model types, the store's item id that is
+- [x] 2.6 ADR-1610: two identifiers — a short label the model types, the store's item id that is
       saved; the suffix rule for re-extractions; the full-id, integer-range and refuse-on-duplicate
       alternatives and why they lost (D3)
 

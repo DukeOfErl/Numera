@@ -11,10 +11,11 @@ one tool call -- and would bury the few relevant entries among the rest.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from .bionumbers import cross_references
-from .corpus import Entry
+from .corpus import Entry, EntryId, entry_key
 from .trace import QuestionTrace
 
 DEFAULT_LIMIT = 50
@@ -28,7 +29,7 @@ MAX_LIMIT = 200
 class CompactRow:
     """What search returns: enough to choose, not enough to answer from."""
 
-    entry_id: int
+    entry_id: EntryId
     property: str
     organism: str
     value: str
@@ -116,9 +117,10 @@ class CorpusRepository:
             # Otherwise search would show two rows for one identifier while get()
             # returned only the last, so the agent would cite one entry and read
             # another's data.
-            seen: set[int] = set()
+            seen: set[EntryId] = set()
             repeated = sorted(
-                {e.entry_id for e in entries if e.entry_id in seen or seen.add(e.entry_id)}
+                {e.entry_id for e in entries if e.entry_id in seen or seen.add(e.entry_id)},
+                key=str,
             )
             raise ValueError(f"corpus contains repeated identifiers: {repeated[:5]}")
         self._organisms = Counter(e.organism for e in entries if e.organism)
@@ -141,6 +143,20 @@ class CorpusRepository:
 
     def __len__(self) -> int:
         return len(self._entries)
+
+    def saved_ids(self, entry_ids: Iterable[EntryId]) -> dict[str, str]:
+        """For each harvested entry among `entry_ids`, its label and the store's id for it.
+
+        What a record writes beside the labels it lists, so the record can be resolved later by the
+        id that never moves (ADR-1610). Empty for a corpus-file entry, whose BNID is both, so a
+        corpus-file run's records are exactly what they were.
+        """
+        out: dict[str, str] = {}
+        for entry_id in entry_ids:
+            entry = self._by_id.get(entry_key(entry_id))
+            if entry is not None and entry.harvest is not None:
+                out[str(entry.entry_id)] = entry.harvest.item_id
+        return out
 
     # -- search -----------------------------------------------------------
 
@@ -172,6 +188,7 @@ class CorpusRepository:
         rows = tuple(_compact(e) for e in matched[:limit])
         result = SearchResult(rows=rows, total_matched=len(matched))
         if trace is not None:
+            saved = self.saved_ids(row.entry_id for row in rows)
             trace.record(
                 "search",
                 property=property,
@@ -182,6 +199,7 @@ class CorpusRepository:
                 entry_ids=[row.entry_id for row in rows],
                 truncated=result.truncated,
                 organism_resolved_to=sorted(resolved) if resolved else None,
+                **({"saved_ids": saved} if saved else {}),
             )
         return result
 
@@ -247,7 +265,8 @@ class CorpusRepository:
 
     # -- retrieval --------------------------------------------------------
 
-    def get(self, entry_id: int, *, trace: QuestionTrace | None = None) -> FullEntry | None:
+    def get(self, entry_id: EntryId, *, trace: QuestionTrace | None = None) -> FullEntry | None:
+        entry_id = entry_key(entry_id)
         entry = self._by_id.get(entry_id)
         if entry is None:
             if trace is not None:
@@ -261,5 +280,6 @@ class CorpusRepository:
         # a fact about this corpus rather than about a citation.
         cited = tuple(sorted(set(cross_references(entry.quotation_text))))
         if trace is not None:
-            trace.record("entry.retrieved", entry_id=entry_id, cited_ids=list(cited))
+            saved = {"saved_id": entry.harvest.item_id} if entry.harvest is not None else {}
+            trace.record("entry.retrieved", entry_id=entry_id, cited_ids=list(cited), **saved)
         return FullEntry(entry=entry, cited_ids=cited)

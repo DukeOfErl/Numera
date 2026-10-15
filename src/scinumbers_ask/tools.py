@@ -147,7 +147,7 @@ def build_tools(
             )
         return "\n".join(out)
 
-    def get_entry(entry_id: int) -> str:
+    def get_entry(entry_id: int | str) -> str:
         if not afford("get_entry", {"entry_id": entry_id}):
             return EXHAUSTED
         found = repo.get(entry_id, trace=trace)

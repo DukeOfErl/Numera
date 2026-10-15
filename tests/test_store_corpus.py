@@ -40,3 +40,14 @@ def test_a_corpus_file_run_never_imports_the_validator_package():
         f"repository.CorpusRepository(corpus.load({str(FIXTURES / 'corpus_sample.jsonl')!r}))\n"
     )
     assert loaded == set()
+
+
+def test_a_corpus_file_entry_carries_no_harvest_and_no_tier():
+    """D2: both parts are None for a corpus-file entry, which is how a surface tells "never
+    reviewed" from "reviewed, and no one approved"."""
+    from scinumbers_ask import corpus
+
+    entries = corpus.load(FIXTURES / "corpus_sample.jsonl")
+    assert entries
+    assert all(e.harvest is None and e.trust is None for e in entries)
+    assert all(e.record_id == e.entry_id for e in entries)

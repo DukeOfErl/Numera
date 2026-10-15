@@ -109,9 +109,13 @@ fixed but needs a load timestamp per run that the store does not keep and this b
 write.
 
 **Saved records.** `Entry.record_id` returns `harvest.item_id` for a harvested entry and the BNID
-otherwise — one property, so no recorder computes it. Wherever an identifier leaves the process —
-the `Answer` event's `cited` and `retrieved`, the trail's per-entry rows, the question-and-answer
-records — it is written as `record_id`, with the label beside it for a reader. Resolution from
+otherwise — one property, so no recorder computes it. Wherever an identifier is *saved* — the
+trail's `search` and `entry.retrieved` rows, and the question-and-answer record `answer.evidence` —
+the store's id is written beside the label (`saved_ids: {label: item_id}`, or `saved_id` on a single
+entry), by `CorpusRepository.saved_ids`, so no recorder computes it. Absent for a corpus-file entry,
+whose BNID is both, so those records are unchanged. The in-process events (`AnswerEntries`,
+`CitationWarning`) keep labels: they are read by the drivers against the repository as loaded, which
+is exactly the scope a label is valid in. Resolution from
 label to entry happens once, in the agent, against the repository as loaded, at the point
 `citations()` returns: a label naming nothing is `unknown`, as today; nothing is matched loosely.
 
