@@ -201,7 +201,8 @@ already draws an answer's citations as grey superscripts (ADR-1240, `web.answer_
 `[[nnnnnn]]` becomes one `<sup>` with its identifiers comma-separated, after escaping. This branch's
 base predates that merge, which is why the first draft of this design said `[[id]]` — the design was
 read against a stale `web.py`. Built on `dev`, the superscript carries each identifier followed by
-its stars and tier marks: `¹⁰⁰⁰⁰² ★★★★★, PMC2652108-1 ★★★☆☆◊⚠`, all in the same grey, smaller size.
+its stars and tier marks — one `<sup>` holding `100002 ★★★★★, PMC2652108-1 ★★★☆☆◊⚠` — all in the
+same grey, smaller size.
 Two changes to `answer_markdown` follow:
 
 - `_CITATION_RUN` matches `\[\[\d+\]\]` only, so a `[[PMC2652108-1]]` citation would be left as
