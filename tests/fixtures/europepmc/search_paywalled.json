@@ -1,0 +1,190 @@
+{
+ "version": "6.9",
+ "hitCount": 1,
+ "request": {
+  "queryString": "EXT_ID:6771086 AND SRC:MED",
+  "internalQuery": "EXT_ID:6771086 AND SRC:MED",
+  "resultType": "CORE",
+  "cursorMark": "*",
+  "pageSize": 25,
+  "sort": "",
+  "synonym": false
+ },
+ "resultList": {
+  "result": [
+   {
+    "id": "6771086",
+    "source": "MED",
+    "pmid": "6771086",
+    "title": "Otitis media with effusion: an allergic disease?",
+    "authorString": "Bernstein JM.",
+    "authorList": {
+     "author": [
+      {
+       "fullName": "Bernstein JM",
+       "firstName": "J M",
+       "lastName": "Bernstein",
+       "initials": "JM"
+      }
+     ]
+    },
+    "journalInfo": {
+     "issue": "4",
+     "volume": "6",
+     "journalIssueId": 311287,
+     "dateOfPublication": "1980 Apr",
+     "monthOfPublication": 4,
+     "yearOfPublication": 1980,
+     "printPublicationDate": "1980-04-01",
+     "journal": {
+      "title": "Comprehensive therapy",
+      "medlineAbbreviation": "Compr Ther",
+      "issn": "0098-8243",
+      "isoabbreviation": "Compr Ther",
+      "nlmid": "7605837"
+     }
+    },
+    "pubYear": "1980",
+    "pageInfo": "15-21",
+    "publicationStatus": "ppublish",
+    "language": "eng",
+    "pubModel": "Print",
+    "pubTypeList": {
+     "pubType": [
+      "Comparative Study",
+      "Journal Article"
+     ]
+    },
+    "meshHeadingList": {
+     "meshHeading": [
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Animals"
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Haplorhini"
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Humans"
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Hearing Loss, Sensorineural",
+       "meshQualifierList": {
+        "meshQualifier": [
+         {
+          "abbreviation": "ET",
+          "qualifierName": "etiology",
+          "majorTopic_YN": "N"
+         }
+        ]
+       }
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Otitis Media",
+       "meshQualifierList": {
+        "meshQualifier": [
+         {
+          "abbreviation": "CO",
+          "qualifierName": "complications",
+          "majorTopic_YN": "Y"
+         },
+         {
+          "abbreviation": "IM",
+          "qualifierName": "immunology",
+          "majorTopic_YN": "Y"
+         },
+         {
+          "abbreviation": "PA",
+          "qualifierName": "pathology",
+          "majorTopic_YN": "N"
+         },
+         {
+          "abbreviation": "PP",
+          "qualifierName": "physiopathology",
+          "majorTopic_YN": "N"
+         }
+        ]
+       }
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Hypersensitivity",
+       "meshQualifierList": {
+        "meshQualifier": [
+         {
+          "abbreviation": "DI",
+          "qualifierName": "diagnosis",
+          "majorTopic_YN": "Y"
+         }
+        ]
+       }
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Immunoglobulin E",
+       "meshQualifierList": {
+        "meshQualifier": [
+         {
+          "abbreviation": "AN",
+          "qualifierName": "analysis",
+          "majorTopic_YN": "N"
+         }
+        ]
+       }
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Radioallergosorbent Test"
+      },
+      {
+       "majorTopic_YN": "N",
+       "descriptorName": "Child"
+      }
+     ]
+    },
+    "chemicalList": {
+     "chemical": [
+      {
+       "name": "Immunoglobulin E",
+       "registryNumber": "37341-29-0"
+      }
+     ]
+    },
+    "subsetList": {
+     "subset": [
+      {
+       "code": "IM",
+       "name": "Index Medicus"
+      }
+     ]
+    },
+    "isOpenAccess": "N",
+    "inEPMC": "N",
+    "inPMC": "N",
+    "hasPDF": "N",
+    "hasBook": "N",
+    "hasSuppl": "N",
+    "citedByCount": 3,
+    "hasData": "N",
+    "hasReferences": "N",
+    "hasTextMinedTerms": "Y",
+    "hasDbCrossReferences": "N",
+    "hasLabsLinks": "N",
+    "hasEvaluations": "N",
+    "authMan": "N",
+    "epmcAuthMan": "N",
+    "nihAuthMan": "N",
+    "hasTMAccessionNumbers": "N",
+    "dateOfCompletion": "1980-09-23",
+    "dateOfCreation": "1980-04-01",
+    "firstIndexDate": "2008-01-29",
+    "dateOfRevision": "2006-11-15",
+    "firstPublicationDate": "1980-04-01"
+   }
+  ]
+ }
+}

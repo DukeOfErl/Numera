@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article article-type="research-article">
+  <front><article-meta>
+    <article-id pub-id-type="pmc">2</article-id>
+    <title-group><article-title>A paragraph that wraps a table</article-title></title-group>
+  </article-meta></front>
+  <body>
+    <sec><title>Results</title>
+      <p>Doubling times are given below.
+        <table-wrap id="T1"><label>Table 1</label>
+          <table>
+            <thead><tr><th>Medium</th><th>Doubling time (min)</th></tr></thead>
+            <tbody>
+              <tr><th>Glucose</th><td>39 ± 1</td></tr>
+              <tr><th>Acetate</th><td>55 ± 2</td></tr>
+            </tbody>
+          </table>
+        </table-wrap>
+        The glucose figure agrees with earlier work.</p>
+    </sec>
+  </body>
+</article>

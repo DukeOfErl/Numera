@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article article-type="research-article">
+  <front><article-meta>
+    <title-group><article-title>Headers that span</article-title></title-group>
+  </article-meta></front>
+  <body>
+    <sec><title>Results</title>
+      <table-wrap id="T1"><label>Table 1</label>
+        <table>
+          <thead>
+            <tr><th rowspan="2">Strain</th><th colspan="2">Doubling time (min)</th></tr>
+            <tr><th>Glucose</th><th>Acetate</th></tr>
+          </thead>
+          <tbody>
+            <tr><th rowspan="2">MG1655</th><td>39</td><td>55</td></tr>
+            <tr><td>41</td><td>57</td></tr>
+          </tbody>
+        </table>
+      </table-wrap>
+    </sec>
+  </body>
+</article>

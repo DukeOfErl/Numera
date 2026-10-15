@@ -72,6 +72,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-user-identity` | `0780`–`0830` — all written |
 | `add-question-and-answer-records` | `0840`–`0870` |
 | `add-open-enrolment` | `0880`–`0920` — `0880`, `0890`, `0900` written |
+| `add-validator-prototype` | `0930`–`0990` — `0930`, `0940`, `0950` written. Its first three, written as `0900`–`0920`, collided with `add-open-enrolment` on `dev` and were renumbered `1520`, `1530`, `1540` on 2026-10-07, inside `add-harvest-prototype`'s block |
 | `add-hosted-tracing` | `1000`–`1040` — clear of `0880`–`0940`, spent on other branches |
 | `add-one-way-in` | `1100`–`1140` — `1100`, `1110` written; archived 2026-09-29 |
 | `add-account-withdrawal` | `1150`–`1190` — `1150` written; archived 2026-09-29 |
@@ -79,6 +80,8 @@ what let the blocks drift: no branch can see another's copy.
 | `add-first-use-notice` | `1250`–`1290` — all written |
 | `speed-up-test-loop` | `1300`–`1340` — `1300` written |
 | `add-first-use-heartbeat` | `1350`–`1390` — `1350` written |
+| `add-harvest-prototype` | `1500`–`1590` — `1500`, `1510` written, and `1520`–`1540` hold the validator's renumbered three; archived 2026-10-15; clear of every block on `dev` and the branches as of 2026-10-07 (highest `1350`–`1390`) |
+| `harden-harvest` | `1700`–`1740` — reserved 2026-10-15, after `add-ask-over-store`'s `1600`–`1690` on `feat/ask-over-store` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets
@@ -109,7 +112,8 @@ is a description of the code.
 
 Three work packages, three packages under `src/`, one dependency extra each, so no two branches edit
 the same source tree: `bionumbers_ingest` (`ingest`), `scinumbers_ask` (`ask`), `bionumbers`
-(`validator`). The ingester and the ask agent are both here; the validator is not yet.
+(`validator`). All three are here now; the validator is a prototype (ADR-1520) and is described in
+its own subsection below.
 
 A fourth extra, `eval`, is **additive to `ask` rather than a package of its own**: the evaluation
 harness lives in `scinumbers_ask` because it is an adapter over that agent, and the extra carries only
@@ -224,6 +228,14 @@ batches several into one hop; `question_ceiling` and `run_budget` bound spend;
 `CONVERSATION_BOUND` bounds a session's tokens. Each is configured where it binds
 and reported when it is reached (ADR-0180).
 
+### `bionumbers` — the validator prototype
+
+A **fixed pipeline, not an agent** (ADR-1520): discovery → fetch → JATS reader → one structured
+extraction call → mechanical quote check → one retry → one second-text call → JSONL → Postgres → a
+review page. Its own `CLAUDE.md` lives in `src/bionumbers/` with the module table and the four
+rules a module will not tell you — the dependency direction holds there too, and only `review.py`
+and the root `review_app.py` may import Streamlit or the ask package.
+
 ### `bionumbers_ingest` — the corpus pipeline
 
 A **pipeline**: the two ends are the only modules that know a file format, and
@@ -261,8 +273,10 @@ frontmatter matches, so these cost nothing on a session that never goes near the
 | `streamlit-driver.md` | `streamlit_app.py`, `web.py`, their tests | why some things can only be seen through a whole script run |
 | `identity.md` | `web.py`, `permissions.py`, `authorization.py`, `accounts.py`, their tests | where the refusal lives, what the agent is never handed, how a session is keyed |
 | `lint-and-format.md` | `pyproject.toml`, `.pre-commit-config.yaml`, CI | the pin that must move in two places at once |
+| `validator-prototype.md` | `src/bionumbers/**`, `review_app.py`, its tests and change | verify quietly, report only what fails |
 
-`src/bionumbers_ingest/CLAUDE.md` loads when Claude reads a file in that package
+`src/bionumbers_ingest/CLAUDE.md` and `src/bionumbers/CLAUDE.md` load when Claude reads a file in
+that package
 — the pipeline's shape, and five things one module will not tell you.
 
 Two things deliberately **not** moved. The table above this section says who each

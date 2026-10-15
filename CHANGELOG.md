@@ -18,12 +18,48 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **The validator's quote check no longer passes a wrong value as verified** (code review of 2026-10-15). A quote of a table cell matches only a table cell under the headers it names, so "cell: 39" in a Kd column no longer verifies against "isolated in 1939" elsewhere. A quote that begins or ends on a digit must begin or end where the paper's number does, so "39" is not quoted from "139" or "39.4". A number that ends a sentence ("was 2.4.") is now read. MathML exponents keep their meaning (`10<msup>…8` reads 10⁸, not 108) in the 22 of 130 cached papers that use them, and a formula given as both MathML and TeX is read once. Re-checked against all 2,643 quotes in the demo database: none was a wrong value let through; five quoting a formula now read its exponent marked.
+- **A publisher's terms page is no longer taken for a licence.** A paper's own licence link counts only if it is a Creative Commons licence or public-domain dedication; 10 of 130 cached papers had been credited with `rupress.org/terms` or Nature's editorial policies. None of the demo's papers was affected.
+- **A paper flagged by OpenRouter's moderation fails on its own** instead of stopping the whole run as if the account had been refused.
 - The commit hook no longer fails a commit made from a worktree. Git sets `GIT_DIR` for its hooks, and `bin/testloop.py` handed it on to pytest, so every test asking git about a temporary directory got an answer about this repository: 61 false failures whenever the full suite ran. Pytest now starts without the variables `git rev-parse --local-env-vars` names.
 - The first-use notice's window follows GitHub's real schedule: it looks back to the start of the previous successful run (plus six minutes) instead of a fixed 70 minutes, which saw about a quarter of arrivals because the "hourly" schedule fires every 4-7 hours. The command's own default is now seven hours. See ADR-1290.
 - The keepalive no longer reports a failure when a page reload lands mid-poll after waking the app, installs its browser from the same pinned Playwright it then runs under (`--install-browser`), runs on `ubuntu-24.04` rather than the floating `ubuntu-latest` that migrates to Ubuntu 26 on 2026-10-19, and its comments no longer promise a per-run failure mail.
 
 ### Added
 
+- **A validator prototype: from a property question to reviewed numbers** (`bionumbers`,
+  the `validator` extra). `bionumbers discover` searches Europe PMC for open-access research
+  articles and fetches their XML; `bionumbers extract` makes one structured extraction call per
+  paper under a $2 ceiling, checks every quote mechanically against the paper, and chooses a second
+  text for each claim; `bionumbers load` puts the items in Postgres; `review_app.py` shows a reviewer
+  one claim at a time with two texts and records which fits and whether the value is approved,
+  failing closed on the write ([ADR-1520], [ADR-1530], [ADR-1540], [ADR-0930]). Each text is
+  shown as the paper wrote it, and a table cell brings its whole table, caption included, beneath
+  the two texts ([ADR-0940]). Extraction
+  reaches the model through OpenRouter on its own key, `BIONUMBERS_OPENROUTER_API_KEY`, so the
+  prototype's spend is readable apart from the ask app's.
+- **Harvest mode for the validator** (`bionumbers harvest <run> --pmcids ...`, then `extract`):
+  a run starts from a list of papers, and each is asked once for its reusable numbers in seven
+  classes instead of for one question's answer; every claim is named by its own property and
+  species ([ADR-0950]). The second text is asked never to be another source's value for the same
+  property in the same organism, which is a second answer rather than a wrong one.
+  A value must be a finding: the size of the animals a study happened to use, given to explain a
+  method, is not asked for. Each domain names its own condition fields (a glass: material, preparation, pressure, phase).
+  `--topic` names what the papers are about, for a reviewer to choose by.
+  `--scope biology|organismal|biophysics|chemistry|physics` asks for one domain's classes of value, and the
+  domain is recorded on every claim ([ADR-1500]). A value reported beside others of its kind is
+  named by its condition (growth state, construct, tissue, position), the control by nothing; and
+  every paper and claim records the model the provider says answered, beside the one asked for.
+- **The quote check reads signs**: a value of "−16.6" is no longer verified by a quote reading
+  "16.6", nor "10^-3" by "10^3". None of the 523 claims verified so far changes. Discovery takes a
+  paper's licence from Europe PMC's index as harvest does, and the default model is GPT-6.1 Sol.
+- **The curated tier** (`bionumbers curate`): BioNumbers' yeast and cytoskeleton entries that are
+  measured, referenced and undoubted — 423 of 492 — loaded beside the harvested entries as the
+  top of the trust order ([ADR-1510]).
+- **The Europe PMC client from the feasibility branch, ported and corrected**: an article without
+  XML is now recognised from the response body rather than a 404 status, because the service
+  answers 500 today; and the article check reads the root element rather than searching for
+  `<article`, which an HTML error page also contains.
 - The first-use check sends one message after seven days with nothing delivered, saying it found no new readers (with its own time and how many checks completed), so a quiet week can be told apart from a broken check. Measured from the standing issue's last comment; the command itself still prints nothing when nobody is new. See ADR-1350.
 - `scinumbers-first-use`, and an hourly workflow that runs it: the operator is told once per reader when they are first seen signing in and when they first ask a question (one line when both fall in the same window), by a comment on one standing issue that opens with an @mention of the owner, and hears nothing when nobody is new. It holds a read-only database role (`sql/first_use_reader.sql`), not the Neon API key. `keepalive-digest` now also covers this workflow, so a failing or silent run is reported once a day. See ADR-1250 to ADR-1280.
 - An hourly keepalive (`.github/workflows/keepalive.yml`, `bin/keepalive.py`): a headless browser visits the deployed app, clicks the sleep screen's button if it is showing, and fails unless the door renders, so Community Cloud's 12-hour hibernation no longer costs the first reader a cold start. A scheduled workflow runs from `main` only, so it starts once merged there. A daily `keepalive-digest` workflow replaces GitHub's per-run failure mail with one comment on a standing issue, and also reports a day with no runs at all.
@@ -662,6 +698,15 @@ number rather than an error:
 [ADR-0830]: docs/decisions/0830-the-session-is-keyed-on-the-account-not-the-link.md
 [ADR-0820]: docs/decisions/0820-one-agent-per-session-handed-a-credential-not-an-identity.md
 [ADR-0840]: docs/decisions/0840-what-a-question-s-trail-keeps.md
+
+[ADR-1520]: docs/decisions/1520-a-fixed-pipeline-not-an-agent-loop.md
+[ADR-1530]: docs/decisions/1530-named-terminal-states-not-confidence.md
+[ADR-1540]: docs/decisions/1540-the-second-text-always-two-kind-recorded.md
+[ADR-0930]: docs/decisions/0930-the-review-store-fails-closed.md
+[ADR-0940]: docs/decisions/0940-texts-as-written-and-the-whole-table.md
+[ADR-0950]: docs/decisions/0950-harvest-first-ask-later.md
+[ADR-1500]: docs/decisions/1500-a-domain-is-a-scope-in-the-user-turn.md
+[ADR-1510]: docs/decisions/1510-the-curated-tier-admits-only-undoubted-entries.md
 [ADR-1000]: docs/decisions/1000-langfuse-cloud-eu-over-langsmith.md
 [ADR-1010]: docs/decisions/1010-tracing-is-a-project-setting.md
 [ADR-1020]: docs/decisions/1020-attribution-is-an-opaque-digest-attached-by-the-driver.md

@@ -79,5 +79,8 @@ eval-results/
 .coverage.*
 htmlcov/
 
+# Local trial review databases: items carry paper text and are never committed
+*.sqlite
+
 # pytest-testmon database: per checkout, rebuilt from scratch, never shared
 .testmondata*

@@ -197,6 +197,7 @@ Not part of the multi-user push; listed so the board is complete.
 | `add-answer-evaluation` | 23/43 — the evaluation harness and its judged layer |
 | `add-provider-limit-ending` | 29/31 |
 | `add-answer-shape` | 0/10 — an answer leads with its quantitative conclusion |
+| `add-validator-prototype` | in progress — question → Europe PMC → one extraction call per paper → two-text review; `feat/validator-prototype` |
 | `add-door-demo` | archived 2026-10-04 — the sign-in door plays a three-example demo, the third with a script-drawn chart; citations are grey superscripts on the door and in the app (ADR-1210–1240) |
 | _app-drawn charts_ | not proposed — the agent returns numbers and the application draws the chart. A model-drawn text chart misplaced every bar on its own axis (ADR-1210). Deferred by Yoav; the door's third example stands in with a script-drawn chart, to be redrawn by the app when this lands (ADR-1230) |
 
@@ -285,3 +286,5 @@ change that is not happening.
 | Grey thumbs | Cosmetic; the colour rule may not be matching. Raised 2026-09-15 |
 | `ToolCallLimitMiddleware` | Deferred in `add-ask-agent` for unexpected consequences seen in `interv_preper`. Worth re-checking against the stock middleware, since the project prefers the library's own components |
 | Terraform | Mentioned for a Google Cloud deploy; no decision taken |
+| Dashboards over the harvest store (the trust-tier pie chart, with its total, and the review dashboards) | Their own work package and branch, off whichever of `feat/simulated-review` or `dev` holds `bionumbers.tiers` (ADR-0990) by then; kept out of the harvest and review merges. The pie's rule is settled: an issue or a disapproval is its own slice, removed from the tier slices; otherwise the highest approving role; otherwise not yet reviewed; curated on top. Open: whether curated entries stay in the chart. Mockup: https://claude.ai/artifact/KKB2Y2xgzbJAnaqJv1HS9X. Raised 2026-10-15 |
+| Harvest beyond Europe PMC: arXiv and bioRxiv/medRxiv | Harvest fetches only Europe PMC JATS for a PMCID, which misses most physics (arXiv) and preprints. Three MCP servers to look at first: `preprint-fulltext` (bioRxiv/medRxiv/arXiv via Europe PMC, openRxiv S3 and ar5iv; a licence on every record; BSD-3, v0.1.0, young), `arxiv-toolkit` (arXiv as Markdown by section; MIT) and `cyanheads/pubmed-mcp-server` (PMC → Europe PMC → Unpaywall; Apache-2.0; the most mature, and a candidate tool for the ask agent). Any new source must still pass the licence gate per paper. Tracked in scout. Raised 2026-10-15 |

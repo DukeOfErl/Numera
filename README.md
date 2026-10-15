@@ -881,6 +881,61 @@ layer — a model separating an answer into claims — is deferred to `add-judge
 hand-labelled reference a judge must be validated against came back 29 sound of 30, and cannot gate
 anything.
 
+## The validator prototype (`bionumbers`)
+
+The ask agent answers from a curated corpus. The validator goes the other way: from a **property
+question** to the open-access literature, out of which it extracts candidate numbers with their
+verbatim evidence and puts each one in front of a person. It is a prototype, built to be rebuilt
+against what reviewers and papers actually do; what it must get right is the review screen and the
+record it leaves behind ([`proposal.md`](openspec/changes/add-validator-prototype/proposal.md)).
+
+Three commands and a page:
+
+```bash
+uv sync --extra ask --extra validator          # the review page imports the ask app's sign-in door
+export BIONUMBERS_OPENROUTER_API_KEY=...       # its own OpenRouter key, so its spend is readable apart from the ask app's
+
+bionumbers discover "doubling time" --organism "Escherichia coli" --since 2015 --limit 20
+bionumbers extract <run-id> --ceiling 2 --budget 40
+bionumbers status <run-id>
+bionumbers load <run-id> --db-url "$BIONUMBERS_REVIEW_DB_URL"   # after applying sql/review.sql once
+streamlit run review_app.py
+```
+
+- **Harvest** is the other way in (ADR-0950): `bionumbers harvest <run-id> --pmcids PMC1,PMC2`
+  starts a run from papers chosen ahead of any question, and `extract` then asks each one for
+  the numbers worth reusing, at most twenty per paper. `--scope` names the domain whose classes
+  of value are wanted — `biology` (the default, cells and molecules), `organismal` (bodies,
+  physiology, life history, genomes), `biophysics`, `chemistry` or `physics`
+  (ADR-1500).
+- **Curate** loads BioNumbers' own entries as the top trust tier, beside the harvested ones:
+  `bionumbers curate --corpus ~/bionumbers/bionumbers.jsonl` keeps the yeast and cytoskeleton
+  entries that are measured and referenced and that nothing in the record marks doubtful — no
+  fused or one-sided range, a readable unit, no "rule of thumb" (ADR-1510).
+- **Discover** searches Europe PMC for open-access research articles with a PMCID — reviews,
+  editorials, comments and preprints excluded by metadata — fetches each paper's JATS XML into
+  `data/europepmc/`, and records the licence. A paper without XML is recorded with the status the
+  service gave, never as an error and never as "states nothing".
+- **Extract** reads each paper into passages (table cells carry their headers; citation markers stay
+  visible as `[ref N]`) and makes **one** structured call per paper — the paper in a cached prefix,
+  no tools, no agent loop. Every quote is checked mechanically against the paper; a failure goes
+  back to the model once, a second failure drops the claim. A second call picks the other text a
+  reviewer will see. Each paper ends in one of six named states; the spend ceiling is **$2 per
+  paper** and the call that would cross it is not made.
+- **The review page** shows one claim at a time: the question, the value as the paper states it,
+  the citation, the conditions and method each quoted with where it came from (beside the value,
+  from Methods, by reference, supplementary only, not stated), and **two texts** from the paper,
+  each as the paper wrote it with nothing in it emphasised. When a text is a table cell, the whole
+  table is drawn beneath the two texts with its caption, both texts' cells marked alike. The
+  reviewer must choose which text fits the value and, separately, approve or disapprove. The second
+  text is a distractor or a second legitimate occurrence; which it was is stored and never shown.
+  Decisions are written the moment they are given and the write fails closed: a reviewer whose
+  decision could not be saved is told so and keeps the item.
+
+What it does not read: supplementary files, figure images, PDFs. What it does not do: verify an
+existing BioNumbers entry (that is `add-grounding-validator`), score reviewer agreement, or route to
+cheaper models. Sequence diagrams: [`architecture.md` §7](docs/diagrams/architecture.md).
+
 ## What it does not do
 
 Nothing writes to the corpus, and no tool can create, modify or delete an entry. The agent does not

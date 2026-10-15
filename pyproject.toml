@@ -18,6 +18,17 @@ validator = [
     "httpx>=0.27",
     "lxml>=5.2",
     "pint>=0.24",
+    # The records every step exchanges (`bionumbers.records`) and the extraction
+    # call's output schema. Already pulled in by `anthropic`; named because the
+    # code imports it directly, and a transitive dependency is one a resolver may
+    # drop.
+    "pydantic>=2.6",
+    # The review page and its store. Same floors as `ask` below, and the same
+    # reasons; a deployment of the review page installs `ask` as well, because
+    # the page imports that package's sign-in door rather than copying it.
+    "streamlit>=1.42",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",
 ]
 ask = [
     "langchain>=1.1",

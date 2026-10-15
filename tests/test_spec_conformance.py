@@ -662,6 +662,187 @@ COVERED: dict[str, tuple[str, ...]] = {
 # Requirements with no test named yet. Listed rather than omitted: the point of this
 # file is that a gap is written down, not that there are none. Completing the
 # mapping is task 10.9.
+# add-validator-prototype.
+COVERED.update(
+    {
+        "An article that is not a research article is set aside after reading its structure": (
+            "test_bionumbers_jats.py::test_the_back_less_brief_report_reads_and_has_no_methods_section",
+            "test_bionumbers_jats.py::test_a_materials_and_methods_section_counts_as_methods",
+            "test_bionumbers_extraction.py::test_a_paper_with_no_methods_section_is_not_sent_to_the_model_at_all",
+        ),
+        "A claim is a value the paper measured, quoted verbatim, with a location": (
+            "test_bionumbers_extraction.py::test_every_quote_that_does_reach_the_record_verifies_against_the_article",
+            "test_bionumbers_extraction.py::test_a_value_the_article_did_not_measure_is_a_candidate_however_it_was_returned",
+            "test_bionumbers_extraction.py::test_the_instruction_gives_the_citation_marker_the_last_word",
+            "test_bionumbers_extraction.py::test_a_right_quote_with_the_right_passage_id_keeps_it",
+            "test_bionumbers_jats.py::test_a_cell_resolves_to_its_headers_plus_its_text",
+            "test_bionumbers_jats.py::test_a_bibliographic_xref_becomes_a_citation_token",
+        ),
+        "Conditions and method are quoted, and each says where it came from": (
+            "test_bionumbers_extraction.py::test_a_condition_the_article_never_states_is_kept_with_no_quote_and_no_location",
+            "test_bionumbers_extraction.py::test_a_claim_whose_value_verifies_is_still_dropped_when_another_of_its_quotes_does_not",
+            "test_bionumbers_extraction.py::test_the_instruction_names_every_category_state_and_condition_field_the_record_has",
+            "test_bionumbers_review.py::test_a_field_the_paper_offloaded_to_another_work_says_so_and_names_it",
+        ),
+        "Each article ends in exactly one named state": (
+            "test_bionumbers_extraction.py::test_every_state_but_unreadable_is_reachable_from_here",
+            "test_bionumbers_extraction.py::test_a_paper_the_model_read_and_found_nothing_in_keeps_the_model_s_reason",
+            "test_bionumbers_extraction.py::test_a_paper_whose_every_claim_was_dropped_says_so_rather_than_saying_the_paper_is_empty",
+            "test_bionumbers_extraction.py::test_a_paper_that_would_cross_its_ceiling_is_not_called_and_keeps_nothing",
+        ),
+        "The model answers from the article, not from what it knows": (
+            "test_bionumbers_extraction.py::test_the_instruction_supplies_no_expected_value_and_no_unit",
+            "test_bionumbers_extraction.py::test_the_instruction_says_that_nothing_to_extract_is_a_correct_answer",
+            "test_bionumbers_extraction.py::test_the_textbook_value_cannot_become_a_claim_because_the_article_never_states_it",
+            "test_bionumbers_extraction.py::test_the_check_for_prior_knowledge_can_fail",
+        ),
+        "What produced a claim is recorded with it": (
+            "test_bionumbers_extraction.py::test_every_claim_and_the_paper_state_carry_what_produced_them",
+            "test_bionumbers_extraction.py::test_an_ending_with_no_claims_is_still_attributed",
+            "test_bionumbers_extraction.py::test_the_instruction_fingerprint_is_the_hash_of_the_instruction",
+        ),
+        "A question is answered from open-access research articles only": (
+            "test_bionumbers_discovery.py::test_excludes_every_publication_type_that_is_not_a_research_article",
+            "test_bionumbers_discovery.py::test_keeps_only_open_access_records_with_a_full_text_source",
+            "test_bionumbers_discovery.py::test_each_dropped_record_is_recorded_with_its_reason",
+            "test_bionumbers_discovery.py::test_keeps_exactly_the_limit_in_the_services_order",
+            "test_bionumbers_discovery.py::test_the_limit_stopping_the_walk_is_recorded",
+            "test_bionumbers_discovery.py::test_records_the_query_it_sent",
+        ),
+        "Full text is fetched or its absence is typed": (
+            "test_bionumbers_discovery.py::test_an_article_is_returned_with_where_it_came_from",
+            "test_bionumbers_discovery.py::test_the_recorded_error_for_an_article_without_xml_is_typed_not_raised",
+            "test_bionumbers_discovery.py::test_the_same_status_with_an_article_body_is_a_service_fault",
+            "test_bionumbers_discovery.py::test_a_second_fetch_makes_no_request",
+            "test_europepmc.py::test_any_error_status_with_a_non_article_body_means_no_xml",
+        ),
+        "The licence travels with the paper": (
+            "test_bionumbers_discovery.py::test_the_document_states_it_in_whichever_layout_its_publisher_uses",
+            "test_bionumbers_discovery.py::test_a_kept_record_carries_what_it_takes_to_cite_it",
+            "test_bionumbers_discovery.py::test_nothing_stated_anywhere_is_unlicensed",
+            "test_bionumbers_store.py::test_no_item_is_loaded_for_an_unlicensed_paper",
+        ),
+        "Discovery is polite to a free service": (
+            "test_bionumbers_discovery.py::test_every_request_carries_the_user_agent",
+            "test_bionumbers_discovery.py::test_a_repeated_search_is_served_from_the_cache",
+            "test_bionumbers_discovery.py::test_pages_by_cursor_from_the_start_mark",
+        ),
+        "Every quote is verified against the article before anything is kept": (
+            "test_bionumbers_quotes.py::test_one_changed_digit_is_refused",
+            "test_bionumbers_quotes.py::test_one_changed_digit_across_inline_markup_is_refused",
+            "test_bionumbers_quotes.py::test_a_paraphrase_is_refused",
+            "test_bionumbers_quotes.py::test_a_changed_unit_is_refused",
+            "test_bionumbers_quotes.py::test_whitespace_alone_never_decides",
+            "test_bionumbers_quotes.py::test_contains_can_fail",
+            "test_bionumbers_extraction.py::test_a_quote_the_article_does_not_contain_is_named_back_to_the_model_once",
+            "test_bionumbers_extraction.py::test_a_quote_that_fails_twice_drops_its_claim_and_leaves_the_others",
+        ),
+        "Spend is bounded per article and per run, and reported": (
+            "test_bionumbers_spend.py::test_the_default_per_paper_ceiling_is_two_dollars",
+            "test_bionumbers_spend.py::test_a_call_crossing_the_paper_ceiling_is_refused",
+            "test_bionumbers_spend.py::test_a_call_crossing_the_run_budget_is_refused_though_the_paper_is_well_under",
+            "test_bionumbers_spend.py::test_projection_prices_output_at_the_requested_maximum",
+            "test_bionumbers_spend.py::test_a_cache_read_is_priced_below_the_same_tokens_uncached",
+            "test_bionumbers_distractor.py::test_a_call_that_would_cross_the_ceiling_is_never_made",
+            "test_bionumbers_extraction.py::test_the_projection_is_asked_of_the_exact_request_before_every_call",
+            "test_bionumbers_extraction.py::test_spend_is_recorded_for_the_paper_in_whatever_state_it_ends",
+        ),
+        "One claim, one item, one screen": (
+            "test_bionumbers_review.py::test_a_table_cell_is_located_by_its_row_and_column_headers",
+            "test_bionumbers_review.py::test_the_value_is_never_emphasised_in_a_text",
+            "test_bionumbers_review.py::test_the_whole_table_is_shown_with_its_label_caption_and_footnotes",
+            "test_bionumbers_review.py::test_both_texts_cells_are_marked_alike_with_their_labels",
+            "test_review_app.py::test_a_cell_s_table_is_drawn_whole_with_its_caption_and_its_cell_marked",
+            "test_bionumbers_review.py::test_a_citation_marker_stays_visible",
+            "test_bionumbers_review.py::test_every_condition_field_is_listed_even_where_the_paper_states_none",
+            "test_bionumbers_review.py::test_the_supporting_text_is_not_always_the_first_one",
+            "test_bionumbers_review.py::test_nothing_the_page_is_given_names_the_second_text_s_kind",
+            "test_review_app.py::test_with_no_identity_configured_an_item_is_shown_with_both_texts",
+            "test_review_app.py::test_nothing_on_the_page_names_the_second_text_s_kind_or_type",
+        ),
+        "The reviewer always chooses between two texts, and separately gives a verdict": (
+            "test_bionumbers_review.py::test_a_verdict_without_a_choice_does_not_complete_the_item",
+            "test_bionumbers_review.py::test_a_choice_without_a_verdict_does_not_complete_the_item",
+            "test_bionumbers_review.py::test_the_chosen_label_is_recorded_as_whether_it_was_the_supporting_text",
+            "test_review_app.py::test_a_verdict_without_a_choice_is_refused_and_the_item_stays",
+            "test_review_app.py::test_a_choice_and_a_verdict_move_to_the_next_item",
+        ),
+        "The second text is a distractor or a second occurrence, and its kind is recorded": (
+            "test_bionumbers_distractor.py::test_an_adjacent_table_row_becomes_the_distractor",
+            "test_bionumbers_distractor.py::test_a_candidate_restating_the_value_is_never_the_item",
+            "test_bionumbers_distractor.py::test_a_converted_restatement_is_refused",
+            "test_bionumbers_distractor.py::test_a_second_occurrence_is_used_when_no_distractor_survives",
+            "test_bionumbers_distractor.py::test_no_admissible_second_text_means_no_item",
+            "test_bionumbers_distractor.py::test_the_kind_and_type_are_on_the_item_and_in_neither_text",
+        ),
+        "What is recorded about an item and a decision": (
+            "test_bionumbers_store.py::test_a_run_loads_its_papers_and_items",
+            "test_bionumbers_store.py::test_a_decision_holds_the_choice_the_verdict_the_comment_the_reviewer_and_a_time",
+            "test_bionumbers_store.py::test_a_decision_without_sign_in_records_no_account_and_nothing_else_differs",
+            "test_bionumbers_store.py::test_a_decision_that_cannot_reach_the_database_raises_with_the_cause",
+            "test_bionumbers_store.py::test_a_failure_of_any_kind_becomes_a_refusal_and_is_never_swallowed",
+            "test_review_app.py::test_a_decision_the_store_refuses_is_reported_and_the_item_stays",
+        ),
+        "Items are served so that every item is reviewed and none twice by the same reviewer": (
+            "test_bionumbers_store.py::test_an_item_a_reviewer_has_decided_is_not_offered_to_them_again",
+            "test_bionumbers_store.py::test_an_item_one_reviewer_has_decided_is_still_offered_to_another",
+            "test_bionumbers_store.py::test_items_are_served_interleaved_across_papers",
+            "test_bionumbers_store.py::test_remaining_counts_down_for_the_reviewer_who_decided",
+            "test_review_app.py::test_when_every_item_is_decided_the_page_says_so",
+        ),
+        "The model is never shown a decision": (
+            "test_bionumbers_distractor.py::test_the_model_is_told_the_value_and_its_quote_and_nothing_about_a_decision",
+            "test_bionumbers_extraction.py::test_the_user_turn_names_the_question_and_the_organism_and_nothing_measurable",
+        ),
+    }
+)
+
+# add-harvest-prototype.
+COVERED.update(
+    {
+        "A harvest starts from chosen articles and asks each for its reusable values": (
+            "test_bionumbers_cli.py::test_harvest_starts_a_run_from_pmcids_with_each_paper_s_own_metadata_and_licence",
+            "test_bionumbers_cli.py::test_extracting_a_harvested_run_asks_no_question_and_names_each_item_by_its_claim",
+            "test_bionumbers_harvest.py::test_the_harvest_instruction_keeps_every_rule_of_the_question_instruction_but_its_opening",
+            "test_bionumbers_harvest.py::test_the_bound_on_claims_is_in_the_instruction",
+            "test_bionumbers_harvest.py::test_a_fabricated_quote_is_dropped_in_harvest_mode_as_in_any_other",
+            "test_bionumbers_extraction.py::test_a_value_computed_from_published_data_is_a_claim_and_says_so",
+        ),
+        "A harvest asks in one named domain, and the domain is on every entry": (
+            "test_bionumbers_harvest.py::test_every_scope_names_its_own_classes_and_exclusions_and_nothing_else",
+            "test_bionumbers_harvest.py::test_the_scopes_differ_where_their_domains_do",
+            "test_bionumbers_harvest.py::test_the_scope_hands_the_model_no_unit_and_no_magnitude",
+            "test_bionumbers_cli.py::test_a_harvest_asked_in_another_domain_sends_that_scope_and_records_it",
+            "test_bionumbers_cli.py::test_a_harvested_run_from_before_scopes_is_read_as_biology",
+        ),
+        # The labels are the model's to write; what is held is that the instruction asks for
+        # them and that the record keeps them. Whether a model names conditions as asked is
+        # measured by review, not by a test.
+        "A harvested entry names its quantity, its class and what it belongs to": (
+            "test_bionumbers_harvest.py::test_a_harvested_claim_is_named_by_its_label_and_keeps_its_class_and_species",
+            "test_bionumbers_harvest.py::test_the_instruction_asks_for_a_latin_name_and_a_value_without_its_unit",
+            "test_bionumbers_harvest.py::test_a_value_beside_others_of_its_kind_is_named_by_its_condition_and_the_control_is_not",
+        ),
+        "A hand-chosen article's licence is the index's where the document is silent": (
+            "test_bionumbers_cli.py::test_harvest_takes_the_licence_from_the_index_when_the_document_states_it_in_prose",
+        ),
+        "Every entry records the model that answered": (
+            "test_bionumbers_harvest.py::test_the_model_that_answered_is_recorded_beside_the_one_asked_for",
+            "test_bionumbers_harvest.py::test_a_retry_answered_by_another_model_records_both",
+            "test_bionumbers_harvest.py::test_a_provider_that_names_no_model_leaves_the_field_empty",
+        ),
+        "Only entries with no sign of doubt are curated": (
+            "test_bionumbers_curated.py::test_each_sign_of_doubt_keeps_an_entry_out",
+            "test_bionumbers_curated.py::test_what_reads_like_doubt_and_is_not_still_admits",
+            "test_bionumbers_curated.py::test_the_approximate_hedge_travels_with_the_entry",
+        ),
+        "The curated tier is loaded whole and says what it left out": (
+            "test_bionumbers_curated.py::test_a_load_replaces_the_tier_rather_than_adding_to_it",
+            "test_bionumbers_curated.py::test_curate_loads_the_slice_and_says_what_it_left_out",
+        ),
+    }
+)
+
 TESTED_BUT_UNNAMED = (
     "Events carry enough detail to show progress and to explain an ending",
     "A transient failure does not end a question",
@@ -924,6 +1105,14 @@ AWAITING_THE_PROMPT = (
     "Leading with a figure does not displace what qualifies it",
 )
 
+# `harden-harvest`'s: four findings moved out of `add-harvest-prototype` on 2026-10-15,
+# so that change could close. Proposed, not built.
+AWAITING_HARDEN_HARVEST = (
+    "An article yields at most twenty entries, and a drop is recorded",
+    "A comment in a list of articles is a comment wherever it starts",
+    "Readings of one article from different runs are served together and linked",
+)
+
 # `add-hosted-tracing`. Each requirement names the tests that assert it in both
 # directions; the conditions of the allowance pause are pure and tested beside the
 # tracer, the command that asks is tested on its own.
@@ -997,6 +1186,7 @@ UNMAPPED: dict[str, str] = {
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),
+    **dict.fromkeys(AWAITING_HARDEN_HARVEST, "harden-harvest is proposed, not built"),
 }
 
 
