@@ -1015,6 +1015,7 @@ AWAITING_THE_STORE = (
     "Nothing written for the review reaches the agent",
     "The agent is told each entry's trust tier",
     "A cited entry from the store is shown with its trust tier as stars",
+    "An entry's caveat marks have a column of their own",
 )
 
 

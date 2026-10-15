@@ -195,13 +195,23 @@ able to read it even by accident — the same line `answer-feedback` draws aroun
 
 Every entry the agent is shown from the store, in a search row and in full, SHALL carry its trust
 tier on one scale, whether it is disputed, and whether the tier was set by a simulated review. The
-agent SHALL be instructed to prefer better-reviewed entries where entries conflict, and to say when
-an answer rests on a disputed or unreviewed entry. The tier is read by the rule recorded in
-ADR-0990 and SHALL NOT be computed a second way for the agent.
+tier is read by the rule recorded in ADR-0990 and SHALL NOT be computed a second way for the agent.
+
+The agent SHALL be instructed to decide which entries bear on the question before weighing their
+tiers, and that a tier never makes an entry relevant; then, among relevant entries for the same
+quantity, to prefer the better-reviewed one; and to say when an answer rests on a disputed or
+unreviewed entry. Trust is a property of an entry and relevance a property of an entry and the
+question: told only to prefer trusted entries, a model can lead with a five-star value about a
+neighbouring quantity over the two-star value that answers the question.
 
 #### Scenario: Entries of different tiers conflict
 - **WHEN** a search returns entries of different tiers for the same quantity
 - **THEN** each row the agent sees carries its tier
+
+#### Scenario: A trusted entry about another quantity
+- **WHEN** the agent is given its instructions
+- **THEN** they say that relevance to the question is decided first and that a tier does not make
+  an entry relevant
 
 #### Scenario: An answer rests on a disputed entry
 - **WHEN** a cited entry is disputed

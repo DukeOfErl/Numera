@@ -52,3 +52,30 @@ say that someone looked and no one approved.
 #### Scenario: The corpus is a file
 - **WHEN** the corpus is a corpus file
 - **THEN** no stars, caution or simulated mark is shown on any citation or row
+
+### Requirement: An entry's caveat marks have a column of their own
+
+Where the entries behind an answer are shown as a table, the marks that qualify an entry — no
+method recorded, cited but not retrieved, a hedged or fused range, an implausible span, no scalar
+value, a value that could not be read with certainty, a calculated value — SHALL be shown in a
+narrow column of their own, before every other column, and not attached to the property. A row to
+which no mark applies SHALL show that cell empty. The column's header MAY be empty. The legend SHALL
+state what each mark shown means, as it does now.
+
+Marks attached to the property make a reader read past symbols to reach the name, and scatter the
+marks at varying offsets where a column lines them up. The marks that qualify a trust tier — a
+dispute, a simulated review — are not caveat marks of the entry and SHALL stay with the stars.
+
+#### Scenario: An entry with caveats
+- **WHEN** an entry with no method recorded is shown in the table
+- **THEN** its mark is in the first column
+- **AND** its property cell holds the property alone
+
+#### Scenario: An entry with none
+- **WHEN** an entry to which no caveat applies is shown
+- **THEN** its first cell is empty
+
+#### Scenario: A calculated value whose reading is uncertain
+- **WHEN** a harvested entry is calculated and its value could not be read with certainty
+- **THEN** both marks are in its first cell
+- **AND** the legend states what each means

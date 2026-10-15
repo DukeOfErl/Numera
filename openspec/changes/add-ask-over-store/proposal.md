@@ -28,8 +28,11 @@ answer from the harvest store and say, beside every citation, how well reviewed 
   never written by the model. The rule is ADR-0990's (`bionumbers.tiers`): the highest role that
   approved, a separate caution where anyone objected, zero stars where no one approved, and a mark
   wherever the tier was set by a simulated review.
-- The agent is told each entry's tier so it can prefer better-reviewed entries, but never shown a
-  reviewer's own words.
+- In the entries table, caveat marks (`†`, `‡`, `§`…) move from in front of the property to a
+  narrow first column of their own, empty where none applies; two marks are added for a value that
+  could not be read with certainty and for a calculated value. This applies to the corpus file too.
+- The agent is told each entry's tier so it can prefer better-reviewed entries — after deciding
+  which entries are relevant, never instead of it — but never shown a reviewer's own words.
 - The text the review shows beside a value to test the reviewer (the "second" text, a distractor in
   402 of 452 items) never reaches the agent.
 

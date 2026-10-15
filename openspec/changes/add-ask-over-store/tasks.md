@@ -73,25 +73,32 @@ some of the store's papers are NC/ND. The real store is read only in local check
       (snapshot of today's output taken before the change, not after)
 - [ ] 4.3 `_caveats` adds the `reading_uncertain` caution and a calculated-value line
 - [ ] 4.4 Search rows carry the tier token for store entries and nothing new for file entries
-- [ ] 4.5 System prompt: prefer better-reviewed entries where entries conflict; say when an answer
-      rests on a disputed or unreviewed entry; no instruction to write stars. Regenerate the agent
+- [ ] 4.5 System prompt (D5): decide relevance first and never let a tier make an entry relevant;
+      among relevant entries for one quantity prefer the better-reviewed; say when an answer rests
+      on a disputed or unreviewed entry; no instruction to write stars. Regenerate the agent
       graph diagram only if middleware changed (it should not)
 - [ ] 4.6 ADR-1620: harvested values are stated as the paper wrote them, and numbers are trusted
       only where the reading fits the recorded kind — which direction is cheap (D4)
 
 ## 5. Stars on both drivers
 
-- [ ] 5.1 Presentation module: tier → stars per D6's table, `†` for simulated, `⚠` for disputed,
+- [ ] 5.1 Presentation module: tier → stars per D6's table, `◊` for simulated, `⚠` for disputed,
       empty for `None`, and the legend text; add it to `PRESENTATION` in
       `test_driver_independence.py`
 - [ ] 5.2 Answer rendering puts the drawn stars after each `[[id]]` in both drivers; the stored and
       recorded answer text is unchanged; stars the model wrote do not change the tier shown
 - [ ] 5.3 Entries table: a trust column on CLI and web; the legend under the answer whenever any
       shown entry has a tier; nothing shown for a corpus file
+- [ ] 5.3a Caveat column (D6a): markers move from the property's prefix to a narrow first column
+      with an empty header, on CLI and web; empty cell where no caveat applies; the property cell
+      holds only the property. Add `?` (`reading_uncertain`) and `∴` (calculated) to
+      `Row.markers()` with legend lines. Existing marker tests assert the column, not the prefix
 - [ ] 5.4 Through a whole script run (`.claude/rules/streamlit-driver.md`): the web page shows
-      stars beside citations and in the table, with the legend, for a fixture store
+      stars beside citations and in the table, the caveat column first, with the legend, for a
+      fixture store and for a corpus file
 - [ ] 5.5 ADR-1630: tiers are drawn by the application and never written by the model; the scale,
-      the separate dispute and simulated marks (D6), citing ADR-0990 and ADR-0960
+      the separate dispute and simulated marks (D6), the caveat column (D6a), citing ADR-0990 and
+      ADR-0960
 
 ## 6. Configuration
 

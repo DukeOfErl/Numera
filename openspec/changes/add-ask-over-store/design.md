@@ -164,8 +164,13 @@ calculated value `calculated from:` with the input passages. Search rows add the
 short token), so a search costs little more than today.
 
 The tier reaches the model as text, e.g. `trust: 3 of 5 (scientist, simulated review); disputed`.
-The system prompt gains two sentences: prefer better-reviewed entries where entries conflict; say so
-when an answer rests on a disputed or unreviewed entry. It is **not** told to write stars.
+The system prompt gains three sentences: decide which entries bear on the question first, and never
+let a tier make an entry relevant; among relevant entries about the same quantity, prefer the
+better-reviewed one; say so when an answer rests on a disputed or unreviewed entry. It is **not**
+told to write stars. The order matters: told only to prefer trusted entries, a model can lead with a
+five-star value about a neighbouring quantity. A prompt sentence is a guard, not a mechanism; the
+two-step version (an explicit shortlist, then ordering by tier) is "Relevance before trust" in
+`docs/roadmap.md`.
 
 Never loaded at all, so no later tool can leak them: `item_json.second` (the review's test text),
 `distractor_type`, `supporting` (equal to the claim's quote in all 452 items, checked 2026-10-13; kept out so there is
@@ -186,8 +191,10 @@ A presentation module (beside `entries_table`) owns the scale:
 | `AI` | ★☆☆☆☆ |
 | `NONE` | ☆☆☆☆☆ |
 
-`†` after the stars marks a simulated tier; `⚠` marks a dispute. A legend under the answer states
-the scale, `†` and `⚠`. `None` trust renders as the empty string.
+`◊` after the stars marks a simulated tier; `⚠` marks a dispute. Both qualify the *tier*, so they
+travel with the stars — beside a citation in the prose and in the trust column alike. A legend under
+the answer states the scale, `◊` and `⚠`. `None` trust renders as the empty string. (`†` was the
+first choice and is taken: it already means "no measurement method recorded".)
 
 Answers are rendered with `[[id]]` followed by the stars, by substituting over `citations.DELIMITED`
 in the drivers — the model's text is not altered where it is stored or recorded, only where it is
@@ -196,6 +203,29 @@ The entries table gains a trust column on both drivers. Stars only, per the user
 legend carrying the role words.
 
 `test_driver_independence` gets the new module under `PRESENTATION`.
+
+### D6a. Caveat marks get a column of their own
+
+Today `Row.markers()` (`‡ † ° ≈ ¡`, and `§` on the web) is prefixed to the property, on both drivers.
+They move to a separate, narrow first column with an empty header; a row with no caveat has an
+empty cell. Reasons: a reader scanning properties no longer reads past symbols, the marks line up
+so a column of `†` is visible at a glance, and the new marks below would otherwise lengthen the
+prefix further.
+
+Two marks are added to `Row.markers()` for harvested entries, each with a legend line:
+
+| Mark | Means |
+|---|---|
+| `?` | the value could not be read with certainty; the paper's text is shown (`reading_uncertain`, D4) |
+| `∴` | calculated, not measured — by the paper's authors or from values published elsewhere |
+
+The tier marks (`◊`, `⚠`) stay with the stars and do not go in this column: they qualify the tier,
+not the entry's value, and splitting them from the stars would leave the stars unqualified.
+
+The side panel's one-line collapsed label (`web._row_label`) is not a table and keeps its prefix.
+The terminal's fixed-width `COLUMNS` gains a width-2 first column; the web dataframe gains a first
+column whose width is the narrowest Streamlit offers — checked against the installed Streamlit's
+`TextColumn` when the task is done, not assumed.
 
 ### D7. Configuration: a separate setting, never both
 
@@ -225,7 +255,7 @@ is untouched. An ADR records the direction and why (one rule, one parser).
   → `value_text` is always what is shown; the parsed numbers only feed search and unit comparison.
 - **Base branch is rebased again** (onto `dev` after harvest/review merge) → no code depends on a
   commit hash; rebase before implementing past the loader.
-- **Shown tiers are simulated** → `†` on every simulated tier and the legend, per ADR-0960.
+- **Shown tiers are simulated** → `◊` on every simulated tier and the legend, per ADR-0960.
 
 ## Migration Plan
 
