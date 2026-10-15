@@ -21,6 +21,7 @@ re-run after the next question.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import html
 import json
 import logging
@@ -31,7 +32,7 @@ import threading
 import time
 import uuid
 from collections import OrderedDict
-from collections.abc import Callable, Iterable, Iterator, MutableMapping
+from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
@@ -41,7 +42,18 @@ from typing import Any
 
 import streamlit as st
 
-from . import accounts, allowance, bionumbers, entries_table, feedback, messages, trace, trail_store
+from . import (
+    accounts,
+    allowance,
+    bionumbers,
+    door_demo,
+    entries_table,
+    feedback,
+    hosted_trace,
+    messages,
+    trace,
+    trail_store,
+)
 from .accounts import Account, EnrolmentUnavailable
 from .agent import AskAgent
 from .authorization import Refused, allowed, require
@@ -374,6 +386,18 @@ def transcript(state: MutableMapping[str, Any]) -> list[tuple[str, list[Item]]]:
 #: This browser session's own key, apart from the conversation it is in.
 TAB_KEY = "scinumbers_ask.tab"
 ADMISSION_KEY = "scinumbers_ask.admission"
+#: The address whose unverified refusal has already been recorded this session.
+#: Not the admission -- that is decided fresh; see `admit`.
+UNVERIFIED_KEY = "scinumbers_ask.unverified_recorded"
+#: The address that has already asked for its confirmation email again. Held so a
+#: reader clicking twice does not write two rows, and so the button can become its
+#: own acknowledgement rather than looking as if it did nothing.
+#:
+#: **The address, not a boolean.** `st.session_state` outlives a sign-out on the
+#: same tab, so a flag would show the next account an acknowledgement it never
+#: asked for -- the same shape as the bug `end_session` exists to prevent. Keyed on
+#: who asked, it corrects itself without depending on an exit path remembering it.
+RESEND_ASKED_KEY = "scinumbers_ask.resend_asked"
 AGENT_KEY = "scinumbers_ask.agent"
 
 
@@ -382,6 +406,7 @@ class Door(StrEnum):
 
     OPEN = "open"
     SIGN_IN = "sign in"
+    UNVERIFIED = "address not verified"
     NOT_ENROLLED = "not enrolled"
     NO_CREDENTIAL = "no credential"
     CREDENTIAL_REJECTED = "credential rejected"
@@ -424,13 +449,173 @@ def identity_configured() -> bool:
         raise
 
 
-def signed_in_email() -> str | None:
-    """The account the identity provider asserts, or None. Never a name the
-    reader typed: the system accepts no credential of its own."""
+#: What makes a sub-table under `[auth]` a provider rather than one of the
+#: section's own settings.
+#:
+#: **Not "is it a mapping".** `client_kwargs` is a documented mapping under
+#: `[auth]` -- read from the installed Streamlit 1.61.1,
+#: `auth_util.generate_default_provider_section`, which lifts it into the default
+#: provider's own section -- so the shape test admits it and the door grows a
+#: "Sign in with client_kwargs" button that cannot work. A discriminator taken
+#: from the record beats one reasoned from the shape of the input.
+#:
+#: `client_id` is the key, because it is one of the three
+#: `validate_auth_credentials` requires of any provider section. A sub-table
+#: carrying it and nothing else still fails, loudly and in Streamlit's own words,
+#: which is the right place for that error.
+PROVIDER_KEY = "client_id"
+
+#: Which configured providers the door actually offers.
+#:
+#: **Not a filter on what is configured, but on what is shown.** Google's client
+#: stays in secrets, `providers()` still finds it, and `st.login()` would still use
+#: it -- every line of the multi-provider machinery is exercised by the tests and
+#: none of it is removed. What changes is that the door draws one button, because
+#: Auth0 signs a reader in with their Google account anyway and two buttons for one
+#: account was a choice nobody needed to make (ADR-1100).
+#:
+#: Restoring the Google button is this tuple, and nothing else -- which is true
+#: only because the labels follow the button *count* rather than being written for
+#: today's arrangement (`messages.SIGN_IN_ALONE`). Shortening Auth0's label by hand
+#: made this promise false for one release: restoring would have drawn "Sign in
+#: with Google" beside a bare "Sign in".
+OFFERED_PROVIDERS = ("auth0",)
+
+#: The unnamed provider: `st.login()` with no argument, whose credentials sit
+#: directly in `[auth]`. Deliberately not passed to `st.login` as a name --
+#: Streamlit resolves a name against a sub-table, and a sub-table called
+#: `default` is a different thing from the section's own credentials.
+DEFAULT_PROVIDER = "default"
+
+
+def _auth_section() -> Mapping | None:
+    """`[auth]` as a mapping, or None where there is no usable section.
+
+    Its own function because two rules read it and they must not disagree about
+    what "no section" means: `providers` asks which providers are complete, and
+    `offered_providers` asks whether an incomplete one is nonetheless *there*.
+    """
+    try:
+        section = st.secrets["auth"]
+    except KeyError:
+        # A secrets file that exists and has no `[auth]`. Streamlit raises a
+        # plain KeyError here, which `_is_not_configured` does not and should not
+        # match -- it is not one of Streamlit's own error types, and widening
+        # that predicate would make it answer "not configured" to any missing
+        # key anywhere.
+        return None
+    except Exception as exc:  # noqa: BLE001 - narrowed by `_is_not_configured`
+        if _is_not_configured(exc):
+            return None
+        raise
+    return section if isinstance(section, Mapping) else None
+
+
+def _offered_but_incomplete(configured: list[str]) -> list[str]:
+    """Offered providers that are present in `[auth]` yet were not counted.
+
+    A sub-table with no `client_id` is invisible to `providers`, which is right
+    for deciding what can be drawn and wrong for deciding what the operator
+    meant. Without this distinction, `[auth.auth0]` left carrying only a
+    `client_secret` -- a rotation half-finished in the deployment's secrets box --
+    looks exactly like a machine where Auth0 was never configured, and the door
+    silently widens back to the Google button ADR-1100 withdrew.
+    """
+    section = _auth_section() or {}
+    return [
+        name
+        for name in OFFERED_PROVIDERS
+        if name not in configured and isinstance(section.get(name), Mapping)
+    ]
+
+
+def providers() -> list[str]:
+    """Every configured way in, in the order secrets lists them.
+
+    `"default"` is the provider whose credentials sit directly in `[auth]` --
+    which is where the Google client has always been -- and is present only when
+    `client_id` is there beside `redirect_uri` and `cookie_secret`. A sub-table
+    carrying `client_id` is a named provider, which is what `st.login(name)`
+    takes.
+
+    Returns names without repeats: a sub-table literally called `default`
+    alongside the section's own credentials would otherwise be offered twice, and
+    two buttons sharing a key is a `StreamlitDuplicateElementKey` that takes the
+    whole door down rather than the one button.
+
+    A deployment with no `[auth]`, in a secrets file or out of it, gets an empty
+    list and never reaches a button.
+    """
+    section = _auth_section()
+    if section is None:
+        return []
+    found = [DEFAULT_PROVIDER] if PROVIDER_KEY in section else []
+    found += [
+        name
+        for name, value in section.items()
+        if isinstance(value, Mapping) and PROVIDER_KEY in value
+    ]
+    return list(dict.fromkeys(found))
+
+
+def offered_providers() -> list[str]:
+    """The buttons to draw: what is configured, narrowed to what is offered.
+
+    **A door with no button is never the right answer**, so two things can widen
+    it back. If the offered set matches nothing configured -- a developer's machine
+    with only the Google client, say -- every configured provider is drawn instead
+    of none. And `[auth]` present but carrying no credentials at all still draws
+    the default button, because `st.login()` then raises Streamlit's own
+    "credentials are missing" error naming the keys: the visitor is stuck either
+    way and the operator is not.
+    """
+    configured = providers()
+    offered = [name for name in configured if name in OFFERED_PROVIDERS]
+    if not offered:
+        # The widening still happens -- a door with no button is never the right
+        # answer -- but it stops being silent. Half a credential is the operator's
+        # mistake and only the operator can fix it, so it goes where they look.
+        for name in _offered_but_incomplete(configured):
+            trail_store.complain(
+                f"[auth.{name}] is configured without {PROVIDER_KEY}, so it cannot be "
+                f"offered and the door has widened to {configured or [DEFAULT_PROVIDER]}",
+                KeyError(PROVIDER_KEY),
+            )
+    return offered or configured or [DEFAULT_PROVIDER]
+
+
+def signed_in_claims() -> Mapping[str, Any] | None:
+    """What the identity provider asserts about this reader, or None.
+
+    The whole claim set rather than the address alone, because whether the
+    provider has *verified* that address is one of the claims and the door has to
+    read it. Streamlit stores the ID token's claims whole and adds `is_logged_in`
+    and `provider` (read from the installed 1.61.1, `starlette_auth_routes.py`);
+    nothing here is a name the reader typed, and the system accepts no credential
+    of its own.
+    """
     user = st.user.to_dict()
     if not user.get("is_logged_in"):
         return None
-    return user.get("email") or None
+    return user
+
+
+def address_verified(claims: Mapping[str, Any]) -> bool:
+    """Whether the provider says it has verified this address.
+
+    **Absence refuses.** A provider that says nothing is one whose accounts this
+    app cannot tell apart from an impersonation: where sign-up is open, anyone
+    can register an enrolled tester's address, and the claim is the only thing
+    separating them. The two directions cost differently -- a wrongly refused
+    reader reads one sentence and clicks a link, a wrongly admitted one reads
+    somebody else's answers under their name -- so the missing case goes to the
+    cheap side (ADR-0890).
+
+    Exactly `True` or the string `"true"`. Not `1`, which `== True` in Python and
+    would let a truthy check through anything a provider happened to send.
+    """
+    value = claims.get("email_verified")
+    return value is True or value == "true"
 
 
 def admit(
@@ -486,10 +671,29 @@ def admit(
     """
     if not identity_configured():
         return Admission(Door.OPEN, configured=False)
-    email = signed_in_email()
-    if email is None:
+    claims = signed_in_claims()
+    email = (claims or {}).get("email") or None
+    if claims is None or email is None:
         state.pop(ADMISSION_KEY, None)
         return Admission(Door.SIGN_IN, configured=True)
+    if not address_verified(claims):
+        # **Decided fresh on every rerun, recorded once.** The decision is not
+        # held because `end_session` does not clear this key, so a cached refusal
+        # would outlive the reader signing out, verifying and signing back in on
+        # the same tab -- exactly the sequence the sentence asks them to perform.
+        # The *record* is held, because every other refusal is written once per
+        # account per session and this one would otherwise be an insert per
+        # click: bounded, but the only door that charges the trail for a reader
+        # rereading it.
+        if state.get(UNVERIFIED_KEY) != email:
+            state[UNVERIFIED_KEY] = email
+            trace.QuestionTrace(
+                question_id="",
+                session_id=session_id,
+                run_label=Config.from_env().run_label,
+            ).record("signin.unverified", email=email)
+        return Admission(Door.UNVERIFIED, configured=True)
+    state.pop(UNVERIFIED_KEY, None)
     held = state.get(ADMISSION_KEY)
     if held is not None and held[0] == email:
         return held[1]
@@ -554,6 +758,43 @@ def account_scope(admission: Admission) -> str | None:
     return hashlib.sha256(admission.account.email.encode()).hexdigest()[:16]
 
 
+def trace_user(admission: Admission, key: str | None = None) -> str | None:
+    """Who asked, as the hosted tracer is told it: a digest keyed with a secret this host holds.
+
+    Not `account_scope`. That is an unsalted hash of the address, fine for a
+    ledger key nobody outside reads, and reversible by anyone who can guess an
+    address -- which a third party holding the traces could, for a handful of
+    named testers. Keyed with `[auth]`'s `cookie_secret`, which the host already
+    has and never sends anywhere, the value is stable per account and opens
+    nothing without the key (ADR-1020).
+
+    `None` without sign-in, and `None` when no key can be read: an unkeyed value
+    is exactly what this replaces, so there is no fallback to one.
+    """
+    if not admission.configured or admission.account is None:
+        return None
+    if key is None:
+        try:
+            key = str(st.secrets["auth"]["cookie_secret"])
+        except Exception:  # noqa: BLE001 - no key means no attribution, never an unkeyed one
+            return None
+    if not key:
+        return None
+    email = admission.account.email.strip().lower().encode()
+    return "u-" + hmac.new(key.encode(), email, hashlib.sha256).hexdigest()[:16]
+
+
+def attributed(admission: Admission) -> Any:
+    """Who asked, attached to the hosted trace of every question asked inside this block.
+
+    As `trace_user`: keyed, stable per account, `None` without sign-in (ADR-1020).
+    Attached here, around the page's consumption of the event stream, so the agent
+    is handed nothing new -- the trail's identity is stamped at the sink the same
+    way (ADR-0820). A no-op when tracing is off.
+    """
+    return hosted_trace.current().attributed(trace_user(admission))
+
+
 def effective_session(admission: Admission, url_session: str) -> str:
     """The key the conversation, the identity stamp and the dev panel all use.
 
@@ -593,7 +834,31 @@ def establish_identity(admission: Admission, session_id: str) -> None:
     held admission that never re-registered used to have.
     """
     if admission.identity is not None:
+        # **The door's one positive record, written here and not in `admit`.**
+        # Until it existed the trail held only refusals, so "nobody tried today"
+        # and "everybody got in" looked identical -- and nothing marked a reader's
+        # problem as solved, because a person who signed in and asked nothing left
+        # no trace of having got through. `pending.py` reads it; without it a
+        # resolved request goes on being reported daily, which is how it was found.
+        #
+        # Here rather than in `admit` because the stamp is registered *below*, so a
+        # record written a line later carries `user_email` and `user_role` from the
+        # filter like every other record of a signed-in session. Written at the
+        # door instead, it would have carried neither -- and "every record carries
+        # the account" is a spec requirement with a test behind it, which is what
+        # caught the first attempt.
+        #
+        # Only on the first establishment: this runs on every rerun of an open
+        # page. A session pruned for idleness and returned to records again, which
+        # is right -- that is an arrival, and the reader had gone away.
+        arriving = session_id not in IDENTITIES
         remember_identity(session_id, admission.identity)
+        if arriving:
+            trace.QuestionTrace(
+                question_id="",
+                session_id=session_id,
+                run_label=Config.from_env().run_label,
+            ).record("signin.admitted")
     else:
         forget_identity(session_id)
 
@@ -673,18 +938,123 @@ def agent_for(
     return agent
 
 
+def request_resend(session_id: str) -> None:
+    """Record that this reader never received their confirmation email.
+
+    A separate event from `signin.unverified`, which fires for *everybody* at
+    sign-up and mostly for people who click the link a minute later -- querying
+    that would hand the operator a list of readers who are fine. This one fires
+    only when somebody says they are stuck, which is the list worth acting on.
+
+    Written once per session: the held flag also turns the button into its own
+    acknowledgement, so a reader who sees nothing happen does not click again.
+    """
+    email = (signed_in_claims() or {}).get("email") or ""
+    if st.session_state.get(RESEND_ASKED_KEY) == email:
+        return
+    st.session_state[RESEND_ASKED_KEY] = email
+    trace.QuestionTrace(
+        question_id="",
+        session_id=session_id,
+        run_label=Config.from_env().run_label,
+    ).record("signin.resend_requested", email=email)
+
+
 def _sign_out(conversation_id: str, tab_id: str | None = None) -> None:
     end_session(conversation_id, tab_id)
     st.logout()
 
 
+def draw_privacy() -> None:
+    """What is kept about a reader, collapsed.
+
+    **On the doors and nowhere else.** It was drawn in the side panel too, on the
+    reasoning that a reader who signed in weeks ago never meets the door again --
+    which is true, and was outweighed: the panel is where a reader works, and a
+    standing legal expander among the controls is furniture. What the obligation
+    actually requires is that the statement be reachable *before* anyone signs in,
+    and that is the door, which is also the address the consent screen points at.
+
+    A caption rather than markdown, like the two shorter notes it extends -- and,
+    incidentally, out of `at.markdown`, which the door's "nothing else is drawn"
+    test reads.
+    """
+    with st.expander(as_text(messages.PRIVACY_HEADING)):
+        st.caption(as_text(messages.PRIVACY))
+
+
+def draw_examples() -> None:
+    """Recorded questions and their real answers, played on a loop (ADR-1210).
+
+    On the sign-in door only. A refused reader is being told something they have to
+    act on, and a moving example beside that sentence competes with it.
+
+    `st.iframe` runs the frame's scripts with same-origin access, which is why
+    Streamlit warns against handing it model output: `door_demo.page` escapes every
+    answer before it becomes markup, and the answers are committed, not fetched.
+    """
+    st.iframe(door_demo.page(), height=door_demo.HEIGHT)
+
+
 def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None = None) -> None:
     """What a visitor sees instead of the page. Sign-in and nothing else, or the
-    one sentence that says why not. The caller stops the script after this."""
+    one sentence that says why not -- and, on the sign-in door, recorded examples
+    of what lies behind it. The caller stops the script after this."""
     draw_title()
     if admission.door is Door.SIGN_IN:
         st.info(as_text(messages.SIGN_IN_NEEDED), icon=":material/login:")
-        st.button("Sign in with Google", on_click=st.login, icon=":material/login:")
+        offered = offered_providers()
+        for provider in offered:
+            # `st.login()` and `st.login("name")` are different calls: the
+            # no-argument form means the credentials in `[auth]` itself, and
+            # passing "default" is not a synonym for it.
+            args = () if provider == DEFAULT_PROVIDER else (provider,)
+            st.button(
+                # Through `as_text` like every other string that reaches the
+                # page: an unlabelled provider's button carries its name out of
+                # secrets, and a `$` there would open inline mathematics and eat
+                # the rest of the label. The literal labels do not need it; the
+                # rule is on the call, not on today's values.
+                as_text(messages.sign_in_label(provider, alone=len(offered) == 1)),
+                key=f"sign-in-{provider}",
+                on_click=st.login,
+                args=args,
+                icon=":material/login:",
+            )
+        draw_examples()
+    elif admission.door is Door.UNVERIFIED:
+        st.error(as_text(messages.UNVERIFIED), icon=":material/mark_email_unread:")
+        # Back through the same provider rather than out and in again. The claim
+        # is read here, in the driver, for the driver's own purpose: which button
+        # to offer. It is still not part of the session key and still reaches no
+        # record (ADR-0880) -- the address is the identity, and this is only the
+        # route back to it.
+        provider = (signed_in_claims() or {}).get("provider") or DEFAULT_PROVIDER
+        st.button(
+            as_text(messages.CONFIRMED_IT),
+            key="confirmed-email",
+            on_click=st.login,
+            args=() if provider == DEFAULT_PROVIDER else (provider,),
+            type="primary",
+            icon=":material/refresh:",
+        )
+        # The email that never arrived, which was the one dead end left on this
+        # door. Nothing is sent from here -- the request is recorded where the
+        # operator looks (`sql/signin.sql`) and they resend from the provider.
+        asked = st.session_state.get(RESEND_ASKED_KEY)
+        if asked is not None and asked == (signed_in_claims() or {}).get("email"):
+            st.info(as_text(messages.RESEND_NOTED), icon=":material/mark_email_read:")
+        else:
+            st.button(
+                as_text(messages.RESEND_REQUEST),
+                key="resend-request",
+                on_click=request_resend,
+                args=(session_id,),
+                icon=":material/outgoing_mail:",
+            )
+        # Still offered, for the reader who confirmed nothing and wants to come
+        # back as somebody else.
+        st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id))
     elif admission.door is Door.NOT_ENROLLED:
         st.error(as_text(messages.NOT_ENROLLED), icon=":material/person_off:")
         st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id))
@@ -701,6 +1071,11 @@ def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None =
         # A widget, so the retry the docstring promises can happen without the
         # reader reloading: Streamlit only reruns on interaction.
         st.button("Try again", on_click=lambda: None, icon=":material/refresh:")
+    # Under every door rather than under the sign-in one. A person refused here
+    # has had their address recorded by the attempt, which is the moment the
+    # question "what do you keep about me" is most reasonable -- and the door that
+    # admits nobody is the one where it is hardest to ask anyone.
+    draw_privacy()
 
 
 #: The button's own key, which Streamlit also emits as the CSS class
@@ -1110,6 +1485,12 @@ def draw_try_later() -> None:
     also bounds the OAuth round trips. The caller stops the script after this."""
     draw_title()
     st.warning(as_text(messages.TRY_LATER), icon=":material/hourglass_top:")
+    # This is a door too, and it was the one door without the statement on it.
+    # `admit` has already run and recorded the sign-in by the time the cap
+    # refuses, so the reader's address is kept and the page that turns them away
+    # was the one page from which they could not read what is kept -- which is
+    # the case ADR-1110 argues is when asking matters most.
+    draw_privacy()
 
 
 # --- the dev panel: a third sink on the same logger ---------------------------------
@@ -1359,6 +1740,37 @@ def as_text(text: str) -> str:
     of this.
     """
     return text.replace("$", r"\$")
+
+
+#: A run of citations -- one or more `[[nnnnnn]]` separated by spaces or a comma --
+#: drawn as one superscript with its identifiers comma-separated (ADR-1240). Words
+#: between two citations make two runs.
+_CITATION_RUN = re.compile(r"\[\[\d+\]\](?:,?\s*\[\[\d+\]\])*")
+#: Opacity rather than a colour, so the grey follows Streamlit's light or dark theme.
+_CITATION_STYLE = "opacity: 0.6; font-size: 0.72em;"
+
+
+def answer_markdown(text: str) -> str:
+    """An answer, ready for `st.markdown(..., unsafe_allow_html=True)`.
+
+    Streamlit's markdown has no superscript, so the citations need HTML, and the
+    answer is model output. **Escaping and the superscripts are one function** so
+    that HTML is never turned on for an answer nobody escaped: the text is escaped
+    first, `$` is kept out of mathematics as `as_text` does, and only then do the
+    `<sup>` tags of our own go in. Markdown itself survives escaping -- `**`, `-`,
+    `#` and `|` are not HTML -- but a `<` or `>` the model meant as markup is shown
+    as the character, which is the safe way round.
+
+    The stored answer keeps `[[nnnnnn]]`: the parser, the trail and the evaluation
+    all read that form, and only drawing restyles it.
+    """
+    escaped = as_text(html.escape(text, quote=False))
+    return _CITATION_RUN.sub(
+        lambda run: (
+            f'<sup style="{_CITATION_STYLE}">{", ".join(re.findall(r"\d+", run.group()))}</sup>'
+        ),
+        escaped,
+    )
 
 
 def _row_label(row: entries_table.Row) -> str:
@@ -1732,7 +2144,7 @@ def run_status(
 def draw(item: Item) -> None:
     """Draw one item. The only function here that touches the screen."""
     if item.kind is Kind.ANSWER:
-        st.markdown(as_text(item.text))
+        st.markdown(answer_markdown(item.text), unsafe_allow_html=True)
     elif item.kind is Kind.ENTRIES:
         if item.table is not None:
             _draw_table(item.table)

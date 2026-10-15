@@ -97,9 +97,18 @@ it — this section points rather than repeats:
   permitted, it is handed permissions, never the role** — ADR-0820.
 - **The grant table itself** is `GRANTS` in `src/scinumbers_ask/permissions.py`,
   with the rule for growing it in the comment above.
-- **Operator's steps** — Google OAuth client, `[auth]` in secrets, the
+- **Operator's steps** — the identity providers, `[auth]` in secrets, the
   `accounts` table from `sql/accounts.sql`, one capped OpenRouter key per tester
   — are in `README.md` §"Sign-in and enrolment".
+
+**Since `add-open-enrolment` (2026-09-18):** sign-in is no longer Google-only —
+any OpenID Connect provider is a sub-table in secrets and gets its own button,
+and only an address the provider says it has verified is admitted (ADR-0880,
+ADR-0890). The helper script below is no longer "left for later": it is
+`scinumbers-enrol`, which mints the capped key and inserts the row in one step
+and names the database branch every time (ADR-0900). Two operator steps remain
+outside the repository and are in the README: creating the Auth0 tenant, and
+publishing the Google consent screen so testers need not be listed by hand.
 
 Kept here because it is operational reference an ADR would bury: OpenRouter's
 **Management API Keys**, verified against openrouter.ai/docs/features/provisioning-api-keys
@@ -118,12 +127,15 @@ own ending (ADR-0600). The tester never sees the key; nothing is accepted from
 anyone, the operator's own credit is subdivided — which is what keeps this clear
 of Streamlit Cloud's terms about accepting third-party credentials.
 
-Left for later, on purpose: a helper script for minting keys and inserting rows;
-the deletion path and any retention limit for what is kept about a person (the
-spec says why: nobody to ask yet); re-reading enrolment mid-session.
+Left for later, on purpose: the deletion path and any retention limit for what is
+kept about a person (the spec says why: nobody to ask yet); re-reading enrolment
+mid-session; withdrawal, re-keying and role changes from the command rather than
+from `sql/accounts.sql`. The helper script itself has landed — see above.
 
 ### WP4 — Usage events + hosted tracing
-Depends on WP1 and WP3. Not yet proposed.
+Depends on WP1 and WP3. **Split:** hosted tracing is built as `add-hosted-tracing`
+on `feat/hosted-tracing` (Langfuse Cloud EU, ADR-1000–1020, 2026-09-25) and moves to
+Done at merge. The usage-events table is still to propose, as its own change.
 
 **Both the tally table and a hosted tracer were agreed — they are not
 alternatives.** The table is the system of record; the tracer is a debugger.
@@ -133,7 +145,7 @@ alternatives.** The table is the system of record; the tracer is a debugger.
   metadata. `QuestionTrace.run_config()` already returns the `RunnableConfig`
   shape both read, and `agent.py` already merges it — per-user attribution is one
   more key in an existing dict, not a new mechanism.
-- Per-answer verdicts pushed as scores with `extend_trace_retention=True`.
+- Per-answer verdicts pushed as scores. (Langfuse has no retention flag; see ADR-1000.)
 - Install the LangSmith skills: https://docs.langchain.com/langsmith/skills (or the langfuse skills)
 
 **Why the tracer cannot be the record.** Feedback is a child of a run, the free
@@ -145,6 +157,8 @@ tier expires traces at 14 days, and max retention was cut 400 → 180 days on
 setting that one variable, by anyone, at any time, immediately ships full prompts,
 tool results and corpus text to a US-hosted service. Exposing corpus entries was
 accepted; the point is that it must be a decision, not an env var nobody chose.
+**Closed by `add-hosted-tracing`:** the agent's stream runs with LangSmith's own
+tracing refused whatever the environment says, for every caller (ADR-1010).
 
 ### WP5 — Cloud Run, and the ledger that has to move first
 Not now. Revisit when the alpha outgrows Community Cloud.
@@ -184,6 +198,8 @@ Not part of the multi-user push; listed so the board is complete.
 | `add-provider-limit-ending` | 29/31 |
 | `add-answer-shape` | 0/10 — an answer leads with its quantitative conclusion |
 | `add-validator-prototype` | in progress — question → Europe PMC → one extraction call per paper → two-text review; `feat/validator-prototype` |
+| `add-door-demo` | archived 2026-10-04 — the sign-in door plays a three-example demo, the third with a script-drawn chart; citations are grey superscripts on the door and in the app (ADR-1210–1240) |
+| _app-drawn charts_ | not proposed — the agent returns numbers and the application draws the chart. A model-drawn text chart misplaced every bar on its own axis (ADR-1210). Deferred by Yoav; the door's third example stands in with a script-drawn chart, to be redrawn by the app when this lands (ADR-1230) |
 
 ---
 
@@ -270,3 +286,5 @@ change that is not happening.
 | Grey thumbs | Cosmetic; the colour rule may not be matching. Raised 2026-09-15 |
 | `ToolCallLimitMiddleware` | Deferred in `add-ask-agent` for unexpected consequences seen in `interv_preper`. Worth re-checking against the stock middleware, since the project prefers the library's own components |
 | Terraform | Mentioned for a Google Cloud deploy; no decision taken |
+| Dashboards over the harvest store (the trust-tier pie chart, with its total, and the review dashboards) | Their own work package and branch, off whichever of `feat/simulated-review` or `dev` holds `bionumbers.tiers` (ADR-0990) by then; kept out of the harvest and review merges. The pie's rule is settled: an issue or a disapproval is its own slice, removed from the tier slices; otherwise the highest approving role; otherwise not yet reviewed; curated on top. Open: whether curated entries stay in the chart. Mockup: https://claude.ai/artifact/KKB2Y2xgzbJAnaqJv1HS9X. Raised 2026-10-15 |
+| Harvest beyond Europe PMC: arXiv and bioRxiv/medRxiv | Harvest fetches only Europe PMC JATS for a PMCID, which misses most physics (arXiv) and preprints. Three MCP servers to look at first: `preprint-fulltext` (bioRxiv/medRxiv/arXiv via Europe PMC, openRxiv S3 and ar5iv; a licence on every record; BSD-3, v0.1.0, young), `arxiv-toolkit` (arXiv as Markdown by section; MIT) and `cyanheads/pubmed-mcp-server` (PMC → Europe PMC → Unpaywall; Apache-2.0; the most mature, and a candidate tool for the ask agent). Any new source must still pass the licence gate per paper. Tracked in scout. Raised 2026-10-15 |

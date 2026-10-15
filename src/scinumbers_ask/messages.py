@@ -35,10 +35,11 @@ from .events import (
 # controls a reader actually came for. So it says the thing that matters, which
 # is that what passes through here is recorded and why.
 #
-# **A fuller disclaimer is deferred, not dropped** (`docs/roadmap.md`). When
-# there are real users rather than invited testers, what is kept about a person
-# is shown once, before they use the app, where a person will read it -- which is
-# the right shape for that obligation and the wrong shape for a side panel.
+# **The fuller disclaimer arrived** as `PRIVACY` below, earlier than the "real
+# users rather than invited testers" condition that was to reopen it: Google will
+# not publish a consent screen without a policy at a public address. It is offered
+# rather than shown once before use -- a collapsed expander beside this line and on
+# the door -- because a notice a reader must dismiss to proceed is dismissed.
 #
 # The same sentence whether or not sign-in is configured. It was a function of
 # that for one release; with both variants identical the parameter only invited
@@ -57,10 +58,161 @@ BUDGET_NOTE = (
     "purposeful, and don't abuse budget."
 )
 
+#: Where a reader is told to write. Published on a public page, so it is a
+#: deliberate disclosure rather than a detail: change it here and it changes in
+#: both places the policy is drawn.
+PRIVACY_CONTACT = "yoavpol@gmail.com"
+
+#: The standing statement about what is kept, in full rather than in a line.
+#:
+#: `RECORDS_NOTE` says *that* exchanges are logged, which is the right length for
+#: a sidebar caption and too short to be a privacy policy. This is the long form,
+#: behind a collapsed expander so that it is reachable without being imposed.
+#: Written now because Google requires a policy at a public address before it will
+#: take a consent screen out of testing, and the app's own address is the one the
+#: consent screen points at (ADR-1100).
+#:
+#: **It must be readable without signing in**, which is what decides where it is
+#: drawn: the app's own address is what the consent screen links to, and a visitor
+#: following that link is by definition not signed in. So it is on the doors --
+#: every one of them -- and not in the side panel, where it would sit among the
+#: controls a reader came for.
+#:
+#: Every service named here is one this app actually hands something to, and the
+#: list is the part that dates fastest -- a new sink means a line here, in the
+#: same change. The first draft named four and missed three, which is the failure
+#: this note exists to stop: the *host* (everything runs on Streamlit Community
+#: Cloud), the provider **behind** the provider (Auth0 federates to Google, so a
+#: reader signing in with Google is handing Google the request), and the stores
+#: that are not the database (the conversation's own checkpoints and the trail's
+#: log file, both on the app's filesystem). A recipient omitted because it is
+#: infrastructure rather than a service is still a recipient, and the one a
+#: reader is most likely to care about was the one missing.
+PRIVACY_HEADING = "Privacy Policy"
+PRIVACY = f"""SciNumbers Ask is a research prototype, run by one person and offered by
+invitation. Using it means the following is recorded.
+
+- **Your email address**, as the sign-in provider reports it, and the role you were
+  enrolled under.
+- **Your questions, the answers given and the corpus entries behind them**, together
+  with any rating or comment you leave on an answer.
+- **Timestamps, and identifiers for the session and for each question**, so one
+  conversation can be told from another.
+
+This is kept in a hosted Postgres database, and also in files on the machine the app
+runs on: the conversation itself, so that reopening it works, and a log of the same
+records. It is used to run the app, to keep it inside the developer's budget, and to
+find where its answers go wrong. Your questions, and the corpus entries looked up for
+them, are sent to a model provider to be answered.
+
+What it passes through: **Streamlit Community Cloud**, which hosts the app and so
+handles all of the above; **Auth0** for sign-in, and **Google** where you sign in with
+a Google account; **Neon**, which holds the database; **OpenRouter** and the model
+provider it routes your question to; and, where tracing is switched on, **Langfuse**.
+Nothing is sold, and nothing is shared beyond those.
+
+Records are kept for as long as the prototype runs. To see what is held about you, or
+to have it deleted, email {PRIVACY_CONTACT}."""
+
 # The door, before anything else is drawn. Each is a different sentence because
 # each asks the reader to do a different thing -- and "not enrolled" during an
 # outage would send a person to the operator, who finds them already enrolled.
-SIGN_IN_NEEDED = "Sign in to ask a question. Nothing is shown, and nothing is kept, until you do."
+# Says *why* there is a door rather than what to do about it. The button beside it
+# already says what to do, and a visitor who was not invited needs the reason more
+# than the instruction: without it the refusal reads as a system that has not
+# recognised them yet, and they try again. Naming the budget is the honest form --
+# this is one person's money, which is also why every account is capped.
+SIGN_IN_NEEDED = "Use of this app is by invitation only since you are using the developer's budget"
+#: What each configured provider's button says. Keyed by the name the provider
+#: has in secrets -- `"default"` for the section's own credentials, a sub-table's
+#: name otherwise -- so adding a third provider is a secrets edit and, at most, a
+#: row here. A name with no row gets "Sign in with <name>" rather than a
+#: KeyError: an operator who adds `[auth.okta]` should meet a plain button, not a
+#: blank page.
+#: **A lone button says "Sign in"; two or more say what tells them apart.** The
+#: rule is on the count rather than on the provider, because the reason is: a
+#: label names a method to distinguish it from the method beside it, and with one
+#: button there is nothing to distinguish -- naming the method then invites the
+#: question of what the others are. Written as a per-provider exception first
+#: ("auth0" alone was shortened), which made `OFFERED_PROVIDERS` a lie: restoring
+#: the Google button would have drawn "Sign in with Google" beside a bare "Sign
+#: in", reintroducing the ambiguity ADR-1100 removed. The promise that restoring
+#: is one tuple is true only if the labels follow the count by themselves.
+SIGN_IN_ALONE = "Sign in"
+
+SIGN_IN_LABELS = {
+    "default": "Sign in with Google",
+    # `google` as a *named* provider, which is how the Google client is written
+    # when the buttons need to be in an order other than "default first". Moving
+    # it out of `[auth]`'s own keys into `[auth.google]` is a secrets change and
+    # nothing else -- the same label, reached by the other route.
+    "google": "Sign in with Google",
+    # What it says when it is *not* alone: "with email" is what distinguishes it
+    # from the Google button. Today it is alone (ADR-1100) and says "Sign in", by
+    # the rule above rather than by a second entry here.
+    "auth0": "Sign in with email",
+}
+
+
+def sign_in_label(provider: str, *, alone: bool = False) -> str:
+    """The button's words for one provider, given whether it is the only one."""
+    if alone:
+        return SIGN_IN_ALONE
+    return SIGN_IN_LABELS.get(provider, f"Sign in with {provider}")
+
+
+# Distinct from NOT_ENROLLED on purpose: the reader's next step differs. Here it
+# is theirs to take and it will work; there it is the operator's and nothing on
+# this page helps. A single sentence for both would send half of each group to
+# the wrong place.
+# Three goes at this one, and the failures are the useful part.
+#
+# The first named "your sign-in provider" and "the link it emailed you": accurate,
+# and inert. The reader who met it had the email and did not look, because nobody
+# thinks of Auth0 as their sign-in provider.
+#
+# The second said what to do and explained why at length, which reads as a system
+# addressing its operator rather than a person trying to ask a question.
+#
+# The third -- this one -- is a reader's own wording. "A confirmation email has
+# been sent" was resisted on the grounds that this page cannot know it, and that
+# was wrong: the sentence does not claim *just now*, and sign-up does send one,
+# whether that was five minutes or five days ago. The objection had conflated "was
+# sent" with "was just sent". Recorded because the useful correction came from the
+# person meeting the sentence cold, twice, and both times the fault was in
+# explaining rather than in the facts.
+UNVERIFIED = (
+    "A confirmation email has been sent to your address (check your spam folder too). "
+    "Please confirm it, then use the button below."
+)
+
+#: The way back in without signing out. `st.login` has no already-signed-in guard
+#: (read from the installed Streamlit 1.61.1): it redirects to the provider, which
+#: sees its own session and issues a fresh token carrying the now-confirmed
+#: address. So the reader clicks once and is admitted, with no password to retype
+#: and no apparent sign-out -- which is the difference between a door and a dead
+#: end.
+CONFIRMED_IT = "I have confirmed my email"
+
+#: The other thing a reader on that door might need, and the only dead end left in
+#: it: the email never arrived. Resending it needs an Auth0 Management credential
+#: with `update:users`, which can also create accounts and change addresses -- far
+#: more power than one message is worth, and the first credential this app would
+#: hold that acts on other people's accounts. So the button records a request
+#: instead, and the operator resends from the provider's dashboard.
+RESEND_REQUEST = "I did not get the email"
+
+#: Deliberately not "an email is on its way": nothing was sent from here, and a
+#: person told to wait for a message nobody has sent waits twice.
+#:
+#: The second sentence is the honest part. The request goes to the trail, where the
+#: operator finds it by looking (`sql/signin.sql`) -- so the wait is however long
+#: until they look. This is a prototype run by one person, and saying so while
+#: inviting a direct message is truer than implying a support desk.
+RESEND_NOTED = (
+    "Your issue has been recorded. Since this is a prototype, please also contact the "
+    "developer personally."
+)
 NOT_ENROLLED = (
     "This account is not enrolled. Ask whoever runs this to enrol it; there is nothing to do here."
 )

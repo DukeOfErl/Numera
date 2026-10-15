@@ -102,6 +102,7 @@ flowchart TB
         events[events.py]
         trace[trace.py]
         store[trail_store.py]
+        ht[hosted_trace.py]
         identity[identity: who may<br/>do what]
     end
     subgraph data["Corpus"]
@@ -110,6 +111,7 @@ flowchart TB
         units[units.py]
     end
     pg[("Postgres<br/>append-only trail")]
+    lf[("Langfuse Cloud EU<br/>one trace per question")]
 
     cli --> messages
     web --> messages
@@ -133,9 +135,20 @@ flowchart TB
     web --> fb
     fb -- "a reader's judgement" --> trace
     web --> identity
+    agent -- "a callback, only if<br/>SCINUMBERS_TRACING=langfuse" --> ht
+    web -- "who asked, as a digest" --> ht
+    fb -- "a copy of the rating" --> ht
+    ht -. "best-effort" .-> lf
 ```
 
 *Caption: which modules exist, and what each may depend on.*
+
+`hosted_trace.py` is the one module that names the hosted tracer. The agent reaches it at its single
+stream call, for a callback and for the refusal of the framework vendor's own tracing; the page
+reaches it only to attach an opaque digest around a question it is drawing; `feedback.py` reaches it
+to copy a rating. None of those paths can change an answer, and all of them do nothing unless
+tracing is switched on (ADR-1010, ADR-1020). The agent's graph (section 1) is unchanged by it:
+callbacks are not nodes, and the middleware list is the same.
 
 `identity` is three modules — `permissions.py` (the roles and the grant table as
 data), `authorization.py` (`require`, called inside the operation it guards) and
@@ -155,11 +168,12 @@ sequenceDiagram
     participant Door as web.admit
     participant Accounts as accounts.py
     participant Trail as trace logger
-    Reader->>Page: opens the app
+    Reader->>Page: opens the app, having signed in with one of the providers
     Page->>Door: which door?
+    Door->>Door: has the provider verified this address?
     Door->>Accounts: lookup(email)
     Accounts-->>Door: account, or none
-    alt not signed in, not enrolled, no credential, check unavailable
+    alt unverified, not signed in, not enrolled, no credential, check unavailable
         Door-->>Page: a closed door
         Page-->>Reader: one sentence, and nothing else
     else enrolled, with a credential
@@ -174,6 +188,59 @@ sequenceDiagram
 *Caption: what the page decides before it draws anything, and where identity
 joins the trail. The refusals are one branch because they differ only in the
 sentence shown; ADR-0830 says why the session is keyed on the account.*
+
+**The verification check is drawn before the lookup because that is where it
+is**, and the order is the point rather than a detail of the drawing: an
+unverified address never reaches the accounts table. Where sign-up at a provider
+is open, the claim is the only thing separating an enrolled tester from anyone
+who registers their address (ADR-0890). The reader arrives having chosen one of
+the configured providers; which one they used is not part of the session key and
+is not stamped on anything, because the address is the identity (ADR-0880).
+
+## 3c. What happens when the operator enrols a tester
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operator
+    participant Cmd as scinumbers-enrol
+    participant Neon as neon.py
+    participant OR as OpenRouter
+    participant Accounts as accounts.py
+    Operator->>Cmd: email, role, cap, --branch
+    Cmd->>Cmd: refuse a cap that is not positive, or an unknown role
+    Cmd->>Neon: which branch is called this?
+    Note over Cmd,Neon: the cheap refusals run first, so a<br/>mistyped cap costs no live call
+    Neon-->>Cmd: exactly one, or a refusal listing what was found
+    Cmd->>OR: mint a key capped at the amount, renewing monthly
+    OR-->>Cmd: the key, and the cap it actually set
+    Cmd->>Accounts: insert the row
+    alt the row was written
+        Accounts-->>Operator: enrolled, without the credential
+    else it was not
+        Cmd->>OR: withdraw the key again
+        Cmd-->>Operator: nothing was enrolled
+    end
+```
+
+*Caption: two systems with no transaction between them, and what a half-done
+enrolment leaves behind. Everything that can be refused from the arguments alone
+is refused before any live call; the branch is resolved before the mint, so a
+mistyped name is free too. ADR-0900.*
+
+The cap and role checks belong to `enrol`, not to the command, and `enrol` runs
+them — the command runs the same expression of them first only so that
+`--limit-usd 0` does not spend two control-plane calls before anything says no.
+A review found this diagram drawn in the order the code *should* have run rather
+than the order it did; the code moved to match the drawing, which was the right
+way round here because the drawing was the better design.
+
+**The order is the decision.** Inserting first would leave a row with no key —
+a door of its own, where the tester is told no credential has been issued and the
+operator sees an account that looks deliberately keyless rather than half-made.
+Minting first leaves, at worst, a capped key nobody refers to, and the command
+withdraws it on the way out. Where the withdrawal fails too, the key is named so
+a person can revoke it by hand; that is the one outcome this leaves work for.
 
 **The identity modules are core so that the refusal is reachable without a
 browser**, and `test_driver_independence.py` names them as such on purpose
@@ -226,6 +293,40 @@ consumes the same events `cli` and `web` do, and the agent takes no parameter
 naming its caller (ADR-0110). Its own modules are section 6. It carries one rule
 the interactive drivers do not — it may not reach for a terminal, or the thing
 meant to run unattended would need one.
+
+## 3d. What happens each hour when a reader may have just arrived
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Tick as GitHub schedule
+    participant Job as first-use.yml
+    participant Cmd as scinumbers-first-use
+    participant Trail as the trail (read-only role)
+    participant Issue as the "first use" issue
+    actor Operator
+    Tick->>Job: hourly, from main only
+    Job->>Cmd: the read-only URL, the excluded addresses
+    Cmd->>Trail: set transaction read only, then who was first seen in the window
+    Trail-->>Cmd: one row per reader, with each first
+    alt nobody new
+        Cmd-->>Job: nothing at all, exit 0
+        Note over Job,Issue: a quiet hour touches GitHub not at all
+    else somebody new
+        Cmd-->>Job: one line per reader, to a file
+        Job->>Issue: a comment on the one open issue
+        Issue-->>Operator: GitHub mails the owner
+    else the trail cannot be read
+        Cmd-->>Job: exit 1, said loudly
+        Note over Job,Operator: the daily digest reports the failed run
+    end
+```
+
+*Caption: the command keeps no state. "First" is read out of the trail each hour,
+which is why the window is longer than the interval: a tick that is delayed leaves a
+gap an exact-hour window would lose a reader in, and a repeat costs a line.
+ADR-1250. The job holds a role that can read one table (ADR-1260), and the report
+goes to a file and an issue, never the run's log (ADR-1280).*
 
 ## 4. Ingestion: how the published export becomes a corpus
 
