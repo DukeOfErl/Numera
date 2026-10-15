@@ -108,6 +108,29 @@ class TestRequest:
                 system=SYSTEM, messages=MESSAGES, output_format=Answer, max_tokens=9
             )
 
+    def test_a_moderation_flag_is_the_paper_s_failure_not_the_account_s(self):
+        """Code review of 2026-10-15: OpenRouter answers 403 when moderation flags the input.
+        The negative of the test above, varying the one thing the rule reads -- the body's
+        moderation metadata -- at the same status."""
+        body = {
+            "error": {
+                "code": 403,
+                "message": "Input was flagged",
+                "metadata": {
+                    "reasons": ["violence"],
+                    "flagged_input": "...botulinum toxin...",
+                    "provider_name": "OpenAI",
+                    "model_slug": "openai/gpt-6.1-sol",
+                },
+            }
+        }
+        seen, client = _server(body, status=403)
+
+        with pytest.raises(ModelRefused, match="moderation.*violence"):
+            OpenRouterModel("k", client=client).parse(
+                system=SYSTEM, messages=MESSAGES, output_format=Answer, max_tokens=9
+            )
+
     def test_a_server_error_is_still_the_paper_s_failure(self):
         """The negative, varying the status: a 500 is one paper's bad luck, not the account's."""
         seen, client = _server({"error": {"message": "overloaded"}}, status=500)

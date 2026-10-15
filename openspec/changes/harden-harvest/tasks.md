@@ -18,6 +18,18 @@ ADR block: `1700`–`1740` (reserved in `CLAUDE.md`).
 - [ ] 3.2 A line whose first non-blank character is `#` is a comment in a PMCID file; test with an indented comment
 - [ ] 3.3 The committable-run-folder guard lives in the operation that creates the run folder, called once
 
-## 4. Before hand-over
+## 4. From the code review of 2026-10-15 (the five that let a wrong value or licence through were fixed on `add-harvest-prototype`)
 
-- [ ] 4.1 Map the three requirements in `tests/test_spec_conformance.py` (recorded as gaps until then)
+- [ ] 4.1 A paper with no full text at discovery that `extract` fetches again has its licence read then, before any call; until it has one it is set aside with no spend (`cli._one_paper`)
+- [ ] 4.2 A citation written as a superscript (`<sup><xref ref-type="bibr">`) folds away whole, caret included, so a quote with or without the marker verifies (10 of 130 cached papers)
+- [ ] 4.3 A row whose label is a `<td rowspan>` carried down from the row above keeps that label as its row header (15 of 130 cached papers)
+- [ ] 4.4 Re-extracting a run under the same id cannot mix two extractions on load: refuse, or load the run's items as one generation
+- [ ] 4.5 Text and table cells on the review page are escaped for Markdown wherever they are shown (`>128` rendered as a blockquote), not only in `as_markdown`
+- [ ] 4.6 A condition's quote is stored as the paper's text, reduced from a rendered table line as the claim's is
+- [ ] 4.7 A second text may not be a fragment of the supporting text, nor a second occurrence identical to it
+- [ ] 4.8 `extract` and `choose_second_text` take the model id from the client, so a caller other than the CLI cannot record and price the wrong model
+- [ ] 4.9 One location mapping (`jats.Passage.location()`) and one superscript table, shared by the reader and the checker
+
+## 5. Before hand-over
+
+- [ ] 5.1 Map the three requirements in `tests/test_spec_conformance.py` (recorded as gaps until then)

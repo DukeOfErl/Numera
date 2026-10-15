@@ -217,6 +217,54 @@ def test_every_dash_in_an_exponent_is_a_superscript_minus(dash):
     assert paragraph.text == f"a rate of 0.23 h{chr(0x207B)}{chr(0x00B9)} was seen"
 
 
+_MATH = 'xmlns:mml="http://www.w3.org/1998/Math/MathML"'
+
+
+def _paragraph(inner: str) -> str:
+    return (
+        f'<article article-type="research-article" {_MATH}><body><sec><title>Results</title>'
+        f"<p>{inner}</p></sec></body></article>"
+    )
+
+
+def test_a_mathml_exponent_keeps_its_meaning():
+    """Code review of 2026-10-15: `<mml:msup>` flattened to `2.5×108`, the 2026-09-21 finding 3
+    back again for the 22 of 130 cached papers that write exponents in MathML. Markup as
+    PMC12331447 writes it."""
+    doc = read_jats(
+        _paragraph(
+            "reached <inline-formula><mml:math><mml:mn>2.5</mml:mn><mml:mo>×</mml:mo>"
+            "<mml:msup><mml:mrow><mml:mn>10</mml:mn></mml:mrow><mml:mn>8</mml:mn></mml:msup>"
+            "</mml:math></inline-formula> cells"
+        )
+    )
+    paragraph = holding(doc, "reached", kind="p")
+    assert paragraph.text == f"reached 2.5×10{chr(0x2078)} cells"
+
+
+def test_a_mathml_exponent_with_a_subscript_keeps_both():
+    doc = read_jats(
+        _paragraph(
+            "a rate <inline-formula><mml:math><mml:msubsup><mml:mi>k</mml:mi><mml:mi>on</mml:mi>"
+            "<mml:mrow><mml:mo>−</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msubsup>"
+            "</mml:math></inline-formula> here"
+        )
+    )
+    assert holding(doc, "a rate", kind="p").text == f"a rate kon{chr(0x207B)}{chr(0x00B9)} here"
+
+
+def test_a_formula_given_two_ways_is_read_once():
+    """`<alternatives>` holding MathML and TeX read `s-1s^{-1}`; the MathML one is read."""
+    doc = read_jats(
+        _paragraph(
+            "at 4 <inline-formula><alternatives><tex-math>s^{-1}</tex-math><mml:math>"
+            "<mml:msup><mml:mi>s</mml:mi><mml:mrow><mml:mo>−</mml:mo><mml:mn>1</mml:mn></mml:mrow>"
+            "</mml:msup></mml:math></alternatives></inline-formula> today"
+        )
+    )
+    assert holding(doc, "at 4", kind="p").text == f"at 4 s{chr(0x207B)}{chr(0x00B9)} today"
+
+
 def test_a_superscript_that_is_not_a_number_is_marked_with_a_caret():
     """A footnote letter has no superscript character; a caret says it was raised rather than
     letting `elsewherea` read as a word."""

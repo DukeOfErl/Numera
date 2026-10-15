@@ -399,6 +399,46 @@ class TestLicence:
         the assertion can tell which source was read."""
         assert licence_of({"license": "cc0"}, fixture("fulltext_PMC2288635.xml")) == "cc0"
 
+    @pytest.mark.parametrize(
+        "terms",
+        [
+            "http://www.rupress.org/terms",
+            "http://www.nature.com/authors/editorial_policies/license.html#terms",
+            "https://www.elsevier.com/tdm/userlicense/1.0/",
+        ],
+        ids=["rupress", "nature", "elsevier-tdm"],
+    )
+    @pytest.mark.parametrize("layout", ["ali", "href", "prose"])
+    def test_a_link_that_is_not_an_open_licence_is_no_licence(self, terms, layout):
+        """Code review of 2026-10-15: any link counted, and 10 of 130 cached papers carried a
+        publisher's terms page as their licence, past the one guard (`UNLICENSED`) that stops
+        text. The first two are links real cached papers carry."""
+        inner = {
+            "ali": f"<ali:license_ref>{terms}</ali:license_ref>",
+            "href": "",
+            "prose": f'<license-p>See <ext-link xlink:href="{terms}">terms</ext-link></license-p>',
+        }[layout]
+        attribute = f' xlink:href="{terms}"' if layout == "href" else ""
+        xml = (
+            '<article xmlns:xlink="http://www.w3.org/1999/xlink" '
+            'xmlns:ali="http://www.niso.org/schemas/ali/1.0/"><front><article-meta>'
+            f"<permissions><license{attribute}>{inner}</license></permissions>"
+            "</article-meta></front></article>"
+        )
+
+        assert licence_of(None, xml) == UNLICENSED
+
+    def test_an_open_licence_after_a_terms_link_is_found(self):
+        xml = (
+            '<article xmlns:xlink="http://www.w3.org/1999/xlink"><front><article-meta>'
+            '<permissions><license><license-p><ext-link xlink:href="http://www.rupress.org/terms">'
+            "terms</ext-link>, then CC BY-NC-SA "
+            '<ext-link xlink:href="https://creativecommons.org/licenses/by-nc-sa/4.0/">here</ext-link>'
+            "</license-p></license></permissions></article-meta></front></article>"
+        )
+
+        assert licence_of(None, xml) == "https://creativecommons.org/licenses/by-nc-sa/4.0/"
+
     def test_a_document_stating_no_licence_is_unlicensed(self):
         xml = (
             "<article><front><article-meta><permissions>"
