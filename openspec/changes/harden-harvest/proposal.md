@@ -15,6 +15,10 @@ reader is told when that happens.
 - The review page keeps one database connection across reruns whichever way its database is named
   (no behaviour change; listed for the task).
 - The guard refusing a run folder git would track lives in the operation that writes the run, once.
+- Nine findings of the 2026-10-15 code review that let no wrong value through: a re-fetched paper's
+  licence, superscript citations, spanned row labels, a re-extracted run mixing on load, Markdown on
+  the review page, condition quotes in rendered form, second-text fragments, the model id's default,
+  and two duplicated tables.
 
 Builds on `add-harvest-prototype` (tasks 6.5, 6.6, 6.8, 6.9 there, moved here on 2026-10-15). The
 short citation labels of `add-ask-over-store` (`PMC…-n`, `-n.2` for a later run) are that

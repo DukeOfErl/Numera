@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import html
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
@@ -28,6 +28,7 @@ from bionumbers.quotes import (
     cell_text,
     contains,
     fold,
+    numbers_in,
     states_value,
     verify,
 )
@@ -44,6 +45,9 @@ _MARKUP = re.compile(r"<[^>]+>")
 class _Passage:
     id: str
     text: str
+    kind: str = "p"
+    row_headers: tuple[str, ...] = ()
+    column_headers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,19 +349,90 @@ def test_the_checker_is_written_in_ascii():
 
 class TestARenderedCell:
     """The model is shown a cell as 'row: … | column: … | cell: X'. Quoting that line is quoting
-    our rendering plus the paper's cell; only the cell is the paper's."""
+    our rendering plus the paper's cell; only the cell is the paper's, and only a table cell under
+    the headers quoted may hold it (code review of 2026-10-15)."""
+
+    CELL = _Passage(
+        id="t3r2c8",
+        text="693.0",
+        kind="td",
+        row_headers=("Dt (h)",),
+        column_headers=("NLC-CIP (ng/mL)", "500"),
+    )
 
     def test_a_quote_carrying_its_headers_is_checked_on_its_cell(self):
-        doc = _Document(passages=(_Passage(id="t3r2c8", text="693.0"),))
+        doc = _Document(passages=(self.CELL,))
         outcome = verify("row: Dt (h) | column: NLC-CIP (ng/mL) / 500 | cell: 693.0", doc, "t3r2c8")
         assert isinstance(outcome, Verified) and outcome.in_named_passage
 
     def test_the_cell_part_is_still_held_to_the_digit(self):
-        doc = _Document(passages=(_Passage(id="t3r2c8", text="693.0"),))
+        doc = _Document(passages=(self.CELL,))
         assert isinstance(verify("row: Dt (h) | cell: 693.5", doc, "t3r2c8"), Failed)
 
     def test_a_sentence_that_merely_mentions_a_cell_is_not_reduced(self):
         assert cell_text("the cell: count was 693") == "the cell: count was 693"
+
+    def test_a_cell_quote_never_matches_a_paragraph(self):
+        """The reproduction: 'cell: 39' under a Kd column, against a cell reading 12 and a
+        paragraph saying 'isolated in 1939'."""
+        doc = _Document(
+            passages=(
+                _Passage(id="p1", text="The strain was isolated in 1939 from soil."),
+                _Passage(
+                    id="t1r2c2",
+                    text="12",
+                    kind="td",
+                    row_headers=("mut",),
+                    column_headers=("Kd (nM)",),
+                ),
+            )
+        )
+        assert isinstance(verify("row: mut | column: Kd (nM) | cell: 39", doc, "t1r2c2"), Failed)
+
+    def test_a_cell_quote_never_matches_another_number_s_digits(self):
+        doc = _Document(passages=(replace(self.CELL, text="1693.0"),))
+        quote = "row: Dt (h) | column: NLC-CIP (ng/mL) / 500 | cell: 693.0"
+        assert isinstance(verify(quote, doc, "t3r2c8"), Failed)
+
+    @pytest.mark.parametrize(
+        "quote",
+        [
+            "row: Dt (h) | column: CIP (ng/mL) / 500 | cell: 693.0",
+            "row: Dt (min) | column: NLC-CIP (ng/mL) / 500 | cell: 693.0",
+        ],
+        ids=["column", "row"],
+    )
+    def test_a_cell_quote_under_other_headers_is_refused_and_says_why(self, quote):
+        outcome = verify(quote, _Document(passages=(self.CELL,)), "t3r2c8")
+        assert isinstance(outcome, Failed) and "headers" in outcome.reason
+
+    def test_a_cell_quote_naming_no_headers_matches_any_cell(self):
+        doc = _Document(passages=(self.CELL,))
+        assert isinstance(verify("cell: 693.0", doc, "t3r2c8"), Verified)
+
+    def test_a_plain_quote_of_a_cell_is_still_verified(self):
+        assert isinstance(verify("693.0", _Document(passages=(self.CELL,)), "t3r2c8"), Verified)
+
+
+class TestNumberBoundaries:
+    """A quote that starts or ends on a digit starts or ends where the paper's number does."""
+
+    DOC = _Document(passages=(_Passage(id="p1", text="Doubling took 139 min, or 39.4 in LB."),))
+
+    @pytest.mark.parametrize("quote", ["39 min", "took 13", "or 39", "9.4 in"])
+    def test_a_quote_cutting_a_number_is_refused(self, quote):
+        assert isinstance(verify(quote, self.DOC, "p1"), Failed)
+
+    @pytest.mark.parametrize("quote", ["139 min", "or 39.4 in LB.", "39.4", "took 139"])
+    def test_a_quote_on_whole_numbers_is_verified(self, quote):
+        assert isinstance(verify(quote, self.DOC, "p1"), Verified)
+
+    def test_a_number_ending_a_sentence_is_read(self):
+        """Code review of 2026-10-15: '(?![\\d.])' made 'was 2.4.' state no number at all."""
+        text = "The Hill coefficient was 2.4. Doubling took 39."
+        assert numbers_in(text) == ("2.4", "39")
+        assert states_value(text, "2.4") and states_value(text, "39")
+        assert not states_value("The coefficient was 2.45.", "2.4")
 
 
 class TestStatesValue:

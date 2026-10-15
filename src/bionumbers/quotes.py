@@ -101,10 +101,16 @@ _SUPERSCRIPT_RUN = re.compile(f"[{_SUPERSCRIPT_CHARS}]+")
 
 
 class PassageLike(Protocol):
-    """One container of the paper: the unit a location names, and the unit a quote must fit in."""
+    """One container of the paper: the unit a location names, and the unit a quote must fit in.
+
+    `kind` and the two header tuples are read only for a quote of a rendered table line, which may
+    match nothing but a table cell under the headers it names."""
 
     id: str
     text: str
+    kind: str
+    row_headers: Sequence[str]
+    column_headers: Sequence[str]
 
 
 class HasPassages(Protocol):
@@ -170,10 +176,16 @@ def contains(haystack: str, needle: str) -> bool:
 # is checked as strictly as any other quote. Found on the first live run (2026-09-18), where every
 # cell candidate for a second text failed for carrying its own headers.
 _RENDERED_CELL = re.compile(
-    r"\A\s*(?:row:\s*[^|]*\|\s*)?(?:column:\s*[^|]*\|\s*)?cell:\s*(?P<cell>.*)\Z", re.DOTALL
+    r"\A\s*(?:row:\s*(?P<row>[^|]*?)\s*\|\s*)?(?:column:\s*(?P<column>[^|]*?)\s*\|\s*)?"
+    r"cell:\s*(?P<cell>.*)\Z",
+    re.DOTALL,
 )
 
-_NUMBER = re.compile(r"(?<![\d.])\d+(?:\.\d+)?(?![\d.])")
+#: A number ends at the first character that cannot continue it. A full stop continues it only when
+#: a digit follows: "was 2.4." ends a sentence on 2.4, which `(?![\d.])` made invisible to every
+#: check here (code review of 2026-10-15) -- a correct quote of a dimensionless value at the end of
+#: a sentence was refused as not stating it.
+_NUMBER = re.compile(r"(?<![\d.])\d+(?:\.\d+)?(?!\d|\.\d)")
 _UNCERTAINTY = re.compile(r"\s*(?:\+/-|\+-|\u00b1)\s*")
 
 
@@ -256,18 +268,38 @@ def verify(quote: str, document: HasPassages, passage_id: str | None = None) -> 
     refused. A quote spanning two passages fails: the claim's location has to name one container,
     and a span that fits none has no location to record.
     """
-    wanted = fold(cell_text(quote))
+    rendered = _RENDERED_CELL.match(quote)
+    wanted = fold(rendered.group("cell") if rendered else quote)
     if not wanted:
         return Failed(reason="empty quote", longest_prefix=0)
 
+    # A quote of a rendered table line may only be a table cell's, under the headers it names. Once
+    # the headers were dropped and the cell searched everywhere, "cell: 39" with a Kd column named
+    # verified against "isolated in 1939" in a paragraph (code review of 2026-10-15).
+    candidates = [
+        passage
+        for passage in document.passages
+        if rendered is None or _under_headers(passage, rendered)
+    ]
+
     if passage_id is not None:
-        for passage in document.passages:
-            if passage.id == passage_id and wanted in fold(passage.text):
+        for passage in candidates:
+            if passage.id == passage_id and _bounded_in(wanted, fold(passage.text)):
                 return Verified(passage_id=passage_id, in_named_passage=True)
 
-    for passage in document.passages:
-        if wanted in fold(passage.text):
+    for passage in candidates:
+        if _bounded_in(wanted, fold(passage.text)):
             return Verified(passage_id=passage.id, in_named_passage=passage_id is None)
+
+    if rendered is not None and any(
+        _bounded_in(wanted, fold(passage.text)) for passage in document.passages
+    ):
+        return Failed(
+            reason=(
+                "the cell's text is in the paper, but not in a table cell under the headers quoted"
+            ),
+            longest_prefix=len(wanted),
+        )
 
     # The probe's diagnostic, over the whole paper rather than a passage: where a quote diverges is
     # usually outside the passage it was meant to come from, and the retry has to be told the
@@ -288,3 +320,40 @@ def verify(quote: str, document: HasPassages, passage_id: str | None = None) -> 
         ),
         longest_prefix=low,
     )
+
+
+def _under_headers(passage: PassageLike, rendered: re.Match[str]) -> bool:
+    """Is the passage a table cell whose headers are the ones the rendered quote names?
+
+    A header the quote leaves out is not checked; one it gives must be the cell's own, joined the
+    way `jats.render_for_model` joins them. Refusing a mismatch costs the bounded retry; accepting
+    one would put the value under another row's or column's condition."""
+    if getattr(passage, "kind", None) != "td":
+        return False
+    for group, headers in (("row", "row_headers"), ("column", "column_headers")):
+        given = rendered.group(group)
+        if given is not None and fold(given) != fold(" / ".join(getattr(passage, headers, ()))):
+            return False
+    return True
+
+
+def _bounded_in(wanted: str, haystack: str) -> bool:
+    """Is `wanted` in `haystack` somewhere it does not cut a number in two?
+
+    A quote that begins or ends on a digit must begin or end where the paper's number does: "39"
+    is not quoted from "139" or "1939", nor from "39.4". Both strings are already folded. Text
+    edges are not checked beyond digits, so a quote may still start mid-sentence as before."""
+    start = haystack.find(wanted)
+    while start != -1:
+        end = start + len(wanted)
+        before_ok = not wanted[0].isdigit() or not (
+            start and (haystack[start - 1].isdigit() or haystack[start - 1] == ".")
+        )
+        after = haystack[end : end + 2]
+        after_ok = not wanted[-1].isdigit() or not (
+            after[:1].isdigit() or (after[:1] == "." and after[1:2].isdigit())
+        )
+        if before_ok and after_ok:
+            return True
+        start = haystack.find(wanted, start + 1)
+    return False

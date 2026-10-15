@@ -183,16 +183,24 @@ def licence_of(record: dict | None, xml: str | None) -> str:
         # inside the prose is all two of the three fixtures give (PMC13340094, PMC2288635), so a
         # reader that stops at the first two returns UNLICENSED for papers that are plainly CC BY.
         ref = element.xpath("string(ali:license_ref)", namespaces=_NAMESPACES).strip()
-        if ref:
-            return ref
         href = (element.get(f"{{{_XLINK}}}href") or "").strip()
-        if href:
-            return href
         links = element.xpath(".//*[local-name()='ext-link']/@xlink:href", namespaces=_NAMESPACES)
-        for link in links:
-            if str(link).strip():
-                return str(link).strip()
+        for candidate in (ref, href, *(str(link).strip() for link in links)):
+            if _OPEN_LICENCE.match(candidate):
+                return candidate
     return UNLICENSED
+
+
+#: What a document's own link must be to count as a licence: a Creative Commons licence or public
+#: domain dedication. Any link was accepted before, and 10 of 130 cached papers then carried a
+#: publisher's terms page (`rupress.org/terms`, Nature's editorial policies) as their licence --
+#: which only `UNLICENSED` stops, so their text could reach the review store (code review of
+#: 2026-10-15). A licence this does not recognise reads as none: the cost is a paper set aside,
+#: the other direction is a licence breach. The index's own field is not held to this, being the
+#: archive's judgement rather than a link in publisher prose.
+_OPEN_LICENCE = re.compile(
+    r"\Ahttps?://(?:www\.)?creativecommons\.org/(?:licenses|publicdomain)/", re.I
+)
 
 
 class EuropePMC:

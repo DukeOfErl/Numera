@@ -80,7 +80,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-first-use-notice` | `1250`–`1290` — all written |
 | `speed-up-test-loop` | `1300`–`1340` — `1300` written |
 | `add-first-use-heartbeat` | `1350`–`1390` — `1350` written |
-| `add-harvest-prototype` | `1500`–`1590` — `1500`, `1510` written, and `1520`–`1540` hold the validator's renumbered three; clear of every block on `dev` and the branches as of 2026-10-07 (highest `1350`–`1390`) |
+| `add-harvest-prototype` | `1500`–`1590` — `1500`, `1510` written, and `1520`–`1540` hold the validator's renumbered three; archived 2026-10-15; clear of every block on `dev` and the branches as of 2026-10-07 (highest `1350`–`1390`) |
 | `harden-harvest` | `1700`–`1740` — reserved 2026-10-15, after `add-ask-over-store`'s `1600`–`1690` on `feat/ask-over-store` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last

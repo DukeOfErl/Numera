@@ -491,6 +491,12 @@ def _text(element: etree._Element | None, skip: frozenset[str] = frozenset()) ->
     return _WHITESPACE.sub(" ", "".join(_pieces(element, skip))).strip()
 
 
+#: MathML's namespace. Its exponents need the treatment `<sup>` gets: flattened, `10<msup>`'s
+#: base and exponent read `108`, the 2026-09-21 review's finding 3 back again in 22 of 130
+#: cached papers (code review of 2026-10-15).
+_MML = "{http://www.w3.org/1998/Math/MathML}"
+
+
 def _pieces(element: etree._Element, skip: frozenset[str]):
     if element.text:
         yield element.text
@@ -501,10 +507,34 @@ def _pieces(element: etree._Element, skip: frozenset[str]):
                 yield f"[ref {inner or child.get('rid', '')}]"
             elif child.tag == "sup":
                 yield _superscript("".join(_pieces(child, skip)))
+            elif child.tag in (_MML + "msup", _MML + "msubsup") and len(child) in (2, 3):
+                # (base, exponent) or (base, subscript, exponent): the exponent is always last.
+                *lower, exponent = child
+                for part in lower:
+                    yield "".join(_pieces(part, skip))
+                yield _superscript("".join(_pieces(exponent, skip)))
+            elif child.tag == "alternatives":
+                # One formula given several ways (MathML, TeX, an image): read one of them, the
+                # MathML where there is one, or the text would say `s-1s^{-1}`.
+                chosen = _one_alternative(child)
+                if chosen is not None:
+                    yield "".join(_pieces(chosen, skip))
             elif child.tag not in skip:
                 yield from _pieces(child, skip)
         if child.tail:
             yield child.tail
+
+
+def _one_alternative(alternatives: etree._Element) -> etree._Element | None:
+    """The MathML child of an `<alternatives>`, else its first child that is not an image."""
+    children = [child for child in alternatives if isinstance(child.tag, str)]
+    for child in children:
+        if child.tag == _MML + "math":
+            return child
+    for child in children:
+        if child.tag not in ("graphic", "inline-graphic", "media"):
+            return child
+    return None
 
 
 def _superscript(text: str) -> str:
