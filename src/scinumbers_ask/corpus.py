@@ -101,6 +101,29 @@ class Harvest:
     reading_uncertain: bool = False
 
 
+#: How many of five a trust tier stands for, keyed by the tier's name (ADR-0990's `Tier` is a string
+#: enum, so its name is its value). Keyed by name so that neither the tools nor the drivers import
+#: `bionumbers` to read a tier (ADR-1600). One scale for the model's view and the reader's stars.
+TRUST_LEVEL = {
+    "CURATED": 5,
+    "SENIOR_SCIENTIST": 4,
+    "SCIENTIST": 3,
+    "STUDENT": 2,
+    "AI": 1,
+    "NONE": 0,
+}
+
+#: Who stands behind each tier, in words.
+TRUST_ROLE = {
+    "CURATED": "curated",
+    "SENIOR_SCIENTIST": "senior scientist",
+    "SCIENTIST": "scientist",
+    "STUDENT": "student",
+    "AI": "AI reviewer",
+    "NONE": "no reviewer approved it",
+}
+
+
 class CorpusUnavailable(Exception):
     """Raised instead of falling back to bundled data, of which there is none."""
 

@@ -1,0 +1,11 @@
+{
+ "get": {
+  "100001": "entry_id: 100001\nproperty: Cell length\norganism: Bacteria Escherichia coli\nvalue: 1.94–2.72 μm\nreference: Grossman N. J Bacteriol. 1982 p.37 table 1\npubmed: 6749809\nmethod: P.37: \"Cells of E. coli B...\"\ncomments: Range for E. coli B. See [[102065]], [[104333]]\ncites: [[102065]], [[104333]]",
+  "100002": "entry_id: 100002\nproperty: Cell diameter\norganism: Bacteria Escherichia coli\nvalue: 1.0–1.1 μm\nreference: Nelson DE. J Bacteriol. 2000 p.1719\npubmed: 10692378\ncomments: \"...clustered between 1.0 and 1.1 µm\". See [[103714]]\ncites: [[103714]]",
+  "100003": "entry_id: 100003\nproperty: Cell volume\norganism: Bacteria Escherichia coli\nvalue: 0.1–3.5 μm^3\nreference: Loferer-Krossbacher M. 1998 abstract",
+  "100010": "entry_id: 100010\nproperty: Cell diameter\norganism: Budding yeast Saccharomyces cerevisiae\nvalue: 5.0 μm\nreference: Some ref p.1\npubmed: 111111",
+  "100020": "entry_id: 100020\nproperty: Number of ribosomes\norganism: Bacteria Escherichia coli\nvalue: 6800.0–72000.0 unitless\nreference: Bremer H. 1996\npubmed: 222222",
+  "100030": "entry_id: 100030\nproperty: Mass of protein\norganism: African clawed frog Xenopus laevis\nvalue: 25.0 μg\nreference: Ref p.2"
+ },
+ "search": "4 entries matched; all shown.\nentry_id\tproperty\torganism\tvalue\n100001\tCell length\tBacteria Escherichia coli\t1.94–2.72 μm\n100002\tCell diameter\tBacteria Escherichia coli\t1.0–1.1 μm\n100003\tCell volume\tBacteria Escherichia coli\t0.1–3.5 μm^3\n100010\tCell diameter\tBudding yeast Saccharomyces cerevisiae\t5.0 μm\nNOTE: these rows measure 2 different kinds of quantity (length, volume). Values of different kinds are not alternative estimates of one quantity and must not be presented as a range or an average."
+}

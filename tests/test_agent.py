@@ -1190,3 +1190,16 @@ def test_an_answer_that_searched_is_not_reported(repo, config, tmp_path):
     )
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
     assert not any(isinstance(e, UngroundedRefusal) for e in events)
+
+
+def test_the_prompt_puts_relevance_before_trust():
+    """`store-corpus`: told only to prefer trusted entries, a model can lead with a five-star value
+    about a neighbouring quantity. So the instruction orders the two, and says a rating never makes
+    an entry relevant."""
+    lowered = SYSTEM_PROMPT.lower()
+    first = lowered.index("decide first which entries bear on the question")
+    assert "never makes an entry relevant" in lowered
+    assert lowered.index("prefer the better-rated one") > first
+    assert "disputed" in lowered
+    # Asked not to write stars, never asked to: the drawn ones are the tier (ADR-1630).
+    assert "do not write ratings or stars" in lowered

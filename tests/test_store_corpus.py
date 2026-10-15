@@ -29,7 +29,8 @@ from scinumbers_ask import corpus, store_corpus
 from scinumbers_ask.corpus import Condition, CorpusUnavailable, Origin
 from scinumbers_ask.events import CitationWarning
 from scinumbers_ask.repository import CorpusRepository
-from scinumbers_ask.trace import configure
+from scinumbers_ask.tools import ToolBudget, build_tools
+from scinumbers_ask.trace import configure, start_question
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -368,3 +369,91 @@ def test_a_label_no_loaded_entry_carries_is_reported_unknown(store_path, config,
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "F-actin?"))
     (warning,) = [e for e in events if isinstance(e, CitationWarning)]
     assert warning.unknown == ("PMC1000001-9",)
+
+
+# -- what the model is shown (D5) ---------------------------------------------
+
+
+def _tools(repo):
+    built = build_tools(repo, start_question("dev"), lambda event: None, ToolBudget(99))
+    return {tool.name: tool for tool in built}
+
+
+@pytest.fixture
+def store_tools(store_path):
+    return _tools(CorpusRepository(store_corpus.load(store_path)))
+
+
+def test_a_corpus_file_s_tool_output_is_what_it_was_before_this_change(repo):
+    """The snapshot was taken from the code before the store existed (2026-10-15), not after."""
+    before = json.loads((FIXTURES / "tool_output_before_store.json").read_text(encoding="utf-8"))
+    tools = _tools(repo)
+    for entry_id, text in before["get"].items():
+        assert tools["get_entry"].invoke({"entry_id": int(entry_id)}) == text
+    assert tools["search_entries"].invoke({"property": "Cell"}) == before["search"]
+
+
+def test_a_word_only_in_the_passage_finds_the_entry(store_path):
+    """`lamellipodial` is in the quote, not in the paper's wording of the property. The repository
+    matches a keyword as a substring of each keyword, so a whole passage held as one keyword is
+    searched like any other (checked 2026-10-15 before relying on it)."""
+    repo = CorpusRepository(store_corpus.load(store_path))
+    assert "lamellipodial" not in repo.get("PMC1000001-1").entry.property.lower()
+    found = {row.entry_id for row in repo.search(keyword="lamellipodial").rows}
+    assert found == {"PMC1000001-1"}
+    by_condition = {row.entry_id for row in repo.search(keyword="electron microscopy").rows}
+    assert by_condition == {"PMC1000001-1"}
+    assert {row.entry_id for row in repo.search(keyword="cytoskeleton").rows} >= {"PMC1000001-2"}
+    assert repo.search(keyword="nowhere in any passage").rows == ()
+
+
+def test_a_harvested_entry_shows_the_model_what_it_needs_to_judge_it(store_tools):
+    text = store_tools["get_entry"].invoke({"entry_id": "PMC1000001-1"})
+    assert "origin: measured" in text
+    assert 'quote: "The lamellipodial F-actin concentration was 488 µM' in text
+    assert 'condition: organism -- "invented mouse cells"' in text
+    assert "not stated: temperature" in text
+    assert "domain: biology / cytoskeleton" in text
+    assert "trust: 3 of 5 (scientist, simulated review); disputed" in text
+
+
+def test_a_calculated_entry_is_shown_as_a_calculation_with_its_inputs(store_tools):
+    authors = store_tools["get_entry"].invoke({"entry_id": "PMC1000001-2"})
+    assert "origin: calculated by the paper's authors" in authors
+    assert 'calculated from: "Invented input passage one."' in authors
+    assert "caution: this value was calculated, not measured" in authors
+    published = store_tools["get_entry"].invoke({"entry_id": "PMC1000001-3"})
+    assert "origin: calculated from values published elsewhere" in published
+    measured = store_tools["get_entry"].invoke({"entry_id": "PMC1000001-1"})
+    assert "calculated" not in measured
+
+
+def test_an_uncertain_reading_is_cautioned_and_given_in_the_paper_s_words(store_tools):
+    text = store_tools["get_entry"].invoke({"entry_id": "PMC1000001-4"})
+    assert "value: 10–20 s" in text
+    assert "caution: the value could not be read as a number with certainty" in text
+    fitting = store_tools["get_entry"].invoke({"entry_id": "PMC1000001-1"})
+    assert "could not be read" not in fitting
+
+
+def test_every_tier_reads_as_words_on_one_scale(store_tools):
+    shown = {
+        i: store_tools["get_entry"].invoke({"entry_id": i})
+        for i in (100001, "PMC1000001-2", "PMC1000001-3", "PMC1000001-4", "PMC2000002-1")
+    }
+    assert "trust: 5 of 5 (curated)" in shown[100001]
+    assert "trust: 1 of 5 (AI reviewer)" in shown["PMC1000001-2"]
+    assert "trust: 4 of 5 (senior scientist)" in shown["PMC1000001-3"]
+    assert "trust: 0 of 5 (no reviewer approved it); disputed" in shown["PMC1000001-4"]
+    assert "trust: 0 of 5 (not yet reviewed)" in shown["PMC2000002-1"]
+    assert "disputed" not in shown["PMC2000002-1"]
+    assert "★" not in "".join(shown.values()), "stars are the application's, never the model's"
+
+
+def test_search_rows_carry_the_tier_for_store_entries(store_tools):
+    text = store_tools["search_entries"].invoke({"property": "F-actin"})
+    assert "entry_id\tproperty\torganism\tvalue\ttrust" in text
+    assert "PMC1000001-1\tF-actin concentration\tmouse\t488 µM\ttrust 3/5, scientist, " in text
+    assert (
+        "PMC1000001-1.2\tF-actin concentration\tmouse\t500 µM\ttrust 0/5, not yet reviewed" in text
+    )

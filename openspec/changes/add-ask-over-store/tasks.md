@@ -71,19 +71,23 @@ some of the store's papers are NC/ND. The real store is read only in local check
 
 ## 4. Search and the model's view
 
-- [ ] 4.1 `keywords` carry domain, topic, the quote and the stated conditions' quotes; a keyword
+- [x] 4.1 `keywords` carry domain, topic, the quote and the stated conditions' quotes; a keyword
       found only in a passage finds the entry. Check the repository's keyword match on passages
-      that long before relying on it, and say what was found
-- [ ] 4.2 `get_entry` shows a harvested entry's quote, conditions, not-stated list, paper, origin,
+      that long before relying on it, and say what was found. Found: `search` matches a keyword as
+      a substring of each keyword, so a whole passage held as one keyword is searched like any
+      other; no change to the repository was needed
+- [x] 4.2 `get_entry` shows a harvested entry's quote, conditions, not-stated list, paper, origin,
       calculated-from passages and tier text (D5); a corpus-file entry's output is unchanged
       (snapshot of today's output taken before the change, not after)
-- [ ] 4.3 `_caveats` adds the `reading_uncertain` caution and a calculated-value line
-- [ ] 4.4 Search rows carry the tier token for store entries and nothing new for file entries
-- [ ] 4.5 System prompt (D5): decide relevance first and never let a tier make an entry relevant;
+- [x] 4.3 `_caveats` adds the `reading_uncertain` caution and a calculated-value line
+- [x] 4.4 Search rows carry the tier token for store entries and nothing new for file entries
+- [x] 4.5 System prompt (D5): decide relevance first and never let a tier make an entry relevant;
       among relevant entries for one quantity prefer the better-reviewed; say when an answer rests
       on a disputed or unreviewed entry; no instruction to write stars. Regenerate the agent
-      graph diagram only if middleware changed (it should not)
-- [ ] 4.6 ADR-1620: harvested values are stated as the paper wrote them, and numbers are trusted
+      graph diagram only if middleware changed (it should not). Done: rule 6; also the opening line
+      says "scientific quantities" and "a corpus of entries" (the store spans five domains and is
+      not all curated) and rule 1 says "the identifier", not "the number". Middleware unchanged
+- [x] 4.6 ADR-1620: harvested values are stated as the paper wrote them, and numbers are trusted
       only where the reading fits the recorded kind — which direction is cheap (D4)
 
 ## 5. Stars on both drivers

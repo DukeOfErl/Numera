@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any
 
 from .bionumbers import cross_references
 from .corpus import Entry, EntryId, entry_key
@@ -34,6 +35,9 @@ class CompactRow:
     organism: str
     value: str
     units: str
+    # The entry's trust tier where the corpus is the harvest store, None otherwise. Carried so the
+    # model can weigh it when choosing among rows (ADR-0990's rule, read by the loader).
+    trust: Any = None
 
 
 @dataclass(frozen=True)
@@ -59,6 +63,7 @@ def _compact(entry: Entry) -> CompactRow:
         organism=entry.organism,
         value=entry.value_display,
         units=entry.units,
+        trust=entry.trust,
     )
 
 
