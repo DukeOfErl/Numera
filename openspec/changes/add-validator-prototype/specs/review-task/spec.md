@@ -163,6 +163,10 @@ which is the opposite of the trail's case, where a lost row costs one row.
 - **WHEN** a reviewer enrolled as a student, scientist or senior scientist completes an item or raises an issue
 - **THEN** the row records that role, so the entry's tier can be read from it; a developer or administrator account records none
 
+#### Scenario: A reviewer needs no model credential
+- **WHEN** an enrolled account with no model credential issued opens the review page
+- **THEN** it is admitted and reviews under its account; a credential is needed to ask, not to review
+
 #### Scenario: An issue is raised before any text is chosen
 - **WHEN** a reviewer raises an issue on an item at the first step and gives its text
 - **THEN** the row holds the text, no choice and no verdict, and the item is not offered to that reviewer again

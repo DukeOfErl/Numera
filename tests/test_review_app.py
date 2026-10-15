@@ -712,9 +712,8 @@ def test_a_signed_in_reviewer_s_decisions_carry_the_account_s_role(page, monkeyp
     monkeypatch.setattr(web, "identity_configured", lambda: True)
     monkeypatch.setattr(web, "signed_in_email", lambda: "s@example.org")
     monkeypatch.setattr(web, "trail_destination", lambda: engine)
-    # A key, because the shared door closes on an account without one before `check_key` is
-    # consulted -- a reviewer needs none, and that is a finding for the door, not this test.
-    scientist = Account(email="s@example.org", role=Role.SCIENTIST, openrouter_key="sk-or-x")
+    # No key: a reviewer needs none, and the decisions below are the proof they were admitted.
+    scientist = Account(email="s@example.org", role=Role.SCIENTIST, openrouter_key=None)
     monkeypatch.setattr(web.accounts, "lookup", lambda engine, who, **kwargs: scientist)
 
     at = _judge(_choose(page.run(), choice="A", value="39"), verdict=review.APPROVE)
@@ -729,6 +728,22 @@ def test_a_signed_in_reviewer_s_decisions_carry_the_account_s_role(page, monkeyp
 
 
 # --- the closed door, and no store --------------------------------------------------------------
+
+
+def test_an_enrolled_reviewer_with_no_key_is_admitted(page, monkeypatch):
+    """The shared door closes the ask page on an account without a key; this page makes no
+    model call, so the same account is admitted here and sees an item, not the key sentence."""
+    monkeypatch.setattr(web, "identity_configured", lambda: True)
+    monkeypatch.setattr(web, "signed_in_email", lambda: "k@example.org")
+    monkeypatch.setattr(web, "trail_destination", lambda: object())
+    keyless = Account(email="k@example.org", role=Role.STUDENT, openrouter_key=None)
+    monkeypatch.setattr(web.accounts, "lookup", lambda engine, who, **kwargs: keyless)
+
+    at = page.run()
+
+    assert not at.exception
+    assert not any(messages.NO_CREDENTIAL in e.value for e in at.error)
+    assert _on_screen(at, FIRST_SUPPORTING)
 
 
 def test_with_identity_configured_a_visitor_not_signed_in_sees_the_door_and_no_item(

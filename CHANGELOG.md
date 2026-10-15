@@ -195,6 +195,9 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **A reviewer needs no API key**: the shared door admits an enrolled account without one to the
+  review page, which makes no model call, and the ask page's refusal now says that reviewing is
+  still open to the account. Before, a reviewer had to hold a key they would never use.
 - **A reading in scientific notation, or beside a parenthesis, is compared at its written
   precision**: `1.2 x 10^9` against a stored `1.23 × 10⁹` matches (it was two digits against
   ten), a bare `10⁻³` is read, and `39 min (n = 3-5)` or a stored `39 (30–45)` is 39 and not the

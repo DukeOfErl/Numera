@@ -194,8 +194,8 @@ gates it. The operator's steps, in order:
 3. For each tester, mint a runtime key at OpenRouter with a monthly limit
    (Management API, `limit_reset: monthly`) and insert a row: email, one of the
    five roles, the key. Each tester's questions are then charged to their own
-   key and capped by it; an enrolled account with no key can sign in but is told
-   no credential has been issued. Nobody but the operator ever sees a key
+   key and capped by it; an enrolled account with no key can sign in and review,
+   but is told no key has been assigned and so cannot ask. Nobody but the operator ever sees a key
    ([ADR-0780](docs/decisions/0780-accounts-live-in-the-trail-database.md),
    [ADR-0820](docs/decisions/0820-one-agent-per-session-handed-a-credential-not-an-identity.md)).
 

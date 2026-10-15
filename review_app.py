@@ -4,9 +4,10 @@ A second script beside `streamlit_app.py` rather than a page inside it (design D
 share a door and a database and nothing else: a reviewer has no use for the ask app's corpus,
 agent or spend, and the ask app's reader has no business being handed items to judge.
 
-The door is imported, not copied -- `web.admit` with `check_key=None`, because a reviewer needs no
-model credential and this page makes no model call at all. With no `[auth]` configured the door is
-open and decisions record no account, which `user-identity` already requires.
+The door is imported, not copied -- `web.admit` with `credential_required=False`, because a
+reviewer needs no model credential and this page makes no model call at all: an enrolled account
+without a key is refused asking and admitted here. With no `[auth]` configured the door is open and
+decisions record no account, which `user-identity` already requires.
 
 An item is decided in two steps (ADR-0970). First the reviewer sees the quantity, the paper and
 the two texts, chooses the text that states a value for the quantity and writes the value they
@@ -161,7 +162,9 @@ tab = web.tab_id(st.session_state)
 
 # Before anything is drawn. A visitor who is not signed in or not enrolled sees the door and no
 # item: an item is the paper's text, and the reviewer's judgement of it is the record.
-admission = web.admit(st.session_state, web.trail_destination, url_session, check_key=None)
+admission = web.admit(
+    st.session_state, web.trail_destination, url_session, credential_required=False
+)
 if admission.door is not web.Door.OPEN:
     web.draw_closed_door(admission, url_session, tab)
     st.stop()

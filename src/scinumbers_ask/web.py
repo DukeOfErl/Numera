@@ -439,8 +439,15 @@ def admit(
     session_id: str,
     *,
     check_key: Callable[[str], Any] | None = None,
+    credential_required: bool = True,
 ) -> Admission:
     """Decide the door, reading enrolment once per account.
+
+    `credential_required=False` is for a page that makes no model call -- the
+    review page -- where an enrolled account without a key is admitted and
+    `check_key` is not consulted. The ask page keeps the default: there a missing
+    key is a closed door, because `agent_for` would otherwise have nothing to hand
+    the agent but the environment's own key.
 
     The enrolment row is held in session state keyed by the email, so a rerun
     does not pay a database round trip and a different account signing in on the
@@ -510,6 +517,9 @@ def admit(
             run_label=Config.from_env().run_label,
         ).record("signin.refused", email=email)
         admission = Admission(Door.NOT_ENROLLED, configured=True)
+    elif not credential_required:
+        # Enrolled is enough where no model is called; the key is not this page's business.
+        admission = Admission(Door.OPEN, configured=True, account=account)
     elif not account.openrouter_key:
         admission = Admission(Door.NO_CREDENTIAL, configured=True, account=account)
     elif check_key is not None and check_key(account.openrouter_key).rejected:

@@ -415,6 +415,8 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_an_enrolled_account_with_no_credential_meets_a_door_of_its_own",
         "test_web_driver_identity.py::test_the_no_credential_door_is_its_own_state_not_an_open_one",
         "test_web_driver_identity.py::"
+        "test_the_no_credential_sentence_says_whom_to_ask_and_that_review_is_still_open",
+        "test_web_driver_identity.py::"
         "test_agent_for_refuses_rather_than_falling_back_to_the_environment",
         "test_web_driver_identity.py::test_the_credential_is_never_on_the_page",
         "test_web_driver_identity.py::test_two_sessions_get_two_agents_and_one_repository",
@@ -630,6 +632,8 @@ COVERED.update(
             "test_bionumbers_store.py::test_a_decision_without_sign_in_records_no_account_and_nothing_else_differs",
             "test_review_app.py::test_a_signed_in_reviewer_s_decisions_carry_the_account_s_role",
             "test_bionumbers_review.py::test_the_account_s_role_is_the_rung_a_person_s_decisions_count_on",
+            "test_review_app.py::test_an_enrolled_reviewer_with_no_key_is_admitted",
+            "test_web_driver_identity.py::test_a_page_that_needs_no_credential_admits_a_keyless_account",
             "test_bionumbers_store.py::test_a_decision_that_cannot_reach_the_database_raises_with_the_cause",
             "test_bionumbers_store.py::test_a_failure_of_any_kind_becomes_a_refusal_and_is_never_swallowed",
             "test_review_app.py::test_a_choice_the_store_refuses_is_reported_and_the_item_stays",
