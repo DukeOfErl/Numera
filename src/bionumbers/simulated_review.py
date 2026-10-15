@@ -30,8 +30,8 @@ Which items a role reviews is drawn from a hash of the role and the item id (`as
 across runs, independent between roles, so the subsets overlap by chance and an entry can carry
 several ratings or none.
 
-This module reaches `bionumbers.review`, which imports the ask app's door, so importing it needs
-the `ask` extra as the review page does. `cli` therefore imports it inside its one command.
+Needs nothing from the ask app: the screens come from `bionumbers.review`, which is core, and the
+model call goes through `spend.call` as the extractor's does.
 """
 
 from __future__ import annotations
@@ -40,9 +40,10 @@ import hashlib
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Any, Literal
 
-from bionumbers import readings, review, store
+from bionumbers import readings, review, spend, store
 from bionumbers.extraction import ProviderRefused
 from bionumbers.records import Frozen, ReviewerRole, ReviewItem, SecondTextKind, TableView
 from bionumbers.spend import (
@@ -51,8 +52,6 @@ from bionumbers.spend import (
     CeilingReached,
     Ledger,
     Unpriceable,
-    cost,
-    projected_cost,
 )
 
 #: Enough for an answer and for a reasoning model's thinking before it; the answer itself is
@@ -277,35 +276,22 @@ def ask(
     ledger: Ledger,
     entry: str,
 ) -> tuple[Any, str]:
-    """One call for one step: project, check, call, record -- `spend`'s order. Returns the
-    parsed answer and the model the provider says answered (empty where it says nothing).
+    """One call for one step, through `spend.call` like the extractor's. Returns the parsed
+    answer and the model the provider says answered (empty where it says nothing).
 
     The instruction goes as a plain string rather than as content blocks. Nothing here is long
     enough to cache, and a string is the one system form every provider behind the gateway takes.
     """
-    messages = [{"role": "user", "content": content}]
-    counted = model.count_tokens(system=system, messages=messages, output_format=output_format)
-    projected = projected_cost(
-        reviewer.model, input_tokens=counted.input_tokens, max_tokens=MAX_OUTPUT_TOKENS
+    return spend.call(
+        model,
+        system=system,
+        messages=[{"role": "user", "content": content}],
+        output_format=output_format,
+        max_tokens=MAX_OUTPUT_TOKENS,
+        ledger=ledger,
+        entry=entry,
+        model_id=reviewer.model,
     )
-    ledger.check(entry, projected)
-    try:
-        response = model.parse(
-            system=system,
-            messages=messages,
-            output_format=output_format,
-            max_tokens=MAX_OUTPUT_TOKENS,
-        )
-    except Exception as failure:
-        # A call that came back unreadable was still billed (`extraction._one_call`).
-        usage = getattr(failure, "usage", None)
-        if usage is not None:
-            ledger.record(entry, cost(reviewer.model, usage))
-        raise
-    ledger.record(entry, cost(reviewer.model, response.usage))
-    raw = getattr(response, "raw", None)
-    answered = raw.get("model") if isinstance(raw, dict) else None
-    return response.parsed_output, answered if isinstance(answered, str) else ""
 
 
 def run(
@@ -341,9 +327,10 @@ def run(
         summary.tallies.append(tally)
         model = model_for(reviewer.model)
         spent_before = ledger.run.usd
-        for item in store.undecided_items(engine, reviewer.name):
-            if not assigned(item.item_id, reviewer):
-                continue
+        mine = store.undecided_items(
+            engine, reviewer.name, keep=partial(assigned, reviewer=reviewer)
+        )
+        for item in mine:
             try:
                 _review_one(engine, model, item, reviewer, ledger, tally)
             except ProviderRefused as refused:

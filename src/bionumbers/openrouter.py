@@ -78,6 +78,27 @@ def _error_of(response: httpx.Response) -> str:
         return response.text[:200]
 
 
+def _moderation_reasons(response: httpx.Response) -> list[str]:
+    try:
+        reasons = response.json()["error"]["metadata"]["reasons"]
+    except (ValueError, KeyError, TypeError):
+        return []
+    return [str(reason) for reason in reasons] if isinstance(reasons, list) else []
+
+
+def _is_moderation(response: httpx.Response) -> bool:
+    """Does the error carry OpenRouter's moderation metadata (`reasons`, `flagged_input`)?
+
+    Read from the body because the status alone cannot tell: 403 also means insufficient
+    permissions or a guardrail, which are about the key. Documented at
+    openrouter.ai/docs/api-reference/errors, read 2026-10-15."""
+    try:
+        metadata = response.json()["error"]["metadata"]
+    except (ValueError, KeyError, TypeError):
+        return False
+    return isinstance(metadata, dict) and ("reasons" in metadata or "flagged_input" in metadata)
+
+
 class NoCredential(Exception):
     """No OpenRouter key was given and none is in the environment."""
 
@@ -228,6 +249,15 @@ class OpenRouterModel:
             "usage": {"include": True},
         }
         response = self._client.post(self._url, headers=self._headers, json=body)
+        if response.status_code == 403 and _is_moderation(response):
+            # A 403 is also OpenRouter's answer when moderation flags the input -- a fact about
+            # this paper (a toxin, a pathogen), not the account. As an account refusal it stopped
+            # the whole run and told the operator to fix a key that was fine (code review of
+            # 2026-10-15). Nothing was generated, so nothing was billed.
+            raise ModelRefused(
+                f"input flagged by moderation: {_error_of(response)} "
+                f"({', '.join(_moderation_reasons(response)) or 'no reason given'})"
+            )
         if response.status_code in _ACCOUNT_REFUSALS:
             raise ProviderRefused(
                 f"HTTP {response.status_code} from OpenRouter: {_error_of(response)}"

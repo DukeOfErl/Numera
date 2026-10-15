@@ -1,0 +1,65 @@
+name: keepalive-digest
+
+# One mail a day instead of one per failed hour. `keepalive` and `first-use` run
+# hourly and fail loudly, but GitHub's own failure mail is switched off for the account
+# (Settings > Notifications > Actions > "Don't notify"), so this is the notice:
+# it looks back over the last 24 hours and writes to ONE standing issue, which is
+# what mails the owner. Nothing to say, nothing written.
+#
+# Two things count as a problem, and the second is the one a failure mail can never
+# report: runs that failed, and *no runs at all* -- GitHub pauses scheduled
+# workflows after 60 days without repository activity, and a stopped check looks
+# exactly like a passing one.
+#
+# Like `keepalive`, this runs from the default branch only.
+on:
+  schedule:
+    - cron: "43 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  issues: write
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TITLE: "scheduled workflow problems"
+      # Mentioned in every comment, for the reason `first-use.yml` gives: the bot
+      # opens this issue, so only a mention reaches "Participating and @mentions".
+      OWNER: ${{ github.repository_owner }}
+    steps:
+      - name: Summarise the last 24 hours
+        run: |
+          since=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          : > report.md
+          for workflow in keepalive.yml first-use.yml; do
+            gh run list --workflow "$workflow" --created ">=$since" --limit 100 \
+              --json conclusion,url > runs.json
+            # `cancelled` and in-progress runs are neither: only a conclusion that
+            # says the job did not do its work counts against it.
+            total=$(jq 'length' runs.json)
+            failed=$(jq '[.[] | select(.conclusion == "failure" or .conclusion == "timed_out")] | length' runs.json)
+            if [ "$total" -eq 0 ]; then
+              echo "- \`$workflow\`: no run in the last 24 hours. The schedule may have been paused (GitHub does so after 60 days without repository activity) -- re-enable it from the Actions tab." >> report.md
+            elif [ "$failed" -gt 0 ]; then
+              echo "- \`$workflow\`: $failed of $total runs failed in the last 24 hours:" >> report.md
+              jq -r '.[] | select(.conclusion == "failure" or .conclusion == "timed_out") | "  - " + .url' runs.json >> report.md
+            fi
+          done
+      - name: Write to the standing issue
+        run: |
+          [ -s report.md ] || exit 0
+          { echo "@$OWNER"; echo; cat report.md; } > body.md
+          number=$(gh issue list --state open --search "\"$TITLE\" in:title" \
+            --json number,title \
+            --jq '[.[] | select(.title == env.TITLE)][0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body-file body.md
+          else
+            gh issue create --title "$TITLE" --body-file body.md
+          fi

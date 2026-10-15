@@ -690,7 +690,10 @@ def test_the_side_panel_is_there_before_any_question(monkeypatch, repo, config, 
     at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
 
     assert any(t.label == web.ENTRIES_TAB for t in at.sidebar.tabs)
-    assert not at.sidebar.expander, "entries before anything was retrieved"
+    # Every expander bar the standing one, which is the privacy statement and is
+    # there from the first draw by design (ADR-1110).
+    entries = [e for e in at.sidebar.expander if e.label != messages.PRIVACY_HEADING]
+    assert not entries, "entries before anything was retrieved"
 
 
 def test_the_legend_sits_between_the_two_tables(monkeypatch, repo, config, tmp_path):
@@ -1134,3 +1137,32 @@ def test_the_evidence_column_can_hold_its_table():
         f"browser and the table needs {needed}px, so it scrolls sideways and hides "
         f"the ID column. Narrow the columns or widen the split — not the target."
     )
+
+
+# --- citations in a drawn answer (ADR-1240) --------------------------------------
+
+
+def test_a_run_of_citations_is_drawn_as_one_grey_superscript():
+    drawn = web.answer_markdown("42 μm³ [[100427]] [[100430]], and 1.1 μm³ [[100004]].")
+    assert '<sup style="opacity: 0.6; font-size: 0.72em;">100427, 100430</sup>' in drawn
+    assert "1.1 μm³ <sup" in drawn and ">100004</sup>." in drawn
+    assert "[[" not in drawn
+
+
+def test_an_answer_drawn_with_html_allowed_is_escaped_first():
+    """HTML is turned on for the superscripts alone. The answer is model output, so
+    it is escaped before any tag of ours goes in -- and in this one function, so no
+    caller can turn HTML on for an answer that was not."""
+    drawn = web.answer_markdown('<img src=x onerror="alert(1)"> **bold** [[100001]] costs $5')
+    assert "<img" not in drawn and "&lt;img" in drawn
+    assert "**bold**" in drawn, "markdown is left for Streamlit to draw"
+    assert r"\$5" in drawn, "and `$` is still kept out of mathematics"
+
+
+def test_the_page_draws_an_answer_s_citations_as_superscripts(monkeypatch, repo, config, tmp_path):
+    model = scripted(says("about 1 micrometre [[100002]] [[100003]] <b>x</b>"))
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+    (drawn,) = [m for m in at.markdown if "micrometre" in m.value]
+    assert ">100002, 100003</sup>" in drawn.value
+    assert "&lt;b&gt;x&lt;/b&gt;" in drawn.value
+    assert drawn.proto.allow_html

@@ -76,7 +76,7 @@ def test_a_visitor_who_has_not_passed_the_door_holds_no_place(capped, monkeypatc
     so each sign-in stranded exactly one. What costs the host is a session with
     an agent behind it, which is what the cap now counts."""
     monkeypatch.setattr(web, "identity_configured", lambda: True)
-    monkeypatch.setattr(web, "signed_in_email", lambda: None)
+    monkeypatch.setattr(web, "signed_in_claims", lambda: None)
     for _ in range(5):
         at = capped().run()
         assert not at.chat_input, "control: the door was closed"
@@ -212,3 +212,13 @@ def test_nothing_reads_the_client_s_address():
             elif isinstance(node, ast.Constant) and isinstance(node.value, str):
                 reached.add(node.value)
         assert not reached & forbidden, (path.name, sorted(reached & forbidden))
+
+
+def test_the_turned_away_visitor_can_still_read_what_is_kept_about_them(capped):
+    """The cap refuses *after* `admit` has recorded the sign-in, so this reader's
+    address is already kept by the time they are turned away -- and this was the
+    one door with no statement on it (ADR-1110)."""
+    capped().run(), capped().run()
+    third = capped().run()
+    assert _turned_away(third)
+    assert [e.label for e in third.expander] == [messages.PRIVACY_HEADING]

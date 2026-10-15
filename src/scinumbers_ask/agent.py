@@ -27,7 +27,7 @@ from langchain_core.messages import ToolMessage
 from langchain_core.messages.utils import count_tokens_approximately
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from . import run_ledger
+from . import hosted_trace, run_ledger
 from .citations import FORM, citations
 from .config import Config, NotConfigured, format_usd, warning_for
 from .corpus import EntryId, entry_key
@@ -727,6 +727,10 @@ class AskAgent:
                 checkpointer=saver,
             )
             config = {"configurable": {"thread_id": session_id}, **trace.run_config("ask")}
+            # The hosted tracer's callback, when -- and only when -- the project's
+            # own setting turns it on (ADR-1010). Here rather than in a driver, so
+            # every caller gets the same answer to "is this traced?".
+            config = hosted_trace.current().traced(config, trace)
 
             answer_text = ""
             tool_calls = 0
@@ -810,18 +814,27 @@ class AskAgent:
                     question=question,
                 )
 
-            stream = agent.stream(
-                {"messages": [{"role": "user", "content": question}]},
-                config=config,
-                stream_mode="updates",
-            )
             # closing() so the stream is shut down before the checkpointer is.
             # This generator can be abandoned at any yield -- a caller breaking
             # out of the loop, or an exception from the processing below -- and
             # unwinding would otherwise close the SQLite connection while
             # LangGraph's worker threads are still writing to it, which segfaults
             # the interpreter rather than raising.
-            with closing(stream):
+            #
+            # `Isolated` advances the stream in a context of its own, with the
+            # framework vendor's tracing refused inside it: `LANGSMITH_TRACING` in
+            # the environment must not send anything, whoever is asking
+            # (ADR-1010), and a question abandoned here cannot leave its reader's
+            # attribution -- or anything else -- on the next one.
+            with closing(
+                hosted_trace.Isolated(
+                    agent.stream(
+                        {"messages": [{"role": "user", "content": question}]},
+                        config=config,
+                        stream_mode="updates",
+                    )
+                )
+            ) as stream:
                 while True:
                     # The guard covers advancing the stream and nothing else. Wrapping
                     # the processing below would report a defect in this file as a

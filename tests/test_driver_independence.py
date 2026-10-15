@@ -32,12 +32,41 @@ DRIVERS = {"cli", "web"}
 # as each module lands, and `test_every_named_adapter_exists` refuses a name with no
 # file: a guard listing a module that was renamed protects nothing, and nothing else
 # would say so.
-HARNESS = {"question_set", "evaluation", "scoring", "report", "answer_sheet", "eval_cli"}
+HARNESS = {
+    "question_set",
+    "evaluation",
+    "scoring",
+    "report",
+    "answer_sheet",
+    "eval_cli",
+    # The enrolment command. Here for the same reason as the rest: an operator
+    # runs it from a terminal against a deployment they are not looking at, so a
+    # module that reached for `web` would need a browser to enrol anybody.
+    # `neon` is deliberately *not* here -- it imports nothing but the standard
+    # library, and leaving it in the core is the stricter of the two placements.
+    "enrol",
+    # The daily check. Runs from cron with nobody watching, so it may not reach
+    # for a terminal or a browser either.
+    "pending",
+    # The hourly first-use notice. Same reason as `pending`: it runs from a
+    # scheduler with nobody watching, so it may not need a terminal or a browser.
+    "first_use",
+}
 ADAPTERS = DRIVERS | HARNESS
 # `autobuild` joins them: it decides whether to build a corpus, which is a driver's
 # policy and not the agent's, and it is the one module allowed to import the
 # ingester. Putting it on this side is what keeps that dependency out of the core.
-PRESENTATION = ADAPTERS | {"messages", "entries_table", "autobuild", "feedback", "allowance"}
+PRESENTATION = ADAPTERS | {
+    "messages",
+    "entries_table",
+    "autobuild",
+    "feedback",
+    "allowance",
+    # The door's recorded examples: text and markup a visitor sees, never read by
+    # the agent. Presentation by what it is, and placed here so it is not
+    # counted as core by subtraction.
+    "door_demo",
+}
 
 AGENT_CORE = sorted(
     path.stem
@@ -309,7 +338,11 @@ IDENTITY_TOKENS = {
 # three get stamped by the web driver's filter without knowing, which is the
 # design's whole point -- a parameter, a field or an import here would mean the
 # side door had been opened.
-IDENTITY_FREE = ("agent", "trace", "feedback")
+#
+# `hosted_trace.py` joins them: it is what sends a question to a third party, so
+# identity reaching it would reach the tracer. Who asked arrives there only as an
+# opaque digest the web driver passes to `attributed()` (ADR-1020).
+IDENTITY_FREE = ("agent", "trace", "feedback", "hosted_trace")
 
 
 def identifiers_of(module: str) -> set[str]:
@@ -364,5 +397,5 @@ def test_the_identity_free_modules_exist_and_are_core():
     """A renamed module would make the test above pass over nothing."""
     for module in IDENTITY_FREE:
         assert (PACKAGE / f"{module}.py").exists(), module
-    assert {"agent", "trace"} <= set(AGENT_CORE)
+    assert {"agent", "trace", "hosted_trace"} <= set(AGENT_CORE)
     assert "feedback" in PRESENTATION  # stamped from outside like the other two

@@ -19,9 +19,9 @@ recorded by id in `unverifiable` rather than deleted silently, because "the mode
 quotes" and "the paper says nothing" are different facts about a run, and the rebuild has to
 tell them apart.
 
-`Ledger.check` is asked before every call, and every call goes through `_one_call` for the
-reason that module's docstring gives: the bound is only as good as its call sites, so it has
-one place to be missing from instead of three.
+`Ledger.check` is asked before every call, and every call goes through `spend.call` for the
+reason its docstring gives: the bound is only as good as its call sites, so it has one place to
+be missing from instead of three -- and the simulated review's calls share that place.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from typing import Any, Literal, NamedTuple, Protocol
 
 import anthropic
 
-from bionumbers import quotes
+from bionumbers import quotes, spend
 from bionumbers.jats import Document, render_for_model
 from bionumbers.records import (
     CONDITION_FIELDS,
@@ -56,9 +56,7 @@ from bionumbers.spend import (
     MODEL,
     CeilingReached,
     Ledger,
-    cost,
     count_input_tokens,
-    projected_cost,
 )
 
 MAX_TOKENS = 16000
@@ -483,52 +481,6 @@ def _correction_turn(failures: Iterable[QuoteFailure]) -> dict:
     return {"role": "user", "content": content}
 
 
-def _one_call(
-    model: Model,
-    *,
-    system: list[dict],
-    messages: list[dict],
-    article_id: str,
-    ledger: Ledger,
-    model_id: str,
-    max_tokens: int = MAX_TOKENS,
-) -> tuple[ExtractionOutput, str]:
-    """Project, ask the ledger, call, record. Every model call comes through here.
-
-    Returns the output and the model the provider says answered (`""` where it says nothing).
-
-    The projection assumes nothing is cached, even on the retry where most of the prefix
-    will be. That over-projects, and over-projecting stops a paper early while
-    under-projecting lets a runaway through -- and the cache can expire between two calls,
-    so the cheap-looking figure is also the one that can be wrong. A ceiling's job is to
-    fail expensive.
-    """
-    counted = model.count_tokens(
-        system=system, messages=messages, output_format=ExtractionOutput
-    ).input_tokens
-    projected = projected_cost(model_id, input_tokens=counted, max_tokens=max_tokens)
-    ledger.check(article_id, projected)
-    try:
-        response = model.parse(
-            system=system,
-            messages=messages,
-            output_format=ExtractionOutput,
-            max_tokens=max_tokens,
-        )
-    except Exception as failure:
-        # A response the adapter could not read into the schema was still billed. The first
-        # live run had one such paper showing $0.00 and no call, which is the one figure a
-        # ceiling must never under-count. Adapters that know the usage attach it to the error.
-        usage = getattr(failure, "usage", None)
-        if usage is not None:
-            ledger.record(article_id, cost(model_id, usage))
-        raise
-    ledger.record(article_id, cost(model_id, response.usage))
-    raw = getattr(response, "raw", None)
-    answered = raw.get("model") if isinstance(raw, dict) else None
-    return response.parsed_output, answered if isinstance(answered, str) else ""
-
-
 def _location(doc: Document, passage_id: str) -> Location:
     """Where a verified quote sits, taken from the passage it was found in.
 
@@ -763,14 +715,15 @@ def extract(
     messages = [user if user is not None else user_turn(question, organism)]
     answered: list[str] = []
     try:
-        output, by = _one_call(
+        output, by = spend.call(
             model,
             system=system,
             messages=messages,
-            article_id=paper.pmcid,
+            output_format=ExtractionOutput,
+            max_tokens=max_tokens,
+            entry=paper.pmcid,
             ledger=ledger,
             model_id=model_id,
-            max_tokens=max_tokens,
         )
         answered.append(by)
         # Rebinds the name `ending` reads, so every ending after a call says who answered it.
@@ -785,14 +738,15 @@ def extract(
                 _assistant_turn(output),
                 _correction_turn(checked.failures),
             ]
-            output, by = _one_call(
+            output, by = spend.call(
                 model,
                 system=system,
                 messages=corrected,
-                article_id=paper.pmcid,
+                output_format=ExtractionOutput,
+                max_tokens=max_tokens,
+                entry=paper.pmcid,
                 ledger=ledger,
                 model_id=model_id,
-                max_tokens=max_tokens,
             )
             answered.append(by)
             fingerprint = _answered_by(fingerprint, answered)

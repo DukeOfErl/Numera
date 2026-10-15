@@ -1,11 +1,12 @@
 """The validator's dependency direction, asserted over the source (design D9).
 
 Core modules of `bionumbers` import no Streamlit and nothing from `scinumbers_ask`; only
-`review.py` (presentation) and the root `review_app.py` (the driver) may. Nothing in Python
+`deployment.py` (the page's database and a person's rung) and the root `review_app.py` (the
+driver) may. `review.py` is core: the simulated review builds its screens from it. Nothing in Python
 enforces this -- `import streamlit` inside `store.py` would run perfectly -- so it is read from the
 AST, the way `test_driver_independence.py` reads the ask package's.
 
-The core is *every file in the package minus `review`*, computed rather than listed, so a module
+The core is *every file in the package minus `deployment`*, computed rather than listed, so a module
 added tomorrow is under the rule before anyone remembers to name it. Imports are read wherever
 they sit: at top level, inside a function, relative or absolute -- the absolute intra-package form
 is the one a sibling test found its predecessor blind to.
@@ -24,7 +25,7 @@ PACKAGE = ROOT / "src" / "bionumbers"
 REVIEW_APP = ROOT / "review_app.py"
 
 #: The one module in the package allowed to reach a driver framework or the ask package.
-PRESENTATION = {"review"}
+PRESENTATION = {"deployment"}
 
 #: What no core module may reach: the web framework, and the ask package under any of its names.
 FORBIDDEN = {"streamlit", "scinumbers_ask"}
@@ -44,6 +45,7 @@ REVIEW_APP_ALLOWED = {"streamlit", "bionumbers", "scinumbers_ask"}
 #: Within those, the exact modules the page is allowed to touch. `scinumbers_ask` narrows to the
 #: door: the page has no business with the ask app's agent, corpus or spend.
 REVIEW_APP_ALLOWED_MODULES = {
+    "bionumbers.deployment",
     "bionumbers.review",
     "bionumbers.store",
     "bionumbers.records",
@@ -119,24 +121,25 @@ def test_the_helper_resolves_relative_imports_to_this_package():
 # --- the core -----------------------------------------------------------------------------
 
 
-def test_the_core_is_not_empty_and_review_is_not_in_it():
+def test_the_core_is_not_empty_and_deployment_is_not_in_it():
     assert len(CORE) >= 5, CORE
-    assert "review" not in CORE
-    assert (PACKAGE / "review.py").exists(), "the exemption names a module that is not there"
+    assert "deployment" not in CORE
+    assert "review" in CORE, "the screens are core: the simulated review needs no ask extra"
+    assert (PACKAGE / "deployment.py").exists(), "the exemption names a module that is not there"
 
 
 @pytest.mark.parametrize("module", CORE)
 def test_no_core_module_reaches_for_streamlit_or_the_ask_package(module):
     source = (PACKAGE / f"{module}.py").read_text()
     assert forbidden_in(source) == set(), (
-        f"bionumbers.{module} reaches {sorted(forbidden_in(source))}; only review may (design D9)"
+        f"bionumbers.{module} reaches {sorted(forbidden_in(source))}; only deployment may (D9)"
     )
 
 
-def test_review_is_the_one_module_that_reaches_the_ask_package():
-    """The exemption is used, not just granted: if `review` stopped needing the ask package the
-    allowance above would be dead and should go."""
-    source = (PACKAGE / "review.py").read_text()
+def test_deployment_is_the_one_module_that_reaches_the_ask_package():
+    """The exemption is used, not just granted: if `deployment` stopped needing the ask package
+    the allowance above would be dead and should go."""
+    source = (PACKAGE / "deployment.py").read_text()
     assert "scinumbers_ask" in forbidden_in(source)
 
 
@@ -152,9 +155,9 @@ def test_the_review_page_imports_only_what_a_driver_needs():
 
 
 def test_the_review_page_reaches_the_door_and_the_review_module():
-    """The positive half: the page really does go through the two seams the design names."""
+    """The positive half: the page really does go through the seams the design names."""
     reached = imports_in(REVIEW_APP.read_text())
-    assert {"scinumbers_ask.web", "bionumbers.review"} <= reached
+    assert {"scinumbers_ask.web", "bionumbers.review", "bionumbers.deployment"} <= reached
 
 
 def test_the_helper_expands_a_package_s_from_form_to_its_submodules():

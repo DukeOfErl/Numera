@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from typing import Any
 
 from . import autobuild, messages
 from .agent import AskAgent
@@ -25,6 +26,7 @@ from .corpus import CorpusUnavailable, load
 from .evaluation import (
     ResultsFileError,
     ResultsWouldBeCommitted,
+    RunNotApproved,
     provenance_for,
     read_results,
     run_evaluation,
@@ -198,6 +200,46 @@ def main(argv: list[str] | None = None) -> None:
         )
 
 
+def approve_on_the_terminal(usage: Any, estimate: Any, stdin: Any = None) -> bool:
+    """Show the tracer's allowance and this run's estimate; ask when approval is needed.
+
+    The wording only. Whether a run needs approval, and the refusal when it is
+    not given, belong to `run_evaluation`, where every caller passes; this is the
+    command's way of answering. It shows the figures whenever tracing is on, and
+    when `estimate.needs_approval` it reads one line: only `yes` approves. A `no`,
+    an empty line, end of input or no terminal to ask on is a refusal -- a run can
+    be started again, an allowance cannot be unspent. Deliberate even when the
+    figure is unknown because Langfuse is unreachable: an evaluation run is
+    attended, and the operator decides (ADR-1000).
+    """
+    stdin = sys.stdin if stdin is None else stdin
+    window = f"{usage.since:%Y-%m-%d} to {usage.until:%Y-%m-%d}"
+    if usage.units is None:
+        print(f"Hosted tracing is on. Usage {window}: unknown (it could not be counted).")
+    else:
+        print(
+            f"Hosted tracing is on. Usage {window}: {usage.units:,} of {usage.allowance:,} "
+            f"units ({usage.share:.0%}), counted here and possibly over-counted; "
+            f"{usage.remaining:,} remain."
+        )
+    attempts = f"{estimate.questions} attempt(s) (questions x repeats still to ask)"
+    if estimate.units is None:
+        print(f"This run: {attempts}; cost per attempt unknown.")
+    else:
+        print(
+            f"This run: {attempts} x ~{usage.per_question:,.0f} units "
+            f"= ~{estimate.units:,.0f} units (this window's average per traced question)."
+        )
+    if not estimate.needs_approval:
+        return True
+    print("Paused before the first question: " + "; ".join(estimate.reasons) + ".")
+    if not stdin.isatty():
+        print("No terminal to ask on, so the run ends here.")
+        return False
+    print("Type yes to run anyway: ", end="", flush=True)
+    return stdin.readline().strip().lower() == "yes"
+
+
 def _run(args, questions, corpus: str, entries) -> None:
     """Ask the set and record it. Everything printed here goes to stdout as text."""
     try:
@@ -222,7 +264,10 @@ def _run(args, questions, corpus: str, entries) -> None:
             provenance,
             repeats=args.repeats,
             announce=lambda text: print(text, file=sys.stderr),
+            approve=approve_on_the_terminal,
         )
+    except RunNotApproved as exc:
+        raise SystemExit(f"{PROG}: run not approved; nothing was asked or recorded.") from exc
     except (ResultsFileError, ValueError) as exc:
         raise SystemExit(f"{PROG}: {exc}") from exc
 

@@ -71,9 +71,18 @@ what let the blocks drift: no branch can see another's copy.
 | `add-answer-feedback` | `0740`–`0770` — `0740`, `0750`, `0760` written |
 | `add-user-identity` | `0780`–`0830` — all written |
 | `add-question-and-answer-records` | `0840`–`0870` |
-| `add-validator-prototype` | `0930`–`0990` — `0930`, `0940`, `0950`, `0960`, `0970`, `0980`, `0990` written: block full, widen before the next. Its first three, written as `0900`–`0920`, collided with `add-open-enrolment` on `dev` and were renumbered `1520`, `1530`, `1540` on 2026-10-07, inside `add-harvest-prototype`'s block |
-| `add-harvest-prototype` | `1500`–`1590` — `1500`, `1510` written, and `1520`–`1540` hold the validator's renumbered three; clear of every block on `dev` and the branches as of 2026-10-07 (highest `1350`–`1390`) |
+| `add-open-enrolment` | `0880`–`0920` — `0880`, `0890`, `0900` written |
+| `add-validator-prototype` | `0930`–`0990` — all written, block full; archived 2026-10-15. Its first three, written as `0900`–`0920`, collided with `add-open-enrolment` on `dev` and were renumbered `1520`, `1530`, `1540` on 2026-10-07, inside `add-harvest-prototype`'s block |
+| `add-hosted-tracing` | `1000`–`1040` — clear of `0880`–`0940`, spent on other branches |
+| `add-one-way-in` | `1100`–`1140` — `1100`, `1110` written; archived 2026-09-29 |
+| `add-account-withdrawal` | `1150`–`1190` — `1150` written; archived 2026-09-29 |
+| `add-door-demo` | `1200`–`1240` — all written; archived 2026-10-04 |
+| `add-first-use-notice` | `1250`–`1290` — all written |
+| `speed-up-test-loop` | `1300`–`1340` — `1300` written |
+| `add-first-use-heartbeat` | `1350`–`1390` — `1350` written |
+| `add-harvest-prototype` | `1500`–`1590` — `1500`, `1510` written, and `1520`–`1540` hold the validator's renumbered three; archived 2026-10-15; clear of every block on `dev` and the branches as of 2026-10-07 (highest `1350`–`1390`) |
 | `add-ask-over-store` | `1600`–`1690` — `1600`, `1610`, `1620` written |
+| `harden-harvest` | `1700`–`1740` — reserved 2026-10-15, after `add-ask-over-store`'s `1600`–`1690` on `feat/ask-over-store` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets
@@ -171,10 +180,16 @@ core, and a test there refuses a name with no file behind it.
 | `eval_cli.py` | The evaluation command (`scinumbers-eval`): `check`, `run` and `report` |
 | `trace.py` | The structured trail, one question id and one session id throughout |
 | `trail_store.py` | The trail's durable destination: one append-only table, written best-effort (ADR-0700, ADR-0710) |
+| `hosted_trace.py` | The hosted tracer (Langfuse): the setting that turns it on, the per-question callback, the refusal of LangSmith's own switch, the rating's copy, and the allowance count. Off unless `SCINUMBERS_TRACING=langfuse` (ADR-1000–1020) |
 | `feedback.py` | A reader's judgement of an answer, recorded to the trail. **Presentation, not core** — see below |
 | `permissions.py` | `Role`, `Permission`, `Identity`, and `GRANTS` — the default-deny table as data, with the pruning rule above it (ADR-0800) |
 | `authorization.py` | `allowed` / `require` / `Refused`: the one refusal, called inside the operation it guards, never by the page |
-| `accounts.py` | `lookup(engine, email)`: enrolment off one row, **fails closed** — the deliberate inverse of `trail_store` (ADR-0780) |
+| `accounts.py` | `lookup(engine, email)` and `insert(...)`: enrolment off one row, **fails closed** — the deliberate inverse of `trail_store` (ADR-0780). Both here so the case-folding rule has one home |
+| `enrol.py` | The two commands that open and close an account: `scinumbers-enrol` mints a capped key and inserts the row, withdrawing the key if the row cannot be written (ADR-0900); `scinumbers-withdraw` disables the row and revokes the key, in that order, so a partial failure leaves a refused account rather than a live one (ADR-1150). A harness module |
+| `pending.py` | The daily check (`scinumbers-pending`): who is **still** stuck at the door, read out of the trail. Resolution is derived from `user_email` and `signin.refused` rather than tracked, so no state is added. **Silent when nobody is stuck** — the contract a cron line rests on. A harness module |
+| `first_use.py` | The hourly check (`scinumbers-first-use`): who was **just seen for the first time**, signing in or asking, read out of the trail with no state kept. Holds a **read-only database URL, never the Neon API key**, and sets its own transaction read-only. **Silent when nobody is new.** The window is computed by the workflow from the previous successful run. A harness module (ADR-1250, ADR-1260, ADR-1290) |
+| `door_demo.py` | The sign-in door's demo: real answers from `door_demo.json`, shortened with every edit recorded, typed and streamed in an iframe. **Presentation**; committed under ADR-1200, real by ADR-1210, shortened by ADR-1220. Its one chart is drawn by `bin/door-demo-chart`, not by the app (ADR-1230); citations are grey superscripts (ADR-1240) |
+| `neon.py` | Neon's control plane: a branch's *name* to its connection URL, so no database url is kept on disk |
 
 **`ask` wraps `_ask`, and the wrapper is where the records are written.** The
 question, the answer and the evidence behind it are recorded as their events pass
@@ -219,7 +234,7 @@ and reported when it is reached (ADR-0180).
 A **fixed pipeline, not an agent** (ADR-1520): discovery → fetch → JATS reader → one structured
 extraction call → mechanical quote check → one retry → one second-text call → JSONL → Postgres → a
 review page. Its own `CLAUDE.md` lives in `src/bionumbers/` with the module table and the four
-rules a module will not tell you — the dependency direction holds there too, and only `review.py`
+rules a module will not tell you — the dependency direction holds there too, and only `deployment.py`
 and the root `review_app.py` may import Streamlit or the ask package.
 
 ### `bionumbers_ingest` — the corpus pipeline
@@ -240,8 +255,8 @@ subagent.
 is next, and the reasons that would otherwise live only in a session transcript.
 It records decisions already taken, not proposals. Read it before proposing a
 change, and reconcile it when one lands; it names the severe findings that gate
-later work (the SQLite ledger on Cloud Run, the LangSmith env var) where a change
-author will meet them rather than rediscover them.
+later work (the SQLite ledger on Cloud Run) where a change author will meet them
+rather than rediscover them.
 
 ## Where the rest of the rules live
 

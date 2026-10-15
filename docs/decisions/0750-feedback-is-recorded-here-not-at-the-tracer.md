@@ -56,3 +56,6 @@ question retrieved, so "this answer was rated down, and here is what it was
 shown" is one join rather than an export from a third party. That is the query
 the whole change exists to make possible, and it is the reason this decision goes
 the way it does even though the tracer's API is easier.
+
+**Amended 2026-09-24 by ADR-1000.** The tracer is Langfuse, which has no retention-extension flag:
+the copy is a score and does not extend its trace. The decision above is unchanged.

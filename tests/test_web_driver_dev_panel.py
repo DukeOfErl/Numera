@@ -150,7 +150,7 @@ def test_two_sessions_panels_show_only_their_own_records(page, recent):
 
     Asserted on each page's own draw and again on the sink beneath them, keyed by
     the session each account actually got. The pages cannot be re-run against each
-    other here: `web.signed_in_email` is one process-wide stub, so re-running the
+    other here: `web.signed_in_claims` is one process-wide stub, so re-running the
     first page after the second was built would re-identify it as the second
     account -- correct behaviour for a browser whose signed-in account changed,
     and an artefact of the fixture rather than a leak. The sink check below is

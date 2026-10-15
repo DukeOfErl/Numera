@@ -58,9 +58,12 @@ from bionumbers.records import (
     Paper,
     PaperResult,
     PaperState,
+    ReviewerRole,
     ReviewItem,
     Spend,
 )
+from bionumbers.simulated_review import Reviewer
+from bionumbers.simulated_review import run as run_simulated_review
 from bionumbers.spend import PRICES, Ceiling, CeilingReached, Ledger, Unpriceable
 
 DB_URL_ENV = "BIONUMBERS_REVIEW_DB_URL"
@@ -621,9 +624,6 @@ def _reviewer_from(spec: str) -> Any:
     """`ROLE=MODEL[@SHARE]`, e.g. `student=anthropic/claude-haiku-4.5@0.6`. The share is set
     off by `@` because a model id may itself hold a colon. Raises `ValueError` saying what is
     wrong with the spec."""
-    from bionumbers.records import ReviewerRole
-    from bionumbers.simulated_review import Reviewer
-
     role_name, _, rest = spec.partition("=")
     model_id, _, share = rest.partition("@")
     roles = {role.value.lower(): role for role in ReviewerRole}
@@ -636,21 +636,14 @@ def _reviewer_from(spec: str) -> Any:
 
 
 def simulate_review(args: argparse.Namespace) -> int:
-    """Models answer the review task in place of people, each role over its share of the items.
-
-    Imported here rather than at the top: the simulated review reads the screen through
-    `bionumbers.review`, which needs the ask app's door, and the other commands must keep
-    working where only the validator's own dependencies are installed.
-    """
-    from bionumbers import simulated_review
-
+    """Models answer the review task in place of people, each role over its share of the items."""
     url = args.db_url or os.environ.get(DB_URL_ENV, "")
     if not url:
         print(f"Give --db-url or set {DB_URL_ENV} to the review database.", file=sys.stderr)
         return 2
     try:
         reviewers = [_reviewer_from(spec) for spec in args.reviewer]
-        summary = simulated_review.run(
+        summary = run_simulated_review(
             _engine(url),
             reviewers,
             _model,

@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -643,8 +643,12 @@ def remaining(engine: Any, reviewer: str | None, preference: Preference | None =
         return int(conn.execute(statement).scalar_one())
 
 
-def undecided_items(engine: Any, reviewer: str | None) -> list[ReviewItem]:
-    """Every item this reviewer has not decided, in item-id order.
+def undecided_items(
+    engine: Any, reviewer: str | None, *, keep: Callable[[str], bool] | None = None
+) -> list[ReviewItem]:
+    """Every item this reviewer has not decided, in item-id order -- those whose id `keep` accepts,
+    where one is given. The filter runs on the id before the record is parsed, so a role with a
+    tenth of the items pays for a tenth; it is a draw on the id, not a `Preference`.
 
     For a reviewer that is handed a batch rather than one screen at a time -- the simulated
     review. Not interleaved across papers the way `next_item` is: that ordering exists because a
@@ -653,14 +657,18 @@ def undecided_items(engine: Any, reviewer: str | None) -> list[ReviewItem]:
     (ADR-0980), and a model that could be handed them would review a pool a person shaped.
     """
     statement = (
-        select(review_item.c.item_json)
+        select(review_item.c.item_id, review_item.c.item_json)
         .where(_undecided(review_item.c.item_id, reviewer))
         .order_by(review_item.c.item_id)
     )
     with engine.begin() as conn:
         _bound(conn)
         rows = conn.execute(statement).all()
-    return [ReviewItem.model_validate_json(row.item_json) for row in rows]
+    return [
+        ReviewItem.model_validate_json(row.item_json)
+        for row in rows
+        if keep is None or keep(row.item_id)
+    ]
 
 
 def record_choice(

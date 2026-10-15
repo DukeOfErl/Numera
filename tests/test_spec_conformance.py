@@ -356,6 +356,23 @@ COVERED: dict[str, tuple[str, ...]] = {
     #     hand against Neon, not a test.
     #   - "The credential is never shown": asserted over the elements the tests
     #     draw, not over every page state.
+    # `add-open-enrolment`. Both requirements are claimed above; the gaps are:
+    #   - "The same address arrives through a second provider ... the same
+    #     conversation": asserted below the page, on `admit` and
+    #     `effective_session` under two `provider` claims. A real round trip
+    #     through two OIDC providers is not something AppTest can drive.
+    #   - "A credential capped at that amount, renewing monthly, is issued":
+    #     asserted against a double's echo. **That the provider honours
+    #     `limit_reset` on create was answered by one live run rather than by a
+    #     test**: on 2026-09-26 a $0.01 key came back
+    #     `"limit_reset": "monthly"`, recorded in ADR-0900 and `tasks.md` 2.9.
+    #     There is still no `network`-marked check, deliberately -- a standing
+    #     one would mint a real key on every marked run to re-answer a settled
+    #     question. What remains unverified live is the `PATCH` retry, which the
+    #     create call has not yet made necessary.
+    #   - "The named environment does not exist ... names the environments that
+    #     do exist": the refusal and its list are asserted; that Neon's `search`
+    #     really is a partial match is read from its documentation, not driven.
     "A reader signs in before anything is shown, and identity comes from the provider": (
         "test_web_driver_identity.py::"
         "test_a_visitor_who_is_not_signed_in_is_offered_sign_in_and_nothing_else",
@@ -363,7 +380,128 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_an_enrolled_account_is_admitted_and_its_records_carry_who_and_as_what",
         "test_web_driver_identity.py::test_the_sidebar_says_who_is_signed_in_and_offers_sign_out",
         "test_web_driver_identity.py::test_signing_out_forgets_the_session_s_identity",
-        "test_web_driver_identity.py::test_signed_in_email_is_none_without_is_logged_in",
+        "test_web_driver_identity.py::test_signed_in_claims_are_none_without_is_logged_in",
+        # `add-open-enrolment`: more than one provider, and a verified address.
+        "test_web_driver_identity.py::test_providers_reads_the_default_and_every_sub_table",
+        "test_web_driver_identity.py::test_providers_is_empty_with_no_auth_section",
+        "test_web_driver_identity.py::"
+        "test_the_door_offers_one_way_in_while_the_others_stay_configured",
+        "test_web_driver_identity.py::test_a_provider_with_no_label_still_gets_a_button",
+        "test_web_driver_identity.py::test_what_is_configured_is_unchanged_by_what_is_offered",
+        "test_web_driver_identity.py::test_buttons_keep_secrets_order_where_more_than_one_is_drawn",
+        "test_web_driver_identity.py::"
+        "test_address_verified_reads_the_claim_and_refuses_its_absence",
+        "test_web_driver_identity.py::test_an_unverified_address_is_refused_with_its_own_sentence",
+        "test_web_driver_identity.py::test_an_unverified_address_is_never_looked_up",
+        "test_web_driver_identity.py::test_the_unverified_door_is_not_held_across_reruns",
+        "test_web_driver_identity.py::"
+        "test_the_same_address_through_a_second_provider_is_the_same_reader",
+        # `add-door-demo`: the recorded examples are the one exception.
+        "test_web_driver_identity.py::"
+        "test_the_sign_in_door_plays_the_recorded_examples_and_nothing_live",
+    ),
+    # The animation is not asserted: typing, erasing, streaming and reduced motion
+    # were driven in headless Chromium and looked at. The reduced-motion test below
+    # only proves the page carries the rule, not that a browser honours it.
+    "The sign-in door may play a demo drawn from real answers": (
+        "test_web_driver_identity.py::"
+        "test_the_sign_in_door_plays_the_recorded_examples_and_nothing_live",
+        "test_web_driver_identity.py::test_a_door_that_refuses_plays_no_examples",
+        "test_web_driver_identity.py::test_a_signed_in_reader_does_not_see_the_examples",
+        "test_door_demo.py::test_every_scenario_types_the_question_it_shows",
+        "test_door_demo.py::test_a_reworded_question_names_the_one_actually_asked_in_its_edits",
+        "test_door_demo.py::test_every_scenario_says_which_model_answered_and_when",
+        "test_door_demo.py::test_the_page_is_titled_as_a_demo_and_carries_every_question",
+        "test_door_demo.py::test_every_shortened_answer_says_what_was_changed",
+        # The chart's last clause, "as the corpus stores it", is a `corpus`-marked
+        # test: it needs SCINUMBERS_CORPUS and is deselected by default.
+        "test_door_demo_chart.py::test_every_mark_sits_where_its_volume_is_on_the_drawn_axis",
+        "test_door_demo_chart.py::test_the_door_shows_exactly_the_chart_the_script_draws",
+        "test_door_demo_chart.py::test_the_chart_says_charts_are_not_yet_a_feature",
+        "test_door_demo_chart.py::test_every_value_drawn_is_the_corpus_value",
+        "test_door_demo.py::test_citations_are_set_apart_as_superscripts",
+        "test_door_demo.py::test_every_example_closes_by_saying_the_app_gives_full_citations",
+        "test_door_demo.py::test_the_page_stands_still_for_a_reader_who_asked_for_less_motion",
+    ),
+    "The operator is told when a reader is first seen, once for signing in and once for asking": (
+        "test_first_use.py::test_nobody_new_prints_nothing_at_all",
+        "test_first_use.py::test_a_first_sign_in_is_reported_as_a_sign_in_and_not_as_a_question",
+        "test_first_use.py::test_a_first_question_is_reported_as_a_question_and_not_as_a_sign_in",
+        "test_first_use.py::test_both_firsts_for_one_reader_are_one_message_about_one_person",
+        "test_first_use.py::test_an_excluded_address_is_not_reported_whatever_its_case",
+        "test_first_use.py::test_everyone_excluded_is_silence_not_an_empty_report",
+        "test_first_use.py::test_asking_writes_nothing_and_says_so_to_the_database",
+        "test_first_use.py::test_the_fallback_window_covers_the_longest_gap_the_schedule_was_seen_to_leave",
+        "test_first_use.py::test_a_trail_that_cannot_be_read_says_so_and_fails",
+        "test_first_use.py::test_a_window_that_can_match_nothing_is_refused",
+        # "First" is a `having min(at) > ...` over a case-folded address; only a real
+        # database can assert it.
+        "test_first_use_live.py::test_a_first_sign_in_inside_the_window_is_reported",
+        "test_first_use_live.py::test_a_first_question_inside_the_window_is_reported",
+        "test_first_use_live.py::test_both_firsts_in_one_window_come_back_as_one_row",
+        "test_first_use_live.py::test_a_sign_in_that_is_not_the_first_is_not_reported",
+        "test_first_use_live.py::test_a_question_that_is_not_the_first_is_not_reported",
+        "test_first_use_live.py::test_a_first_question_older_than_the_window_is_not_reported",
+        "test_first_use_live.py::test_a_new_sign_in_does_not_make_an_old_first_question_new",
+        "test_first_use_live.py::test_a_returning_reader_asking_for_the_first_time_is_reported_for_asking_only",
+        "test_first_use_live.py::test_one_address_in_two_spellings_is_one_reader",
+        "test_first_use_live.py::test_an_excluded_address_is_dropped_whole",
+    ),
+    "Whatever asks on a schedule can read the records and change none of them": (
+        "test_first_use.py::test_importing_first_use_never_loads_the_neon_control_plane",
+        "test_first_use.py::test_the_role_is_granted_three_columns_and_never_the_table",
+        "test_first_use_live.py::test_the_role_cannot_read_the_columns_the_question_does_not_need",
+        "test_first_use_live.py::test_the_role_can_ask_the_question",
+        "test_first_use_live.py::test_the_role_cannot_change_anything",
+        "test_first_use_live.py::test_the_grants_alone_refuse_a_write_even_if_the_transaction_is_made_writable",
+        "test_first_use_live.py::test_the_role_cannot_read_another_table",
+    ),
+    "A new reader's arrival reaches the operator on a schedule, "
+    "with no mail account of their own": (
+        "test_scheduled_workflows.py::test_it_runs_every_hour_and_not_on_keepalives_minute",
+        "test_scheduled_workflows.py::test_a_report_becomes_a_comment_on_the_one_standing_issue",
+        "test_scheduled_workflows.py::test_the_first_report_opens_the_standing_issue",
+        "test_scheduled_workflows.py::test_a_run_with_nobody_new_delivers_nothing",
+        # The quiet-week message (add-first-use-heartbeat): measured from the last
+        # delivery on the standing issue, observed rather than asserted, never after a
+        # failed read.
+        "test_scheduled_workflows.py::test_a_quiet_week_delivers_exactly_one_message",
+        "test_scheduled_workflows.py::test_less_than_seven_days_since_the_last_delivery_delivers_nothing",
+        "test_scheduled_workflows.py::test_the_newest_comment_decides_whatever_it_was",
+        "test_scheduled_workflows.py::test_a_message_just_delivered_is_not_repeated_by_the_next_run",
+        "test_scheduled_workflows.py::test_with_no_standing_issue_nothing_is_delivered_and_nothing_is_created",
+        "test_scheduled_workflows.py::test_the_message_says_what_the_check_found_and_does_not_claim_nobody_exists",
+        "test_scheduled_workflows.py::test_a_check_that_could_not_read_the_issue_fails_instead_of_reporting_a_quiet_week",
+        "test_scheduled_workflows.py::test_the_only_secret_is_the_read_only_url_and_no_mail_credential_exists",
+        "test_first_use.py::test_a_first_sign_in_is_reported_as_a_sign_in_and_not_as_a_question",
+    ),
+    "The operator can see who is stuck at the door, and only who is still stuck": (
+        "test_pending.py::test_nothing_waiting_prints_nothing_at_all",
+        "test_pending.py::test_a_request_for_the_email_is_reported_with_what_to_do",
+        "test_pending.py::test_an_unenrolled_account_is_reported_as_the_enrolment_queue",
+        "test_pending.py::test_a_trail_that_cannot_be_read_says_so_and_fails",
+        "test_pending.py::test_a_window_that_can_match_nothing_is_refused",
+        "test_pending.py::test_the_management_key_note_goes_to_a_terminal_and_never_to_cron",
+        # The resolution rule is a join; only a real database can assert it.
+        "test_pending_live.py::test_a_request_answered_by_verification_stops_being_reported",
+        "test_pending_live.py::test_an_admitted_session_resolves_a_request_for_the_email",
+        "test_pending_live.py::test_the_enrolment_queue_reports_everyone_with_no_row",
+        "test_pending_live.py::test_an_enrolled_account_leaves_the_queue_even_if_it_never_returns",
+        "test_pending_live.py::test_a_withdrawn_account_is_not_enrolled",
+        "test_pending_live.py::test_the_window_bounds_how_far_back_it_looks",
+    ),
+    "Enrolling an account is one operator action, and it never issues an uncapped credential": (
+        "test_enrol.py::test_enrolling_mints_a_capped_key_and_records_the_account",
+        "test_enrol.py::test_a_credential_is_never_issued_without_a_cap",
+        "test_enrol.py::test_a_role_that_is_not_a_role_is_refused_before_minting",
+        "test_enrol.py::test_an_address_already_enrolled_keeps_its_row_and_loses_the_new_key",
+        "test_enrol.py::test_a_row_that_cannot_be_written_withdraws_the_credential",
+        "test_enrol.py::test_a_credential_that_cannot_be_withdrawn_is_named",
+        "test_enrol.py::test_what_the_command_prints_carries_no_credential",
+        "test_enrol.py::test_the_command_refuses_without_a_branch_and_says_why",
+        "test_enrol.py::test_a_branch_that_does_not_exist_is_refused_with_what_does",
+        "test_enrol.py::test_the_branch_is_matched_exactly_among_partial_hits",
+        "test_accounts.py::test_insert_refuses_an_address_that_already_has_a_row",
     ),
     "An account must be enrolled, and enrolment happens outside the application": (
         "test_web_driver_identity.py::"
@@ -421,6 +559,18 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_web_driver_identity.py::test_the_credential_is_never_on_the_page",
         "test_web_driver_identity.py::test_two_sessions_get_two_agents_and_one_repository",
     ),
+    "Withdrawing an account is one operator action, and it ends both halves of access": (
+        "test_enrol.py::test_withdrawing_disables_the_row_and_revokes_the_credential",
+        "test_enrol.py::test_an_account_that_is_not_there_withdraws_nothing",
+        "test_enrol.py::test_a_row_with_no_handle_is_disabled_and_said_to_be_unwithdrawable",
+        "test_enrol.py::test_a_refused_revoke_leaves_the_account_disabled_and_names_the_key",
+        "test_enrol.py::test_the_command_refuses_without_a_branch",
+        "test_accounts.py::test_disabling_returns_the_handle_that_can_withdraw_the_credential",
+        "test_accounts.py::test_disabling_an_account_that_is_not_there_is_none",
+        # The records surviving is `disable` keeping the row rather than deleting
+        # it, which the statement itself asserts.
+        "test_accounts.py::test_disabling_is_unconditional_so_a_hand_disabled_row_still_yields_its_handle",
+    ),
     "What is kept about a person, and that they are told": (
         "test_identity_never_reaches_the_agent.py::"
         "test_two_sessions_under_two_identities_each_carry_their_own",
@@ -435,6 +585,17 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_trail_store.py::test_the_handler_carries_the_role_beside_the_email",
         "test_web_driver_identity.py::test_the_sidebar_says_who_is_signed_in_and_offers_sign_out",
         "test_web_driver_identity.py::test_the_note_is_one_short_sentence_whatever_is_configured",
+        # The full statement, added with the door's own address (ADR-1110). Named
+        # here because the requirement's older clauses were already claimed by the
+        # identity-stamping tests above, so the suite stayed green while four new
+        # clauses were covered by tests that assert none of them -- which is the
+        # state this file exists to make visible.
+        "test_web_driver_identity.py::test_the_policy_is_readable_without_signing_in",
+        "test_web_driver_identity.py::test_the_policy_is_offered_rather_than_imposed",
+        "test_web_driver_identity.py::test_the_panel_does_not_carry_it",
+        "test_web_driver_identity.py::test_a_refused_reader_is_told_what_was_kept_about_them",
+        "test_web_driver_session_cap.py::"
+        "test_the_turned_away_visitor_can_still_read_what_is_kept_about_them",
     ),
     "An operator can see a session's own trail": (
         "test_web_driver_dev_panel.py::test_an_operator_s_page_has_the_section",
@@ -631,7 +792,7 @@ COVERED.update(
             "test_bionumbers_store.py::test_a_decision_holds_the_choice_the_verdict_the_comment_the_reviewer_and_a_time",
             "test_bionumbers_store.py::test_a_decision_without_sign_in_records_no_account_and_nothing_else_differs",
             "test_review_app.py::test_a_signed_in_reviewer_s_decisions_carry_the_account_s_role",
-            "test_bionumbers_review.py::test_the_account_s_role_is_the_rung_a_person_s_decisions_count_on",
+            "test_bionumbers_deployment.py::test_the_account_s_role_is_the_rung_a_person_s_decisions_count_on",
             "test_review_app.py::test_an_enrolled_reviewer_with_no_key_is_admitted",
             "test_web_driver_identity.py::test_a_page_that_needs_no_credential_admits_a_keyless_account",
             "test_bionumbers_store.py::test_a_decision_that_cannot_reach_the_database_raises_with_the_cause",
@@ -1018,12 +1179,89 @@ AWAITING_THE_STORE = (
     "An entry's caveat marks have a column of their own",
 )
 
+# `harden-harvest`'s: four findings moved out of `add-harvest-prototype` on 2026-10-15,
+# so that change could close. Proposed, not built.
+AWAITING_HARDEN_HARVEST = (
+    "An article yields at most twenty entries, and a drop is recorded",
+    "A comment in a list of articles is a comment wherever it starts",
+    "Readings of one article from different runs are served together and linked",
+)
+
+# `add-hosted-tracing`. Each requirement names the tests that assert it in both
+# directions; the conditions of the allowance pause are pure and tested beside the
+# tracer, the command that asks is tested on its own.
+COVERED.update(
+    {
+        "Hosted tracing is off unless this project's own setting turns it on": (
+            "test_hosted_tracing.py::test_absent_or_off_is_off_and_says_nothing",
+            "test_hosted_tracing.py::test_langfuse_with_every_credential_is_on",
+            "test_hosted_tracing.py::test_a_missing_credential_is_off_and_is_named",
+            "test_hosted_tracing.py::test_an_unrecognised_value_is_off_and_is_named",
+            "test_hosted_tracing.py::test_credentials_without_the_setting_do_not_turn_it_on",
+            "test_hosted_tracing.py::test_a_misconfigured_setting_still_answers",
+            "test_hosted_tracing.py::test_langfuse_is_not_imported_unless_tracing_is_on",
+        ),
+        "A tracing vendor's own switch does not send anything": (
+            "test_hosted_tracing.py::test_the_vendor_switch_sends_nothing_with_tracing_off",
+            "test_hosted_tracing.py::test_the_vendor_switch_sends_nothing_beside_the_chosen_tracer",
+            "test_hosted_tracing.py::test_control_without_the_refusal_the_same_harness_sees_langsmith",
+            "test_hosted_tracing.py::test_the_refusal_holds_while_the_generator_is_consumed_one_event_at_a_time",
+            "test_hosted_tracing.py::test_the_vendor_refusal_is_entered_and_left_inside_the_private_context",
+        ),
+        "One question is one trace, found by the question's identifier": (
+            "test_hosted_tracing.py::test_a_question_is_one_trace_whose_id_is_derived_from_the_question",
+            "test_hosted_tracing.py::test_two_questions_are_two_traces_in_one_session",
+            "test_hosted_tracing.py::test_a_tagged_question_carries_the_tag_beside_its_own",
+            "test_hosted_tracing.py::test_an_untagged_question_is_not_marked",
+            "test_eval_tracing_allowance.py::test_every_question_is_asked_inside_the_eval_tag",
+            "test_hosted_tracing.py::test_the_session_key_never_reaches_the_tracer",
+        ),
+        "A trace names who asked only by an opaque value, and the agent is still not told": (
+            "test_hosted_tracing.py::test_an_attributed_question_carries_the_value_on_every_span",
+            "test_hosted_tracing.py::test_two_readers_carry_two_values",
+            "test_hosted_tracing.py::test_nobody_signed_in_attaches_nothing",
+            "test_hosted_tracing.py::test_the_page_attaches_the_account_digest_and_never_the_address",
+            "test_hosted_tracing.py::test_the_tracer_user_is_keyed_and_cannot_be_recomputed_from_a_guessed_address",
+            "test_hosted_tracing.py::test_without_a_key_nobody_is_attributed_rather_than_attributed_unkeyed",
+            "test_hosted_tracing.py::test_an_abandoned_question_cannot_attribute_a_later_one_to_its_reader",
+            "test_hosted_tracing.py::test_what_the_agent_is_given_does_not_depend_on_tracing_or_the_reader",
+        ),
+        "A rating is copied to its question's trace, and the trail remains the record": (
+            "test_hosted_tracing.py::test_a_verdict_reaches_its_question_trace_after_the_trail",
+            "test_hosted_tracing.py::test_a_comment_reaches_the_same_trace",
+            "test_hosted_tracing.py::test_a_failed_copy_leaves_the_trail_exactly_as_it_would_be",
+            "test_hosted_tracing.py::test_tracing_off_touches_no_client",
+        ),
+        "An evaluation run waits for approval when the tracer's allowance is at risk": (
+            "test_eval_tracing_allowance.py::test_a_direct_caller_at_risk_is_refused_before_the_first_question",
+            "test_eval_tracing_allowance.py::test_a_direct_caller_not_at_risk_proceeds_without_being_asked",
+            "test_eval_tracing_allowance.py::test_unknown_usage_refuses_a_caller_that_does_not_approve",
+            "test_eval_tracing_allowance.py::test_nothing_left_to_ask_contacts_no_tracer",
+            "test_eval_tracing_allowance.py::test_under_half_and_fitting_runs_without_asking",
+            "test_eval_tracing_allowance.py::test_more_than_half_ends_on_anything_but_yes",
+            "test_eval_tracing_allowance.py::test_no_terminal_ends_the_run_without_reading",
+            "test_eval_tracing_allowance.py::test_unknown_usage_is_shown_as_unknown_and_pauses",
+            "test_eval_tracing_allowance.py::test_a_run_that_would_not_fit_pauses_under_half",
+            "test_eval_tracing_allowance.py::test_a_resumed_run_estimates_only_what_it_still_has_to_ask",
+            "test_eval_tracing_allowance.py::test_tracing_off_asks_nothing_and_says_nothing",
+            "test_hosted_tracing.py::test_one_view_failing_makes_usage_unknown_never_a_partial_sum",
+            "test_hosted_tracing.py::test_exactly_half_does_not_pause",
+        ),
+        "A tracer fault never reaches a reader": (
+            "test_hosted_tracing.py::test_a_raising_handler_changes_nothing_a_reader_sees",
+            "test_hosted_tracing.py::test_an_export_that_fails_changes_nothing_a_reader_sees",
+            "test_hosted_tracing.py::test_a_client_that_cannot_be_built_is_tracing_off_and_the_question_is_answered",
+        ),
+    }
+)
+
 
 UNMAPPED: dict[str, str] = {
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),
     **dict.fromkeys(AWAITING_THE_STORE, "add-ask-over-store is proposed; nothing is built yet"),
+    **dict.fromkeys(AWAITING_HARDEN_HARVEST, "harden-harvest is proposed, not built"),
 }
 
 
