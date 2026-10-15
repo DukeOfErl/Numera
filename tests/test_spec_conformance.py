@@ -944,11 +944,20 @@ AWAITING_THE_PROMPT = (
     "Leading with a figure does not displace what qualifies it",
 )
 
+# `harden-harvest`'s: four findings moved out of `add-harvest-prototype` on 2026-10-15,
+# so that change could close. Proposed, not built.
+AWAITING_HARDEN_HARVEST = (
+    "An article yields at most twenty entries, and a drop is recorded",
+    "A comment in a list of articles is a comment wherever it starts",
+    "Readings of one article from different runs are served together and linked",
+)
+
 
 UNMAPPED: dict[str, str] = {
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),
+    **dict.fromkeys(AWAITING_HARDEN_HARVEST, "harden-harvest is proposed, not built"),
 }
 
 
