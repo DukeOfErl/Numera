@@ -73,7 +73,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-question-and-answer-records` | `0840`–`0870` |
 | `add-validator-prototype` | `0930`–`0990` — `0930`, `0940`, `0950`, `0960`, `0970`, `0980`, `0990` written: block full, widen before the next. Its first three, written as `0900`–`0920`, collided with `add-open-enrolment` on `dev` and were renumbered `1520`, `1530`, `1540` on 2026-10-07, inside `add-harvest-prototype`'s block |
 | `add-harvest-prototype` | `1500`–`1590` — `1500`, `1510` written, and `1520`–`1540` hold the validator's renumbered three; clear of every block on `dev` and the branches as of 2026-10-07 (highest `1350`–`1390`) |
-| `add-ask-over-store` | `1600`–`1690` — reserved 2026-10-13, nothing written |
+| `add-ask-over-store` | `1600`–`1690` — `1600` written |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets

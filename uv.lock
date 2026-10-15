@@ -114,6 +114,7 @@ ask = [
     { name = "langgraph" },
     { name = "langgraph-checkpoint-sqlite" },
     { name = "psycopg", extra = ["binary"] },
+    { name = "pydantic" },
     { name = "sqlalchemy" },
     { name = "streamlit" },
 ]
@@ -155,6 +156,7 @@ requires-dist = [
     { name = "pint", marker = "extra == 'validator'", specifier = ">=0.24" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'ask'", specifier = ">=3.2" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'validator'", specifier = ">=3.2" },
+    { name = "pydantic", marker = "extra == 'ask'", specifier = ">=2.6" },
     { name = "pydantic", marker = "extra == 'ingest'", specifier = ">=2.6" },
     { name = "pydantic", marker = "extra == 'validator'", specifier = ">=2.6" },
     { name = "sqlalchemy", marker = "extra == 'ask'", specifier = ">=2.0" },

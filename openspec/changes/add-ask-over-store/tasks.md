@@ -12,9 +12,9 @@ some of the store's papers are NC/ND. The real store is read only in local check
       commits of `dev` (2026-10-15), among them the grey-superscript citations (ADR-1240); after the
       rebase, re-read every module this design names against `dev` before building on it — the
       first draft was read against the stale base and missed the superscripts
-- [ ] 1.2 Name `pydantic` in the `ask` extra; add a test that importing `scinumbers_ask.corpus`,
+- [x] 1.2 Name `pydantic` in the `ask` extra; add a test that importing `scinumbers_ask.corpus`,
       `repository`, `tools` and `agent` with a corpus file does not import `bionumbers` (D8)
-- [ ] 1.3 ADR-1600: the ask package depends on `bionumbers` for the tier rule and the value
+- [x] 1.3 ADR-1600: the ask package depends on `bionumbers` for the tier rule and the value
       parser — the direction, the import footprint measured, the alternatives rejected (D8); and
       that with hosted tracing on, store passages reach the tracer as corpus text does today
 

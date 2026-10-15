@@ -194,7 +194,7 @@ A presentation module (beside `entries_table`) owns the scale:
 `#` before the stars marks a simulated tier (`#★★★☆☆`); `⚠` after them marks a dispute. Both qualify the *tier*, so they
 travel with the stars — beside a citation in the prose and in the trust column alike. A legend under
 the answer states the scale, `#` and `⚠`. `None` trust renders as the empty string. (`†` was the
-first choice and is taken: it already means "no measurement method recorded". `#` came next and
+first choice and is taken: it already means "no measurement method recorded". `$` came next and
 was dropped: Streamlit reads it as the start of inline mathematics, and a reader could take it for a
 price in an app that shows spend. `#` was the user's choice after that.)
 
@@ -268,8 +268,8 @@ pull in `bionumbers.store`, `curated`, `records`, `quotes` — SQLAlchemy and py
 `anthropic`, `httpx`, `lxml`, `pint` or Streamlit. SQLAlchemy is already in `ask`; pydantic is
 transitive through LangChain and is named in `ask` explicitly so a resolver cannot drop it.
 
-The imports are confined to `store_corpus.py` and the presentation module, so a JSONL-only run
-never imports `bionumbers`. The reverse rule (`bionumbers` core never imports `scinumbers_ask`)
+The imports are confined to `store_corpus.py`; the presentation module reads a tier by its name
+(`Tier` is a `StrEnum`), so neither a JSONL-only run nor a driver imports `bionumbers`. The reverse rule (`bionumbers` core never imports `scinumbers_ask`)
 is untouched. An ADR records the direction and why (one rule, one parser).
 
 ## Checked against `dev` (2026-10-15)
