@@ -196,9 +196,28 @@ travel with the stars — beside a citation in the prose and in the trust column
 the answer states the scale, `◊` and `⚠`. `None` trust renders as the empty string. (`†` was the
 first choice and is taken: it already means "no measurement method recorded".)
 
-Answers are rendered with `[[id]]` followed by the stars, by substituting over `citations.DELIMITED`
-in the drivers — the model's text is not altered where it is stored or recorded, only where it is
-displayed. Star characters the model writes are left as written; the drawn ones follow the citation.
+**In the web app, the stars go inside the citation's grey superscript.** On `dev` the web driver
+already draws an answer's citations as grey superscripts (ADR-1240, `web.answer_markdown`): a run of
+`[[nnnnnn]]` becomes one `<sup>` with its identifiers comma-separated, after escaping. This branch's
+base predates that merge, which is why the first draft of this design said `[[id]]` — the design was
+read against a stale `web.py`. Built on `dev`, the superscript carries each identifier followed by
+its stars and tier marks: `¹⁰⁰⁰⁰² ★★★★★, PMC2652108-1 ★★★☆☆◊⚠`, all in the same grey, smaller size.
+Two changes to `answer_markdown` follow:
+
+- `_CITATION_RUN` matches `\[\[\d+\]\]` only, so a `[[PMC2652108-1]]` citation would be left as
+  raw brackets. It must match every form `citations` reads — better, be built from
+  `citations.DELIMITED` rather than restating a pattern (ADR-0410's one-definition rule, which
+  `_CITATION_RUN` already bends).
+- The superscript needs each identifier's trust, so `answer_markdown` takes a lookup from identifier
+  to `Trust` (from the loaded entries); with no store it draws exactly what it draws today.
+
+Five stars per identifier at superscript size gets wide when a run cites four entries; whether that
+reads well is judged on the page in task 5.4, and a compact fallback (stars only on the first
+mention of an identifier in an answer) is the first thing to try if it does not.
+
+The terminal has no superscript and keeps `[[id]]`; the stars follow it there. In both drivers the
+model's text is not altered where it is stored or recorded, only where it is displayed. Star
+characters the model writes are left as written; the drawn ones are the tier.
 The entries table gains a trust column on both drivers. Stars only, per the user's choice, with the
 legend carrying the role words.
 
