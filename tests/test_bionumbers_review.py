@@ -29,14 +29,11 @@ from bionumbers.records import (
     Paper,
     Provenance,
     Quote,
-    ReviewerRole,
     ReviewItem,
     SecondTextKind,
     TableCell,
     TableView,
 )
-from scinumbers_ask.accounts import Account
-from scinumbers_ask.permissions import Role
 
 QUESTION = "doubling time of Escherichia coli"
 FP = Fingerprint(model="opus", instruction_sha256="abc123", article_id="PMC1", run_id="run-1")
@@ -532,37 +529,6 @@ def test_the_shown_text_carries_no_field_that_could_leak_the_kind():
     assert fields == {"label", "text", "location_line", "is_supporting", "passage_id"}
 
 
-class TestStoreEngine:
-    """Where the page finds its database: secrets first, a plain URL from the environment second."""
-
-    def test_a_plain_url_serves_a_machine_with_no_secrets(self, monkeypatch, tmp_path):
-        from bionumbers import review
-
-        monkeypatch.setattr(review.web, "trail_destination", lambda: None)
-        monkeypatch.setenv(review.DB_URL_ENV, f"sqlite:///{tmp_path}/review.sqlite")
-
-        engine = review.store_engine()
-
-        assert engine is not None and engine.url.get_backend_name() == "sqlite"
-
-    def test_secrets_win_over_the_environment(self, monkeypatch, tmp_path):
-        from bionumbers import review
-
-        configured = object()
-        monkeypatch.setattr(review.web, "trail_destination", lambda: configured)
-        monkeypatch.setenv(review.DB_URL_ENV, f"sqlite:///{tmp_path}/other.sqlite")
-
-        assert review.store_engine() is configured
-
-    def test_neither_means_none(self, monkeypatch):
-        from bionumbers import review
-
-        monkeypatch.setattr(review.web, "trail_destination", lambda: None)
-        monkeypatch.delenv(review.DB_URL_ENV, raising=False)
-
-        assert review.store_engine() is None
-
-
 def _with_conditions(*fields: ConditionField):
     return an_item().claim.model_copy(update={"conditions": fields})
 
@@ -605,22 +571,3 @@ def test_a_claim_extracted_before_its_scope_had_fields_lists_only_what_was_state
     assert [row[0] for row in biology][:3] == ["Organism", "Strain", "Medium"]
     assert len(biology) == len(review.CONDITION_FIELDS)
     assert review.condition_rows(old_physics, "") == biology, "runs before scopes are biology"
-
-
-@pytest.mark.parametrize(
-    ("role", "rung"),
-    [
-        (Role.STUDENT, ReviewerRole.STUDENT),
-        (Role.SCIENTIST, ReviewerRole.SCIENTIST),
-        (Role.SENIOR_SCIENTIST, ReviewerRole.SENIOR_SCIENTIST),
-        (Role.DEV, None),
-        (Role.ADMIN, None),
-    ],
-)
-def test_the_account_s_role_is_the_rung_a_person_s_decisions_count_on(role, rung):
-    account = Account(email="r@example.org", role=role, openrouter_key=None)
-    assert review.reviewer_role_of(account) is rung
-
-
-def test_no_account_is_no_rung():
-    assert review.reviewer_role_of(None) is None

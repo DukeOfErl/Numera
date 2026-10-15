@@ -8,8 +8,8 @@ the class of defect this file exists to see.
 
 The database is one in-memory SQLite shared with the script thread -- `StaticPool` with
 `check_same_thread=False`, because `AppTest` runs the script on its own thread and a per-thread
-in-memory database would hand the page an empty one. `review.store_engine` is patched at the point
-the page looks it up, so the page runs with no secrets and no connection string.
+in-memory database would hand the page an empty one. `deployment.store_engine` is patched at the
+point the page looks it up, so the page runs with no secrets and no connection string.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.pool import StaticPool
 from streamlit.testing.v1 import AppTest
 
-from bionumbers import records, review, store
+from bionumbers import deployment, records, review, store
 from bionumbers.records import (
     CandidateKind,
     Claim,
@@ -173,7 +173,7 @@ def engine():
 @pytest.fixture
 def page(monkeypatch, engine):
     """The real script over the seeded database, with the door open unless a test closes it."""
-    monkeypatch.setattr(review, "store_engine", lambda: engine)
+    monkeypatch.setattr(deployment, "store_engine", lambda: engine)
     return AppTest.from_file(str(APP), default_timeout=TIMEOUT)
 
 
@@ -768,7 +768,7 @@ def test_with_identity_configured_a_visitor_not_signed_in_sees_the_door_and_no_i
 
 
 def test_a_deployment_with_no_store_says_so_in_one_sentence_and_shows_no_item(monkeypatch, engine):
-    monkeypatch.setattr(review, "store_engine", lambda: None)
+    monkeypatch.setattr(deployment, "store_engine", lambda: None)
 
     at = AppTest.from_file(str(APP), default_timeout=TIMEOUT).run()
 

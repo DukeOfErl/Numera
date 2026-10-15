@@ -233,7 +233,7 @@ and reported when it is reached (ADR-0180).
 A **fixed pipeline, not an agent** (ADR-1520): discovery → fetch → JATS reader → one structured
 extraction call → mechanical quote check → one retry → one second-text call → JSONL → Postgres → a
 review page. Its own `CLAUDE.md` lives in `src/bionumbers/` with the module table and the four
-rules a module will not tell you — the dependency direction holds there too, and only `review.py`
+rules a module will not tell you — the dependency direction holds there too, and only `deployment.py`
 and the root `review_app.py` may import Streamlit or the ask package.
 
 ### `bionumbers_ingest` — the corpus pipeline

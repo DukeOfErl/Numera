@@ -20,8 +20,9 @@ A person may narrow what they are shown to one domain or one topic, and may set 
 ("not my field"); the simulated reviewers get none of this (ADR-0980). Those are page arguments
 to the serving query, and the runner never passes them.
 
-Everything that is not a screen element is in `bionumbers.review`, so what the page decides is
-tested without a browser and only the order and lifetime of the elements needs `AppTest`
+Everything that is not a screen element is in `bionumbers.review` -- and in `bionumbers.deployment`
+for the two things taken from the deployment, its database and a person's rung -- so what the page
+decides is tested without a browser and only the order and lifetime of the elements needs `AppTest`
 (`.claude/rules/streamlit-driver.md`).
 """
 
@@ -29,7 +30,7 @@ import time
 
 import streamlit as st
 
-from bionumbers import review, store
+from bionumbers import deployment, review, store
 from scinumbers_ask import web
 
 #: The one sentence for a deployment with no database behind it. It names the secrets section
@@ -176,9 +177,9 @@ session = web.effective_session(admission, url_session)
 reviewer = admission.account.email if admission.account else None
 # The rung their decisions count on (ADR-0990): from the account's role, so a person's approval
 # can set a tier as a model's does.
-reviewer_role = review.reviewer_role_of(admission.account)
+reviewer_role = deployment.reviewer_role_of(admission.account)
 
-engine = review.store_engine()
+engine = deployment.store_engine()
 
 preference = store.Preference()
 with st.sidebar:

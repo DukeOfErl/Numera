@@ -310,3 +310,49 @@ class Ledger:
         """
         total = self._run.input_tokens + self._run.cache_write_tokens + self._run.cache_read_tokens
         return self._run.cache_read_tokens / total if total else 0.0
+
+
+def call(
+    model: Any,
+    *,
+    system: Any,
+    messages: list[dict],
+    output_format: type,
+    max_tokens: int,
+    ledger: Ledger,
+    entry: str,
+    model_id: str,
+) -> tuple[Any, str]:
+    """Project, ask the ledger, call, record: the one model call under the ledger.
+
+    Every call the extractor and the simulated review make comes through here, so the bound has
+    one place to be missing from instead of several. Returns the parsed output and the model the
+    provider says answered (`""` where it says nothing). `entry` is the ledger's per-entry key: the
+    paper for an extraction, the item for a simulated decision.
+
+    The projection assumes nothing is cached, even where most of the prefix will be. That
+    over-projects, and over-projecting stops a paper early while under-projecting lets a runaway
+    through -- and the cache can expire between two calls, so the cheap-looking figure is also the
+    one that can be wrong. A ceiling's job is to fail expensive.
+
+    A response the adapter could not read into the schema was still billed: the first live run had
+    one such paper showing $0.00 and no call, which is the one figure a ceiling must never
+    under-count. Adapters that know the usage attach it to the error, and it is recorded before the
+    error goes on.
+    """
+    counted = model.count_tokens(system=system, messages=messages, output_format=output_format)
+    projected = projected_cost(model_id, input_tokens=counted.input_tokens, max_tokens=max_tokens)
+    ledger.check(entry, projected)
+    try:
+        response = model.parse(
+            system=system, messages=messages, output_format=output_format, max_tokens=max_tokens
+        )
+    except Exception as failure:
+        usage = getattr(failure, "usage", None)
+        if usage is not None:
+            ledger.record(entry, cost(model_id, usage))
+        raise
+    ledger.record(entry, cost(model_id, response.usage))
+    raw = getattr(response, "raw", None)
+    answered = raw.get("model") if isinstance(raw, dict) else None
+    return response.parsed_output, answered if isinstance(answered, str) else ""

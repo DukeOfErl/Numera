@@ -1,9 +1,10 @@
 """What one review screen shows, decided outside the browser.
 
 `review_app.py` is a script Streamlit re-runs from the top on every click, so everything it decides
-that is not a screen element lives here and is asserted without a browser (design D9). This module
-and that script are the only two in the package allowed to reach `scinumbers_ask`;
-`tests/test_bionumbers_dependency_direction.py` is where that stops being a convention.
+that is not a screen element lives here and is asserted without a browser (design D9). Core, like
+the store: nothing here reaches Streamlit or `scinumbers_ask`, so the simulated review builds its
+screens from these functions with the validator's own dependencies alone. What the page takes from
+the deployment -- its database, a person's rung -- is `deployment.py`, the one module that may.
 
 Two things the reviewer must never learn shape most of what follows. The order of the two texts is
 drawn from the item id rather than from which of them supports the value, and **nothing here reads
@@ -22,27 +23,18 @@ from __future__ import annotations
 
 import hashlib
 import html
-import os
 from dataclasses import dataclass
 
-from sqlalchemy import Engine
-
-from bionumbers import harvest, readings, store
+from bionumbers import harvest, readings
 from bionumbers.records import (
     CONDITION_FIELDS,
     Claim,
     Location,
     Paper,
     Provenance,
-    ReviewerRole,
     ReviewItem,
     TableView,
 )
-from scinumbers_ask import web
-from scinumbers_ask.accounts import Account
-from scinumbers_ask.permissions import Role
-
-DB_URL_ENV = "BIONUMBERS_REVIEW_DB_URL"
 
 TITLE = "SciNumbers review"
 
@@ -392,22 +384,6 @@ def issue_from(text: str) -> str:
     return text
 
 
-#: The account's role as a rung of the trust ladder. `dev` and `admin` are not rungs: a decision
-#: from one is recorded without a role and sets no tier, so a developer clicking through the
-#: page to test it cannot rate an entry.
-_RUNG_OF: dict[Role, ReviewerRole] = {
-    Role.STUDENT: ReviewerRole.STUDENT,
-    Role.SCIENTIST: ReviewerRole.SCIENTIST,
-    Role.SENIOR_SCIENTIST: ReviewerRole.SENIOR_SCIENTIST,
-}
-
-
-def reviewer_role_of(account: Account | None) -> ReviewerRole | None:
-    """The rung a signed-in reviewer's decisions are recorded on, from the account table; None
-    with no identity configured, and for a role that is not a rung."""
-    return _RUNG_OF.get(account.role) if account else None
-
-
 def chosen_label(item: ReviewItem, chosen_supporting: bool) -> str:
     """The label the page put on the text a stored choice names -- for the reveal, which repeats
     the reviewer's choice back to them in the page's own terms."""
@@ -449,32 +425,6 @@ def decision_from(
         approved=verdict == APPROVE,
         comment=comment,
     )
-
-
-def store_engine() -> Engine | None:
-    """The engine holding the review tables, or None where the deployment configures none.
-
-    The same `[connections.usage]` section, and so the same database, as the trail and the accounts
-    table: the review tables are three more tables in it, and a second secrets section would be a
-    second thing to get wrong on a deployment whose first symptom is a page nobody can use.
-
-    `web.trail_destination` is reused rather than a second `st.connection` call because it caches
-    the engine at global scope across sessions -- a fresh engine per rerun would pay TCP, TLS and
-    Postgres auth before every `next_item`, on a page that reruns on every click.
-
-    Named here rather than called from the page so the page's own tests can hand it a database with
-    no connection string, and so "which database" is one decision in one place.
-
-    Where no `[connections.usage]` is configured, `BIONUMBERS_REVIEW_DB_URL` -- the variable
-    `bionumbers load` reads -- names the store instead, so a run loaded into a local SQLite file can
-    be reviewed on the machine that produced it. Secrets win when both are present: the deployed
-    page must not be redirected by an environment variable.
-    """
-    configured = web.trail_destination()
-    if configured is not None:
-        return configured
-    url = os.environ.get(DB_URL_ENV, "").strip()
-    return store.engine_from_url(url) if url else None
 
 
 def _field_label(name: str) -> str:

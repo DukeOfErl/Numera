@@ -466,6 +466,32 @@ def test_undecided_items_are_all_of_a_reviewer_s_open_items_and_no_one_else_s(en
     assert [item.item_id for item in store.undecided_items(engine, None)] == ["i1", "i2", "i3"]
 
 
+def test_undecided_items_parses_only_the_items_kept(engine, monkeypatch):
+    """The runner's share filter runs on the id, before the record is read: a role with a tenth
+    of the items must not pay to parse the other nine tenths on every resumed run."""
+    store.load_run(
+        engine,
+        [a_result()],
+        [an_item("i1"), an_item("i2", claim_id="c2"), an_item("i3", claim_id="c3")],
+        question=QUESTION,
+        run_id=RUN,
+    )
+    parsed: list[str] = []
+    real = store.ReviewItem.model_validate_json
+
+    def counting(raw):
+        item = real(raw)
+        parsed.append(item.item_id)
+        return item
+
+    monkeypatch.setattr(store.ReviewItem, "model_validate_json", counting)
+
+    kept = store.undecided_items(engine, "alice", keep=lambda item_id: item_id != "i2")
+
+    assert [item.item_id for item in kept] == ["i1", "i3"]
+    assert parsed == ["i1", "i3"], "the item not kept was parsed anyway"
+
+
 # --- what a person may choose, and a model may not --------------------------------------------
 
 
