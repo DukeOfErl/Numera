@@ -459,7 +459,18 @@ def _columns(shown: tuple[Row, ...]) -> tuple[tuple[str, str, int], ...]:
     appears only where some entry has a tier, so a corpus-file table gains nothing but the marks.
     """
     marks = ("markers", "", max(1, *(len(row.markers()) for row in shown)))
-    columns = [marks, *COLUMNS]
+    # The identifier is the cell a reader checks against the prose, and a terminal cannot open a
+    # truncated cell: two labels cut to `PMC265…` were indistinguishable in the first live run
+    # over the store (2026-10-16). So the column is as wide as the longest identifier shown; a
+    # corpus file's BNIDs fit the default and draw exactly as before.
+    widest = max(len(str(row.entry_id)) for row in shown)
+    columns = [
+        marks,
+        *(
+            (field, title, max(width, widest) if field == "entry_id" else width)
+            for field, title, width in COLUMNS
+        ),
+    ]
     if any(row.trust is not None for row in shown):
         # Before the identifier, after the units: the order both drivers draw (2026-10-16).
         at = [field for field, _, _ in columns].index("entry_id")

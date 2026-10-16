@@ -12,6 +12,18 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **Caveat marks have a column of their own**, first in both entries tables, instead of a prefix
+  on the property. On the web the table gains a Trust column between Units and ID where entries
+  have tiers; Organism, ID and Reference are narrower so it still fits.
+- **Citations drawn as superscripts read every citation form** — a `PMC…` label as well as a
+  BNID, and several identifiers in one bracket — because the pattern is now `citations.DELIMITED`
+  rather than a second, digits-only copy.
+- The terminal's ID column widens to the longest identifier shown, since a terminal cannot open a
+  truncated cell.
+- The system prompt speaks of "scientific quantities" and "a corpus of entries", and asks for "the
+  identifier" in a citation rather than "the number".
+- A harvest store passed where a corpus file is expected is refused by name instead of reported as
+  a corrupt line, and the evaluation command says why it cannot read the store yet.
 - **One model call under the ledger.** The extractor and the simulated review made the same
   eight-step call in two copies; both now go through `spend.call`, so a guard fixed in one is
   fixed in the other. The two things the review page takes from its deployment, the database and
@@ -33,6 +45,18 @@ any release; `1.0.0` when it stabilizes.
 - The keepalive no longer reports a failure when a page reload lands mid-poll after waking the app, installs its browser from the same pinned Playwright it then runs under (`--install-browser`), runs on `ubuntu-24.04` rather than the floating `ubuntu-latest` that migrates to Ubuntu 26 on 2026-10-19, and its comments no longer promise a per-run failure mail.
 
 ### Added
+
+- **The ask agent answers from the harvest store** (`SCINUMBERS_STORE`, or `--store` on the
+  command line): curated BioNumbers entries and every harvested value in every domain, read-only.
+  A harvested value is cited `[[PMC2652108-1]]`, a later extraction of the same paper
+  `[[PMC2652108-1.2]]`; what is saved is the store's own id (ADR-1610). Each entry carries its
+  passage, stated and unstated conditions, paper, and whether it was measured or calculated; a
+  value is stated as a number only where its reading fits the recorded kind (ADR-1620).
+- **Every citation and table row from the store shows its trust tier as stars**, drawn by the
+  application, with `#` for a simulated review and `⚠` for a dispute, and a legend wherever they
+  appear (ADR-1630). The model is told the tier in words and to decide relevance before trust.
+- **Two new caveat marks**: `?` for a value that could not be read with certainty, `∴` for a
+  calculated one.
 
 - **A validator prototype: from a property question to reviewed numbers** (`bionumbers`,
   the `validator` extra). `bionumbers discover` searches Europe PMC for open-access research

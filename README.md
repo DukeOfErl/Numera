@@ -65,6 +65,36 @@ The agent is separated from the interfaces that drive it (ports and adapters): i
 accepts questions, so the web page and — later — an evaluation harness are adapters over one agent,
 with no mode flag inside it.
 
+### Asking the harvest store
+
+Pointed at the harvest store (`SCINUMBERS_STORE`) instead of a corpus file, the agent answers from
+the validator's review database: the curated BioNumbers entries, cited by their BNID, and every
+value harvested from a paper, in every domain the store holds, each cited by its paper and its
+number within that paper — `[[PMC2652108-1]]`. The store is opened read-only and read once at start;
+decisions reviewers make afterwards appear after a restart.
+
+- **Each citation carries its trust tier as stars**, drawn by the app from the store and never
+  written by the model: ★★★★★ curated, then ★★★★☆ to ★☆☆☆☆ for the highest role that approved the
+  entry (senior scientist, scientist, student, AI reviewer), ☆☆☆☆☆ where no reviewer approved it.
+  `#` before the stars marks a tier set by a **simulated** review — a model standing in for that
+  reviewer — and `⚠` after them marks an entry a reviewer objected to. A legend says so wherever
+  stars appear. The rule is ADR-0990's; how it is drawn is ADR-1630.
+- **The model is told each tier in words** and to decide which entries bear on the question first:
+  a rating never makes an entry relevant, it only decides among relevant ones.
+- **A harvested value is shown as the paper wrote it** (`7.1 ± 0.4`, `1,100–2,100`), with its
+  supporting quote, the conditions the paper states and those it does not, and whether it was
+  measured or calculated. Where the numbers read from it do not fit the kind of value recorded, it
+  is marked `?` and stated in the paper's words only (ADR-1620); a calculated value is marked `∴`.
+- **What is saved is the store's own identifier**, beside the label: the trail and the
+  question-and-answer records can always be traced to the exact value, even after the same paper
+  is extracted again (ADR-1610).
+- The review's own text — the passage shown to test a reviewer, and anything a reviewer wrote —
+  never reaches the model.
+
+Evaluation and the answer sheet still read a corpus file only; "Evaluation over the store" in
+[`docs/roadmap.md`](docs/roadmap.md) plans them. The path from the store to the reader is diagram
+7d in [`docs/diagrams/architecture.md`](docs/diagrams/architecture.md).
+
 ### Rating an answer
 
 Each answer carries a thumbs up or down, at the foot of its prose and beside the entries it rests on.
@@ -152,7 +182,8 @@ one of the above.
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `OPENROUTER_API_KEY` | — | required; a question ends as `not_configured` without it |
-| `SCINUMBERS_CORPUS` | — | required; path to the JSONL corpus |
+| `SCINUMBERS_CORPUS` | — | path to the JSONL corpus; required unless `SCINUMBERS_STORE` is set |
+| `SCINUMBERS_STORE` | — | path to the harvest store (a SQLite file), read instead of a corpus file; see [Asking the harvest store](#asking-the-harvest-store). Setting both is refused |
 | `SCINUMBERS_MODEL` | `anthropic/claude-opus-4.7` | the model, as an OpenRouter slug |
 | `SCINUMBERS_QUESTION_CEILING_USD` | `0.60` | hard per-question limit; the warning is derived at 80% of it |
 | `SCINUMBERS_RUN_BUDGET_USD` | `1.20` | total across every question in a run; where sign-in is configured, per account rather than shared |

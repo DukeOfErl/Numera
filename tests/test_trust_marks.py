@@ -174,3 +174,11 @@ def test_the_entries_behind_a_store_answer_reach_the_page_with_their_stars(store
     table = web.item_for(event, store_repo).table
     trust = {row.entry_id: row.stars for row in table.rows}
     assert trust == {"PMC1000001-1": SCIENTIST_SIMULATED_DISPUTED, "PMC2000002-1": "☆☆☆☆☆"}
+
+
+def test_the_terminal_shows_a_label_whole_since_it_cannot_open_a_cell(store_repo):
+    """Cut to the BNID width, `PMC1000001-1` and `PMC1000001-1.2` both read `PMC100…`."""
+    text = entries_table.render(_rows(store_repo, ("PMC1000001-1", "PMC1000001-1.2")))
+    assert "PMC1000001-1 " in text and "PMC1000001-1.2" in text
+    rule = text.splitlines()[1]
+    assert all(len(line) <= len(rule) for line in text.splitlines()[:6])

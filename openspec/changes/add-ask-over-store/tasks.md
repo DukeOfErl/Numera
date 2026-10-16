@@ -147,7 +147,13 @@ some of the store's papers are NC/ND. The real store is read only in local check
       defaulting to curated (5). Newest-first fails 23 because every store test reads entries by
       label; the intended test is among them. Harness kept out of the repository
 - [ ] 7.3 Ask the demo's questions against the real store in the web app and look at the stars,
-      legend and cautions; probe the OpenRouter key's remaining credit before any live call
-- [ ] 7.4 README, `docs/diagrams/architecture.md` (a store adapter beside the corpus file),
+      legend and cautions; probe the OpenRouter key's remaining credit before any live call.
+      Terminal half done 2026-10-16 (key $9.53 left before, $0.21 spent): two live questions over
+      the real store -- F-actin in lamellipodia, glass transition temperatures -- drew stars, `#`,
+      `⚠`, `?`, `∴` and both legends as designed, and the model called a calculation a calculation
+      and flagged a disputed entry. It found one defect: the terminal ID column cut two labels to
+      the same `PMC265…`; fixed by sizing it to the longest ID shown. The web page's half is
+      Yoav's to look at: no browser is available in this sandbox
+- [x] 7.4 README, `docs/diagrams/architecture.md` (a store adapter beside the corpus file),
       `CLAUDE.md`'s module table (`store_corpus.py`, the presentation module), CHANGELOG
-- [ ] 7.5 `openspec validate --all --strict`; full suite green
+- [x] 7.5 `openspec validate --all --strict`; full suite green
