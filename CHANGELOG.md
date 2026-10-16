@@ -25,7 +25,7 @@ any release; `1.0.0` when it stabilizes.
 - **An answer cites entries, never papers.** The prompt tells the model the identifier is the
   only citation and to name no author, title, journal, year or DOI; each entry's reference is in
   the entries table, and asked for one, it says where the reference is. On the web the Trust
-  column took 6px from Units.
+  column took 12px from Units.
 - **A harvested entry opens with its fields apart.** The full entry shows the supporting quote,
   each condition under its name (conditions quoting one passage named together), what the paper
   does not state and what a calculated value came from -- not the search keywords, which packed

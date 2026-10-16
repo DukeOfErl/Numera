@@ -163,7 +163,8 @@ UNCITED_ROWS = 4
 # frees is what pays for the wider gutter between the columns. Since 2026-10-16 the
 # caveat and Trust columns are paid for by Organism, ID and Reference (below), and
 # the sum still has to fit the evidence column (`test_the_evidence_column_can_hold_its_table`).
-# Trust then took 6px from Units, so a cell's stars leave room for the start of an objection.
+# Trust then took 12px from Units (6, then 6 more, 2026-10-16), so a cell's stars leave room
+# for the start of an objection.
 COLUMN_WIDTHS = {
     # The caveat marks, headed by nothing (`grounded-answering`): narrow because a row carries a
     # mark or two at most. Streamlit 1.61.1 takes a pixel width, read 2026-10-16.
@@ -174,9 +175,9 @@ COLUMN_WIDTHS = {
     # superscript in the prose carries it whole.
     "Organism": 88,
     "Value": 85,
-    "Units": 64,
+    "Units": 58,
     # Drawn only where an entry has a tier, before the identifier it qualifies: `#★★★☆☆⚠` at most.
-    "Trust": 78,
+    "Trust": 84,
     "ID": 50,
     "Reference": 56,
 }
