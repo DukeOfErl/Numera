@@ -59,6 +59,7 @@ def test_a_corpus_file_run_never_imports_the_validator_package():
         "from scinumbers_ask import agent, cli, corpus, entries_table, messages\n"
         "from scinumbers_ask import repository, tools\n"
         f"repository.CorpusRepository(corpus.load({str(FIXTURES / 'corpus_sample.jsonl')!r}))\n"
+        f"corpus.load_configured({str(FIXTURES / 'corpus_sample.jsonl')!r}, None)\n"
     )
     assert loaded == set()
 
@@ -457,3 +458,27 @@ def test_search_rows_carry_the_tier_for_store_entries(store_tools):
     assert (
         "PMC1000001-1.2\tF-actin concentration\tmouse\t500 µM\ttrust 0/5, not yet reviewed" in text
     )
+
+
+# -- configuration (D7) -------------------------------------------------------
+
+
+def test_naming_both_a_corpus_file_and_a_store_is_refused_naming_both(store_path):
+    corpus_file = FIXTURES / "corpus_sample.jsonl"
+    with pytest.raises(CorpusUnavailable) as refused:
+        corpus.load_configured(corpus_file, store_path)
+    message = str(refused.value)
+    assert str(corpus_file) in message and str(store_path) in message
+    assert "SCINUMBERS_CORPUS" in message and "SCINUMBERS_STORE" in message
+
+
+def test_a_store_alone_loads_the_store_and_a_file_alone_loads_the_file(store_path):
+    from_store = corpus.load_configured(None, store_path)
+    assert any(e.harvest is not None for e in from_store)
+    from_file = corpus.load_configured(FIXTURES / "corpus_sample.jsonl", None)
+    assert all(e.harvest is None for e in from_file)
+
+
+def test_a_store_read_as_a_corpus_file_is_refused_by_name(store_path):
+    with pytest.raises(CorpusUnavailable, match="is a harvest store, not a corpus file"):
+        corpus.load(store_path)

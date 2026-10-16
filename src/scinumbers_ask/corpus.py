@@ -331,6 +331,16 @@ def _entry(raw: dict) -> Entry:
     )
 
 
+#: The first bytes of every SQLite database: how a harvest store is told from a corpus file.
+SQLITE_HEADER = b"SQLite format 3\x00"
+
+STORE_IS_NOT_A_CORPUS = (
+    "{path} is a harvest store, not a corpus file. The app reads it through SCINUMBERS_STORE. "
+    "Evaluation and the answer sheet read a corpus file only, until the work package "
+    '"Evaluation over the store" in docs/roadmap.md lands.'
+)
+
+
 def load(path: str | Path | None) -> tuple[Entry, ...]:
     """Load a JSONL corpus. No path means no corpus -- there is no fallback."""
     if not path:
@@ -341,6 +351,13 @@ def load(path: str | Path | None) -> tuple[Entry, ...]:
     p = Path(path)
     if not p.is_file():
         raise CorpusUnavailable(f"No corpus file at {p}.")
+    with p.open("rb") as handle:
+        is_store = handle.read(len(SQLITE_HEADER)) == SQLITE_HEADER
+    if is_store:
+        # Named for what it is. Read as lines, a database is "line 1 is not a usable entry",
+        # which sends a reader looking for corruption in a file that is fine. Here rather than
+        # in the evaluation command, so every caller of a corpus file is told the same.
+        raise CorpusUnavailable(STORE_IS_NOT_A_CORPUS.format(path=p))
     entries = []
     with p.open(encoding="utf-8") as handle:
         for number, line in enumerate(handle, start=1):
@@ -359,3 +376,26 @@ def load(path: str | Path | None) -> tuple[Entry, ...]:
     if not entries:
         raise CorpusUnavailable(f"{p} contains no entries.")
     return tuple(entries)
+
+
+def load_configured(corpus: str | Path | None, store: str | Path | None) -> tuple[Entry, ...]:
+    """The configured corpus: a corpus file, or the harvest store -- never both.
+
+    Both named is refused rather than resolved by a precedence rule (design D7): a reader who set
+    both did not mean one of them, and answering from the other is a wrong-corpus answer that
+    looks right. The refusal is here, in the operation every driver calls, so a second driver or a
+    test cannot load past it.
+
+    The store's loader is imported only when a store is named, so a corpus-file run never imports
+    the validator package (ADR-1600).
+    """
+    if corpus and store:
+        raise CorpusUnavailable(
+            f"Both a corpus file ({corpus}) and a harvest store ({store}) are configured. "
+            "Set SCINUMBERS_CORPUS or SCINUMBERS_STORE, not both."
+        )
+    if store:
+        from .store_corpus import load as load_store
+
+        return load_store(store)
+    return load(corpus)

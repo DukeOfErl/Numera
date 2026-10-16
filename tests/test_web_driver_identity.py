@@ -75,7 +75,7 @@ def caught():
 def page(monkeypatch, repo, config, tmp_path):
     """Build the real script with the door set as a test chooses."""
     built: list[str | None] = []
-    monkeypatch.setattr(web, "resources", lambda corpus=None: repo)
+    monkeypatch.setattr(web, "resources", lambda corpus=None, store=None: repo)
     monkeypatch.setenv("SCINUMBERS_CORPUS", FIXTURE)
     monkeypatch.setenv("SCINUMBERS_CHECKPOINTS", str(tmp_path / "c.sqlite"))
     # Something, so `admit` reaches `lookup` rather than concluding "no database".
@@ -993,7 +993,7 @@ def test_two_sessions_get_two_agents_and_one_repository(monkeypatch, tmp_path):
     web.resources.clear()
     counts = {"indexed": 0, "agents": 0}
     rows = load(FIXTURE)
-    monkeypatch.setattr(web, "load", lambda path: rows)
+    monkeypatch.setattr(web, "load_configured", lambda path, store=None: rows)
 
     def counting_repository(entries):
         counts["indexed"] += 1

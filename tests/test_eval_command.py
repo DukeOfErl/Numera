@@ -8,6 +8,7 @@ an unattended run needs.
 from __future__ import annotations
 
 import json
+import sqlite3
 
 import pytest
 from conftest import write_all_shapes_corpus
@@ -221,3 +222,25 @@ def test_a_report_on_a_file_that_does_not_exist_says_nothing_is_scored(tmp_path,
     out = capsys.readouterr().out
     assert "No results yet" in out
     assert "nothing is implied by that" in out
+
+
+def test_a_run_configured_only_for_the_harvest_store_says_why_it_cannot_use_it(
+    tmp_path, monkeypatch
+):
+    """The app reads the store through SCINUMBERS_STORE; evaluation does not yet, and a reader
+    who configured the app should be told that rather than only that a corpus is missing."""
+    monkeypatch.setenv("SCINUMBERS_STORE", str(tmp_path / "store.sqlite"))
+    with pytest.raises(SystemExit) as exit_info:
+        main(["run", write_set(tmp_path, SUPPORTED), "--results", str(tmp_path / "r.jsonl")])
+    assert "Evaluation over the store" in str(exit_info.value)
+
+
+def test_a_harvest_store_passed_as_the_corpus_is_named_for_what_it_is(tmp_path):
+    """Read as lines, a database is "line 1 is not a usable entry" -- a corruption that is not
+    there. The loader names the file as a store, so every caller is told the same."""
+    store = tmp_path / "store.sqlite"
+    sqlite3.connect(store).execute("create table t (x)").connection.commit()
+    with pytest.raises(SystemExit) as exit_info:
+        main(["check", write_set(tmp_path, SUPPORTED), "--corpus", str(store)])
+    assert "is a harvest store, not a corpus file" in str(exit_info.value)
+    assert "Evaluation over the store" in str(exit_info.value)

@@ -564,16 +564,19 @@ def test_a_number_is_never_split_across_two_lines(repo):
     value_column = next(w for field, _, w in entries_table.COLUMNS if field == "value")
     assert "6800.0–72000…" in text
     assert not any(line.strip() == "0" for line in text.splitlines())
-    assert all(len(line) <= 106 for line in text.splitlines()), "a column overran"
+    # Measured against the rule as drawn: the caveat-mark column (add-ask-over-store) is as wide
+    # as the most marks any row carries, so the table's width is no longer a constant.
+    rule = text.splitlines()[1]
+    assert all(len(line) <= len(rule) for line in text.splitlines()), "a column overran"
     assert value_column == 13
 
 
 def test_a_long_footnote_wraps_to_the_table(repo):
     """The number of dimensions is unbounded, and four already overran the rule. A
     footnote running past it reads as a line belonging to something else."""
-    width = sum(w for _, _, w in entries_table.COLUMNS) + 2 * (len(entries_table.COLUMNS) - 1)
     cited = (VOLUME, COUNT, MASS, FIRST)
     text = entries_table.render(entries_table.rows_for(repo, cited, cited))
+    width = len(text.splitlines()[1])  # the rule as drawn
     assert all(len(line) <= width for line in text.splitlines()), "a line overran the rule"
     # Rejoined, because wrapping is exactly what splits the sentence.
     flat = " ".join(line.strip() for line in text.splitlines())
@@ -648,7 +651,7 @@ def test_a_long_method_is_cut_to_the_table_and_says_so():
     something else."""
     long_method = "Coulter counter " * 40
     text = entries_table.render((_row(1, long_method), _row(2, "Microscopy", value="9.0")))
-    width = sum(w for _, _, w in entries_table.COLUMNS) + 2 * (len(entries_table.COLUMNS) - 1)
+    width = len(text.splitlines()[1])  # the rule as drawn
     assert all(len(line) <= width for line in text.splitlines()), "a method line overran"
     assert "…" in text
 

@@ -53,12 +53,14 @@ from . import (
     messages,
     trace,
     trail_store,
+    trust_marks,
 )
 from .accounts import Account, EnrolmentUnavailable
 from .agent import AskAgent
 from .authorization import Refused, allowed, require
+from .citations import DELIMITED, citations
 from .config import Config, env_setting, format_usd, refuse_retired_env
-from .corpus import load
+from .corpus import load_configured
 from .events import Answer, AnswerEntries, EndReason, Event, QuestionEnded, Retrieval
 from .permissions import Identity, Permission
 from .repository import CorpusRepository
@@ -157,14 +159,24 @@ UNCITED_ROWS = 4
 # give them, and they are the two that can afford it: both hold prose that
 # truncates gracefully and opens in full on a double click, where Value, Units
 # and ID hold short strings that either fit or are unreadable. The 62px this
-# frees is what pays for the wider gutter between the columns.
+# frees is what pays for the wider gutter between the columns. Since 2026-10-16 the
+# caveat and Trust columns are paid for by Organism, ID and Reference (below), and
+# the sum still has to fit the evidence column (`test_the_evidence_column_can_hold_its_table`).
 COLUMN_WIDTHS = {
+    # The caveat marks, headed by nothing (`grounded-answering`): narrow because a row carries a
+    # mark or two at most. Streamlit 1.61.1 takes a pixel width, read 2026-10-16.
+    "": 20,
     "Property": 152,
-    "Organism": 115,
+    # Organism, ID and Reference gave up width for the caveat and Trust columns (2026-10-16, the
+    # user's call): an identifier may truncate, since a double click opens the cell in full and the
+    # superscript in the prose carries it whole.
+    "Organism": 88,
     "Value": 85,
     "Units": 70,
-    "ID": 60,
-    "Reference": 96,
+    # Drawn only where an entry has a tier, before the identifier it qualifies: `#★★★☆☆⚠` at most.
+    "Trust": 72,
+    "ID": 50,
+    "Reference": 56,
 }
 
 #: How the turn's width is split: the prose on the left, the entries it rests on
@@ -259,6 +271,11 @@ class Item:
     # `?session=` and indices restart at 0 while the conversation continues, so
     # `(session, 0)` would name two different questions.
     question_id: str = ""
+    # An answer's citations with the stars drawn for each, and what those stars mean -- read off
+    # the corpus when the item is made, so a redrawn transcript needs no repository. Empty for a
+    # corpus file, whose entries have no tier (ADR-1630).
+    stars: tuple[tuple[str, str], ...] = ()
+    legend: tuple[str, ...] = ()
 
 
 def item_for(event: Event, repo: CorpusRepository | None = None) -> Item | None:
@@ -299,7 +316,13 @@ def _item_without_identity(event: Event, repo: CorpusRepository | None = None) -
     if warning is not None:
         return Item(Kind.WARNING, warning)
     if isinstance(event, Answer):
-        return Item(Kind.ANSWER, event.text)
+        trust_of = trust_marks.trust_lookup(repo)
+        return Item(
+            Kind.ANSWER,
+            event.text,
+            stars=trust_marks.cited_stars(event.text, trust_of),
+            legend=tuple(trust_marks.legend(trust_of(i) for i in citations(event.text))),
+        )
     if isinstance(event, QuestionEnded):
         return Item(
             Kind.ENDING,
@@ -1688,7 +1711,7 @@ def draw_dev_panel(admission: Admission, session_id: str, seat: Any | None = Non
 
 
 @st.cache_resource(show_spinner="Loading the corpus…")
-def resources(corpus: str | None = None) -> CorpusRepository:
+def resources(corpus: str | None = None, store: str | None = None) -> CorpusRepository:
     """The corpus index, built once for the life of the server, and the trail's
     sinks attached beside it.
 
@@ -1724,7 +1747,9 @@ def resources(corpus: str | None = None) -> CorpusRepository:
     # rerun after it.
     if corpus is None:
         corpus = env_setting("SCINUMBERS_CORPUS")
-    return CorpusRepository(load(corpus))
+    if store is None:
+        store = env_setting("SCINUMBERS_STORE")
+    return CorpusRepository(load_configured(corpus, store))
 
 
 def as_text(text: str) -> str:
@@ -1742,15 +1767,17 @@ def as_text(text: str) -> str:
     return text.replace("$", r"\$")
 
 
-#: A run of citations -- one or more `[[nnnnnn]]` separated by spaces or a comma --
+#: A run of citations -- one or more `[[...]]` separated by spaces or a comma --
 #: drawn as one superscript with its identifiers comma-separated (ADR-1240). Words
-#: between two citations make two runs.
-_CITATION_RUN = re.compile(r"\[\[\d+\]\](?:,?\s*\[\[\d+\]\])*")
+#: between two citations make two runs. Built from `citations.DELIMITED`, not a second
+#: pattern (ADR-0410): it once read digits only, and a `[[PMC2652108-1]]` label would
+#: have been drawn as raw brackets. What a group holds is read by `citations` itself.
+_CITATION_RUN = re.compile(rf"{DELIMITED.pattern}(?:,?\s*{DELIMITED.pattern})*")
 #: Opacity rather than a colour, so the grey follows Streamlit's light or dark theme.
 _CITATION_STYLE = "opacity: 0.6; font-size: 0.72em;"
 
 
-def answer_markdown(text: str) -> str:
+def answer_markdown(text: str, stars: Mapping[str, str] | None = None) -> str:
     """An answer, ready for `st.markdown(..., unsafe_allow_html=True)`.
 
     Streamlit's markdown has no superscript, so the citations need HTML, and the
@@ -1761,16 +1788,34 @@ def answer_markdown(text: str) -> str:
     `#` and `|` are not HTML -- but a `<` or `>` the model meant as markup is shown
     as the character, which is the safe way round.
 
-    The stored answer keeps `[[nnnnnn]]`: the parser, the trail and the evaluation
+    The stored answer keeps `[[...]]`: the parser, the trail and the evaluation
     all read that form, and only drawing restyles it.
+
+    `stars` maps an identifier to its drawn tier (`trust_marks`); each identifier in a
+    superscript is followed by its stars, in the same grey (ADR-1630). A run holding a
+    group `citations` cannot read -- `[[Table 1]]` -- is left as written: nothing is
+    drawn as a citation that the parser would not count as one.
     """
+    stars = stars or {}
     escaped = as_text(html.escape(text, quote=False))
-    return _CITATION_RUN.sub(
-        lambda run: (
-            f'<sup style="{_CITATION_STYLE}">{", ".join(re.findall(r"\d+", run.group()))}</sup>'
-        ),
-        escaped,
-    )
+
+    def superscript(run: re.Match) -> str:
+        groups = [group.group(0) for group in DELIMITED.finditer(run.group(0))]
+        if not all(citations(group) for group in groups):
+            return run.group(0)
+        shown = [str(i) for i in citations(run.group(0))]
+        cells = ", ".join(f"{i} {stars[i]}" if i in stars else i for i in shown)
+        return f'<sup style="{_CITATION_STYLE}">{cells}</sup>'
+
+    return _CITATION_RUN.sub(superscript, escaped)
+
+
+def markdown_line(line: str) -> str:
+    """A legend line markdown will not restyle: one beginning `#` would be drawn as a heading.
+
+    The simulated mark is `#` (design D6), and its legend line begins with it.
+    """
+    return "\\" + line if line.startswith("#") else line
 
 
 def _row_label(row: entries_table.Row) -> str:
@@ -1807,18 +1852,27 @@ def _legend(rows: tuple[entries_table.Row, ...]) -> list[str]:
         (entries_table.QUALIFIED_LEGEND, lambda r: r.qualified),
         (entries_table.FUSED_LEGEND, lambda r: r.fused),
         (entries_table.IMPLAUSIBLE_LEGEND, lambda r: r.implausible_span),
+        (entries_table.READING_UNCERTAIN_LEGEND, lambda r: r.reading_uncertain),
+        (entries_table.CALCULATED_LEGEND, lambda r: r.calculated),
     )
-    return [legend for legend, applies in applying if any(applies(row) for row in rows)]
+    marks = [legend for legend, applies in applying if any(applies(row) for row in rows)]
+    return marks + trust_marks.legend(row.trust for row in rows)
 
 
 def _frame(rows: tuple[entries_table.Row, ...]) -> list[dict[str, Any]]:
     """The table's cells, in the reference database's column order."""
+    tiered = any(row.trust is not None for row in rows)
     return [
         {
-            "Property": f"{_markers(row)} {row.property}".strip(),
+            # The caveat marks have a column of their own, first, so the property cell holds
+            # only the property (`grounded-answering`).
+            "": _markers(row),
+            "Property": row.property,
             "Organism": row.organism,
             "Value": row.value if row.has_scalar else "",
             "Units": row.units,
+            # Only where some entry has a tier: a corpus-file table shows no trust column.
+            **({"Trust": row.stars} if tiered else {}),
             # A string, not a number: an identifier formatted as a quantity picks
             # up a thousands separator and stops matching the citation in the prose.
             "ID": str(row.entry_id),
@@ -1923,7 +1977,7 @@ def _draw_table(table: Table) -> None:
     # what they mean, and carries that into the rows below. Before both it is
     # explaining marks nobody has seen yet; after both it is too late.
     for line in _legend(shown):
-        st.caption(as_text(line))
+        st.caption(as_text(markdown_line(line)))
     if rest:
         # Folded away, where the cited table is not. These rows are what the answer
         # *did not* stand on: context for a reader who wants to know what else was
@@ -2144,7 +2198,9 @@ def run_status(
 def draw(item: Item) -> None:
     """Draw one item. The only function here that touches the screen."""
     if item.kind is Kind.ANSWER:
-        st.markdown(answer_markdown(item.text), unsafe_allow_html=True)
+        st.markdown(answer_markdown(item.text, dict(item.stars)), unsafe_allow_html=True)
+        for line in item.legend:
+            st.caption(as_text(markdown_line(line)))
     elif item.kind is Kind.ENTRIES:
         if item.table is not None:
             _draw_table(item.table)

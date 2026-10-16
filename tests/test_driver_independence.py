@@ -66,6 +66,9 @@ PRESENTATION = ADAPTERS | {
     # the agent. Presentation by what it is, and placed here so it is not
     # counted as core by subtraction.
     "door_demo",
+    # Stars for a trust tier. The model is told a tier in words and must never be
+    # shown the stars, or it learns to write them (ADR-1630).
+    "trust_marks",
 }
 
 AGENT_CORE = sorted(

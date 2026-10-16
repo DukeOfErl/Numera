@@ -7,11 +7,13 @@ some of the store's papers are NC/ND. The real store is read only in local check
 
 ## 1. Base and plumbing
 
-- [ ] 1.1 Rebase onto `dev` once harvest and review have merged (until then `feat/simulated-review`)
+- [x] 1.1 Rebase onto `dev` once harvest and review have merged (until then `feat/simulated-review`)
       and confirm `bionumbers.tiers` is present and its tests pass. This branch's base lacks 134
       commits of `dev` (2026-10-15), among them the grey-superscript citations (ADR-1240); after the
       rebase, re-read every module this design names against `dev` before building on it — the
-      first draft was read against the stale base and missed the superscripts
+      first draft was read against the stale base and missed the superscripts. Done 2026-10-16 by
+      merging `feat/simulated-review` (which then held `dev`) and `dev` itself, not by rebasing:
+      one conflict resolution instead of one per commit. Modules re-read against the merged tree
 - [x] 1.2 Name `pydantic` in the `ask` extra; add a test that importing `scinumbers_ask.corpus`,
       `repository`, `tools` and `agent` with a corpus file does not import `bionumbers` (D8)
 - [x] 1.3 ADR-1600: the ask package depends on `bionumbers` for the tier rule and the value
@@ -92,36 +94,40 @@ some of the store's papers are NC/ND. The real store is read only in local check
 
 ## 5. Stars on both drivers
 
-- [ ] 5.1 Presentation module: tier → stars per D6's table, `#` for simulated, `⚠` for disputed,
+- [x] 5.1 Presentation module: tier → stars per D6's table, `#` for simulated, `⚠` for disputed,
       empty for `None`, and the legend text; add it to `PRESENTATION` in
       `test_driver_independence.py`
-- [ ] 5.2 Web: `answer_markdown`'s citation run reads every form `citations` reads (built from
+- [x] 5.2 Web: `answer_markdown`'s citation run reads every form `citations` reads (built from
       `citations.DELIMITED`, not a second pattern), so `[[PMC2652108-1]]` becomes a superscript; each
       identifier in the superscript is followed by its stars and tier marks. Terminal: stars after
       each `[[id]]`. The stored and recorded answer text is unchanged; stars the model wrote do not
       change the tier shown; with no store both drivers draw exactly what they drew before. The legend
       line for `#` is escaped so it is not drawn as a heading (a test over the page's legend)
-- [ ] 5.3 Entries table: a trust column on CLI and web; the legend under the answer whenever any
-      shown entry has a tier; nothing shown for a corpus file
-- [ ] 5.3a Caveat column (D6a): markers move from the property's prefix to a narrow first column
+- [x] 5.3 Entries table: a trust column on CLI and web; the legend under the answer whenever any
+      shown entry has a tier; nothing shown for a corpus file. Column order (user, 2026-10-16):
+      marks, Property, Organism, Value, Units, Trust, ID, Reference; Organism, ID and Reference
+      narrowed on the web so the table fits its column
+- [x] 5.3a Caveat column (D6a): markers move from the property's prefix to a narrow first column
       with an empty header, on CLI and web; empty cell where no caveat applies; the property cell
       holds only the property. Add `?` (`reading_uncertain`) and `∴` (calculated) to
       `Row.markers()` with legend lines. Existing marker tests assert the column, not the prefix
 - [ ] 5.4 Through a whole script run (`.claude/rules/streamlit-driver.md`): the web page shows
       stars inside the citation superscripts and in the table, the caveat column first, with the
       legend, for a fixture store and for a corpus file. Judge on the page whether four starred
-      identifiers in one superscript still read; if not, try stars on first mention only (D6)
-- [ ] 5.5 ADR-1630: tiers are drawn by the application and never written by the model; the scale,
+      identifiers in one superscript still read; if not, try stars on first mention only (D6).
+      The whole-script runs are `tests/test_web_driver_store.py`; the visual judgement needs a
+      real answer on screen and is made in 7.3
+- [x] 5.5 ADR-1630: tiers are drawn by the application and never written by the model; the scale,
       the separate dispute and simulated marks (D6), the caveat column (D6a), citing ADR-0990 and
       ADR-0960
 
 ## 6. Configuration
 
-- [ ] 6.1 `SCINUMBERS_STORE` / `--store`; both it and `SCINUMBERS_CORPUS` set → refusal naming both;
+- [x] 6.1 `SCINUMBERS_STORE` / `--store`; both it and `SCINUMBERS_CORPUS` set → refusal naming both;
       `autobuild` bypassed for the store (D7)
-- [ ] 6.2 The Streamlit app loads the store under the same cache as the corpus; restart picks up
+- [x] 6.2 The Streamlit app loads the store under the same cache as the corpus; restart picks up
       new decisions
-- [ ] 6.3 Evaluation and the answer sheet refuse a store with a message saying they read a corpus
+- [x] 6.3 Evaluation and the answer sheet refuse a store with a message saying they read a corpus
       file and naming the roadmap's "Evaluation over the store" (non-goal, stated rather than
       silently half-working)
 
