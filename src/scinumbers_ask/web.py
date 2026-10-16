@@ -271,11 +271,11 @@ class Item:
     # `?session=` and indices restart at 0 while the conversation continues, so
     # `(session, 0)` would name two different questions.
     question_id: str = ""
-    # An answer's citations with the stars drawn for each, and what those stars mean -- read off
-    # the corpus when the item is made, so a redrawn transcript needs no repository. Empty for a
-    # corpus file, whose entries have no tier (ADR-1630).
+    # An answer's citations with the stars drawn for each -- read off the corpus when the item is
+    # made, so a redrawn transcript needs no repository. Empty for a corpus file, whose entries
+    # have no tier (ADR-1630). What the stars mean is said once, with the entries table, and not
+    # under the answer as well (the user's call, 2026-10-16).
     stars: tuple[tuple[str, str], ...] = ()
-    legend: tuple[str, ...] = ()
 
 
 def item_for(event: Event, repo: CorpusRepository | None = None) -> Item | None:
@@ -321,7 +321,6 @@ def _item_without_identity(event: Event, repo: CorpusRepository | None = None) -
             Kind.ANSWER,
             event.text,
             stars=trust_marks.cited_stars(event.text, trust_of),
-            legend=tuple(trust_marks.legend(trust_of(i) for i in citations(event.text))),
         )
     if isinstance(event, QuestionEnded):
         return Item(
@@ -2206,8 +2205,6 @@ def draw(item: Item) -> None:
     """Draw one item. The only function here that touches the screen."""
     if item.kind is Kind.ANSWER:
         st.markdown(answer_markdown(item.text, dict(item.stars)), unsafe_allow_html=True)
-        for line in item.legend:
-            st.caption(as_text(markdown_line(line)))
     elif item.kind is Kind.ENTRIES:
         if item.table is not None:
             _draw_table(item.table)

@@ -18,11 +18,13 @@ caution beside its stars. The stars say who approved it; the caution says that s
 neither is folded into the other.
 
 Wherever a tier was set by a simulated review, the stars SHALL carry a mark saying so, and what the
-mark means SHALL be stated where it is shown. The demo's reviews are models standing in for people,
+mark means SHALL be stated with the entries the answer rests on. The demo's reviews are models standing in for people,
 and a star a reader takes for a person's judgement is a claim the store does not make.
 
-What the scale means SHALL be stated where the stars are shown: which role each count stands for,
-what the caution means and what zero means.
+What the scale means SHALL be stated once, with the entries table that accompanies the answer:
+which role each count stands for, what the caution means and what zero means. It SHALL NOT be
+repeated under the answer's prose, where it would be read before the evidence it explains and
+again beside it.
 
 An entry from a corpus file carries no tier, and SHALL show no stars — not zero stars, which would
 say that someone looked and no one approved.
@@ -43,7 +45,7 @@ say that someone looked and no one approved.
 #### Scenario: A tier set by a simulated review
 - **WHEN** the review that set an entry's tier was simulated
 - **THEN** its stars carry the simulated mark
-- **AND** what the mark means is stated where the stars are shown
+- **AND** what the mark means is stated once, with the entries table
 
 #### Scenario: The model writes stars
 - **WHEN** the model's answer contains star characters beside a citation

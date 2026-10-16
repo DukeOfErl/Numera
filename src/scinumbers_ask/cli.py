@@ -19,7 +19,6 @@ from typing import TextIO
 
 from . import autobuild, entries_table, messages, trace, trust_marks
 from .agent import AskAgent
-from .citations import citations
 from .config import Config, NotConfigured, env_setting, refuse_retired_env
 from .corpus import CorpusUnavailable, load_configured
 from .events import (
@@ -63,11 +62,9 @@ def render(event: Event, repo: CorpusRepository | None = None) -> str | None:
     if isinstance(event, Answer):
         # The stars are drawn here, beside each citation, and never written into the answer
         # the agent recorded (ADR-1630). A corpus file has no tiers, so its answers draw as before.
-        trust_of = trust_marks.trust_lookup(repo)
-        drawn = dict(trust_marks.cited_stars(event.text, trust_of))
-        legend = trust_marks.legend(trust_of(i) for i in citations(event.text))
-        text = trust_marks.annotate(event.text, drawn)
-        return "\n".join(["", text, *legend, ""])
+        # What they mean is said once, under the entries table, as on the page.
+        drawn = dict(trust_marks.cited_stars(event.text, trust_marks.trust_lookup(repo)))
+        return f"\n{trust_marks.annotate(event.text, drawn)}\n"
     if isinstance(event, QuestionEnded):
         return f"  — {messages.ending_text(event)}"
     return None

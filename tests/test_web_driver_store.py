@@ -1,6 +1,6 @@
 """The harvest store through a whole run of the real page (`.claude/rules/streamlit-driver.md`).
 
-What the page draws for a store -- stars in the citation superscript, the legend under the answer,
+What the page draws for a store -- stars beside the citation superscript, the legend with the table,
 the caveat column first and the Trust column before the ID -- and that a corpus file draws none of
 the store's additions. Over the invented store in `store_double`.
 """
@@ -57,7 +57,8 @@ def test_a_store_answer_carries_its_stars_its_legend_and_both_new_columns(
     assert "★</sup>" not in drawn and "☆</sup>" not in drawn
 
     captions = [c.value for c in at.caption]
-    assert trust_marks.SCALE_LEGEND in captions
+    # Once, with the entries table -- not under the answer as well (the user's call, 2026-10-16).
+    assert captions.count(trust_marks.SCALE_LEGEND) == 1
     # The simulated mark's line begins with `#`; escaped, it is not drawn as a heading.
     assert "\\" + trust_marks.SIMULATED_LEGEND in captions
     assert trust_marks.DISPUTED_LEGEND in captions

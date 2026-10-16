@@ -1219,7 +1219,7 @@ COVERED.update(
         "A cited entry from the store is shown with its trust tier as stars": (
             "test_trust_marks.py::test_each_tier_draws_on_one_scale_with_its_marks",
             "test_trust_marks.py::test_the_legend_explains_only_the_marks_shown",
-            "test_trust_marks.py::test_the_terminal_draws_stars_after_each_citation_and_says_what_they_mean",
+            "test_trust_marks.py::test_the_terminal_draws_stars_after_each_citation_and_leaves_the_legend_to_the_table",
             "test_trust_marks.py::test_a_group_citing_several_entries_names_each_beside_its_stars",
             "test_trust_marks.py::test_stars_the_model_wrote_do_not_become_the_tier",
             "test_trust_marks.py::test_the_web_superscript_reads_a_label_and_carries_its_stars",

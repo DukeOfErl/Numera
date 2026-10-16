@@ -57,10 +57,15 @@ def test_the_legend_explains_only_the_marks_shown():
 # -- beside a citation --------------------------------------------------------
 
 
-def test_the_terminal_draws_stars_after_each_citation_and_says_what_they_mean(store_repo):
+def test_the_terminal_draws_stars_after_each_citation_and_leaves_the_legend_to_the_table(
+    store_repo,
+):
     text = cli.render(Answer(question_id="q", text="488 µM [[PMC1000001-1]]."), store_repo)
     assert f"[[PMC1000001-1]] {SCIENTIST_SIMULATED_DISPUTED}." in text
-    assert trust_marks.SIMULATED_LEGEND in text and trust_marks.DISPUTED_LEGEND in text
+    # Said once, under the entries table (the user's call, 2026-10-16), not under the answer too.
+    assert trust_marks.SCALE_LEGEND not in text
+    table = entries_table.render(_rows(store_repo, ("PMC1000001-1",)))
+    assert trust_marks.SIMULATED_LEGEND in table and trust_marks.DISPUTED_LEGEND in table
 
 
 def test_a_group_citing_several_entries_names_each_beside_its_stars(store_repo):
@@ -98,7 +103,6 @@ def test_the_web_superscript_reads_a_label_and_carries_its_stars(store_repo):
     footnoted = re.findall(r"<sup[^>]*>(.*?)</sup>", drawn)
     assert footnoted == ["PMC1000001-1", "100001"]
     assert "[[" not in drawn, "a label left as raw brackets"
-    assert item.legend[0] == trust_marks.SCALE_LEGEND
 
 
 def test_a_group_that_is_not_a_citation_is_not_drawn_as_one():
@@ -108,7 +112,7 @@ def test_a_group_that_is_not_a_citation_is_not_drawn_as_one():
 
 def test_a_corpus_file_answer_item_carries_no_stars(repo):
     item = web.item_for(Answer(question_id="q", text="1 μm [[100002]]"), repo)
-    assert (item.stars, item.legend) == ((), ())
+    assert item.stars == ()
     assert ">100002</sup>" in web.answer_markdown(item.text, dict(item.stars))
 
 

@@ -47,7 +47,8 @@ choice for the simulated mark and is taken (no measurement method recorded); `$`
 because Streamlit reads it as mathematics and a reader could take it for a price; `#` was the
 user's choice, placed before the stars on their instruction. Its legend line begins with `#` and is
 escaped on the web so markdown does not draw it as a heading. A legend states the scale and each
-mark wherever stars are shown.
+mark once per answer, with its entries table; the first version repeated it under the answer's
+prose, and the user had it removed there (2026-10-16).
 
 **Where they are drawn.** On the web, after the grey citation superscript ADR-1240 introduced, at
 the prose's own size: <sup>PMC2652108-1</sup> #★★★☆☆⚠. The first version put the stars inside the

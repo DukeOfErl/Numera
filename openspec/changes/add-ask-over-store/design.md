@@ -199,8 +199,9 @@ A presentation module (beside `entries_table`) owns the scale:
 | `NONE` | ☆☆☆☆☆ |
 
 `#` before the stars marks a simulated tier (`#★★★☆☆`); `⚠` after them marks a dispute. Both qualify the *tier*, so they
-travel with the stars — beside a citation in the prose and in the trust column alike. A legend under
-the answer states the scale, `#` and `⚠`. `None` trust renders as the empty string. (`†` was the
+travel with the stars — beside a citation in the prose and in the trust column alike. A legend with the
+entries table states the scale, `#` and `⚠` -- once, not under the answer as well (the user's
+call, 2026-10-16). `None` trust renders as the empty string. (`†` was the
 first choice and is taken: it already means "no measurement method recorded". `$` came next and
 was dropped: Streamlit reads it as the start of inline mathematics, and a reader could take it for a
 price in an app that shows spend. `#` was the user's choice after that.)
