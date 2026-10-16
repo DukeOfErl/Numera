@@ -1216,6 +1216,9 @@ COVERED.update(
             "test_store_corpus.py::test_search_rows_carry_the_tier_for_store_entries",
             "test_agent.py::test_the_prompt_puts_relevance_before_trust",
         ),
+        "An answer cites entries, never papers": (
+            "test_agent.py::test_the_prompt_leaves_references_to_the_table",
+        ),
         "A cited entry from the store is shown with its trust tier as stars": (
             "test_trust_marks.py::test_each_tier_draws_on_one_scale_with_its_marks",
             "test_trust_marks.py::test_the_legend_explains_only_the_marks_shown",

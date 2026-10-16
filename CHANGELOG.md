@@ -22,6 +22,9 @@ any release; `1.0.0` when it stabilizes.
   truncated cell.
 - The system prompt speaks of "scientific quantities" and "a corpus of entries", and asks for "the
   identifier" in a citation rather than "the number".
+- **An answer cites entries, never papers.** The prompt tells the model the identifier is the
+  only citation and to name no author, title, journal, year or DOI; each entry's reference is in
+  the entries table. On the web the Trust column took 6px from Units.
 - A harvest store passed where a corpus file is expected is refused by name instead of reported as
   a corrupt line, and the evaluation command says why it cannot read the store yet.
 - **One model call under the ledger.** The extractor and the simulated review made the same

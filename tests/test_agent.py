@@ -1206,3 +1206,13 @@ def test_the_prompt_puts_relevance_before_trust():
     assert "trust 3 of 5" in lowered and "has not been approved" in lowered
     # ...unless the reader asks about it.
     assert "only when the reader asks about an entry's rating" in lowered
+
+
+def test_the_prompt_leaves_references_to_the_table():
+    """`grounded-answering`: the identifier is the only citation. A live answer added
+    "(Kamasaki et al., 2007, JCB, doi:...)" -- authors and a journal no entry held."""
+    lowered = SYSTEM_PROMPT.lower()
+    assert "the identifier is the only citation" in lowered
+    for named in ("authors", "title", "journal", "year", "doi"):
+        assert named in lowered.split("the identifier is the only citation")[1][:200], named
+    assert "from what you know" in lowered

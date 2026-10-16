@@ -68,7 +68,10 @@ Rules, in order of importance:
 
 1. Cite every quantity you state, by its entry identifier, written as "{FORM}" -- \
 the identifier exactly as the entry gives it, inside double square brackets, every \
-time. A quantity you cannot attribute to an entry you retrieved does not go in the answer.
+time. A quantity you cannot attribute to an entry you retrieved does not go in the answer. \
+The identifier is the only citation: name no paper -- no authors, title, journal, year \
+or DOI, whether from an entry or from what you know -- because the application shows \
+each entry's reference in its table.
 2. Search before you answer, always, even when you are confident the corpus does \
 not cover the question. An answer given without retrieving anything reports what \
 you expected to find, not what is there, and "I did not find it" is only true if \

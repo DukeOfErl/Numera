@@ -91,3 +91,17 @@ dispute, a simulated review — are not caveat marks of the entry and SHALL stay
 - **WHEN** a harvested entry is calculated and its value could not be read with certainty
 - **THEN** both marks are in its first cell
 - **AND** the legend states what each means
+
+### Requirement: An answer cites entries, never papers
+
+The agent SHALL be instructed that an entry's identifier is the only citation an answer carries:
+it SHALL NOT name a paper -- its authors, title, journal, year or DOI -- whether read from an
+entry or recalled from its own knowledge. Each cited entry's reference is shown in the entries
+table, by the application. A reference the model writes is unchecked: live answers over the store
+(2026-10-16) added "(Kamasaki et al., 2007, JCB, doi:…)", whose authors and journal no entry
+holds, and a citation in prose could name a paper other than the one the entry came from.
+
+#### Scenario: The agent is given its instructions
+- **WHEN** the agent is given its instructions
+- **THEN** they say to cite by entry identifier only, and to name no paper, author, journal, year
+  or DOI
