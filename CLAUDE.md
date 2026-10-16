@@ -81,7 +81,7 @@ what let the blocks drift: no branch can see another's copy.
 | `speed-up-test-loop` | `1300`–`1340` — `1300` written |
 | `add-first-use-heartbeat` | `1350`–`1390` — `1350` written |
 | `add-harvest-prototype` | `1500`–`1590` — `1500`, `1510` written, and `1520`–`1540` hold the validator's renumbered three; archived 2026-10-15; clear of every block on `dev` and the branches as of 2026-10-07 (highest `1350`–`1390`) |
-| `add-ask-over-store` | `1600`–`1690` — `1600`, `1610`, `1620`, `1630` written |
+| `add-ask-over-store` | `1600`–`1690` — `1600`, `1610`, `1620`, `1630`, `1640` written |
 | `harden-harvest` | `1700`–`1740` — reserved 2026-10-15, after `add-ask-over-store`'s `1600`–`1690` on `feat/ask-over-store` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
@@ -188,6 +188,7 @@ core, and a test there refuses a name with no file behind it.
 | `store_corpus.py` | The harvest store as a corpus: read-only, labels, readings, tiers. **The one core module that imports `bionumbers`** (ADR-1600), so a corpus-file run never does |
 | `objections.py` | What objecting reviewers wrote, for the Trust cell and the terminal's list. **Presentation**: reviewers' words never reach the agent; imports `bionumbers` only when a store is loaded (ADR-1600, ADR-1630) |
 | `trust_marks.py` | A tier as stars, `#` and `⚠`, and their legend. **Presentation**: the model is told a tier in words and never shown a star (ADR-1630) |
+| `references.py` | A harvested paper's reference in Chicago author-date, from its CSL-JSON, by citeproc-py. **Presentation**: the model names no paper and is never handed the authors (ADR-1640) |
 | `enrol.py` | The two commands that open and close an account: `scinumbers-enrol` mints a capped key and inserts the row, withdrawing the key if the row cannot be written (ADR-0900); `scinumbers-withdraw` disables the row and revokes the key, in that order, so a partial failure leaves a refused account rather than a live one (ADR-1150). A harness module |
 | `pending.py` | The daily check (`scinumbers-pending`): who is **still** stuck at the door, read out of the trail. Resolution is derived from `user_email` and `signin.refused` rather than tracked, so no state is added. **Silent when nobody is stuck** — the contract a cron line rests on. A harness module |
 | `first_use.py` | The hourly check (`scinumbers-first-use`): who was **just seen for the first time**, signing in or asking, read out of the trail with no state kept. Holds a **read-only database URL, never the Neon API key**, and sets its own transaction read-only. **Silent when nobody is new.** The window is computed by the workflow from the previous successful run. A harness module (ADR-1250, ADR-1260, ADR-1290) |

@@ -12,6 +12,8 @@ look for them in everything an entry holds.
 
 from __future__ import annotations
 
+import json
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -311,4 +313,41 @@ def build(path: Path, *, with_run_b: bool = True) -> Path:
     if with_run_b:
         load(engine, RUN_B, run_b())
     engine.dispose()
+    return path
+
+
+#: The actin paper's bibliographic record, invented, in the shape `add-paper-references` writes
+#: (ADR-1750): keys present only where the front matter states them.
+ACTIN_CSL = {
+    "type": "article-journal",
+    "id": "PMC1000001",
+    "title": "Invented actin in S. pombe cdc15 mutants",
+    "author": [
+        {"family": "Inventa", "given": "Ada"},
+        {"family": "Fictor", "given": "Ben Carl"},
+        {"family": "Madeup", "given": "Cleo"},
+    ],
+    "container-title": "Journal of Invented Biology",
+    "volume": "12",
+    "issue": "3",
+    "page": "101-109",
+    "issued": {"date-parts": [[2009, 5]]},
+    "DOI": "10.0000/invented.1",
+    "PMID": "1000001",
+    "PMCID": "PMC1000001",
+}
+
+
+def with_references(path: Path, records: dict[str, dict]) -> Path:
+    """Give the store `review_paper.csl_json`, as `upgrade-store` does, and fill it per PMCID.
+
+    Added here rather than through `bionumbers.store`, whose table on this branch predates the
+    column: the ask side must read a store with it and a store without it alike.
+    """
+    with sqlite3.connect(path) as conn:
+        conn.execute("ALTER TABLE review_paper ADD COLUMN csl_json TEXT NOT NULL DEFAULT ''")
+        for pmcid, record in records.items():
+            conn.execute(
+                "UPDATE review_paper SET csl_json = ? WHERE pmcid = ?", (json.dumps(record), pmcid)
+            )
     return path

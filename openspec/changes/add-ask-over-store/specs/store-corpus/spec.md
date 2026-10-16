@@ -224,3 +224,26 @@ neighbouring quantity over the two-star value that answers the question.
 - **WHEN** the agent is given its instructions
 - **THEN** they say not to mention ratings, approvals or disputes in the answer
 - **AND** they say to answer from the trust line when the reader asks about an entry's rating
+
+### Requirement: A harvested entry's reference is shown in Chicago author-date
+
+Where the store holds a paper's bibliographic record as CSL-JSON, every harvested entry from that
+paper SHALL be shown to the reader -- in the entries table's Reference column and in the full entry
+-- with a reference in Chicago author-date form, its authors included, and its title as the paper
+wrote it. Where the store holds no record, or one that cannot be formatted faithfully (no author, a
+collaboration's name), the entry's plain reference SHALL be shown instead. The agent SHALL NOT be
+given the formatted reference or the paper's authors: it is told to name no paper, and the names
+are not its to write. A store written before it held these records SHALL load as before.
+
+#### Scenario: A paper with its record
+- **WHEN** a cited entry's paper has a CSL-JSON record with authors
+- **THEN** its Reference reads in Chicago author-date, surname first for the first author, the
+  year after the names, and the title unchanged in case
+
+#### Scenario: A paper without one
+- **WHEN** a cited entry's paper has no record, or one with no author
+- **THEN** its Reference is the title, year and DOI, as before
+
+#### Scenario: The agent retrieves the entry
+- **WHEN** the agent retrieves an entry whose paper has a record
+- **THEN** nothing it is shown names the paper's authors or journal

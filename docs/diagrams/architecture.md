@@ -95,6 +95,7 @@ flowchart TB
         table[entries_table.py]
         fb[feedback.py]
         tm[trust_marks.py]
+        refs[references.py]
     end
     subgraph core["Agent core"]
         agent[agent.py]
@@ -583,11 +584,11 @@ flowchart LR
     loader["store_corpus<br/><i>labels · readings · tiers</i>"]
     entry["Entry<br/><i>+ harvest details, + tier</i>"]
     model["the model<br/><i>tier in words</i>"]
-    marks["trust_marks<br/><i>stars, # and ⚠</i>"]
+    marks["trust_marks · references<br/><i>stars, # and ⚠; Chicago references</i>"]
     reader["the reader<br/><i>superscript · table · legend</i>"]
     store -- "claims, papers,<br/>decisions → tier" --> loader --> entry
     entry -- "get_entry / search" --> model
-    entry -- "tier" --> marks --> reader
+    entry -- "tier, paper's record" --> marks --> reader
     model -- "[[PMC…-n]]" --> reader
 ```
 
@@ -595,4 +596,6 @@ flowchart LR
 entry by ADR-0990's rule. The model is told the tier in words; the reader is shown it as stars,
 drawn by the application (ADR-1630). The review's own text — the passage that tests a reviewer,
 and anything a reviewer wrote — is put into no entry, so it reaches neither. What is saved about
-an answer is the store's item id beside each label (ADR-1610).*
+an answer is the store's item id beside each label (ADR-1610). A paper's record, with its
+authors, goes the same way as the tier: formatted for the reader (ADR-1640), never shown to the
+model, which is told to cite entries and name no paper.*

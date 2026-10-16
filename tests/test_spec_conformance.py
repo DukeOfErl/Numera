@@ -1216,6 +1216,15 @@ COVERED.update(
             "test_store_corpus.py::test_search_rows_carry_the_tier_for_store_entries",
             "test_agent.py::test_the_prompt_puts_relevance_before_trust",
         ),
+        "A harvested entry's reference is shown in Chicago author-date": (
+            "test_references.py::test_a_reference_reads_in_chicago_author_date",
+            "test_references.py::test_the_title_stays_as_the_paper_wrote_it",
+            "test_references.py::test_seven_authors_are_the_first_three_and_et_al",
+            "test_references.py::test_a_record_that_cannot_be_formatted_faithfully_is_not",
+            "test_references.py::test_the_table_shows_chicago_where_the_store_has_the_record",
+            "test_references.py::test_a_store_without_the_column_still_loads_with_plain_references",
+            "test_references.py::test_the_model_is_never_handed_the_authors",
+        ),
         "An answer cites entries, never papers": (
             "test_agent.py::test_the_prompt_leaves_references_to_the_table",
         ),

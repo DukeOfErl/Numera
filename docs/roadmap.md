@@ -282,7 +282,7 @@ change that is not happening.
 
 | Item | Why it is waiting |
 |---|---|
-| Authors and an author tier | Deferred entirely from `add-ask-over-store` on 2026-10-13: authors with a listed email reviewing their own papers' values, a tier equivalent to curated. Needs the JATS reader to extract contributors, and emails are personal data that may live only in the private data repo |
+| Authors and an author tier | Authors themselves landed on 2026-10-16: the store holds each harvested paper's CSL-JSON record (`add-paper-references`) and the ask agent draws it in Chicago author-date (ADR-1640); curated entries' references by PubMed lookup are "maybe later". The author tier stays deferred, as on 2026-10-13: authors with a listed email reviewing their own papers' values, a tier equivalent to curated. Needs the JATS reader to extract contributors, and emails are personal data that may live only in the private data repo |
 | Per-entry ratings | Gated on what WP2's comments actually say |
 | Grey thumbs | Cosmetic; the colour rule may not be matching. Raised 2026-09-15 |
 | `ToolCallLimitMiddleware` | Deferred in `add-ask-agent` for unexpected consequences seen in `interv_preper`. Worth re-checking against the stock middleware, since the project prefers the library's own components |

@@ -70,6 +70,9 @@ class Paper:
     doi: str
     pmid: str
     licence: str
+    # The paper's bibliographic record as CSL-JSON, where the store holds one (ADR-1640); "" for
+    # a store written before it did. Formatted for a reader by `references`, never for the model.
+    csl_json: str = ""
 
 
 @dataclass(frozen=True)

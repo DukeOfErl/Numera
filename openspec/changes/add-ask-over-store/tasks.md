@@ -157,3 +157,14 @@ some of the store's papers are NC/ND. The real store is read only in local check
 - [x] 7.4 README, `docs/diagrams/architecture.md` (a store adapter beside the corpus file),
       `CLAUDE.md`'s module table (`store_corpus.py`, the presentation module), CHANGELOG
 - [x] 7.5 `openspec validate --all --strict`; full suite green
+
+## 8. References in Chicago author-date (ADR-1640, added 2026-10-16)
+
+- [x] 8.1 Read `review_paper.csl_json` by name, so a store without the column loads unchanged; the
+      store's owner added and filled it (`add-paper-references`, ADR-1750)
+- [x] 8.2 `references.py` (presentation): citeproc-py 0.11.1 with `chicago-author-date`, titles kept
+      as written, a period moved inside the quote; the plain reference where a record cannot be
+      formatted faithfully. All 48 papers behind the 452 values format
+- [x] 8.3 The model is never handed the formatted reference or the authors
+- [x] 8.4 The prompt: cite entries only, name no paper, and when asked say where the reference is
+- [x] 8.5 The full entry draws a harvested value's quote and conditions apart, not its keywords

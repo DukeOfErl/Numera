@@ -88,6 +88,10 @@ decisions reviewers make afterwards appear after a restart.
   supporting quote, the conditions the paper states and those it does not, and whether it was
   measured or calculated. Where the numbers read from it do not fit the kind of value recorded, it
   is marked `?` and stated in the paper's words only (ADR-1620); a calculated value is marked `∴`.
+- **A harvested value's reference names its authors**, in Chicago author-date, in the entries
+  table and the full entry — drawn by the app from the paper's record in the store, with the title
+  as the paper wrote it (ADR-1640). The model cites entries only and names no paper; asked for one,
+  it says where the reference is shown.
 - **What is saved is the store's own identifier**, beside the label: the trail and the
   question-and-answer records can always be traced to the exact value, even after the same paper
   is extracted again (ADR-1610).

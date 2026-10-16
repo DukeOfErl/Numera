@@ -30,7 +30,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, inspect, select, text
 
 from bionumbers import readings, store, tiers
 from bionumbers.records import CandidateKind, ClaimKind, Provenance, ReviewItem
@@ -74,6 +74,7 @@ def load(setting: str | Path | None) -> tuple[Entry, ...]:
             papers = {
                 (row.run_id, row.pmcid): row for row in conn.execute(select(store.review_paper))
             }
+            references = _references(conn)
             items = conn.execute(
                 select(
                     store.review_item.c.item_id,
@@ -100,6 +101,7 @@ def load(setting: str | Path | None) -> tuple[Entry, ...]:
                 labels[row.item_id],
                 paper_row,
                 trust.get(row.item_id, tiers.Trust(tiers.Tier.NONE)),
+                references.get((row.run_id, row.pmcid), ""),
             )
         )
     if not entries:
@@ -172,7 +174,21 @@ def _labels(items: list[Any]) -> dict[str, str]:
     return labels
 
 
-def _harvested(row: Any, label: str, paper_row: Any, trust: tiers.Trust) -> Entry:
+def _references(conn: Any) -> dict[tuple[str, str], str]:
+    """Each paper's CSL-JSON record, keyed as `review_paper` is; empty for a store without them.
+
+    Read by name rather than through `bionumbers.store`'s table, which on this branch predates the
+    column (`add-paper-references`, ADR-1750): a store written before it simply has none.
+    """
+    if "csl_json" not in {column["name"] for column in inspect(conn).get_columns("review_paper")}:
+        return {}
+    rows = conn.execute(text("SELECT run_id, pmcid, csl_json FROM review_paper"))
+    return {(run_id, pmcid): csl or "" for run_id, pmcid, csl in rows}
+
+
+def _harvested(
+    row: Any, label: str, paper_row: Any, trust: tiers.Trust, csl_json: str = ""
+) -> Entry:
     """A harvested value as an `Entry`. Reads the claim and the paper; never the review's text."""
     item = ReviewItem.model_validate_json(row.item_json)
     claim = item.claim
@@ -230,6 +246,7 @@ def _harvested(row: Any, label: str, paper_row: Any, trust: tiers.Trust) -> Entr
                 doi=paper.doi,
                 pmid=paper.pmid,
                 licence=paper.licence,
+                csl_json=csl_json,
             ),
             domain=domain,
             topic=topic,

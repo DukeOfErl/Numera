@@ -72,6 +72,9 @@ PRESENTATION = ADAPTERS | {
     # What objecting reviewers wrote: text a stranger wrote, which the agent must not reach even
     # by accident -- the line `feedback` draws (ADR-0750, ADR-1630).
     "objections",
+    # A paper's reference with its authors, for the reader: the model is told to name no paper
+    # (ADR-1640).
+    "references",
 }
 
 AGENT_CORE = sorted(

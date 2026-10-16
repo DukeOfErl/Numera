@@ -14,7 +14,7 @@ import textwrap
 from dataclasses import dataclass
 from typing import Any
 
-from . import bionumbers, objections, trust_marks
+from . import bionumbers, objections, references, trust_marks
 from .corpus import EntryId, Origin
 from .repository import CorpusRepository
 from .units import dimensions_of
@@ -263,7 +263,7 @@ def rows_for(
                 organism=entry.organism,
                 value=entry.value_display,
                 units=entry.units,
-                reference=entry.reference,
+                reference=_reference(entry),
                 cited=entry_id in cited,
                 method_recorded=bool(entry.measurement_method.strip()),
                 has_scalar=entry.value is not None
@@ -288,6 +288,13 @@ def rows_for(
             )
         )
     return tuple(out)
+
+
+def _reference(entry) -> str:
+    """Chicago author-date where the store holds the paper's record (ADR-1640), else as stored."""
+    if entry.harvest is not None:
+        return references.chicago(entry.harvest.paper.csl_json) or entry.reference
+    return entry.reference
 
 
 def _cell_lines(text: str, width: int) -> list[str]:

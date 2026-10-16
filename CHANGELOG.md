@@ -54,6 +54,9 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **A harvested value's reference names its authors**, in Chicago author-date, in the entries
+  table and the full entry: read from the paper's CSL-JSON record in the store and formatted by
+  citeproc-py, with the title as the paper wrote it. The model is never handed it (ADR-1640).
 - **The ask agent answers from the harvest store** (`SCINUMBERS_STORE`, or `--store` on the
   command line): curated BioNumbers entries and every harvested value in every domain, read-only.
   A harvested value is cited `[[PMC2652108-1]]`, a later extraction of the same paper
