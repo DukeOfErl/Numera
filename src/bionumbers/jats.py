@@ -21,7 +21,8 @@ byte-identical across calls, which is also why nothing here consults the clock o
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from lxml import etree
 
@@ -137,6 +138,10 @@ class Document:
     tables: tuple[TableView, ...] = ()
     """Every table whole, in document order, each cell naming the passage it became. The
     cells are the passages; this is the layout around them, for the review page (ADR-0940)."""
+    csl: dict[str, Any] = field(default_factory=dict)
+    """The article's bibliographic record as one CSL-JSON item (ADR-1750): authors in the
+    paper's order, journal, volume, issue, pages, date and identifiers. Keys the front matter
+    does not fill are absent, not empty."""
 
     def passage(self, passage_id: str) -> Passage | None:
         return next((p for p in self.passages if p.id == passage_id), None)
@@ -185,17 +190,19 @@ def read_jats(xml: str) -> Document:
         if element is not None:
             reader.walk(element, ())
 
+    issued = _issued(meta)
     return Document(
         article_type=root.get("article-type") or "",
         title=_text(meta.find("title-group/article-title")) if meta is not None else "",
         pmcid=_pmcid(meta),
         pmid=_article_id(meta, "pmid"),
         doi=_article_id(meta, "doi"),
-        year=_year(meta),
+        year=issued[0] if issued else None,
         passages=tuple(reader.passages),
         has_methods_section=any(_is_methods_title(title) for title in reader.section_titles),
         supplementary=_supplementary(root),
         tables=tuple(reader.tables),
+        csl=_csl_item(root.find("front/journal-meta"), meta, issued),
     )
 
 
@@ -581,14 +588,85 @@ def _pmcid(meta: etree._Element | None) -> str:
     return value
 
 
-def _year(meta: etree._Element | None) -> int | None:
+def _issued(meta: etree._Element | None) -> tuple[int, ...]:
+    """The publication date as year, month, day -- as many as stated -- or empty.
+
+    Of several `<pub-date>`s the print date wins, then any date of the article's own, and a
+    `collection` date last: that one is the volume's, and in 2 of 130 cached papers it names the
+    year after the article appeared. Within a rank, document order.
+    """
+    ranked: list[tuple[int, tuple[int, ...]]] = []
+    for pub_date in meta.findall("pub-date") if meta is not None else ():
+        parts = []
+        for name in ("year", "month", "day"):
+            digits = (pub_date.findtext(name) or "").strip()
+            if not digits.isdigit():
+                break
+            parts.append(int(digits))
+        if not parts:
+            continue
+        kind = pub_date.get("pub-type") or pub_date.get("date-type") or ""
+        rank = 0 if kind == "ppub" else 2 if kind == "collection" else 1
+        ranked.append((rank, tuple(parts)))
+    return min(ranked, key=lambda dated: dated[0])[1] if ranked else ()
+
+
+def _csl_item(
+    journal: etree._Element | None, meta: etree._Element | None, issued: tuple[int, ...]
+) -> dict[str, Any]:
+    """One CSL-JSON item from the front matter (ADR-1750). Only what is stated is written."""
     if meta is None:
-        return None
-    for year in meta.iterfind("pub-date/year"):
-        digits = (year.text or "").strip()
-        if digits.isdigit():
-            return int(digits)
-    return None
+        return {}
+    pages = (meta.findtext("fpage") or "").strip()
+    last = (meta.findtext("lpage") or "").strip()
+    if pages and last and last != pages:
+        pages = f"{pages}-{last}"
+    stated = {
+        "type": "article-journal",
+        "id": _pmcid(meta),
+        "title": _text(meta.find("title-group/article-title")),
+        "author": _authors(meta),
+        "container-title": _text(journal.find(".//journal-title")) if journal is not None else "",
+        "volume": (meta.findtext("volume") or "").strip(),
+        "issue": (meta.findtext("issue") or "").strip(),
+        "page": pages or (meta.findtext("elocation-id") or "").strip(),
+        "issued": {"date-parts": [list(issued)]} if issued else None,
+        "DOI": _article_id(meta, "doi"),
+        "PMID": _article_id(meta, "pmid"),
+        "PMCID": _pmcid(meta),
+    }
+    return {key: value for key, value in stated.items() if value}
+
+
+def _authors(meta: etree._Element) -> list[dict[str, str]]:
+    """The authors in the paper's order, and nobody else.
+
+    Two layouts in the cache, never mixed within a paper: the type on each `<contrib>`
+    (`contrib-type="author"`, 455 of them), or on the group (`<contrib-group
+    content-type="author">` over untyped contribs, 485). Editors and reviewers are typed the same
+    two ways and are left out; so is a contrib typed neither way, which the cache never holds --
+    a citation short of one author reads as a citation, a citation naming the editor as an author
+    does not.
+    """
+    authors = []
+    for group in meta.findall("contrib-group"):
+        for contrib in group.findall("contrib"):
+            kind = contrib.get("contrib-type") or group.get("content-type")
+            if kind != "author":
+                continue
+            name = contrib.find("name")
+            if name is None:
+                name = contrib.find("name-alternatives/name")
+            if name is not None:
+                authors.append(
+                    {
+                        "family": _text(name.find("surname")),
+                        "given": _text(name.find("given-names")),
+                    }
+                )
+            elif (collab := contrib.find("collab")) is not None:
+                authors.append({"literal": _text(collab)})
+    return authors
 
 
 def _supplementary(root: etree._Element) -> tuple[str, ...]:

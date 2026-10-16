@@ -198,6 +198,7 @@ Not part of the multi-user push; listed so the board is complete.
 | `add-provider-limit-ending` | 29/31 |
 | `add-answer-shape` | 0/10 — an answer leads with its quantitative conclusion |
 | `add-validator-prototype` | archived 2026-10-15 — question → Europe PMC → one extraction call per paper → blind two-step review, simulated roles, one trust-tier rule (ADR-1520–1540, ADR-0930–0990); `feat/simulated-review` |
+| `add-paper-references` | in progress on `feat/paper-references` (2026-10-16) — each paper's bibliographic record as CSL-JSON in the store, styled at display by the ask agent (ADR-1750); asked for by `add-ask-over-store` |
 | `add-door-demo` | archived 2026-10-04 — the sign-in door plays a three-example demo, the third with a script-drawn chart; citations are grey superscripts on the door and in the app (ADR-1210–1240) |
 | _app-drawn charts_ | not proposed — the agent returns numbers and the application draws the chart. A model-drawn text chart misplaced every bar on its own axis (ADR-1210). Deferred by Yoav; the door's third example stands in with a script-drawn chart, to be redrawn by the app when this lands (ADR-1230) |
 

@@ -38,8 +38,10 @@ from bionumbers.records import (
     CandidateKind,
     ClaimKind,
     DistractorType,
+    Fingerprint,
     NotReviewable,
     Paper,
+    PaperResult,
     PaperState,
     ReviewItem,
 )
@@ -252,6 +254,8 @@ def test_extract_ends_every_paper_in_a_state_and_accounts_for_every_claim(
     assert results[TEXTLESS.pmcid].fingerprint.run_id == RUN
     assert results[LICENSED.pmcid].state is PaperState.CLAIMS_FOUND
     assert len(results[LICENSED.pmcid].claims) == 2
+    # Discovery left the paper with no record; extraction, holding the front matter, adds it.
+    assert json.loads(results[LICENSED.pmcid].paper.csl_json)["author"][0]["family"] == "Botting"
 
     items = read_jsonl(dirs.runs / RUN / cli.ITEMS_FILE, ReviewItem)
     not_reviewable = read_jsonl(dirs.runs / RUN / cli.NOT_REVIEWABLE_FILE, NotReviewable)
@@ -359,6 +363,9 @@ def test_harvest_starts_a_run_from_pmcids_with_each_paper_s_own_metadata_and_lic
     with_text = papers[TABLES_PMCID]
     assert with_text.title == ARTICLE.title and with_text.year == ARTICLE.year
     assert with_text.licence != UNLICENSED
+    record = json.loads(with_text.csl_json)
+    assert record["PMCID"] == TABLES_PMCID and record["author"][0]["family"] == "Botting"
+    assert not papers[TEXTLESS.pmcid].csl_json, "no full text, nothing to read a record from"
     assert not with_text.full_text_status
     assert "500" in papers[TEXTLESS.pmcid].full_text_status
     assert "2 paper(s), no full text 1" in capsys.readouterr().out
@@ -703,6 +710,10 @@ def test_the_model_is_pinned_to_the_provider_its_price_was_read_from(monkeypatch
     assert cli._model("typesafe/jev-router")._provider is None
 
 
+#: Columns a file written by the first `create_all` lacks.
+NEWER_COLUMNS = {"domain", "topic", "value_read", "answered_by", "value_agreement", "csl_json"}
+
+
 def test_upgrade_store_brings_an_older_file_up_to_date(tmp_path, capsys):
     """A file written by `create_all` before the newer columns existed; the command adds them
     and says how many it added."""
@@ -725,7 +736,7 @@ def test_upgrade_store_brings_an_older_file_up_to_date(tmp_path, capsys):
                     nullable=c.nullable and c.name not in {"approved", "chosen_supporting"},
                 )
                 for c in table.columns
-                if c.name not in {"domain", "topic", "value_read", "answered_by", "value_agreement"}
+                if c.name not in NEWER_COLUMNS
             ],
         )
     old.create_all(engine)
@@ -734,6 +745,36 @@ def test_upgrade_store_brings_an_older_file_up_to_date(tmp_path, capsys):
     code = cli.main(["upgrade-store", "--db-url", url])
 
     assert code == 0
-    assert "2 column(s) added, 0 paper(s) filled" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "3 column(s) added, 0 paper(s) filled" in out
+    assert "reference" not in out, "without --data there is nothing to read a record from"
     assert cli.main(["upgrade-store", "--db-url", url]) == 0
     assert "0 column(s) added" in capsys.readouterr().out
+
+
+def test_upgrade_store_with_the_cache_fills_each_paper_s_record_from_its_full_text(
+    provider, dirs, tmp_path, capsys
+):
+    """A store loaded before `csl_json` existed holds the paper and its items; the record is in
+    the paper's front matter, so the command reads it from the cache the harvest left."""
+    url = f"sqlite:///{tmp_path}/demo.sqlite"
+    engine = store.engine_from_url(url)
+    store.create_all(engine)
+    fingerprint = Fingerprint(model="m", instruction_sha256="s", article_id="PMC1", run_id=RUN)
+    results = [
+        PaperResult(paper=LICENSED, state=PaperState.CLAIMS_FOUND, fingerprint=fingerprint),
+        PaperResult(paper=TEXTLESS, state=PaperState.UNREADABLE, fingerprint=fingerprint),
+    ]
+    store.load_run(engine, results, [], question=QUESTION, run_id=RUN)
+    engine.dispose()
+    seed_run(dirs, [], cached={TABLES_PMCID: ARTICLE_XML})
+
+    code = cli.main(["upgrade-store", "--db-url", url, "--data", str(dirs.data)])
+
+    assert code == 0
+    assert "1 reference(s) filled" in capsys.readouterr().out
+    with create_engine(url).begin() as conn:
+        papers = store.review_paper.c
+        by_pmcid = dict(conn.execute(select(papers.pmcid, papers.csl_json)).all())
+    assert json.loads(by_pmcid[TABLES_PMCID])["author"][0]["family"] == "Botting"
+    assert by_pmcid[TEXTLESS.pmcid] == "", "the service has no text for it: left for a later run"

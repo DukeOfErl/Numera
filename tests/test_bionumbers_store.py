@@ -123,6 +123,37 @@ def test_a_run_loads_its_papers_and_items(engine):
     assert ReviewItem.model_validate_json(item.item_json) == an_item("i1")
 
 
+RECORD = '{"type": "article-journal", "author": [{"family": "Kamasaki", "given": "Tomoko"}]}'
+
+
+def test_a_paper_s_bibliographic_record_is_loaded_with_it(engine):
+    cited = a_result(paper=a_paper().model_copy(update={"csl_json": RECORD}))
+
+    store.load_run(engine, [cited], [], question=QUESTION, run_id=RUN)
+
+    (paper,) = rows(engine, store.review_paper)
+    assert paper.csl_json == RECORD
+
+
+def test_fill_references_writes_only_the_papers_without_one_and_counts_them(engine):
+    held = a_result(paper=a_paper("PMC1").model_copy(update={"csl_json": RECORD}))
+    wanting = a_result(paper=a_paper("PMC2"))
+    unknown = a_result(paper=a_paper("PMC3"))
+    store.load_run(engine, [held, wanting, unknown], [], question=QUESTION, run_id=RUN)
+    asked: list[str] = []
+
+    def csl_json_for(pmcid: str) -> str:
+        asked.append(pmcid)
+        return '{"id": "PMC2"}' if pmcid == "PMC2" else ""
+
+    written = store.fill_references(engine, csl_json_for)
+
+    assert written == 1
+    assert sorted(asked) == ["PMC2", "PMC3"], "a paper holding a record is not asked about"
+    by_pmcid = {row.pmcid: row.csl_json for row in rows(engine, store.review_paper)}
+    assert by_pmcid == {"PMC1": RECORD, "PMC2": '{"id": "PMC2"}', "PMC3": ""}
+
+
 def test_loading_the_same_run_twice_inserts_nothing_the_second_time(engine):
     """Re-running a load is how a partial run is finished; it must neither duplicate nor rewrite."""
     store.load_run(engine, [a_result()], [an_item("i1")], question=QUESTION, run_id=RUN)
@@ -595,11 +626,11 @@ def test_skipping_a_paper_that_is_not_there_is_refused(engine):
 
 
 def an_old_database() -> tuple[Any, MetaData]:
-    """A SQLite file as `create_all` wrote it before domain, topic, value_read, answered_by and
-    review_skip existed: the same tables, those columns and that table left out."""
+    """A SQLite file as `create_all` wrote it before domain, topic, csl_json, value_read,
+    answered_by and review_skip existed: the same tables, those columns and that table left out."""
     engine = create_engine("sqlite://")
     old = MetaData()
-    dropped = {"domain", "topic", "value_read", "answered_by", "value_agreement"}
+    dropped = {"domain", "topic", "value_read", "answered_by", "value_agreement", "csl_json"}
     for table in store.METADATA.sorted_tables:
         if table.name == "review_skip":
             continue
@@ -679,9 +710,10 @@ def test_upgrade_adds_the_missing_columns_and_table_and_fills_domain_and_topic()
 
     done = store.upgrade(engine)
 
-    # Two added by hand (domain, topic); value_read and answered_by came with the rebuild.
+    # Three added by hand (domain, topic, csl_json); value_read and answered_by came with the
+    # rebuild.
     assert done == {
-        "columns_added": 2,
+        "columns_added": 3,
         "papers_filled": 2,
         "tables_rebuilt": 1,
         "choices_compared": 0,

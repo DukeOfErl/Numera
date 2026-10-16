@@ -28,8 +28,11 @@ passed, what is wrong, and how sure the diagnosis is. Values and paper ids only;
 - 7 is read off the review session's blind trial; the paper has not been re-read here.
 - 4 and 6 are a judgement about what a database entry needs to say; a biologist should confirm
   the wording.
-- Only 7 has been in front of the simulated reviewers (they caught it); for the others, whether a
-  model reviewer would catch them is not known. That is worth measuring: a case the models miss is the stronger slide.
+- 7 has been in front of the simulated reviewers (they caught it). 1 has too, and they did not:
+  the AI reviewer and the simulated student both approved it with no issue, so the ask agent
+  shows it as a two-star entry with no caution (found by the ask-over-store session, 2026-10-16).
+  For the others, whether a model reviewer would catch them is not known. That is worth measuring:
+  a case the models miss is the stronger slide, and 1 is now one.
 
 ## Not yet examined
 

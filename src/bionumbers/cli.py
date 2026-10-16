@@ -48,7 +48,7 @@ from bionumbers.extraction import (
     read_results,
     write_results,
 )
-from bionumbers.jats import JatsUnreadable, read_jats
+from bionumbers.jats import Document, JatsUnreadable, read_jats
 from bionumbers.openrouter import API_KEY_ENV, DEFAULT_MODEL, NoCredential, OpenRouterModel
 from bionumbers.records import (
     UNLICENSED,
@@ -184,6 +184,11 @@ def _run_id(question: str, organism: str) -> str:
     return f"{slug}-{datetime.now(UTC):%Y-%m-%d}"
 
 
+def _csl_json(doc: Document) -> str:
+    """The document's bibliographic record as the store keeps it: one CSL-JSON item, or empty."""
+    return json.dumps(doc.csl, ensure_ascii=False) if doc.csl else ""
+
+
 def _status_of(absent: NoFullText) -> str:
     # `unreachable` carries no status at all, and "(HTTP None)" would read as a status.
     if absent.status is None:
@@ -299,6 +304,7 @@ def harvest_run(args: argparse.Namespace) -> int:
                 doi=doc.doi,
                 title=doc.title,
                 year=doc.year,
+                csl_json=_csl_json(doc),
                 licence=provider.licence(pmcid, fetched.xml),
                 source_url=fetched.url,
             )
@@ -383,6 +389,10 @@ def _one_paper(
         doc = read_jats(fetched.xml)
     except JatsUnreadable as why:
         return _unreadable(paper, f"not a JATS article: {why}", fingerprint), [], []
+    if not paper.csl_json:
+        # A paper from `discover` carries the index record's identifiers and nothing to cite it
+        # by; the front matter now in hand has the authors, so the record takes them here.
+        paper = paper.model_copy(update={"csl_json": _csl_json(doc)})
 
     result = extract(
         model,
@@ -612,8 +622,22 @@ def upgrade_store(args: argparse.Namespace) -> int:
     if not url:
         print(f"Give --db-url or set {DB_URL_ENV} to the review database.", file=sys.stderr)
         return 2
-    done = store.upgrade(_engine(url))
+    engine = _engine(url)
+    done = store.upgrade(engine)
     print(f"{done['columns_added']} column(s) added, {done['papers_filled']} paper(s) filled")
+    if args.data:
+        provider = _europepmc(Path(args.data))
+
+        def csl_json_for(pmcid: str) -> str:
+            fetched = provider.fetch(pmcid)
+            if not isinstance(fetched, FullText):
+                return ""
+            try:
+                return _csl_json(read_jats(fetched.xml))
+            except JatsUnreadable:
+                return ""
+
+        print(f"{store.fill_references(engine, csl_json_for)} reference(s) filled")
     return 0
 
 
@@ -746,6 +770,12 @@ def _parser() -> argparse.ArgumentParser:
         "upgrade-store", help="add the columns and tables a database loaded earlier lacks"
     )
     upgrade_cmd.add_argument("--db-url", default=None, help=f"else {DB_URL_ENV}")
+    upgrade_cmd.add_argument(
+        "--data",
+        default=None,
+        help="the Europe PMC disk cache; given, each paper's bibliographic record is filled from "
+        "its full text",
+    )
     upgrade_cmd.set_defaults(command=upgrade_store)
 
     simulate_cmd = commands.add_parser(

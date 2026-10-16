@@ -724,6 +724,18 @@ COVERED.update(
             "test_bionumbers_discovery.py::test_nothing_stated_anywhere_is_unlicensed",
             "test_bionumbers_store.py::test_no_item_is_loaded_for_an_unlicensed_paper",
         ),
+        "The bibliographic record travels with the paper": (
+            "test_bionumbers_jats.py::test_the_record_names_the_authors_in_order_and_not_the_editor",
+            "test_bionumbers_jats.py::test_authors_typed_on_the_group_count_and_editors_and_reviewers_typed_there_do_not",
+            "test_bionumbers_jats.py::test_a_collaboration_is_one_literal_author",
+            "test_bionumbers_jats.py::test_the_page_is_the_range_the_first_page_or_the_article_number",
+            "test_bionumbers_jats.py::test_the_publication_date_beats_the_collection_date",
+            "test_bionumbers_jats.py::test_what_the_front_matter_does_not_state_is_absent_not_empty",
+            "test_bionumbers_store.py::test_a_paper_s_bibliographic_record_is_loaded_with_it",
+            "test_bionumbers_store.py::test_fill_references_writes_only_the_papers_without_one_and_counts_them",
+            "test_bionumbers_cli.py::test_harvest_starts_a_run_from_pmcids_with_each_paper_s_own_metadata_and_licence",
+            "test_bionumbers_cli.py::test_upgrade_store_with_the_cache_fills_each_paper_s_record_from_its_full_text",
+        ),
         "Discovery is polite to a free service": (
             "test_bionumbers_discovery.py::test_every_request_carries_the_user_agent",
             "test_bionumbers_discovery.py::test_a_repeated_search_is_served_from_the_cache",

@@ -10,6 +10,15 @@ any release; `1.0.0` when it stabilizes.
 
 ## [Unreleased]
 
+### Added
+
+- **Each harvested paper carries its bibliographic record.** Authors in the paper's order,
+  journal, volume, issue, pages, date and identifiers, read from the JATS front matter the
+  harvest already parses and kept as one CSL-JSON item (`review_paper.csl_json`), so the
+  application can format a citation in any style without a model writing one (ADR-1750).
+  `bionumbers upgrade-store --data` fills the record for a store loaded before the column
+  existed, from the cached full text.
+
 ### Changed
 
 - **One model call under the ledger.** The extractor and the simulated review made the same

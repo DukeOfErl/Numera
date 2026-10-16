@@ -49,8 +49,14 @@ create table if not exists review_paper (
     loaded_at        timestamptz not null default now(),
     domain           text not null default 'biology',
     topic            text not null default '',
+    -- The bibliographic record as one CSL-JSON item (ADR-1750): authors, journal, volume, issue,
+    -- pages, date and identifiers, read from the paper's front matter. The application formats
+    -- the citation a reader sees from it. Empty until `bionumbers upgrade-store --data` fills it
+    -- from the cached full text; nothing here can, since no row holds the authors.
+    csl_json         text not null default '',
     primary key (run_id, pmcid)
 );
+alter table review_paper add column if not exists csl_json text not null default '';
 
 -- The same two for a database that predates them (ADR-0980). `domain` is the harvest scope the
 -- paper was read under, in `fingerprint_json` as `scope`; runs from before scopes are biology.
