@@ -1791,10 +1791,13 @@ def answer_markdown(text: str, stars: Mapping[str, str] | None = None) -> str:
     The stored answer keeps `[[...]]`: the parser, the trail and the evaluation
     all read that form, and only drawing restyles it.
 
-    `stars` maps an identifier to its drawn tier (`trust_marks`); each identifier in a
-    superscript is followed by its stars, in the same grey (ADR-1630). A run holding a
-    group `citations` cannot read -- `[[Table 1]]` -- is left as written: nothing is
-    drawn as a citation that the parser would not count as one.
+    `stars` maps an identifier to its drawn tier (`trust_marks`). Where any identifier in
+    a run has one, each identifier gets a superscript of its own followed by its stars at
+    the prose's own size -- the stars, `#` and `⚠` are read, not footnoted (the user's
+    call, 2026-10-16; ADR-1630). A run with no tiers -- every corpus-file answer -- is the
+    one comma-separated superscript it always was. A run holding a group `citations`
+    cannot read -- `[[Table 1]]` -- is left as written: nothing is drawn as a citation
+    that the parser would not count as one.
     """
     stars = stars or {}
     escaped = as_text(html.escape(text, quote=False))
@@ -1804,8 +1807,12 @@ def answer_markdown(text: str, stars: Mapping[str, str] | None = None) -> str:
         if not all(citations(group) for group in groups):
             return run.group(0)
         shown = [str(i) for i in citations(run.group(0))]
-        cells = ", ".join(f"{i} {stars[i]}" if i in stars else i for i in shown)
-        return f'<sup style="{_CITATION_STYLE}">{cells}</sup>'
+        if not any(i in stars for i in shown):
+            return f'<sup style="{_CITATION_STYLE}">{", ".join(shown)}</sup>'
+        return " ".join(
+            f'<sup style="{_CITATION_STYLE}">{i}</sup>' + (f" {stars[i]}" if i in stars else "")
+            for i in shown
+        )
 
     return _CITATION_RUN.sub(superscript, escaped)
 

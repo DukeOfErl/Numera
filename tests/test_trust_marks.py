@@ -6,6 +6,8 @@ come from the scale in design D6, not from running the code.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 import store_double
 
@@ -88,7 +90,13 @@ def test_the_web_superscript_reads_a_label_and_carries_its_stars(store_repo):
         Answer(question_id="q", text="488 µM [[PMC1000001-1]] [[100001]]."), store_repo
     )
     drawn = web.answer_markdown(item.text, dict(item.stars))
-    assert f">PMC1000001-1 {SCIENTIST_SIMULATED_DISPUTED}, 100001 ★★★★★</sup>." in drawn
+    # The identifier is footnoted; the stars, `#` and `⚠` are at the prose's size, outside it.
+    sup = '<sup style="opacity: 0.6; font-size: 0.72em;">'
+    assert (
+        f"{sup}PMC1000001-1</sup> {SCIENTIST_SIMULATED_DISPUTED} {sup}100001</sup> ★★★★★." in drawn
+    )
+    footnoted = re.findall(r"<sup[^>]*>(.*?)</sup>", drawn)
+    assert footnoted == ["PMC1000001-1", "100001"]
     assert "[[" not in drawn, "a label left as raw brackets"
     assert item.legend[0] == trust_marks.SCALE_LEGEND
 

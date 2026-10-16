@@ -23,8 +23,9 @@ Options for who puts it there:
 
 Option 2. The model sees `trust: 3 of 5 (scientist, simulated review); disputed`
 (`tools.trust_text`) and never a star; `trust_marks` — presentation, which no core module may
-import (`test_driver_independence.py`) — draws the stars. The prompt asks the model not to write
-ratings; where it does anyway, its stars are left as text it wrote and the drawn ones still follow
+import (`test_driver_independence.py`) — draws the stars. The prompt asks the model never to state
+a rating in any form — the first live answers wrote "(trust 3/5)" beside stars that already said
+it; where it does anyway, its stars are left as text it wrote and the drawn ones still follow
 the citation, read from the store. The stored and recorded answer is never altered: only drawing
 adds the stars.
 
@@ -48,9 +49,12 @@ user's choice, placed before the stars on their instruction. Its legend line beg
 escaped on the web so markdown does not draw it as a heading. A legend states the scale and each
 mark wherever stars are shown.
 
-**Where they are drawn.** On the web, inside the grey citation superscript ADR-1240 introduced,
-after each identifier: `PMC2652108-1 #★★★☆☆⚠`. The superscript's pattern is now built from
-`citations.DELIMITED` rather than a second pattern — it read digits only, and a label would have
+**Where they are drawn.** On the web, after the grey citation superscript ADR-1240 introduced, at
+the prose's own size: <sup>PMC2652108-1</sup> #★★★☆☆⚠. The first version put the stars inside the
+superscript; the user's verdict on seeing it (2026-10-16) was that the stars, `#` and `⚠` are read,
+not footnoted, so each identifier of a run now gets its own superscript followed by its stars, and
+a run with no tiers is drawn as one superscript, as before. The superscript's pattern is now built
+from `citations.DELIMITED` rather than a second pattern — it read digits only, and a label would have
 been drawn as raw brackets. In the terminal, after each `[[id]]`. In both entries tables, a Trust
 column after Units and before the ID, drawn only where some entry has a tier.
 

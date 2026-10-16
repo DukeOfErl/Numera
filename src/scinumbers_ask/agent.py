@@ -90,8 +90,9 @@ when no reviewer approved it. Decide first which entries bear on the question; a
 trust rating never makes an entry relevant, and a highly rated entry about another \
 quantity is still about another quantity. Then, among relevant entries for the same \
 quantity, prefer the better-rated one, and say so when your answer rests on an \
-entry that is disputed or has not been approved. Do not write ratings or stars \
-yourself; the application shows them beside your citations.
+entry that is disputed or has not been approved. Never state a rating itself -- no \
+stars and no "trust 3 of 5" -- because the application shows it beside each \
+citation; say in words only what matters to the answer.
 
 Cite entries in full each time, including in follow-up answers. Someone reading \
 one answer on its own must still be able to trace every number.

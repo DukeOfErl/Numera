@@ -210,13 +210,15 @@ price in an app that shows spend. `#` was the user's choice after that.)
 line is written `\#`. Inside the citation superscript a `#` sits mid-line and markdown leaves it
 alone; in the terminal and in the dataframe cells it is plain text.
 
-**In the web app, the stars go inside the citation's grey superscript.** On `dev` the web driver
+**In the web app, the identifier is the grey superscript and the stars follow it at text size.**
+(Revised 2026-10-16 after the user saw the first version, which put the stars inside the
+superscript: the stars, `#` and `⚠` are read, not footnoted. Each identifier of a run then gets a
+superscript of its own, followed by its stars; a run with no tiers is drawn exactly as before.) On `dev` the web driver
 already draws an answer's citations as grey superscripts (ADR-1240, `web.answer_markdown`): a run of
 `[[nnnnnn]]` becomes one `<sup>` with its identifiers comma-separated, after escaping. This branch's
 base predates that merge, which is why the first draft of this design said `[[id]]` — the design was
 read against a stale `web.py`. Built on `dev`, the superscript carries each identifier followed by
-its stars and tier marks — one `<sup>` holding `100002 ★★★★★, PMC2652108-1 #★★★☆☆⚠` — all in the
-same grey, smaller size.
+its stars and tier marks — `<sup>100002</sup> ★★★★★ <sup>PMC2652108-1</sup> #★★★☆☆⚠`.
 Two changes to `answer_markdown` follow:
 
 - `_CITATION_RUN` matches `\[\[\d+\]\]` only, so a `[[PMC2652108-1]]` citation would be left as

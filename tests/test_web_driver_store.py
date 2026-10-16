@@ -51,8 +51,10 @@ def test_a_store_answer_carries_its_stars_its_legend_and_both_new_columns(
     assert not at.exception
 
     drawn = " ".join(m.value for m in at.markdown)
-    assert ">PMC1000001-1 #★★★☆☆⚠</sup>" in drawn
-    assert ">PMC1000001-1.2 ☆☆☆☆☆</sup>" in drawn
+    # Each identifier footnoted on its own; its stars follow at text size, outside the superscript.
+    assert ">PMC1000001-1</sup> #★★★☆☆⚠" in drawn
+    assert ">PMC1000001-1.2</sup> ☆☆☆☆☆" in drawn
+    assert "★</sup>" not in drawn and "☆</sup>" not in drawn
 
     captions = [c.value for c in at.caption]
     assert trust_marks.SCALE_LEGEND in captions
