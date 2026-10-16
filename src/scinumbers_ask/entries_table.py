@@ -158,6 +158,9 @@ class Row:
     # What objecting reviewers said, for a disputed entry from the store: shown to a reader who
     # asks why, never to the model (`objections`).
     objections: tuple[str, ...] = ()
+    # The harvested value's own fields, for the full entry: its keywords pack the quote and every
+    # condition's quote together for search, so drawn as keywords they read as one fused field.
+    harvest: Any = None
 
     @property
     def stars(self) -> str:
@@ -281,6 +284,7 @@ def rows_for(
                 objections=objections.of(repo, entry.record_id)
                 if entry.trust is not None and entry.trust.disputed
                 else (),
+                harvest=entry.harvest,
             )
         )
     return tuple(out)

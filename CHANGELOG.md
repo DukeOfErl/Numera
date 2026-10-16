@@ -24,7 +24,12 @@ any release; `1.0.0` when it stabilizes.
   identifier" in a citation rather than "the number".
 - **An answer cites entries, never papers.** The prompt tells the model the identifier is the
   only citation and to name no author, title, journal, year or DOI; each entry's reference is in
-  the entries table. On the web the Trust column took 6px from Units.
+  the entries table, and asked for one, it says where the reference is. On the web the Trust
+  column took 6px from Units.
+- **A harvested entry opens with its fields apart.** The full entry shows the supporting quote,
+  each condition under its name (conditions quoting one passage named together), what the paper
+  does not state and what a calculated value came from -- not the search keywords, which packed
+  them all into one line.
 - A harvest store passed where a corpus file is expected is refused by name instead of reported as
   a corrupt line, and the evaluation command says why it cannot read the store yet.
 - **One model call under the ledger.** The extractor and the simulated review made the same

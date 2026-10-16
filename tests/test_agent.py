@@ -1216,3 +1216,8 @@ def test_the_prompt_leaves_references_to_the_table():
     for named in ("authors", "title", "journal", "year", "doi"):
         assert named in lowered.split("the identifier is the only citation")[1][:200], named
     assert "from what you know" in lowered
+    # Forbidden without an alternative, a model pressed by the reader fills the gap from memory:
+    # so it is told where the reference is, and to say so.
+    asked = lowered.split("when the reader asks which paper a value comes from")[1][:300]
+    assert "do not refuse and do not supply it" in asked
+    assert "reference column of the entries table" in asked and "full listing" in asked

@@ -100,8 +100,15 @@ entry or recalled from its own knowledge. Each cited entry's reference is shown 
 table, by the application. A reference the model writes is unchecked: live answers over the store
 (2026-10-16) added "(Kamasaki et al., 2007, JCB, doi:…)", whose authors and journal no entry
 holds, and a citation in prose could name a paper other than the one the entry came from.
+A prohibition alone leaves a model pressed by the reader nothing to say but a refusal or a
+reference from memory, so the agent SHALL be told where the reference is, and to say so.
 
 #### Scenario: The agent is given its instructions
 - **WHEN** the agent is given its instructions
 - **THEN** they say to cite by entry identifier only, and to name no paper, author, journal, year
   or DOI
+
+#### Scenario: The reader asks which paper a value comes from
+- **WHEN** the reader asks for a value's paper, its authors, journal or DOI
+- **THEN** the agent's instructions tell it to say the reference is in the Reference column of the
+  entries table and in the entry's full listing, rather than to refuse or to write it out

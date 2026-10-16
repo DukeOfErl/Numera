@@ -140,3 +140,70 @@ def test_the_page_refuses_both_settings_at_once(monkeypatch, store_path, tmp_pat
         assert any("not both" in e.value for e in at.error)
     finally:
         web.resources.clear()
+
+
+def test_a_harvested_entry_opens_with_its_fields_apart_not_its_keywords(
+    monkeypatch, store_path, config, tmp_path
+):
+    """Its keywords pack the quote and each condition's quote together for search; drawn as
+    "Keywords:" they read as one fused field (seen on PMC2064542-2, 2026-10-16)."""
+    repo, agent = _store_answer(store_path, config, tmp_path)
+    at = ask_question(_page(monkeypatch, repo, agent).run(), "F-actin in lamellipodia?")
+    opened = next(e for e in at.sidebar.expander if "PMC1000001-1" in e.label)
+    drawn = [m.value for m in opened.markdown] + [c.value for c in opened.caption]
+    text = "\n".join(drawn)
+    assert "Keywords:" not in text
+    assert (
+        "*Quote.* “The lamellipodial F-actin concentration was 488 µM in invented cells.”" in drawn
+    )
+    assert "*Organism.* “invented mouse cells”" in drawn
+    assert "Not stated in the paper: temperature" in drawn
+    # The method condition is the measurement method line, not a second condition.
+    assert text.count("invented electron microscopy counts") == 1
+
+
+def _draw_shared_quotes():
+    from scinumbers_ask import entries_table, web
+    from scinumbers_ask.corpus import Condition, Harvest, Origin, Paper
+
+    said = "Strains and growth conditions were described previously."
+    harvest = Harvest(
+        item_id="i",
+        value_text="1",
+        quote="Q",
+        conditions=(
+            Condition("medium", said),
+            Condition("temperature", said),
+            Condition("growth_phase", "Cells were in M phase."),
+            Condition("culture_mode", said),
+        ),
+        not_stated=(),
+        origin=Origin.MEASURED,
+        inputs=(),
+        paper=Paper(pmcid="PMC1", title="t", year=2000, doi="", pmid="", licence=""),
+        domain="biology",
+        topic="cytoskeleton",
+        reading_uncertain=False,
+    )
+    row = entries_table.Row(
+        entry_id="PMC1-1",
+        property="p",
+        organism="o",
+        value="1",
+        units="",
+        reference="",
+        cited=True,
+        keywords=("biology", "Q", said, said, said),
+        harvest=harvest,
+    )
+    web._draw_entry(row)
+
+
+def test_conditions_quoting_one_passage_are_named_together():
+    at = AppTest.from_function(_draw_shared_quotes, default_timeout=TIMEOUT).run()
+    assert not at.exception
+    drawn = [m.value for m in at.markdown]
+    said = "Strains and growth conditions were described previously."
+    assert f"*Medium, temperature, culture mode.* “{said}”" in drawn
+    assert "*Growth phase.* “Cells were in M phase.”" in drawn
+    assert sum(said in d for d in drawn) == 1

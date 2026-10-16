@@ -61,7 +61,7 @@ from .agent import AskAgent
 from .authorization import Refused, allowed, require
 from .citations import DELIMITED, citations
 from .config import Config, env_setting, format_usd, refuse_retired_env
-from .corpus import load_configured
+from .corpus import Harvest, Origin, load_configured
 from .events import Answer, AnswerEntries, EndReason, Event, QuestionEnded, Retrieval
 from .permissions import Identity, Permission
 from .repository import CorpusRepository
@@ -1912,12 +1912,42 @@ def _draw_entry(row: entries_table.Row) -> None:
         st.caption(entries_table.NO_METHOD_LEGEND)
     if row.comments:
         st.markdown(f"*Comments.* {as_text(row.comments)}")
-    keywords = shown_keywords(row)
-    if keywords:
-        st.caption("Keywords: " + as_text(", ".join(keywords)))
+    if row.harvest is not None:
+        _draw_harvest(row.harvest)
+    else:
+        keywords = shown_keywords(row)
+        if keywords:
+            st.caption("Keywords: " + as_text(", ".join(keywords)))
     reference = row.reference or "(no reference recorded)"
     pubmed = f" · PubMed {row.reference_pubmed_id}" if row.reference_pubmed_id else ""
     st.caption(as_text(f"{reference}{pubmed}"))
+
+
+def _draw_harvest(harvest: Harvest) -> None:
+    """A harvested value's passage and conditions, each under its own name.
+
+    Not its keywords: those pack the quote and every condition's quote into one list for search
+    (`store_corpus`), and drawn as one line they read as a single fused field. Conditions quoting
+    the same passage are named together -- a paper's "described previously" sentence is often
+    the quote for its medium, temperature and culture mode at once -- and `method` is left to the
+    measurement method line above.
+    """
+    st.markdown(f"*Quote.* “{as_text(harvest.quote)}”")
+    named: dict[str, list[str]] = {}
+    for condition in harvest.conditions:
+        if condition.name != "method":
+            named.setdefault(condition.quote, []).append(condition.name.replace("_", " "))
+    for quote, names in named.items():
+        st.markdown(f"*{as_text(', '.join(names)).capitalize()}.* “{as_text(quote)}”")
+    if harvest.not_stated:
+        not_stated = ", ".join(name.replace("_", " ") for name in harvest.not_stated)
+        st.caption(as_text(f"Not stated in the paper: {not_stated}"))
+    if harvest.origin is not Origin.MEASURED:
+        st.caption(entries_table.CALCULATED_LEGEND)
+        for text in harvest.inputs:
+            st.markdown(f"*Calculated from.* “{as_text(text)}”")
+    topic = f" / {harvest.topic}" if harvest.topic else ""
+    st.caption(as_text(f"{harvest.domain}{topic}"))
 
 
 def shown_keywords(row: entries_table.Row) -> list[str]:
