@@ -133,11 +133,19 @@ some of the store's papers are NC/ND. The real store is read only in local check
 
 ## 7. Verification and documentation
 
-- [ ] 7.1 Map every new requirement in `tests/test_spec_conformance.py`
-- [ ] 7.2 Fault seeding over `store_corpus.py` and the `citations` change (copies, never the working
+- [x] 7.1 Map every new requirement in `tests/test_spec_conformance.py`
+- [x] 7.2 Fault seeding over `store_corpus.py` and the `citations` change (copies, never the working
       tree): drop a condition's quote, swap `MEASURED`/`DERIVED`, let a disagreeing reading through
       as a number, leak `second` into a field, read `PMC…-n` as an integer, order runs newest
-      first, save the label instead of the item id — each must fail exactly the intended test
+      first, save the label instead of the item id — each must fail exactly the intended test.
+      Run 2026-10-16 in copies (baseline green, canary caught by 33 tests, isolation asserted
+      inside the suite), ten seeds, all caught by the test named for the behaviour: a condition's
+      quote dropped (3), MEASURED/DERIVED swapped (6), a disagreeing reading let through (4), the
+      second text leaked into a field (1: the leak test alone), a label read as an integer (10),
+      runs ordered newest first (23), the label saved instead of the item id (1), the store opened
+      writable (1), WITH_UNCERTAINTY accepted without an uncertainty (1), an undecided item
+      defaulting to curated (5). Newest-first fails 23 because every store test reads entries by
+      label; the intended test is among them. Harness kept out of the repository
 - [ ] 7.3 Ask the demo's questions against the real store in the web app and look at the stars,
       legend and cautions; probe the OpenRouter key's remaining credit before any live call
 - [ ] 7.4 README, `docs/diagrams/architecture.md` (a store adapter beside the corpus file),

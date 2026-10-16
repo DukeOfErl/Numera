@@ -1166,18 +1166,79 @@ AWAITING_THE_PROMPT = (
     "Leading with a figure does not displace what qualifies it",
 )
 
-# Proposed, not built: each moves to COVERED with the task that implements it.
-AWAITING_THE_STORE = (
-    "The store is a corpus the agent can be pointed at, and is only read",
-    "The store's entries are its curated entries and its harvested values",
-    "A harvested entry carries what a reader needs to judge it",
-    "A harvested value is stated as the paper wrote it, "
-    "and as a number only where its reading is sure",
-    "Nothing written for the review reaches the agent",
-    "The agent is told each entry's trust tier",
-    "A cited entry from the store is shown with its trust tier as stars",
-    "An entry's caveat marks have a column of their own",
+# `add-ask-over-store`: the harvest store as the agent's corpus, and its trust tiers drawn.
+COVERED.update(
+    {
+        "The store is a corpus the agent can be pointed at, and is only read": (
+            "test_store_corpus.py::test_the_store_is_opened_so_nothing_can_be_written",
+            "test_store_corpus.py::test_loading_leaves_the_store_byte_for_byte_as_it_was",
+            "test_store_corpus.py::test_a_corpus_file_s_tool_output_is_what_it_was_before_this_change",
+            "test_store_corpus.py::test_a_corpus_file_entry_carries_no_harvest_and_no_tier",
+            "test_store_corpus.py::test_a_missing_store_is_refused_by_name",
+            "test_store_corpus.py::test_a_file_that_is_not_a_store_is_refused",
+            "test_store_corpus.py::test_naming_both_a_corpus_file_and_a_store_is_refused_naming_both",
+            "test_web_driver_store.py::test_the_page_loads_the_store_from_its_setting_without_building_a_corpus",
+            "test_web_driver_store.py::test_the_page_refuses_both_settings_at_once",
+        ),
+        "The store's entries are its curated entries and its harvested values": (
+            "test_store_corpus.py::test_the_store_holds_its_curated_entries_and_every_harvested_value",
+            "test_store_corpus.py::test_a_curated_entry_keeps_its_bnid_and_is_curated",
+            "test_store_corpus.py::test_a_second_extraction_of_a_paper_is_its_own_entry_with_a_suffixed_label",
+            "test_store_corpus.py::test_a_saved_id_still_names_its_value_after_later_extractions_are_added",
+            "test_store_corpus.py::test_two_values_that_would_share_a_label_stop_the_load",
+            "test_store_corpus.py::test_a_harvested_citation_is_saved_under_the_store_s_id",
+            "test_store_corpus.py::test_a_corpus_file_run_saves_what_it_saved_before",
+            "test_store_corpus.py::test_a_label_no_loaded_entry_carries_is_reported_unknown",
+            "test_citation_form.py::test_a_harvested_label_is_read_as_itself",
+            "test_citation_form.py::test_a_later_extraction_s_label_keeps_its_suffix",
+            "test_citation_form.py::test_a_group_that_only_resembles_a_label_is_refused",
+        ),
+        "A harvested entry carries what a reader needs to judge it": (
+            "test_store_corpus.py::test_a_harvested_value_carries_what_a_reader_needs_to_judge_it",
+            "test_store_corpus.py::test_a_calculated_value_says_by_whom_and_from_what",
+            "test_store_corpus.py::test_a_harvested_entry_shows_the_model_what_it_needs_to_judge_it",
+            "test_store_corpus.py::test_a_calculated_entry_is_shown_as_a_calculation_with_its_inputs",
+            "test_store_corpus.py::test_a_word_only_in_the_passage_finds_the_entry",
+        ),
+        "A harvested value is stated as the paper wrote it, "
+        "and as a number only where its reading is sure": (
+            "test_store_corpus.py::test_a_reading_that_fits_its_kind_gives_numbers",
+            "test_store_corpus.py::test_a_reading_that_does_not_fit_its_kind_states_no_number",
+            "test_store_corpus.py::test_the_reading_is_kept_only_where_it_fits_the_recorded_kind",
+            "test_store_corpus.py::test_an_uncertain_reading_is_cautioned_and_given_in_the_paper_s_words",
+        ),
+        "Nothing written for the review reaches the agent": (
+            "test_store_corpus.py::test_no_entry_holds_the_review_s_test_text_or_a_reviewer_s_words",
+        ),
+        "The agent is told each entry's trust tier": (
+            "test_store_corpus.py::test_each_entry_stands_on_the_tier_its_decisions_earned",
+            "test_store_corpus.py::test_every_tier_reads_as_words_on_one_scale",
+            "test_store_corpus.py::test_search_rows_carry_the_tier_for_store_entries",
+            "test_agent.py::test_the_prompt_puts_relevance_before_trust",
+        ),
+        "A cited entry from the store is shown with its trust tier as stars": (
+            "test_trust_marks.py::test_each_tier_draws_on_one_scale_with_its_marks",
+            "test_trust_marks.py::test_the_legend_explains_only_the_marks_shown",
+            "test_trust_marks.py::test_the_terminal_draws_stars_after_each_citation_and_says_what_they_mean",
+            "test_trust_marks.py::test_a_group_citing_several_entries_names_each_beside_its_stars",
+            "test_trust_marks.py::test_stars_the_model_wrote_do_not_become_the_tier",
+            "test_trust_marks.py::test_the_web_superscript_reads_a_label_and_carries_its_stars",
+            "test_trust_marks.py::test_a_corpus_file_answer_draws_as_it_did",
+            "test_trust_marks.py::test_a_corpus_file_answer_item_carries_no_stars",
+            "test_trust_marks.py::test_the_simulated_mark_s_legend_line_is_not_drawn_as_a_heading",
+            "test_web_driver_store.py::test_a_store_answer_carries_its_stars_its_legend_and_both_new_columns",
+            "test_web_driver_store.py::test_a_corpus_file_answer_draws_none_of_the_store_s_additions",
+        ),
+        "An entry's caveat marks have a column of their own": (
+            "test_trust_marks.py::test_the_web_table_puts_the_marks_first_and_trust_before_the_id",
+            "test_trust_marks.py::test_the_terminal_table_puts_the_marks_first_and_trust_before_the_id",
+            "test_trust_marks.py::test_a_corpus_file_web_table_has_marks_but_no_trust_column",
+            "test_trust_marks.py::test_a_corpus_file_terminal_table_has_no_trust_column",
+            "test_web_driver.py::test_an_entry_with_no_scalar_is_marked_and_its_value_left_blank",
+        ),
+    }
 )
+
 
 # `harden-harvest`'s: four findings moved out of `add-harvest-prototype` on 2026-10-15,
 # so that change could close. Proposed, not built.
@@ -1260,7 +1321,6 @@ UNMAPPED: dict[str, str] = {
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
     **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),
-    **dict.fromkeys(AWAITING_THE_STORE, "add-ask-over-store is proposed; nothing is built yet"),
     **dict.fromkeys(AWAITING_HARDEN_HARVEST, "harden-harvest is proposed, not built"),
 }
 
