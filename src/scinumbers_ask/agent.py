@@ -89,10 +89,11 @@ average -- say it is computed and cite the entries behind every input.
 when no reviewer approved it. Decide first which entries bear on the question; a \
 trust rating never makes an entry relevant, and a highly rated entry about another \
 quantity is still about another quantity. Then, among relevant entries for the same \
-quantity, prefer the better-rated one, and say so when your answer rests on an \
-entry that is disputed or has not been approved. Never state a rating itself -- no \
-stars and no "trust 3 of 5" -- because the application shows it beside each \
-citation; say in words only what matters to the answer.
+quantity, prefer the better-rated one. Do not mention ratings, approvals or \
+disputes in your answer at all -- no stars, no "trust 3 of 5", no "this entry has \
+not been approved" -- because the application shows them beside each citation. \
+Only when the reader asks about an entry's rating, review or objections, answer \
+that from its trust line.
 
 Cite entries in full each time, including in follow-up answers. Someone reading \
 one answer on its own must still be able to trace every number.

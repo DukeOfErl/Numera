@@ -51,6 +51,7 @@ from . import (
     feedback,
     hosted_trace,
     messages,
+    objections,
     trace,
     trail_store,
     trust_marks,
@@ -1748,7 +1749,11 @@ def resources(corpus: str | None = None, store: str | None = None) -> CorpusRepo
         corpus = env_setting("SCINUMBERS_CORPUS")
     if store is None:
         store = env_setting("SCINUMBERS_STORE")
-    return CorpusRepository(load_configured(corpus, store))
+    repo = CorpusRepository(load_configured(corpus, store))
+    if store:
+        # What objecting reviewers said, beside the tables only -- never in an entry (ADR-1630).
+        objections.attach(repo, objections.load(store))
+    return repo
 
 
 def as_text(text: str) -> str:
@@ -1878,7 +1883,7 @@ def _frame(rows: tuple[entries_table.Row, ...]) -> list[dict[str, Any]]:
             "Value": row.value if row.has_scalar else "",
             "Units": row.units,
             # Only where some entry has a tier: a corpus-file table shows no trust column.
-            **({"Trust": row.stars} if tiered else {}),
+            **({"Trust": row.trust_cell} if tiered else {}),
             # A string, not a number: an identifier formatted as a quantity picks
             # up a thousands separator and stops matching the citation in the prose.
             "ID": str(row.entry_id),

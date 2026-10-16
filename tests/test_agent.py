@@ -1200,8 +1200,9 @@ def test_the_prompt_puts_relevance_before_trust():
     first = lowered.index("decide first which entries bear on the question")
     assert "never makes an entry relevant" in lowered
     assert lowered.index("prefer the better-rated one") > first
-    assert "disputed" in lowered
-    # Asked never to state a rating, in stars or in numbers: the drawn ones are the tier
-    # (ADR-1630). "trust 3/5" in an answer, beside the stars that already say it, was seen live.
-    assert "never state a rating itself" in lowered
-    assert "no stars and no" in lowered and "trust 3 of 5" in lowered
+    # Told not to mention ratings, approvals or disputes at all: the stars and the legend say it
+    # (ADR-1630). "(trust 3/5)" and "this entry has not been approved" were both seen live.
+    assert "do not mention ratings, approvals or disputes in your answer" in lowered
+    assert "trust 3 of 5" in lowered and "has not been approved" in lowered
+    # ...unless the reader asks about it.
+    assert "only when the reader asks about an entry's rating" in lowered

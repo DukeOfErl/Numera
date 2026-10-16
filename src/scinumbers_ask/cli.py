@@ -17,7 +17,7 @@ import uuid
 from collections.abc import Iterable
 from typing import TextIO
 
-from . import autobuild, entries_table, messages, trace, trust_marks
+from . import autobuild, entries_table, messages, objections, trace, trust_marks
 from .agent import AskAgent
 from .config import Config, NotConfigured, env_setting, refuse_retired_env
 from .corpus import CorpusUnavailable, load_configured
@@ -190,6 +190,9 @@ def main(argv: list[str] | None = None) -> None:
         if not args.store:
             corpus = autobuild.corpus_path(corpus, lambda text: print(text, file=sys.stderr))
         repo = CorpusRepository(load_configured(corpus, args.store))
+        if args.store:
+            # What objecting reviewers said, beside the table only -- never in an entry.
+            objections.attach(repo, objections.load(args.store))
         config = Config.from_env()
     except (CorpusUnavailable, NotConfigured) as exc:
         raise SystemExit(f"scinumbers-ask: {exc}") from exc

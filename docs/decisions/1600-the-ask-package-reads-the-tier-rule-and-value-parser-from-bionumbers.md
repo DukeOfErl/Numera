@@ -38,6 +38,13 @@ nothing else — no `anthropic`, `httpx`, `lxml`, `pint` or Streamlit. SQLAlchem
 `ask` extra; pydantic is now named there too, because the code imports it and a transitive
 dependency is one a resolver may drop. The `ask` extra does not need the `validator` extra.
 
+**Amended 2026-10-16: a second, presentation-side reader.** `objections.py` reads what objecting
+reviewers wrote, so a reader can see why an entry is disputed (ADR-1630). It imports
+`bionumbers.store` **inside its loading function**, so a corpus-file run still never loads
+`bionumbers` (the fresh-interpreter test imports the drivers that import it). It is presentation,
+not core, and that is the point: reviewers' words must not be reachable from the agent, and
+`test_driver_independence.py` forbids every core module to import it.
+
 The reverse rule is untouched: `bionumbers` core still imports nothing from `scinumbers_ask`.
 
 **Hosted tracing.** When `SCINUMBERS_TRACING=langfuse` is set (ADR-1010), everything the model sees

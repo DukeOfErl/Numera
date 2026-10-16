@@ -69,6 +69,9 @@ PRESENTATION = ADAPTERS | {
     # Stars for a trust tier. The model is told a tier in words and must never be
     # shown the stars, or it learns to write them (ADR-1630).
     "trust_marks",
+    # What objecting reviewers wrote: text a stranger wrote, which the agent must not reach even
+    # by accident -- the line `feedback` draws (ADR-0750, ADR-1630).
+    "objections",
 }
 
 AGENT_CORE = sorted(

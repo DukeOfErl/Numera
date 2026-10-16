@@ -57,6 +57,9 @@ any release; `1.0.0` when it stabilizes.
   appear (ADR-1630). The model is told the tier in words and to decide relevance before trust.
 - **Two new caveat marks**: `?` for a value that could not be read with certainty, `∴` for a
   calculated one.
+- **Why an entry is disputed**: its Trust cell carries what each objecting reviewer wrote, after
+  the stars (double click to read it all); the terminal lists the objections under its table. The
+  model never sees them.
 
 - **A validator prototype: from a property question to reviewed numbers** (`bionumbers`,
   the `validator` extra). `bionumbers discover` searches Europe PMC for open-access research

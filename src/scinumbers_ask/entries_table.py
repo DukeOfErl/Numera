@@ -14,7 +14,7 @@ import textwrap
 from dataclasses import dataclass
 from typing import Any
 
-from . import bionumbers, trust_marks
+from . import bionumbers, objections, trust_marks
 from .corpus import EntryId, Origin
 from .repository import CorpusRepository
 from .units import dimensions_of
@@ -155,10 +155,20 @@ class Row:
     reading_uncertain: bool = False
     calculated: bool = False
     trust: Any = None
+    # What objecting reviewers said, for a disputed entry from the store: shown to a reader who
+    # asks why, never to the model (`objections`).
+    objections: tuple[str, ...] = ()
 
     @property
     def stars(self) -> str:
         return trust_marks.stars(self.trust)
+
+    @property
+    def trust_cell(self) -> str:
+        """The stars, then what objecting reviewers said: a double click opens it in full."""
+        if not self.objections:
+            return self.stars
+        return f"{self.stars} {' · '.join(self.objections)}"
 
     def markers(self) -> str:
         # Deliberately not `has_scalar`: the terminal writes "(no scalar value)"
@@ -268,6 +278,9 @@ def rows_for(
                 calculated=entry.harvest is not None
                 and entry.harvest.origin is not Origin.MEASURED,
                 trust=entry.trust,
+                objections=objections.of(repo, entry.record_id)
+                if entry.trust is not None and entry.trust.disputed
+                else (),
             )
         )
     return tuple(out)
@@ -368,6 +381,22 @@ def _methods_block(shown: tuple[Row, ...], width: int) -> list[str]:
     return out
 
 
+def _objections_block(shown: tuple[Row, ...], width: int) -> list[str]:
+    """What reviewers said against each shown entry they disputed.
+
+    The page puts this after the stars, where a double click opens it; a terminal cannot open a
+    cell, so it is listed here, one line an objection, cut to the table.
+    """
+    disputed = [row for row in shown if row.objections]
+    if not disputed:
+        return []
+    out = ["objections raised:"]
+    for row in disputed:
+        prefix = f"  {bionumbers.label(row.entry_id)}  "
+        out += [prefix + _clamp(said, width - len(prefix)) for said in row.objections]
+    return out
+
+
 def _clamp(text: str, width: int) -> str:
     """One line, cut at a word where it can be, with the cut marked."""
     if len(text) <= width or width < 2:
@@ -431,6 +460,7 @@ def render(
         # a footnote running past the rule reads as a line of a different table.
         out.extend(textwrap.wrap(note, len(rule), subsequent_indent="  "))
     out.extend(_methods_block(shown, len(rule)))
+    out.extend(_objections_block(shown, len(rule)))
     if any(not row.retrieved for row in shown):
         out.append(NOT_RETRIEVED_LEGEND)
     if any(not row.method_recorded for row in shown):
@@ -445,7 +475,7 @@ def render(
         out.append(READING_UNCERTAIN_LEGEND)
     if any(row.calculated for row in shown):
         out.append(CALCULATED_LEGEND)
-    for line in trust_marks.legend(row.trust for row in shown):
+    for line in trust_marks.legend((row.trust for row in shown), terminal=True):
         out.extend(textwrap.wrap(line, len(rule), subsequent_indent="  "))
     return "\n".join(out)
 

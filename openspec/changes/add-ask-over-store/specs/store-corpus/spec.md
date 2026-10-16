@@ -200,8 +200,10 @@ tier is read by the rule recorded in ADR-0990 and SHALL NOT be computed a second
 
 The agent SHALL be instructed to decide which entries bear on the question before weighing their
 tiers, and that a tier never makes an entry relevant; then, among relevant entries for the same
-quantity, to prefer the better-reviewed one; and to say when an answer rests on a disputed or
-unreviewed entry. Trust is a property of an entry and relevance a property of an entry and the
+quantity, to prefer the better-reviewed one. The agent SHALL be instructed not to mention an
+entry's rating, approval or dispute in its answer -- the application shows them beside each
+citation, and the same fact in prose says it twice -- unless the reader asks about that entry's
+rating, review or objections. Trust is a property of an entry and relevance a property of an entry and the
 question: told only to prefer trusted entries, a model can lead with a five-star value about a
 neighbouring quantity over the two-star value that answers the question.
 
@@ -217,3 +219,8 @@ neighbouring quantity over the two-star value that answers the question.
 #### Scenario: An answer rests on a disputed entry
 - **WHEN** a cited entry is disputed
 - **THEN** the agent was told it is disputed when it retrieved it
+
+#### Scenario: The answer does not restate what the stars show
+- **WHEN** the agent is given its instructions
+- **THEN** they say not to mention ratings, approvals or disputes in the answer
+- **AND** they say to answer from the trust line when the reader asks about an entry's rating

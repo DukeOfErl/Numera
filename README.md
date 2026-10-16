@@ -77,10 +77,13 @@ decisions reviewers make afterwards appear after a restart.
   written by the model: ★★★★★ curated, then ★★★★☆ to ★☆☆☆☆ for the highest role that approved the
   entry (senior scientist, scientist, student, AI reviewer), ☆☆☆☆☆ where no reviewer approved it.
   `#` before the stars marks a tier set by a **simulated** review — a model standing in for that
-  reviewer — and `⚠` after them marks an entry a reviewer objected to. A legend under the entries
+  reviewer — and a yellow `⚠️` after them marks an entry a reviewer objected to; in the entries
+  table its Trust cell goes on to say what each objecting reviewer wrote (double click to read it
+  all). A legend under the entries
   table says so. The rule is ADR-0990's; how it is drawn is ADR-1630.
 - **The model is told each tier in words** and to decide which entries bear on the question first:
-  a rating never makes an entry relevant, it only decides among relevant ones.
+  a rating never makes an entry relevant, it only decides among relevant ones. It does not mention
+  ratings in its answer unless asked; the stars and the legend say it.
 - **A harvested value is shown as the paper wrote it** (`7.1 ± 0.4`, `1,100–2,100`), with its
   supporting quote, the conditions the paper states and those it does not, and whether it was
   measured or calculated. Where the numbers read from it do not fit the kind of value recorded, it

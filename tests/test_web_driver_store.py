@@ -15,7 +15,7 @@ from conftest import FIXTURE, agent_with, ask_question
 from streamlit.testing.v1 import AppTest
 
 from agent_doubles import says, scripted, tool_call
-from scinumbers_ask import autobuild, store_corpus, trust_marks, web
+from scinumbers_ask import autobuild, objections, store_corpus, trust_marks, web
 from scinumbers_ask.corpus import load
 from scinumbers_ask.repository import CorpusRepository
 
@@ -52,7 +52,7 @@ def test_a_store_answer_carries_its_stars_its_legend_and_both_new_columns(
 
     drawn = " ".join(m.value for m in at.markdown)
     # Each identifier footnoted on its own; its stars follow at text size, outside the superscript.
-    assert ">PMC1000001-1</sup> #★★★☆☆⚠" in drawn
+    assert ">PMC1000001-1</sup> #★★★☆☆⚠️" in drawn
     assert ">PMC1000001-1.2</sup> ☆☆☆☆☆" in drawn
     assert "★</sup>" not in drawn and "☆</sup>" not in drawn
 
@@ -75,7 +75,7 @@ def test_a_store_answer_carries_its_stars_its_legend_and_both_new_columns(
         "Reference",
     ]
     assert dict(zip(table["ID"], table["Trust"], strict=True)) == {
-        "PMC1000001-1": "#★★★☆☆⚠",
+        "PMC1000001-1": "#★★★☆☆⚠️",
         "PMC1000001-1.2": "☆☆☆☆☆",
     }
 
@@ -123,6 +123,9 @@ def test_the_page_loads_the_store_from_its_setting_without_building_a_corpus(
         assert not at.exception
         assert not at.error, [e.value for e in at.error]
         assert seen["repo"].get("PMC1000001-1") is not None
+        # The cached loader attached the store's objections for the tables to show.
+        item = f"{store_double.RUN_A}-{store_double.ACTIN.pmcid}-1-item"
+        assert objections.of(seen["repo"], item) == (f"student: {store_double.REVIEWER_ISSUE}",)
     finally:
         web.resources.clear()
 

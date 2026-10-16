@@ -12,13 +12,15 @@ import pytest
 import store_double
 
 from bionumbers.tiers import Tier, Trust
-from scinumbers_ask import cli, entries_table, store_corpus, trust_marks, web
+from scinumbers_ask import cli, entries_table, objections, store_corpus, trust_marks, web
 from scinumbers_ask.events import Answer, AnswerEntries
 from scinumbers_ask.repository import CorpusRepository
+from scinumbers_ask.tools import ToolBudget, build_tools
+from scinumbers_ask.trace import start_question
 
 #: PMC1000001-1: scientist (simulated), disputed. -4: nobody approved, disputed. -2: AI.
-SCIENTIST_SIMULATED_DISPUTED = "#★★★☆☆⚠"
-NOBODY_DISPUTED = "☆☆☆☆☆⚠"
+SCIENTIST_SIMULATED_DISPUTED = "#★★★☆☆⚠️"
+NOBODY_DISPUTED = "☆☆☆☆☆⚠️"
 
 
 @pytest.fixture
@@ -32,7 +34,7 @@ def store_repo(tmp_path):
         (Trust(Tier.CURATED), "★★★★★"),
         (Trust(Tier.SENIOR_SCIENTIST), "★★★★☆"),
         (Trust(Tier.SCIENTIST, simulated=True), "#★★★☆☆"),
-        (Trust(Tier.STUDENT, disputed=True), "★★☆☆☆⚠"),
+        (Trust(Tier.STUDENT, disputed=True), "★★☆☆☆⚠️"),
         (Trust(Tier.AI), "★☆☆☆☆"),
         (Trust(Tier.NONE), "☆☆☆☆☆"),
         (None, ""),
@@ -65,7 +67,11 @@ def test_the_terminal_draws_stars_after_each_citation_and_leaves_the_legend_to_t
     # Said once, under the entries table (the user's call, 2026-10-16), not under the answer too.
     assert trust_marks.SCALE_LEGEND not in text
     table = entries_table.render(_rows(store_repo, ("PMC1000001-1",)))
-    assert trust_marks.SIMULATED_LEGEND in table and trust_marks.DISPUTED_LEGEND in table
+    flat = " ".join(line.strip() for line in table.splitlines())  # legend lines wrap to the rule
+    assert trust_marks.SIMULATED_LEGEND in flat
+    # A terminal cannot open a cell, so its dispute line points at the list, not a double click.
+    assert trust_marks.DISPUTED_LEGEND_TERMINAL in flat
+    assert "Double click" not in flat
 
 
 def test_a_group_citing_several_entries_names_each_beside_its_stars(store_repo):
@@ -95,7 +101,7 @@ def test_the_web_superscript_reads_a_label_and_carries_its_stars(store_repo):
         Answer(question_id="q", text="488 µM [[PMC1000001-1]] [[100001]]."), store_repo
     )
     drawn = web.answer_markdown(item.text, dict(item.stars))
-    # The identifier is footnoted; the stars, `#` and `⚠` are at the prose's size, outside it.
+    # The identifier is footnoted; the stars, `#` and `⚠️` are at the prose's size, outside it.
     sup = '<sup style="opacity: 0.6; font-size: 0.72em;">'
     assert (
         f"{sup}PMC1000001-1</sup> {SCIENTIST_SIMULATED_DISPUTED} {sup}100001</sup> ★★★★★." in drawn
@@ -194,3 +200,65 @@ def test_the_terminal_shows_a_label_whole_since_it_cannot_open_a_cell(store_repo
     assert "PMC1000001-1 " in text and "PMC1000001-1.2" in text
     rule = text.splitlines()[1]
     assert all(len(line) <= len(rule) for line in text.splitlines()[:6])
+
+
+# -- what objecting reviewers said (ADR-1630) ---------------------------------
+
+A = f"{store_double.RUN_A}-{store_double.ACTIN.pmcid}"
+
+
+@pytest.fixture
+def store_with_objections(tmp_path):
+    path = store_double.build(tmp_path / "s.sqlite")
+    repo = CorpusRepository(store_corpus.load(path))
+    objections.attach(repo, objections.load(path))
+    return repo
+
+
+def test_the_objections_are_the_decisions_that_disputed_an_entry(tmp_path):
+    """Per `store_double.build`: -1 drew an issue from a student, -4 a student's disapproval; the
+    approvals and the undecided optics value draw nothing."""
+    found = objections.load(store_double.build(tmp_path / "s.sqlite"))
+    assert found == {
+        f"{A}-1-item": (f"student: {store_double.REVIEWER_ISSUE}",),
+        f"{A}-4-item": (f"student: {store_double.REVIEWER_COMMENT}",),
+    }
+
+
+def test_the_web_trust_cell_carries_the_objections_after_the_stars(store_with_objections):
+    rows = _rows(store_with_objections, ("PMC1000001-1", "PMC1000001-2"))
+    disputed, approved = web._frame(rows)
+    assert (
+        disputed["Trust"]
+        == f"{SCIENTIST_SIMULATED_DISPUTED} student: {store_double.REVIEWER_ISSUE}"
+    )
+    assert approved["Trust"] == "★☆☆☆☆", "an entry nobody objected to shows only its stars"
+    assert trust_marks.DISPUTED_LEGEND in web._legend(rows)
+    assert trust_marks.DISPUTED_LEGEND == (
+        "⚠️ : a reviewer objected to this entry. "
+        "Double click the rating in the table to find out why"
+    )
+
+
+def test_the_terminal_lists_the_objections_under_its_table(store_with_objections):
+    text = entries_table.render(_rows(store_with_objections, ("PMC1000001-4",)))
+    assert "objections raised:" in text
+    assert f"PMC1000001-4  student: {store_double.REVIEWER_COMMENT}" in text
+
+
+def test_the_model_never_sees_an_objection(store_with_objections):
+    """The objections are attached for the tables; the tools still hand the model none of them."""
+    tools = {
+        t.name: t
+        for t in build_tools(
+            store_with_objections, start_question("dev"), lambda e: None, ToolBudget(99)
+        )
+    }
+    shown = tools["get_entry"].invoke({"entry_id": "PMC1000001-1"})
+    shown += tools["search_entries"].invoke({"property": "F-actin"})
+    for marker in store_double.NEVER_SHOWN:
+        assert marker not in shown, marker
+
+
+def test_a_corpus_file_has_no_objections(repo):
+    assert all(row.objections == () for row in _rows(repo, (100002,)))

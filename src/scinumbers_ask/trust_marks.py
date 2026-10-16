@@ -22,7 +22,9 @@ EMPTY = "☆"
 #: Before the stars: the review that set this tier was a model standing in for a person (ADR-0960).
 SIMULATED = "#"
 #: After the stars: some reviewer objected to this entry, whoever approved it (ADR-0990).
-DISPUTED = "⚠"
+#: The emoji form (U+26A0 U+FE0F), which browsers and the table draw in yellow; the bare U+26A0
+#: draws in the text colour, where a warning does not stand out (the user's call, 2026-10-16).
+DISPUTED = "\u26a0\ufe0f"
 
 SCALE_LEGEND = (
     f"{FULL * 5} curated · {FULL * 4}{EMPTY} senior scientist · {FULL * 3}{EMPTY * 2} scientist · "
@@ -32,7 +34,16 @@ SCALE_LEGEND = (
 SIMULATED_LEGEND = (
     f"{SIMULATED} before the stars: set by a simulated review, a model standing in for the reviewer"
 )
-DISPUTED_LEGEND = f"{DISPUTED} after the stars: a reviewer objected to this entry"
+#: The page's wording, the user's own (2026-10-16): a double click opens a cell in full, and the
+#: Trust cell carries the objections after the stars.
+DISPUTED_LEGEND = (
+    f"{DISPUTED} : a reviewer objected to this entry. "
+    "Double click the rating in the table to find out why"
+)
+#: The terminal cannot open a cell, so its objections are listed under the table instead.
+DISPUTED_LEGEND_TERMINAL = (
+    f"{DISPUTED} : a reviewer objected to this entry; the objections are listed above"
+)
 
 
 def stars(trust: Any) -> str:
@@ -44,8 +55,12 @@ def stars(trust: Any) -> str:
     return (SIMULATED if trust.simulated else "") + drawn + (DISPUTED if trust.disputed else "")
 
 
-def legend(trusts: Iterable[Any]) -> list[str]:
-    """What the stars and marks mean, for the tiers actually shown; empty where none is."""
+def legend(trusts: Iterable[Any], *, terminal: bool = False) -> list[str]:
+    """What the stars and marks mean, for the tiers actually shown; empty where none is.
+
+    `terminal` words the dispute line for a driver that lists objections under its table rather
+    than opening a cell on a double click.
+    """
     shown = [t for t in trusts if t is not None]
     if not shown:
         return []
@@ -53,7 +68,7 @@ def legend(trusts: Iterable[Any]) -> list[str]:
     if any(t.simulated for t in shown):
         lines.append(SIMULATED_LEGEND)
     if any(t.disputed for t in shown):
-        lines.append(DISPUTED_LEGEND)
+        lines.append(DISPUTED_LEGEND_TERMINAL if terminal else DISPUTED_LEGEND)
     return lines
 
 

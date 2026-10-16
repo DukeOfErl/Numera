@@ -65,6 +65,21 @@ column with an empty header (`grounded-answering`). On the web the new columns a
 Organism, ID and Reference, which got narrower so the table still fits the evidence column on the
 target browser (`test_the_evidence_column_can_hold_its_table`).
 
+**Revised the same day, after the user read live answers (2026-10-16).**
+
+- The model mentioned tiers in prose anyway — "(trust 3/5)", "this entry has not been approved",
+  "this entry is disputed" — saying twice what the stars say. The prompt now tells it not to
+  mention ratings, approvals or disputes at all unless the reader asks about an entry's rating,
+  review or objections.
+- `⚠` is the emoji form (U+26A0 U+FE0F), which the page and the table draw in yellow.
+- A disputed entry's Trust cell carries, after the stars, what each objecting reviewer said
+  (`objections.py`), introduced by role and marked where simulated. The column keeps its width; a
+  double click opens the cell. The page's legend line is the user's wording: "⚠️ : a reviewer
+  objected to this entry. Double click the rating in the table to find out why". The terminal,
+  which cannot open a cell, lists the objections under its table and says so in its legend.
+  Reviewers' words reach the reader only: they are attached to the loaded repository in a
+  presentation-side registry the agent's core may not import, and no entry holds them.
+
 ## Trade-off accepted
 
 The model's prose cannot say "this five-star entry" in the reader's own visual terms, only in

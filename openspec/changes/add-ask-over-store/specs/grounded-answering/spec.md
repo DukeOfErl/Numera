@@ -14,7 +14,10 @@ wrong star rating looks exactly like a right one. Where the model writes stars a
 NOT be taken for the tier.
 
 A disputed entry — one a reviewer objected to, whether or not another approved it — SHALL carry a
-caution beside its stars. The stars say who approved it; the caution says that someone did not, and
+caution beside its stars, drawn so it stands out from the text (yellow on the page). Where the
+entries are shown as a table, the trust cell SHALL carry what each objecting reviewer said, after
+the stars: a reader who sees the caution can learn why without leaving the table. A reviewer's
+words are shown to the reader only, never to the model. The stars say who approved it; the caution says that someone did not, and
 neither is folded into the other.
 
 Wherever a tier was set by a simulated review, the stars SHALL carry a mark saying so, and what the
@@ -46,6 +49,13 @@ say that someone looked and no one approved.
 - **WHEN** the review that set an entry's tier was simulated
 - **THEN** its stars carry the simulated mark
 - **AND** what the mark means is stated once, with the entries table
+
+#### Scenario: A reader asks why an entry is disputed
+- **WHEN** a disputed entry is shown in the entries table
+- **THEN** its trust cell carries, after the stars, what each objecting reviewer said, introduced by
+  the reviewer's role and marked where the review was simulated
+- **AND** the cell keeps its width, and the full text is reached by opening the cell
+- **AND** none of it is in anything the model receives
 
 #### Scenario: The model writes stars
 - **WHEN** the model's answer contains star characters beside a citation

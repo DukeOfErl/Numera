@@ -185,7 +185,8 @@ core, and a test there refuses a name with no file behind it.
 | `permissions.py` | `Role`, `Permission`, `Identity`, and `GRANTS` — the default-deny table as data, with the pruning rule above it (ADR-0800) |
 | `authorization.py` | `allowed` / `require` / `Refused`: the one refusal, called inside the operation it guards, never by the page |
 | `accounts.py` | `lookup(engine, email)` and `insert(...)`: enrolment off one row, **fails closed** — the deliberate inverse of `trail_store` (ADR-0780). Both here so the case-folding rule has one home |
-| `store_corpus.py` | The harvest store as a corpus: read-only, labels, readings, tiers. **The only module that imports `bionumbers`** (ADR-1600), so a corpus-file run never does |
+| `store_corpus.py` | The harvest store as a corpus: read-only, labels, readings, tiers. **The one core module that imports `bionumbers`** (ADR-1600), so a corpus-file run never does |
+| `objections.py` | What objecting reviewers wrote, for the Trust cell and the terminal's list. **Presentation**: reviewers' words never reach the agent; imports `bionumbers` only when a store is loaded (ADR-1600, ADR-1630) |
 | `trust_marks.py` | A tier as stars, `#` and `⚠`, and their legend. **Presentation**: the model is told a tier in words and never shown a star (ADR-1630) |
 | `enrol.py` | The two commands that open and close an account: `scinumbers-enrol` mints a capped key and inserts the row, withdrawing the key if the row cannot be written (ADR-0900); `scinumbers-withdraw` disables the row and revokes the key, in that order, so a partial failure leaves a refused account rather than a live one (ADR-1150). A harness module |
 | `pending.py` | The daily check (`scinumbers-pending`): who is **still** stuck at the door, read out of the trail. Resolution is derived from `user_email` and `signin.refused` rather than tracked, so no state is added. **Silent when nobody is stuck** — the contract a cron line rests on. A harness module |

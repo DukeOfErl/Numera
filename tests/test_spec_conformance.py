@@ -1228,6 +1228,10 @@ COVERED.update(
             "test_trust_marks.py::test_the_simulated_mark_s_legend_line_is_not_drawn_as_a_heading",
             "test_web_driver_store.py::test_a_store_answer_carries_its_stars_its_legend_and_both_new_columns",
             "test_web_driver_store.py::test_a_corpus_file_answer_draws_none_of_the_store_s_additions",
+            "test_trust_marks.py::test_the_objections_are_the_decisions_that_disputed_an_entry",
+            "test_trust_marks.py::test_the_web_trust_cell_carries_the_objections_after_the_stars",
+            "test_trust_marks.py::test_the_terminal_lists_the_objections_under_its_table",
+            "test_trust_marks.py::test_the_model_never_sees_an_objection",
         ),
         "An entry's caveat marks have a column of their own": (
             "test_trust_marks.py::test_the_web_table_puts_the_marks_first_and_trust_before_the_id",
