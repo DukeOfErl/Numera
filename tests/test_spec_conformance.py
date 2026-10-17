@@ -969,6 +969,13 @@ COVERED.update(
             "test_guard.py::test_the_library_call_refuses_where_git_would_track_the_output",
             "test_guard.py::test_it_refuses_before_reading_the_source",
             "test_guard.py::test_every_file_a_run_can_create_is_checked",
+            "test_guard.py::test_a_git_that_does_not_answer_is_a_refusal",
+            "test_guard.py::test_a_library_ingest_writes_nothing_when_git_does_not_answer",
+            "test_guard.py::test_the_command_says_why_when_git_does_not_answer",
+            "test_guard.py::test_a_path_git_says_is_in_no_repository_is_still_allowed",
+            "test_guard.py::test_a_machine_without_git_is_still_allowed",
+            "test_evaluation.py::test_a_results_file_already_on_a_tracked_path_is_still_refused",
+            "test_evaluation.py::test_a_results_file_is_refused_when_git_does_not_answer",
         ),
         "Each key carries the value of its own column": (
             "test_cleaning.py::test_each_column_reaches_its_own_field",

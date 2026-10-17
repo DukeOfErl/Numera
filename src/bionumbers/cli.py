@@ -137,7 +137,7 @@ def _refuse_a_committable_run_dir(directory: Path) -> None:
     write.
     """
     try:
-        from bionumbers_ingest.guard import committable_repo_for
+        from bionumbers_ingest.guard import GitDidNotAnswer, committable_repo_for
     except ImportError as absent:  # pragma: no cover - both packages are installed here
         raise RunFileWouldBeCommitted(
             f"Cannot check whether {directory} is committable: the guard lives in "
@@ -147,7 +147,13 @@ def _refuse_a_committable_run_dir(directory: Path) -> None:
 
     for name in RUN_FILES:
         candidate = directory / name
-        repo = committable_repo_for(candidate)
+        try:
+            repo = committable_repo_for(candidate)
+        except GitDidNotAnswer as unknown:
+            raise RunFileWouldBeCommitted(
+                f"{unknown}. A run file quotes the article, so this refuses rather than "
+                f"writing unchecked; nothing was written. Run it again."
+            ) from unknown
         if repo is not None:
             raise RunFileWouldBeCommitted(
                 f"git would track {candidate} in {repo}. A run file carries the article's "

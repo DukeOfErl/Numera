@@ -38,6 +38,11 @@ Five things about it that reading one module will not tell you:
   in `cli.py` and so protected one caller; the operation invoked as a library wrote 20 MB onto a
   committable path in silence. A guard in a driver is a guard for one
   driver; ADR-0250.
+- **An unknown is a refusal.** When git is installed and gives no answer -- a timeout, a failure
+  to start, any error but "not a git repository" -- `committable_repo_for` raises
+  `GitDidNotAnswer` rather than returning `None`. It used to allow the write, and once let a
+  results file into the repository under a loaded test run. Only "no repository" and "no git
+  installed" pass; ADR-1800.
 - **`cleaning.py` has been the densest source of defects in the project**, and every one of them
   produced a plausible number rather than an error. Seven review passes, fault seeding and mutation
   testing each found more; treat a change there as needing all three, and **measure both directions**

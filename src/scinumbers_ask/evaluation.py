@@ -208,11 +208,12 @@ def append_result(path: str | Path, result: Result) -> None:
     was holding.
     """
     file = Path(path)
-    if not file.exists():
-        # Checked as the file comes into existence: that is the moment the path
-        # becomes real, it costs two git calls once rather than per record, and it
-        # catches a caller that reaches this function directly.
-        refuse_a_committable_results_path(file)
+    # Checked on every append, not only as the file comes into existence: a file
+    # already on a tracked path -- copied there, or written while git did not
+    # answer -- would otherwise be appended to unchecked for the rest of the run
+    # and every resumed one after it. Two git calls per result, beside a model
+    # call per result. It also catches a caller that reaches this function directly.
+    refuse_a_committable_results_path(file)
     if file.parent != Path(""):
         file.parent.mkdir(parents=True, exist_ok=True)
     _drop_a_torn_last_line(file)
@@ -279,14 +280,20 @@ def refuse_a_committable_results_path(path: str | Path) -> None:
     is to stop.
     """
     try:
-        from bionumbers_ingest.guard import committable_repo_for
+        from bionumbers_ingest.guard import GitDidNotAnswer, committable_repo_for
     except ImportError as exc:  # pragma: no cover - both packages are present here
         raise ResultsWouldBeCommitted(
             f"Cannot check whether {path} is committable: the guard lives in "
             f"`bionumbers_ingest`, which is not installed. Results carry corpus "
             f"text verbatim, so this refuses rather than writing unchecked."
         ) from exc
-    repo = committable_repo_for(Path(path))
+    try:
+        repo = committable_repo_for(Path(path))
+    except GitDidNotAnswer as exc:
+        raise ResultsWouldBeCommitted(
+            f"{exc}. Results carry corpus text verbatim, so this refuses rather than "
+            f"writing unchecked; nothing was written. Run it again."
+        ) from exc
     if repo is not None:
         raise ResultsWouldBeCommitted(
             f"git would track {path} in {repo}. Every result carries the retrieval "

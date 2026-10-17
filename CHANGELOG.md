@@ -34,6 +34,10 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **The git-tracking guard refuses when git gives no answer.** A timeout or a git that could not
+  be started was read as "no git" and the write allowed; it is now refused, and the reader told to
+  run it again. An evaluation results file is checked on every append, not only when created.
+  Outside any repository, or with no git installed, writes go ahead as before (ADR-1800).
 - **The validator's quote check no longer passes a wrong value as verified** (code review of 2026-10-15). A quote of a table cell matches only a table cell under the headers it names, so "cell: 39" in a Kd column no longer verifies against "isolated in 1939" elsewhere. A quote that begins or ends on a digit must begin or end where the paper's number does, so "39" is not quoted from "139" or "39.4". A number that ends a sentence ("was 2.4.") is now read. MathML exponents keep their meaning (`10<msup>…8` reads 10⁸, not 108) in the 22 of 130 cached papers that use them, and a formula given as both MathML and TeX is read once. Re-checked against all 2,643 quotes in the demo database: none was a wrong value let through; five quoting a formula now read its exponent marked.
 - **A publisher's terms page is no longer taken for a licence.** A paper's own licence link counts only if it is a Creative Commons licence or public-domain dedication; 10 of 130 cached papers had been credited with `rupress.org/terms` or Nature's editorial policies. None of the demo's papers was affected.
 - **A paper flagged by OpenRouter's moderation fails on its own** instead of stopping the whole run as if the account had been refused.

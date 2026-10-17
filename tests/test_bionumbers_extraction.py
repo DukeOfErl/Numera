@@ -981,6 +981,18 @@ def test_a_run_file_git_would_track_is_refused_before_anything_is_written(articl
     assert not tracked.exists()
 
 
+def test_a_run_file_is_refused_when_git_does_not_answer(tmp_path, monkeypatch, article):
+    from bionumbers_ingest.guard import GitDidNotAnswer
+
+    def no_answer(path):
+        raise GitDidNotAnswer(path, "git did not answer within 10 s")
+
+    monkeypatch.setattr("bionumbers_ingest.guard.committable_repo_for", no_answer)
+    with pytest.raises(RunFileWouldBeCommitted, match="could not ask git"):
+        write_results(two_results(article), tmp_path / "run")
+    assert not (tmp_path / "run").exists()
+
+
 def test_a_run_file_outside_the_repository_is_written(tmp_path, article):
     """The negative case for the refusal, varying the dimension the guard reads -- whether git
     would track the path -- and nothing else. Without it the guard could be refusing everything."""

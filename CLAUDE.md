@@ -83,6 +83,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-harvest-prototype` | `1500`–`1590` — `1500`, `1510` written, and `1520`–`1540` hold the validator's renumbered three; archived 2026-10-15; clear of every block on `dev` and the branches as of 2026-10-07 (highest `1350`–`1390`) |
 | `harden-harvest` | `1700`–`1740` — reserved 2026-10-15, after `add-ask-over-store`'s `1600`–`1690` on `feat/ask-over-store` |
 | `add-paper-references` | `1750`–`1790` — `1750` written; archived 2026-10-17 |
+| `fix-guard-fails-closed` | `1800`–`1840` — `1800` written; archived 2026-10-17, after `add-paper-references`' `1750`–`1790` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets
