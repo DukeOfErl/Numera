@@ -12,12 +12,16 @@ A guard in a driver is a guard for one driver. This one belongs to the operation
 
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
 from bionumbers_ingest.io import PARTIAL_SUFFIX
 from bionumbers_ingest.provenance import manifest_path_for
+
+#: How long git has to answer. A slow answer is a refusal, not a pass.
+GIT_TIMEOUT_S = 10
 
 
 class OutputWouldBeCommitted(Exception):
@@ -31,6 +35,20 @@ class OutputWouldBeCommitted(Exception):
         self.path = path
         self.repo = repo
         super().__init__(f"git would track {path} in {repo}")
+
+
+class GitDidNotAnswer(Exception):
+    """Git is there and gave no answer about this path, so whether it is tracked is unknown.
+
+    A refusal like `OutputWouldBeCommitted`, and its own type because the remedy differs: not
+    "write it elsewhere" but "run it again". An unknown is refused rather than allowed, because
+    the mistake this guards against cannot be undone (fix-guard-fails-closed).
+    """
+
+    def __init__(self, path: Path, reason: str) -> None:
+        self.path = path
+        self.reason = reason
+        super().__init__(f"could not ask git whether it would track {path}: {reason}")
 
 
 def _nearest_existing(path: Path) -> Path:
@@ -53,27 +71,50 @@ def committable_repo_for(output: Path) -> str | None:
     asks the authority rather than guessing at ignore semantics.
 
     Returns the repository root as a string when the file would be tracked, or
-    ``None`` when it is ignored, outside any repository, or git is unavailable.
+    ``None`` when it is ignored, outside any repository, or git is not installed.
+
+    **An unknown is a refusal** (fix-guard-fails-closed). Raises `GitDidNotAnswer`
+    when git is installed and gives no answer -- it times out, cannot be started,
+    or fails for any reason but "not a git repository". Under memory pressure a
+    results file was once written inside this repository by the test asserting it
+    would be refused, because a git that did not answer read as "no git".
+    "Not a git repository" is matched in git's own words, so git is run in the C
+    locale, where those are the words it uses.
     """
     target = output if output.is_absolute() else Path.cwd() / output
     anchor = _nearest_existing(target.parent)
     try:
-        top = subprocess.run(
-            ["git", "-C", str(anchor), "rev-parse", "--show-toplevel"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
+        top = _git(anchor, "rev-parse", "--show-toplevel")
         if top.returncode != 0:
-            return None  # not a repository
-        ignored = subprocess.run(
-            ["git", "-C", str(anchor), "check-ignore", "-q", str(target)],
-            capture_output=True,
-            timeout=10,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None  # no git to ask; the .gitignore is the only guard left
-    return None if ignored.returncode == 0 else top.stdout.strip()
+            if "not a git repository" in top.stderr:
+                return None
+            raise GitDidNotAnswer(target, _said(top))
+        ignored = _git(anchor, "check-ignore", "-q", str(target))
+    except FileNotFoundError:
+        return None  # git is not installed, so nothing here can commit the file
+    except subprocess.TimeoutExpired as exc:
+        raise GitDidNotAnswer(target, f"git did not answer within {exc.timeout:g} s") from exc
+    except OSError as exc:
+        raise GitDidNotAnswer(target, f"git could not be started: {exc}") from exc
+    if ignored.returncode == 0:
+        return None
+    if ignored.returncode == 1:
+        return top.stdout.strip()
+    raise GitDidNotAnswer(target, _said(ignored))
+
+
+def _git(anchor: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(anchor), *args],
+        capture_output=True,
+        text=True,
+        timeout=GIT_TIMEOUT_S,
+        env={**os.environ, "LC_ALL": "C"},
+    )
+
+
+def _said(result: subprocess.CompletedProcess[str]) -> str:
+    return result.stderr.strip() or f"git exited with status {result.returncode}"
 
 
 def paths_a_run_can_create(output: Path, scratch: Sequence[Path] = ()) -> list[Path]:

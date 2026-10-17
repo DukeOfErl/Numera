@@ -587,9 +587,42 @@ def test_a_results_file_git_would_track_is_refused_before_it_is_written(tmp_path
         # throwaway copy a mutation run works in, are both trees without one.
         pytest.skip("not a git checkout, so there is no tracking to refuse")
     tracked = Path("src") / "scinumbers_ask" / "leaked-results.jsonl"
-    with pytest.raises(ResultsWouldBeCommitted, match="git would track"):
-        append_result(tracked, a_result("q1"))
-    assert not tracked.exists()
+    try:
+        with pytest.raises(ResultsWouldBeCommitted, match="git would track"):
+            append_result(tracked, a_result("q1"))
+        assert not tracked.exists()
+    finally:
+        # A regression leaves the file in the working tree, where it would be committed -- and,
+        # before every append was checked, where the next run appended to it unchecked.
+        tracked.unlink(missing_ok=True)
+
+
+def test_a_results_file_already_on_a_tracked_path_is_still_refused():
+    """Checked on every append, not only as the file comes into existence: a file that got there
+    some other way -- copied in, or written while git did not answer -- is not grandfathered."""
+    if not Path(".git").exists():
+        pytest.skip("not a git checkout, so there is no tracking to refuse")
+    tracked = Path("src") / "scinumbers_ask" / "leaked-results.jsonl"
+    tracked.write_text("", encoding="utf-8")
+    try:
+        with pytest.raises(ResultsWouldBeCommitted, match="git would track"):
+            append_result(tracked, a_result("q1"))
+        assert tracked.read_text(encoding="utf-8") == ""
+    finally:
+        tracked.unlink(missing_ok=True)
+
+
+def test_a_results_file_is_refused_when_git_does_not_answer(tmp_path, monkeypatch):
+    from bionumbers_ingest.guard import GitDidNotAnswer
+
+    def no_answer(path):
+        raise GitDidNotAnswer(path, "git did not answer within 10 s")
+
+    monkeypatch.setattr("bionumbers_ingest.guard.committable_repo_for", no_answer)
+    path = tmp_path / "results.jsonl"
+    with pytest.raises(ResultsWouldBeCommitted, match="could not ask git"):
+        append_result(path, a_result("q1"))
+    assert not path.exists()
 
 
 def test_a_results_file_outside_the_repository_is_allowed(tmp_path):

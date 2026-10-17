@@ -645,6 +645,26 @@ def test_a_runs_directory_git_would_track_is_refused_before_anything_happens(
     assert provider.requests == []
 
 
+def test_a_runs_directory_is_refused_when_git_does_not_answer(
+    monkeypatch, provider, dirs, tmp_path, capsys
+):
+    from bionumbers_ingest.guard import GitDidNotAnswer
+
+    def no_answer(path):
+        raise GitDidNotAnswer(path, "git did not answer within 10 s")
+
+    scripted(monkeypatch)
+    monkeypatch.setattr("bionumbers_ingest.guard.committable_repo_for", no_answer)
+    runs = tmp_path / "runs-outside"
+    argv = ["discover", "doubling time", "--organism", "Escherichia coli", "--run-id", RUN]
+    code = cli.main([*argv, "--runs", str(runs), "--data", str(dirs.data)])
+
+    assert code == 2
+    assert "could not ask git" in capsys.readouterr().err
+    assert not runs.exists()
+    assert provider.requests == []
+
+
 # --- status and load --------------------------------------------------------------------------
 
 

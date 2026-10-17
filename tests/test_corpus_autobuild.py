@@ -77,6 +77,23 @@ def test_the_build_is_announced_before_it_happens(outside_any_repo, monkeypatch)
     )
 
 
+def test_a_git_that_does_not_answer_reaches_the_reader_as_a_message(outside_any_repo, monkeypatch):
+    from bionumbers_ingest.guard import GitDidNotAnswer
+
+    export = outside_any_repo / "BioNumbers.xls"
+    export.write_text("not really an export")
+    corpus = outside_any_repo / "bionumbers.jsonl"
+
+    def no_answer(plan):
+        raise GitDidNotAnswer(corpus, "git did not answer within 10 s")
+
+    monkeypatch.setattr("bionumbers_ingest.resolve.build", no_answer)
+    with pytest.raises(CorpusUnavailable) as raised:
+        autobuild.corpus_path(str(corpus), lambda _text: None)
+    said = str(raised.value)
+    assert str(corpus) in said and "could not ask git" in said
+
+
 def test_a_refused_destination_reaches_the_reader_as_a_message(outside_any_repo, monkeypatch):
     """The guard refuses a corpus git would track. Translated once here rather than
     in each driver, so neither has to import the ingester's exception to say so."""

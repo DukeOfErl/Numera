@@ -20,7 +20,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from bionumbers_ingest.guard import OutputWouldBeCommitted
+from bionumbers_ingest.guard import GitDidNotAnswer, OutputWouldBeCommitted
 from bionumbers_ingest.ingest import VERSION, ingest
 
 DEFAULT_OUTPUT = Path("data/processed/bionumbers.jsonl")
@@ -82,6 +82,16 @@ def main(argv: list[str] | None = None) -> int:
             f"permanent.\n"
             f"  Either write it outside the repository, or add the path to that "
             f"repository's .gitignore.",
+            file=sys.stderr,
+        )
+        return 3
+    except GitDidNotAnswer as refusal:
+        # The same refusal for an unknown: whether git would track the file could not be
+        # asked, and the mistake it guards against cannot be undone.
+        print(
+            f"bionumbers-ingest: refusing to write {refusal}.\n"
+            f"  Nothing was written. Run it again; if it keeps failing, check that git "
+            f"works in that directory.",
             file=sys.stderr,
         )
         return 3
