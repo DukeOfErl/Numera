@@ -1879,7 +1879,8 @@ def evidence_html(rows: Iterable[entries_table.Row], numbers: Mapping[str, int])
 
 
 def _legend(rows: tuple[entries_table.Row, ...]) -> list[str]:
-    """What the marks shown mean, under the list, and only for the marks shown."""
+    """What the caveat marks shown mean, under the list, and only for the marks shown. The trust
+    scale is not here: it bears on every answer and is said once, pinned (`draw_footer`)."""
     applying = (
         (entries_table.NOT_RETRIEVED_LEGEND, lambda r: not r.retrieved),
         (entries_table.NO_METHOD_LEGEND, lambda r: not r.method_recorded),
@@ -1890,8 +1891,7 @@ def _legend(rows: tuple[entries_table.Row, ...]) -> list[str]:
         (entries_table.READING_UNCERTAIN_LEGEND, lambda r: r.reading_uncertain),
         (entries_table.CALCULATED_LEGEND, lambda r: r.calculated),
     )
-    marks = [legend for legend, applies in applying if any(applies(row) for row in rows)]
-    return marks + trust_marks.legend(row.trust for row in rows)
+    return [legend for legend, applies in applying if any(applies(row) for row in rows)]
 
 
 def summary_for(table: Table, shown: int) -> str:
@@ -1949,14 +1949,22 @@ def draw_evidence(table: Table, numbers: Mapping[str, int]) -> None:
 OPEN_BUTTONS_MAX = 12
 
 
+OPEN_PREFIX = "scinumbers_ask.open."
+
+
 def _open_key(question_id: str) -> str:
-    return f"scinumbers_ask.open.{question_id}"
+    return f"{OPEN_PREFIX}{question_id}"
 
 
 def draw_open_entry(
     table: Table, numbers: Mapping[str, int], question_id: str, *, answering: bool = False
 ) -> None:
     """Choose an entry by its number and read it in full, beside the answer (ADR-1850).
+
+    **Closed until chosen**, and closed again by choosing the open number a second time: opened
+    by default, a record per turn filled the page as a conversation grew (the user's call,
+    2026-10-17). Above twelve entries the list has "Show no entry" first for the same reason.
+    Every turn's choice is cleared when a new question is sent (`close_entries`).
 
     Keyed by the question, like the rating, so each turn keeps its own choice. **Not offered while
     a question is being answered**: a click re-runs the page, which abandons the agent's generator
@@ -1969,32 +1977,39 @@ def draw_open_entry(
     if not by_number:
         return
     options = sorted(by_number)
-    first = next(
-        (numbers[str(r.entry_id)] for r in table.rows if r.cited and str(r.entry_id) in numbers),
-        options[0],
-    )
     key = _open_key(question_id)
     if len(options) <= OPEN_BUTTONS_MAX:
+        # Single selection, not required: a click on the selected pill deselects it.
         chosen = st.pills(
-            "Open entry",
-            options,
-            default=first,
-            required=True,
-            key=key,
-            disabled=answering,
-            format_func=str,
+            "Open entry", options, default=None, key=key, disabled=answering, format_func=str
         )
     else:
         chosen = st.selectbox(
             "Open entry",
-            options,
-            index=options.index(first),
+            [None, *options],
+            index=0,
             key=key,
             disabled=answering,
-            format_func=lambda n: f"{n} · {by_number[n].property[:60]}",
+            format_func=lambda n: (
+                SHOW_NO_ENTRY if n is None else f"{n} · {by_number[n].property[:60]}"
+            ),
         )
     if chosen is not None and chosen in by_number:
         draw_record(by_number[chosen], chosen)
+
+
+#: The list's first option above twelve entries: nothing opened.
+SHOW_NO_ENTRY = "Show no entry"
+
+
+def close_entries(state: MutableMapping[str, Any]) -> None:
+    """Close every turn's opened entry, as a new question is sent.
+
+    Deleting a widget's key resets it to its default -- nothing chosen -- on the run that follows,
+    so the page answering a new question does not carry a column of old records above it.
+    """
+    for key in [k for k in state if str(k).startswith(OPEN_PREFIX)]:
+        del state[key]
 
 
 def draw_record(row: entries_table.Row, number: int) -> None:
@@ -2049,7 +2064,7 @@ def _draw_harvest(harvest: Harvest) -> None:
     measurement method line above.
     """
     if harvest.property_in_paper:
-        st.markdown(f"*In the paper.* {as_text(harvest.property_in_paper)}")
+        st.markdown(f"*Property name in the paper.* {as_text(harvest.property_in_paper)}")
     st.markdown(f"*Quote.* “{as_text(harvest.quote)}”")
     named: dict[str, list[str]] = {}
     for condition in harvest.conditions:
@@ -2146,25 +2161,18 @@ def draw_title(text: str = TITLE) -> None:
     st.markdown(TITLE_HTML.format(mark=mark, text=html.escape(text)), unsafe_allow_html=True)
 
 
-#: Under the title: whose numbers these are, as the page's own subtitle.
-SUBTITLE_STORE = "BioNumbers + values harvested from papers"
-SUBTITLE_CORPUS = "BioNumbers"
-
-
-def draw_header(*, harvested: bool) -> None:
-    """The title, what the data is, and the prototype caveat, in amber (ADR-1850).
+def draw_header() -> None:
+    """The title and the prototype caveat, in amber (ADR-1850).
 
     The caveat used to be pinned to the viewport. The canvas puts it in the header as one amber
     line; it is still drawn on every view of the page, before anything a reader could trust.
     """
-    with st.container(horizontal=True, vertical_alignment="center", gap="medium"):
-        draw_title()
-        st.caption(as_text(SUBTITLE_STORE if harvested else SUBTITLE_CORPUS))
+    draw_title()
     emphasised = PROTOTYPE_NOTE.replace("**", "<strong>", 1).replace("**", "</strong>", 1)
     st.html(f'<div class="sn-proto">{emphasised}</div>')
 
 
-def draw_footer(admission: Admission) -> None:
+def draw_footer(admission: Admission, *, harvested: bool = False) -> None:
     """Under the question box: what is kept, whose money a question spends, and whose account it
     is kept against. Here rather than in the sidebar, which is collapsed by default (ADR-1850): a
     request a reader never sees is not a request."""
@@ -2178,6 +2186,11 @@ def draw_footer(admission: Admission) -> None:
         else ""
     )
     with st.bottom:
+        if harvested:
+            # The trust scale, pinned with the question box: it bears on practically every
+            # answer and list, where the caveat marks depend on the entries shown (the user's
+            # call, 2026-10-17).
+            st.caption(as_text(" · ".join(trust_marks.FULL_LEGEND)))
         st.caption(as_text(" ".join(part for part in (RECORDS_NOTE, BUDGET_NOTE, who) if part)))
 
 
@@ -2209,9 +2222,9 @@ def draw_first_view(*, answering: bool = False) -> None:
     with ask:
         st.subheader("Ask about a scientific quantity", anchor=False)
         st.markdown(
-            "A size, a concentration, a rate. Answers are grounded in BioNumbers and in values "
-            "harvested from papers and checked by reviewers. Every number links to the entry "
-            "behind it, so you can check it against the source."
+            "A size, a concentration, a rate. Try asking about one in a given organism. Answers "
+            "are grounded in values harvested from papers, checked by reviewers and provided "
+            "with a trust-tier."
         )
         st.caption("Try one")
         with st.container(horizontal=True, gap="small"):

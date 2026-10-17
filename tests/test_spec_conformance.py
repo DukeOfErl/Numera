@@ -1259,6 +1259,8 @@ COVERED.update(
             "test_web_driver_store.py::test_a_harvested_entry_opens_with_its_fields_apart_not_its_keywords",
             "test_web_driver.py::test_twelve_entries_are_buttons_and_thirteen_a_list",
             "test_web_driver.py::test_no_entry_can_be_chosen_while_a_question_is_answering",
+            "test_web_driver.py::test_an_entry_is_closed_until_chosen_and_closed_again_by_its_number",
+            "test_web_driver.py::test_a_new_question_closes_every_opened_entry",
         ),
         "An answer cites entries, never papers": (
             "test_agent.py::test_the_prompt_leaves_references_to_the_table",

@@ -209,7 +209,8 @@ def test_the_evidence_list_is_number_entry_value_trust_id(store_repo):
     legend = web._legend(rows)
     assert entries_table.CALCULATED_LEGEND in legend
     assert entries_table.READING_UNCERTAIN_LEGEND in legend
-    assert trust_marks.SCALE_LEGEND in legend
+    # The trust scale is pinned once for the page, not repeated under each list.
+    assert trust_marks.SCALE_LEGEND not in legend
 
 
 def test_the_organism_and_first_author_year_sit_under_the_property(tmp_path):
@@ -310,7 +311,7 @@ def test_the_trust_cell_carries_the_stars_alone_and_the_legend_says_open_the_ent
     assert disputed[3] == SCIENTIST_SIMULATED_DISPUTED
     assert store_double.REVIEWER_ISSUE not in web.evidence_html(rows, {})
     assert approved[3] == "★☆☆☆☆"
-    assert trust_marks.DISPUTED_LEGEND in web._legend(rows)
+    assert trust_marks.DISPUTED_LEGEND in trust_marks.FULL_LEGEND
     assert trust_marks.DISPUTED_LEGEND == (
         "⚠️ : a reviewer objected to this entry. Open the entry to read why"
     )

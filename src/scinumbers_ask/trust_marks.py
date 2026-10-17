@@ -42,6 +42,11 @@ DISPUTED_LEGEND_TERMINAL = (
 )
 
 
+#: The whole scale and both marks, for a page whose every answer may carry a tier: said once,
+#: where it stays in view, rather than under each list (the user's call, 2026-10-17).
+FULL_LEGEND = (SCALE_LEGEND, SIMULATED_LEGEND, DISPUTED_LEGEND)
+
+
 def stars(trust: Any) -> str:
     """`★★★☆☆ sim ⚠️` for a tier, or "" where an entry has none."""
     if trust is None:

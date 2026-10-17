@@ -29,7 +29,12 @@ def store_path(tmp_path):
     return store_double.build(tmp_path / "store.sqlite")
 
 
-def _page(monkeypatch, repo, agent) -> AppTest:
+def _page(monkeypatch, repo, agent, store="invented-store.sqlite") -> AppTest:
+    # The page reads which corpus it is from the setting, as a deployment does; the repository
+    # itself is handed in.
+    if store:
+        monkeypatch.setenv("SCINUMBERS_STORE", store)
+        monkeypatch.delenv("SCINUMBERS_CORPUS", raising=False)
     monkeypatch.setattr(web, "resources", lambda corpus=None, store=None: repo)
     monkeypatch.setattr(web, "agent_for", lambda state, repo, admission: agent)
     return AppTest.from_file(APP, default_timeout=TIMEOUT)
@@ -66,14 +71,16 @@ def test_a_store_answer_carries_pills_an_evidence_list_and_an_opened_entry(
     evidence = _html(at)
     assert "<th>#</th><th>Entry</th><th>Value</th><th>Trust</th><th>ID</th>" in evidence
     assert ">PMC1000001-1<" in evidence and ">PMC1000001-1.2<" in evidence
-    # The scale, and the marks shown, said once under the list.
+    # The whole trust scale, said once and pinned with the question box (2026-10-17).
     legend = [c.value for c in at.caption if trust_marks.SCALE_LEGEND in c.value]
     assert len(legend) == 1
     assert trust_marks.SIMULATED_LEGEND in legend[0] and trust_marks.DISPUTED_LEGEND in legend[0]
 
-    # The entries are chosen by number, and the first cited is open: objections included.
+    # The entries are chosen by number; nothing is open until one is: then objections included.
     (chooser,) = at.get("button_group")
     assert chooser.options == ["1", "2"]
+    assert not at.warning
+    chooser.set_value(1).run()
     assert any(w.value.startswith("**A reviewer objected.**") for w in at.warning)
     assert any(store_double.REVIEWER_ISSUE in w.value for w in at.warning)
     # And nothing of it in the sidebar any more.
@@ -92,12 +99,13 @@ def test_a_corpus_file_answer_has_pills_without_stars(monkeypatch, config, tmp_p
     repo = CorpusRepository(load(FIXTURE))
     model = scripted(tool_call("search_entries", property="Cell"), says("1 μm [[100002]]"))
     agent = agent_with(repo, config, tmp_path, model)
-    at = ask_question(_page(monkeypatch, repo, agent).run(), "how wide?")
+    at = ask_question(_page(monkeypatch, repo, agent, store=None).run(), "how wide?")
     assert not at.exception
 
     prose = " ".join(m.value for m in at.markdown)
     assert 'title="BNID 100002"><b>1</b></span>' in prose
     assert "★" not in prose and "☆" not in prose
+    # A corpus file has no tiers, so the pinned trust scale is not drawn at all.
     assert trust_marks.SCALE_LEGEND not in " ".join(c.value for c in at.caption)
     assert "<th>Trust</th>" not in _html(at)
 
@@ -155,6 +163,7 @@ def test_a_harvested_entry_opens_with_its_fields_apart_not_its_keywords(
     "Keywords:" they read as one fused field (seen on PMC2064542-2, 2026-10-16)."""
     repo, agent = _store_answer(store_path, config, tmp_path)
     at = ask_question(_page(monkeypatch, repo, agent).run(), "F-actin in lamellipodia?")
+    at.get("button_group")[0].set_value(1).run()
     drawn = [m.value for m in at.markdown] + [c.value for c in at.caption]
     text = "\n".join(drawn)
     assert "Keywords:" not in text

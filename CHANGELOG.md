@@ -33,6 +33,9 @@ any release; `1.0.0` when it stabilizes.
   - What is kept, and whose budget pays, is said under the question box.
   - The finished search box says what was searched and how many entries were retrieved and cited.
   - The first view offers example questions.
+  - An entry stays closed until its number is chosen, closes on a second click, and every
+    entry closes when a new question is sent.
+  - The trust scale's legend is pinned under the question box.
 - `sim` replaces `#` as the simulated-review mark, in the terminal too: papers label rings and
   samples "#1–#4".
 - **Caveat marks have a column of their own**, first in both entries tables, instead of a prefix

@@ -582,6 +582,7 @@ def test_an_opened_entry_names_itself_and_its_identifier(monkeypatch, repo, conf
         tool_call("get_entry", entry_id=100002), says("about 1 micrometre (BNID 100002)")
     )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+    at.main.get("button_group")[0].set_value(1).run()
     drawn = [m.value for m in at.main.markdown]
     assert "**Entry 1** · `BNID 100002`" in drawn
     assert "**Cell diameter**" in drawn
@@ -624,6 +625,8 @@ def test_an_entry_opens_beside_the_answer_not_in_the_side_panel(
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
     assert at.main.get("button_group"), "no way to open an entry"
+    assert not any(m.value.startswith("**Entry") for m in at.main.markdown), "open by default"
+    at.main.get("button_group")[0].set_value(1).run()
     assert any(m.value.startswith("**Entry 1** · `BNID 100002`") for m in at.main.markdown)
     assert not [e for e in at.sidebar.expander if e.label != messages.PRIVACY_HEADING]
     assert not at.sidebar.tabs, "one sidebar view needs no tab strip"
@@ -636,6 +639,7 @@ def test_an_opened_row_shows_the_entry_the_model_never_saw(monkeypatch, repo, co
     )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
+    at.main.get("button_group")[0].set_value(1).run()
     drawn = " ".join(c.value for c in at.caption) + " ".join(m.value for m in at.markdown)
     assert "Nelson DE. J Bacteriol. 2000 p.1719" in drawn
 
@@ -1167,7 +1171,9 @@ def test_twelve_entries_are_buttons_and_thirteen_a_list():
     assert at.get("button_group") and not at.selectbox
     at = AppTest.from_function(_draw_turn, args=(13, False), default_timeout=TIMEOUT).run()
     assert at.selectbox and not at.get("button_group")
-    assert at.selectbox[0].options[6] == "7 · Property 6"
+    # Nothing opened until chosen, and a way back to nothing (the user's call, 2026-10-17).
+    assert at.selectbox[0].options[0] == web.SHOW_NO_ENTRY and at.selectbox[0].value is None
+    assert at.selectbox[0].options[7] == "7 · Property 6"
 
 
 def test_no_entry_can_be_chosen_while_a_question_is_answering():
@@ -1176,3 +1182,30 @@ def test_no_entry_can_be_chosen_while_a_question_is_answering():
     assert at.get("button_group")[0].proto.disabled
     at = AppTest.from_function(_draw_turn, args=(3, False), default_timeout=TIMEOUT).run()
     assert not at.get("button_group")[0].proto.disabled
+
+
+def test_an_entry_is_closed_until_chosen_and_closed_again_by_its_number():
+    """The user's call (2026-10-17): open by default, a record per turn filled the page."""
+    at = AppTest.from_function(_draw_turn, args=(3, False), default_timeout=TIMEOUT).run()
+    assert not any(m.value.startswith("**Entry") for m in at.markdown)
+    at.get("button_group")[0].set_value(2).run()
+    assert "**Entry 2** · `BNID 100001`" in [m.value for m in at.markdown]
+    # A second click on the open number deselects it in the browser because the pills are not
+    # `required` (st.pills, 1.61.1). AppTest cannot press a selected pill again -- its
+    # `set_value(None)` keeps the last value -- so what is asserted is the setting that does it.
+    assert not at.get("button_group")[0].proto.required
+
+
+def test_a_new_question_closes_every_opened_entry(monkeypatch, repo, config, tmp_path):
+    model = scripted(
+        tool_call("get_entry", entry_id=100002),
+        says("about 1 micrometre [[100002]]"),
+        tool_call("get_entry", entry_id=100003),
+        says("and [[100003]]"),
+    )
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+    at.main.get("button_group")[0].set_value(1).run()
+    assert any(m.value.startswith("**Entry 1**") for m in at.main.markdown)
+    at = ask(at, "and the other?")
+    assert not at.exception
+    assert not any(m.value.startswith("**Entry") for m in at.main.markdown), "left open"

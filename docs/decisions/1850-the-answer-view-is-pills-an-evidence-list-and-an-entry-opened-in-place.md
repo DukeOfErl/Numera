@@ -66,6 +66,23 @@ store holds.
   - The finished retrieval box is labelled "Searched “…” · N retrieved, M cited".
   - The first view shows a heading, a paragraph and three example questions that ask themselves.
 
+**Revised the same day, after Yoav's first look (2026-10-17).**
+
+- **Entries start closed.** An opened entry per turn, open by default, filled the page as the
+  conversation scrolled. Now:
+  - nothing is open until a number is chosen;
+  - choosing the open number again closes it (the pills are not `required`);
+  - the dropdown above twelve entries starts on "Show no entry";
+  - sending a new question closes every turn's entry (`close_entries` deletes the widgets' keys).
+- **The trust scale is pinned.** It bears on practically every answer and table, so it is said
+  once, pinned in `st.bottom` with the question box, and only where the corpus has tiers. The
+  caveat marks, which depend on the entries shown, keep their legend under the list.
+- **Wording.**
+  - The subtitle is dropped.
+  - The first view's paragraph is Yoav's own.
+  - "No user configured." replaces the longer no-sign-in sentence.
+  - "Property name in the paper." replaces "In the paper.".
+
 ## Trade-off accepted
 
 - **Numbers live in the browser session.** After a reload they restart while the conversation

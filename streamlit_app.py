@@ -122,13 +122,17 @@ agent = web.agent_for(st.session_state, repo, admission)
 # and a re-run abandons the agent's generator mid-tool-call -- so while a question
 # is being answered, the ratings on past answers are drawn inert.
 answering = web.question_pending(st.session_state)
+# A new question closes every opened entry, so the page answering it is not a column of old
+# records (the user's call, 2026-10-17).
+if answering:
+    web.close_entries(st.session_state)
 
 # Page-level, drawn once, above everything that uses them, rather than once per turn.
 web.draw_page_style()
 web.draw_feedback_style()
 
-# The title, what the data is, and the prototype caveat in amber (ADR-1850).
-web.draw_header(harvested=bool(store))
+# The title and the prototype caveat in amber (ADR-1850).
+web.draw_header()
 
 # Both pinned to the top of the panel, before anything whose length depends on an
 # answer. The entries below are unbounded -- one question can fill the panel -- and
@@ -272,6 +276,6 @@ elif question := (
     st.rerun()
 
 # Under the question box: what is kept, and whose account it is kept against (ADR-1850).
-web.draw_footer(admission)
+web.draw_footer(admission, harvested=bool(store))
 # Written after the conversation, so the trail reflects the question just asked.
 web.draw_dev_panel(admission, session, dev_seat)

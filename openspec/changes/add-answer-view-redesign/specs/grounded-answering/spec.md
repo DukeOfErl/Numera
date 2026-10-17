@@ -33,13 +33,20 @@ number under the table -- from one button per entry, or from a list where there 
 -- and not in the side panel. The opened entry SHALL show every field the corpus holds for it that
 the table does not: the full reference with its links, the measurement method, and for a harvested
 value the quote, the property in the paper's words, the conditions, what the paper does not state,
-what a calculated value was calculated from, and what each objecting reviewer said. The choice SHALL
-NOT be offered while the agent is still answering, because a click re-runs the page and would cut
-the answer off.
+what a calculated value was calculated from, and what each objecting reviewer said. No entry SHALL be
+open until the reader chooses one; choosing the open one again SHALL close it, the list SHALL offer
+showing no entry, and sending a new question SHALL close every opened entry -- one record per turn,
+open by default, filled the page as a conversation grew. The choice SHALL NOT be offered while the
+agent is still answering, because a click re-runs the page and would cut the answer off.
 
 #### Scenario: A reader opens an entry
 - **WHEN** a reader chooses an entry's number under the table
 - **THEN** that entry is shown in full in the evidence column
+- **AND** before any is chosen, none is shown
+
+#### Scenario: A new question is sent
+- **WHEN** a reader sends a new question
+- **THEN** every entry opened in an earlier turn is closed
 
 #### Scenario: Many entries
 - **WHEN** an answer has more than twelve entries
@@ -165,10 +172,11 @@ the stars: `#` was dropped because papers label their rings and samples "#1–#4
 mark means SHALL be stated with the entries the answer rests on. The demo's reviews are models standing in for people,
 and a star a reader takes for a person's judgement is a claim the store does not make.
 
-What the scale means SHALL be stated once, with the entries table that accompanies the answer:
-which role each count stands for, what the caution means and what zero means. It SHALL NOT be
-repeated under the answer's prose, where it would be read before the evidence it explains and
-again beside it.
+What the scale means SHALL be stated once for the page, where it stays in view beside the question
+box, because it bears on practically every answer and table: which role each count stands for, what
+the simulated mark and the caution mean and what zero means. It SHALL NOT be repeated under each
+answer or each table. The caveat marks, which depend on the entries shown, keep their legend under
+the table.
 
 An entry from a corpus file carries no tier, and SHALL show no stars — not zero stars, which would
 say that someone looked and no one approved.
@@ -189,7 +197,7 @@ say that someone looked and no one approved.
 #### Scenario: A tier set by a simulated review
 - **WHEN** the review that set an entry's tier was simulated
 - **THEN** its stars carry the simulated mark
-- **AND** what the mark means is stated once, with the entries table
+- **AND** what the mark means is stated once for the page, in view beside the question box
 
 #### Scenario: A reader asks why an entry is disputed
 - **WHEN** a reader opens a disputed entry
