@@ -54,7 +54,10 @@ it, and the label an earlier pass gave it. Write two labels, nothing quoted:
 - {OBJECT_RULE}
 The two will be joined as "<measure> of <measured_object>", so write each to read well there."""
 
-MAX_OUTPUT_TOKENS = 200
+#: Two short labels need a few dozen tokens; 600 because a provider may count the model's own
+#: reasoning against the bound, and 14 of 452 demo entries came back empty at 200 for that reason
+#: (finish_reason "length" with no output), the long-object papers first.
+MAX_OUTPUT_TOKENS = 600
 
 
 class PropertyOutput(Frozen):

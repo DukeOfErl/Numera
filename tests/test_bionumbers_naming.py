@@ -159,10 +159,10 @@ def test_the_run_budget_stops_the_run_and_keeps_what_was_named(engine):
     model = _Namer(*[naming.PropertyOutput(measure="m", measured_object="o")] * 3)
 
     done = naming.backfill(
-        engine, model, "anthropic/claude-sonnet-5.5", ceiling=Ceiling(per_paper=1.0, per_run=0.005)
+        engine, model, "anthropic/claude-sonnet-5.5", ceiling=Ceiling(per_paper=1.0, per_run=0.009)
     )
 
-    # Each call projects $0.003 (500 in, 200 out at Sonnet's prices) and costs $0.0013; the
+    # Each call projects $0.007 (500 in, 600 out at Sonnet's prices) and costs $0.0013; the
     # third would cross the bound.
     assert done.stopped
     assert done.named == 2
