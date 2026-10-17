@@ -1284,6 +1284,12 @@ AWAITING_HARDEN_HARVEST = (
     "Readings of one article from different runs are served together and linked",
 )
 
+# `add-answer-view-redesign`, being built: each moves to COVERED as its tests land.
+AWAITING_THE_REDESIGN = (
+    "Cited entries are numbered through the session",
+    "An entry is opened beside the answer",
+)
+
 # `add-hosted-tracing`. Each requirement names the tests that assert it in both
 # directions; the conditions of the allowance pause are pure and tested beside the
 # tracer, the command that asks is tested on its own.
@@ -1358,6 +1364,7 @@ UNMAPPED: dict[str, str] = {
     **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),
     **dict.fromkeys(AWAITING_HARDEN_HARVEST, "harden-harvest is proposed, not built"),
+    **dict.fromkeys(AWAITING_THE_REDESIGN, "add-answer-view-redesign is being built"),
 }
 
 
