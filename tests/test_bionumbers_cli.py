@@ -273,6 +273,7 @@ def test_extract_ends_every_paper_in_a_state_and_accounts_for_every_claim(
     assert summary["papers"] == 2
     assert summary["papers_left_unread"] == 0
     assert summary["items"] == 1 and summary["not_reviewable"] == 1
+    assert summary["unnamed"] == 0
     assert summary["unlicensed"] == 0
     # The paper's record carries all three calls -- extraction and both second texts -- and the
     # run's spend is that paper's, since the other paper was never sent. The dollar figure is

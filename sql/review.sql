@@ -111,8 +111,8 @@ create table if not exists review_item (
     item_json       text not null,
     created_at      timestamptz not null default now(),
     -- The entry's property as a reader is shown it (ADR-1700): the harvest's "measure of object"
-    -- name, or the question a questioned run asked. Written on load; for older items by
-    -- `bionumbers name-properties`, never into item_json, which stays what the reviewer saw.
+    -- name. Written on load, empty where the model's two parts made no name, until
+    -- `bionumbers name-properties` names it; never into item_json, which stays what the reviewer saw.
     property        text not null default '',
     foreign key (run_id, pmcid) references review_paper (run_id, pmcid)
 );

@@ -222,7 +222,8 @@ def test_a_harvested_claim_is_named_by_its_label_and_keeps_its_class_and_species
 
     assert result.state is PaperState.CLAIMS_FOUND
     (claim,) = result.claims
-    assert claim.property_asked == "Replication period of the E. coli chromosome"
+    assert claim.property == "Replication period of the E. coli chromosome"
+    assert claim.property_asked == claim.property
     assert (claim.property_class, claim.organism_name) == ("TIME", "Escherichia coli")
     assert harvest.question_of(claim) == (
         "Replication period of the E. coli chromosome (Escherichia coli)"
@@ -238,12 +239,14 @@ def test_a_harvested_claim_is_named_by_its_label_and_keeps_its_class_and_species
     ],
     ids=["bare measure", "bare object", "measure repeated"],
 )
-def test_a_claim_that_names_only_a_measure_or_only_an_object_is_dropped_and_recorded(
+def test_a_claim_whose_parts_make_no_name_is_kept_with_no_property(
     article, measure, measured_object
 ):
     """The negative of the naming rule (ADR-1700), varying the parts: the first live harvest
-    produced "average length" and "cytokinetic actin rings", and neither is an entry. Dropped
-    like a claim whose quote failed, by id, rather than kept under the article's own term."""
+    produced "average length" and "cytokinetic actin rings", and neither is a name. The value
+    is verified, so it stays, labelled by the article's own term for the review screen; the
+    property is empty for `name-properties` to fill (Yoav, 2026-10-17: a dropped value costs
+    a paper's extraction to get back, a name a third of a cent)."""
     draft = a_draft(
         article,
         measure=measure,
@@ -256,13 +259,15 @@ def test_a_claim_that_names_only_a_measure_or_only_an_object_is_dropped_and_reco
         ScriptedModel(ExtractionOutput(state="CLAIMS_FOUND", claims=[draft])), article
     )
 
-    assert result.claims == ()
-    assert result.unverifiable == (f"h1-{PAPER.pmcid}-1",)
+    (claim,) = result.claims
+    assert claim.property == ""
+    assert claim.property_asked == "time replisomes are present"
+    assert result.unverifiable == ()
 
 
 def test_a_question_still_names_the_claim_when_one_was_asked(article):
     """Question mode is untouched: the parts the model may write do not displace the question,
-    and their absence drops nothing -- the naming rule is the harvest's (ADR-1700)."""
+    and their absence leaves the property empty -- the naming rule is the harvest's (ADR-1700)."""
     draft = a_draft(
         article, measure="", measured_object="", organism_name="E. coli", property_class="TIME"
     )
@@ -279,6 +284,7 @@ def test_a_question_still_names_the_claim_when_one_was_asked(article):
     )
 
     assert result.claims[0].property_asked == "time to replicate the chromosome"
+    assert result.claims[0].property == ""
     assert model.calls[0]["system"][1]["text"] == INSTRUCTION
 
 

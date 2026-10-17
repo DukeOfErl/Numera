@@ -57,6 +57,7 @@ def a_claim(claim_id: str = "c1") -> Claim:
     return Claim(
         claim_id=claim_id,
         property_asked="doubling time",
+        property="Doubling time of Escherichia coli",
         property_in_paper="generation time",
         value="39",
         unit="min",
@@ -120,7 +121,7 @@ def test_a_run_loads_its_papers_and_items(engine):
     assert (item.item_id, item.pmcid, item.claim_id) == ("i1", "PMC1", "c1")
     assert (item.value, item.unit, item.second_kind) == ("39", "min", "DISTRACTOR")
     assert item.distractor_type == "ADJACENT_CONDITION"
-    assert item.property == "doubling time", "the claim's name, for the reader (ADR-1700)"
+    assert item.property == "Doubling time of Escherichia coli", "the claim's name (ADR-1700)"
     assert ReviewItem.model_validate_json(item.item_json) == an_item("i1")
 
 
@@ -158,7 +159,7 @@ def test_fill_properties_names_only_the_unnamed_items_and_leaves_item_json_alone
     assert written == 1
     assert sorted(asked) == ["i2", "i3"], "an item already named is not asked about"
     by_id = {row.item_id: (row.property, row.item_json) for row in rows(engine, store.review_item)}
-    assert by_id["i1"][0] == "doubling time"
+    assert by_id["i1"][0] == "Doubling time of Escherichia coli"
     assert by_id["i2"][0] == "Doubling time of Escherichia coli"
     assert by_id["i3"][0] == ""
     assert ReviewItem.model_validate_json(by_id["i2"][1]) == an_item("i2"), "what was shown stays"

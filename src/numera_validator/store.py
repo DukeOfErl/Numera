@@ -157,9 +157,9 @@ review_item = Table(
     Column("item_json", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     # The entry's property as a reader is shown it: the harvest's "measure of object" name
-    # (ADR-1700), or the question a questioned run asked. Written on load from the claim; for an
-    # item loaded before the name was asked for, by `fill_properties`, and never into `item_json`,
-    # which stays what the reviewer saw.
+    # (ADR-1700). Written on load from the claim, empty where the parts made no name or a
+    # question was asked, until `fill_properties` names it -- and never into `item_json`, which
+    # stays what the reviewer saw.
     Column("property", Text, nullable=False, default=""),
     ForeignKeyConstraint(["run_id", "pmcid"], ["review_paper.run_id", "review_paper.pmcid"]),
 )
@@ -1082,5 +1082,5 @@ def _item_row(item: ReviewItem, *, question: str, run_id: str, now: datetime) ->
         # reviewer never saw (D5).
         "item_json": item.model_dump_json(),
         "created_at": now,
-        "property": item.claim.property_asked,
+        "property": item.claim.property,
     }

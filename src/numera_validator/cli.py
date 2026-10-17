@@ -548,6 +548,8 @@ def extract_run(args: argparse.Namespace) -> int:
         "papers_left_unread": papers_left_unread,
         "items": len(items),
         "not_reviewable": len(not_reviewable),
+        # Claims kept with no property name, for `name-properties` (ADR-1700).
+        "unnamed": sum(1 for item in items if not item.claim.property),
         "unlicensed": unlicensed,
         "stopped": stopped,
     }

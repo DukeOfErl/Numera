@@ -32,7 +32,7 @@ ADR block: `1700`–`1740` (reserved in `CLAUDE.md`).
 
 ## 6. A property names the measure and what it measures (Yoav, 2026-10-16; done on `feat/property-names`)
 
-- [x] 6.1 The harvest asks for `measure` and `measured_object` in place of `property_name`; `naming.property_name` joins them; a claim whose parts make no name is dropped and recorded (ADR-1700)
+- [x] 6.1 The harvest asks for `measure` and `measured_object` in place of `property_name`; `naming.property_name` joins them; a claim whose parts make no name is kept with an empty property for the backfill, and the run counts it (ADR-1700, amended 2026-10-17)
 - [x] 6.2 `review_item.property`, written on load; `store.fill_properties` and `bionumbers name-properties` for a store loaded earlier
 - [x] 6.3 Tests: the join, the seven refusals, the three dropped drafts, the backfill's resume, failure and budget, the CLI
 - [x] 6.4 Name the 452 entries of `harvest-demo.sqlite` and back it up; read the refusals both ways before trusting the rule (2026-10-17: 452 named, 0 refused, 3 duplicate names remain; median 14 words)

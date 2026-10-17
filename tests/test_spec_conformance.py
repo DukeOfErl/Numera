@@ -895,7 +895,7 @@ COVERED.update(
             "test_bionumbers_harvest.py::test_a_harvested_claim_is_named_by_its_label_and_keeps_its_class_and_species",
             "test_bionumbers_harvest.py::test_the_instruction_asks_for_a_latin_name_and_a_value_without_its_unit",
             "test_bionumbers_harvest.py::test_a_value_beside_others_of_its_kind_is_named_by_its_condition_and_the_control_is_not",
-            "test_bionumbers_harvest.py::test_a_claim_that_names_only_a_measure_or_only_an_object_is_dropped_and_recorded",
+            "test_bionumbers_harvest.py::test_a_claim_whose_parts_make_no_name_is_kept_with_no_property",
             "test_bionumbers_naming.py::test_the_name_is_the_measure_of_the_object",
             "test_bionumbers_naming.py::test_a_part_missing_or_repeated_makes_no_name",
             "test_bionumbers_naming.py::test_the_backfill_names_each_unnamed_item_and_records_what_it_refused",

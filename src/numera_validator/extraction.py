@@ -562,9 +562,8 @@ def _assemble(
 
     A claim with any failed quote is dropped whole and its id recorded: a claim missing its
     temperature quote is not a claim one field short, it is a claim whose conditions nobody
-    checked. So is a harvested claim whose property names only a measure or only an object. A
-    rejected candidate is dropped silently, because it is a pool the second-text step draws
-    from, and a pool coming up short costs a reviewer nothing.
+    checked. A rejected candidate is dropped silently, because it is a pool the second-text
+    step draws from, and a pool coming up short costs a reviewer nothing.
     """
     claims: list[Claim] = []
     rejected: list[RejectedCandidate] = []
@@ -579,13 +578,11 @@ def _assemble(
             unverifiable.append(claim_id)
             continue
         quote = _quote(doc, checked, ("claim", index, "quote"), draft.quote.text)
+        # The harvest's rule (ADR-1700): an entry's name says what was measured and of what.
+        # Where the two parts make no name the value is kept and the name left empty for
+        # `bionumbers name-properties`: a verified value costs a paper's extraction to get back,
+        # a name a third of a cent (Yoav, 2026-10-17).
         named = naming.property_name(draft.measure, draft.measured_object)
-        if not question and not named:
-            # The harvest's rule (ADR-1700): an entry names what was measured and of what, or it
-            # is not an entry. Dropped and recorded like a failed quote, not kept under the
-            # article's own term -- "average length" is the defect, not a fallback.
-            unverifiable.append(claim_id)
-            continue
         if draft.candidate_kind not in CLAIMABLE:
             # The spec's rule, enforced here rather than trusted to the instruction: a
             # cited or assumed value is not this paper's claim, whichever list the model
@@ -607,8 +604,10 @@ def _assemble(
         claims.append(
             Claim(
                 claim_id=claim_id,
-                # No question in harvest mode: the claim is named by the measure of the object.
-                property_asked=question or named,
+                # No question in harvest mode: the claim is labelled by the measure of the
+                # object, falling back to the article's own term where the parts made no name.
+                property_asked=question or named or draft.property_in_paper,
+                property=named,
                 property_in_paper=draft.property_in_paper,
                 # A class outside the scope's list is a label the model invented or borrowed
                 # from another domain; the value is still verified, so the label goes, not the

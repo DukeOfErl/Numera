@@ -40,9 +40,9 @@ article names it. The value field SHALL hold no unit.
 The entry's property SHALL be one name that says both what was measured and of what — "Average
 length of F-actin filaments in non-contracting rings", never "average length" nor "cytokinetic
 actin rings" alone. The system SHALL join the two parts the model writes into that name, and
-SHALL refuse an entry whose parts do not make one: a part missing, or one part repeating the
-other. A refused entry SHALL be dropped and recorded by its identifier, not kept under the
-article's own term.
+SHALL give no name to an entry whose parts do not make one: a part missing, or one part repeating
+the other. Such an entry SHALL be kept — its value is verified — labelled by the article's own
+term and with no property until it is named on request; the run SHALL say how many it left so.
 
 Where an article reports the same quantity under more than one condition, the object of every
 value but the article's control SHALL end with its condition as a scientist would name it — growth
@@ -65,7 +65,8 @@ without rewriting the record a reviewer was shown.
 #### Scenario: A bare measure or a bare object
 - **WHEN** the model names a value "average length" with nothing it is a length of, or
   "cytokinetic actin rings" with nothing measured
-- **THEN** the entry is dropped and its identifier recorded
+- **THEN** the entry is kept with no property, the article's own term stands as its label, and
+  the run counts it among the unnamed
 
 #### Scenario: A store named earlier
 - **WHEN** a store holds entries with no property name and the naming is requested
