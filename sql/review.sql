@@ -110,8 +110,13 @@ create table if not exists review_item (
     distractor_type text,
     item_json       text not null,
     created_at      timestamptz not null default now(),
+    -- The entry's property as a reader is shown it (ADR-1700): the harvest's "measure of object"
+    -- name, or the question a questioned run asked. Written on load; for older items by
+    -- `bionumbers name-properties`, never into item_json, which stays what the reviewer saw.
+    property        text not null default '',
     foreign key (run_id, pmcid) references review_paper (run_id, pmcid)
 );
+alter table review_item add column if not exists property text not null default '';
 
 -- What one reviewer decided about one item. `reviewer` is the signed-in account's address, and
 -- null where no identity is configured — which `user-identity` already allows and this task

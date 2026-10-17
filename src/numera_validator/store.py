@@ -156,6 +156,11 @@ review_item = Table(
     Column("distractor_type", Text),
     Column("item_json", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    # The entry's property as a reader is shown it: the harvest's "measure of object" name
+    # (ADR-1700), or the question a questioned run asked. Written on load from the claim; for an
+    # item loaded before the name was asked for, by `fill_properties`, and never into `item_json`,
+    # which stays what the reviewer saw.
+    Column("property", Text, nullable=False, default=""),
     ForeignKeyConstraint(["run_id", "pmcid"], ["review_paper.run_id", "review_paper.pmcid"]),
 )
 
@@ -445,6 +450,35 @@ def fill_references(engine: Any, csl_json_for: Callable[[str], str]) -> int:
                 .values(csl_json=record)
             )
             written += 1
+    return written
+
+
+def fill_properties(engine: Any, property_for: Callable[[ReviewItem], str]) -> int:
+    """Give every item without a property the name `property_for(item)` returns.
+
+    For a store loaded before `review_item.property` existed. An item already named is not
+    asked about; one the callable answers empty for stays empty, so a run can be repeated until
+    every item is named. Each name is written as it is decided, so a run that stops keeps what it
+    had named. Returns the rows written.
+    """
+    with engine.begin() as conn:
+        _bound(conn)
+        unnamed = conn.execute(
+            select(review_item.c.item_id, review_item.c.item_json).where(
+                review_item.c.property == ""
+            )
+        ).all()
+    written = 0
+    for item_id, item_json in unnamed:
+        named = property_for(ReviewItem.model_validate_json(item_json))
+        if not named:
+            continue
+        with engine.begin() as conn:
+            _bound(conn)
+            conn.execute(
+                update(review_item).where(review_item.c.item_id == item_id).values(property=named)
+            )
+        written += 1
     return written
 
 
@@ -1048,4 +1082,5 @@ def _item_row(item: ReviewItem, *, question: str, run_id: str, now: datetime) ->
         # reviewer never saw (D5).
         "item_json": item.model_dump_json(),
         "created_at": now,
+        "property": item.claim.property_asked,
     }

@@ -54,11 +54,19 @@ class ScriptedModel:
         return SimpleNamespace(parsed_output=self.answers.pop(0), usage=USAGE)
 
 
-def a_draft(article, *, property_name: str, organism_name: str, property_class: str) -> ClaimDraft:
+def a_draft(
+    article,
+    *,
+    measure: str,
+    measured_object: str = "the E. coli chromosome",
+    organism_name: str,
+    property_class: str,
+) -> ClaimDraft:
     passage = next(p.id for p in article.passages if MEASURED_SENTENCE in p.text)
     return ClaimDraft(
         property_in_paper="time replisomes are present",
-        property_name=property_name,
+        measure=measure,
+        measured_object=measured_object,
         property_class=property_class,
         organism_name=organism_name,
         value="65",
@@ -124,8 +132,11 @@ def test_a_value_beside_others_of_its_kind_is_named_by_its_condition_and_the_con
     """Blind review of 60 seeded items (2026-10-07): about a third of the adjacent-condition
     items were undecidable from the name alone -- two "Axonal actin ring spacing (mouse)", six
     "Hyphal cell length". The control stays unnamed so a reviewer picks it by judgement."""
-    rule = harvest.HARVEST_INSTRUCTION.split("- property_name:", 1)[1].split("- property_class")[0]
-    assert "more\n  than one condition" in rule or "more than one condition" in rule
+    rule = harvest.HARVEST_INSTRUCTION.split("- measured_object:", 1)[1].split("- property_class")[
+        0
+    ]
+    assert "- measure:" in harvest.HARVEST_INSTRUCTION
+    assert "more than one condition" in rule
     assert "never as a table's row or column" in rule
     assert "control or wild type carries no condition" in rule
     assert "THE VALUE FIELD HOLDS NO UNIT" in harvest.HARVEST_INSTRUCTION
@@ -199,7 +210,8 @@ def test_the_paper_is_still_the_cached_first_block_and_the_harvest_instruction_t
 def test_a_harvested_claim_is_named_by_its_label_and_keeps_its_class_and_species(article):
     draft = a_draft(
         article,
-        property_name="replication period",
+        measure="replication period",
+        measured_object="the E. coli chromosome",
         organism_name="Escherichia coli",
         property_class="TIME",
     )
@@ -210,29 +222,49 @@ def test_a_harvested_claim_is_named_by_its_label_and_keeps_its_class_and_species
 
     assert result.state is PaperState.CLAIMS_FOUND
     (claim,) = result.claims
-    assert claim.property_asked == "replication period"
+    assert claim.property_asked == "Replication period of the E. coli chromosome"
     assert (claim.property_class, claim.organism_name) == ("TIME", "Escherichia coli")
-    assert harvest.question_of(claim) == "replication period (Escherichia coli)"
+    assert harvest.question_of(claim) == (
+        "Replication period of the E. coli chromosome (Escherichia coli)"
+    )
 
 
-def test_a_claim_with_no_label_falls_back_to_the_article_s_own_term(article):
-    """The negative of the naming rule, varying the label: an empty one must not leave a claim
-    with no name at all, since the review screen judges a text against it."""
-    draft = a_draft(article, property_name="", organism_name="", property_class="")
+@pytest.mark.parametrize(
+    ("measure", "measured_object"),
+    [
+        ("Average length", ""),  # a measure of nothing
+        ("", "cytokinetic actin rings"),  # an object with no measure
+        ("Length", "actin filament length"),  # the object says the measure again
+    ],
+    ids=["bare measure", "bare object", "measure repeated"],
+)
+def test_a_claim_that_names_only_a_measure_or_only_an_object_is_dropped_and_recorded(
+    article, measure, measured_object
+):
+    """The negative of the naming rule (ADR-1700), varying the parts: the first live harvest
+    produced "average length" and "cytokinetic actin rings", and neither is an entry. Dropped
+    like a claim whose quote failed, by id, rather than kept under the article's own term."""
+    draft = a_draft(
+        article,
+        measure=measure,
+        measured_object=measured_object,
+        organism_name="",
+        property_class="",
+    )
 
     result = harvested(
         ScriptedModel(ExtractionOutput(state="CLAIMS_FOUND", claims=[draft])), article
     )
 
-    (claim,) = result.claims
-    assert claim.property_asked == "time replisomes are present"
-    assert harvest.question_of(claim) == "time replisomes are present"
+    assert result.claims == ()
+    assert result.unverifiable == (f"h1-{PAPER.pmcid}-1",)
 
 
 def test_a_question_still_names_the_claim_when_one_was_asked(article):
-    """Question mode is untouched: the label the model may write does not displace the question."""
+    """Question mode is untouched: the parts the model may write do not displace the question,
+    and their absence drops nothing -- the naming rule is the harvest's (ADR-1700)."""
     draft = a_draft(
-        article, property_name="replication period", organism_name="E. coli", property_class="TIME"
+        article, measure="", measured_object="", organism_name="E. coli", property_class="TIME"
     )
     model = ScriptedModel(ExtractionOutput(state="CLAIMS_FOUND", claims=[draft]))
 
@@ -252,7 +284,7 @@ def test_a_question_still_names_the_claim_when_one_was_asked(article):
 
 def test_a_fabricated_quote_is_dropped_in_harvest_mode_as_in_any_other(article):
     draft = a_draft(
-        article, property_name="replication period", organism_name="E. coli", property_class="TIME"
+        article, measure="replication period", organism_name="E. coli", property_class="TIME"
     )
     invented = draft.model_copy(
         update={"quote": QuoteDraft(text="are present for 40 min on average", passage_id="p1")}
@@ -272,7 +304,7 @@ def test_the_model_that_answered_is_recorded_beside_the_one_asked_for(article):
     """A router or a dated build answers under another name than the one asked for; the
     fingerprint said only what was asked."""
     draft = a_draft(
-        article, property_name="replisome lifetime", organism_name="E. coli", property_class="TIME"
+        article, measure="replisome lifetime", organism_name="E. coli", property_class="TIME"
     )
     model = ScriptedModel(
         ExtractionOutput(state="CLAIMS_FOUND", claims=[draft]),
@@ -287,7 +319,7 @@ def test_the_model_that_answered_is_recorded_beside_the_one_asked_for(article):
 
 
 def test_a_retry_answered_by_another_model_records_both(article):
-    invented = a_draft(article, property_name="x", organism_name="E. coli", property_class="TIME")
+    invented = a_draft(article, measure="lifetime", organism_name="E. coli", property_class="TIME")
     invented = invented.model_copy(
         update={
             "quote": invented.quote.model_copy(update={"text": "a sentence no article contains"})
@@ -319,7 +351,7 @@ def test_a_class_outside_the_scope_loses_its_label_and_keeps_its_value(article, 
     list, would be counted on the dashboards as a class of this one. The value is verified, so
     the claim stays; only the label goes."""
     draft = a_draft(
-        article, property_name="replisome lifetime", organism_name="E. coli", property_class=label
+        article, measure="replisome lifetime", organism_name="E. coli", property_class=label
     )
     result = extract(
         ScriptedModel(ExtractionOutput(state="CLAIMS_FOUND", claims=[draft])),

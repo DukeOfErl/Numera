@@ -895,6 +895,13 @@ COVERED.update(
             "test_bionumbers_harvest.py::test_a_harvested_claim_is_named_by_its_label_and_keeps_its_class_and_species",
             "test_bionumbers_harvest.py::test_the_instruction_asks_for_a_latin_name_and_a_value_without_its_unit",
             "test_bionumbers_harvest.py::test_a_value_beside_others_of_its_kind_is_named_by_its_condition_and_the_control_is_not",
+            "test_bionumbers_harvest.py::test_a_claim_that_names_only_a_measure_or_only_an_object_is_dropped_and_recorded",
+            "test_bionumbers_naming.py::test_the_name_is_the_measure_of_the_object",
+            "test_bionumbers_naming.py::test_a_part_missing_or_repeated_makes_no_name",
+            "test_bionumbers_naming.py::test_the_backfill_names_each_unnamed_item_and_records_what_it_refused",
+            "test_bionumbers_naming.py::test_a_named_item_is_not_asked_about_again",
+            "test_bionumbers_naming.py::test_a_reviewed_item_s_record_is_not_rewritten",
+            "test_bionumbers_cli.py::test_name_properties_names_the_unnamed_items_and_says_what_it_refused",
         ),
         "A hand-chosen article's licence is the index's where the document is silent": (
             "test_bionumbers_cli.py::test_harvest_takes_the_licence_from_the_index_when_the_document_states_it_in_prose",

@@ -24,6 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from numera_validator.extraction import INSTRUCTION
+from numera_validator.naming import MEASURE_RULE, OBJECT_RULE
 from numera_validator.records import CONDITION_FIELDS, Claim
 
 #: At most this many claims from one paper. A bound on cost before it is one on content: every
@@ -341,16 +342,9 @@ THE REJECTED LIST IS SHORT HERE. List at most five rejected candidates: numbers 
 wanted classes that read like this article's own values and are not (CITED, PARAMETER,
 COMPILED). Leave every other number in the article out.
 
-THREE LABELS ARE YOURS TO WRITE. They are labels, not quotes; everything else stays quoted.
-- property_name: a short general name for the quantity, worded as a database heading,
-  without the value or the organism. Where the article reports the quantity under more
-  than one condition, the name of every value but the control ends with its condition,
-  named as a scientist would name it -- the growth state, genotype or construct, genome
-  assembly ("haplotype 1 assembly"), tissue, developmental stage, or position ("third
-  hyphal compartment from the tip", not "3rd cell"); outside biology, the sample or state
-  -- and never as a table's row or column label, nor left to a heading that spans several
-  columns. The value the article marks as its control or wild type carries no condition in
-  its name.
+FOUR LABELS ARE YOURS TO WRITE. They are labels, not quotes; everything else stays quoted.
+- {MEASURE_RULE}
+- {OBJECT_RULE}
 - property_class: one of the class names in the user turn.
 - organism_name: the species the value belongs to, as the Latin binomial the article gives
   for it anywhere in its text -- the common name ("yeast", "mouse") only where the article

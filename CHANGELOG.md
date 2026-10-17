@@ -78,6 +78,12 @@ any release; `1.0.0` when it stabilizes.
   them all into one line.
 - A harvest store passed where a corpus file is expected is refused by name instead of reported as
   a corrupt line, and the evaluation command says why it cannot read the store yet.
+- **A harvested property names the measure and what it measures.** The extraction asks for the
+  two parts, `measure` and `measured_object`, in place of one general label, and the application
+  joins them into one name ("Average length of F-actin filaments in non-contracting rings"); a
+  claim whose parts make no name is dropped and recorded. The name is on `review_item.property`
+  for the ask agent to show. `bionumbers name-properties` names a store loaded earlier, one call
+  per entry without re-reading the paper (ADR-1700).
 - **One model call under the ledger.** The extractor and the simulated review made the same
   eight-step call in two copies; both now go through `spend.call`, so a guard fixed in one is
   fixed in the other. The two things the review page takes from its deployment, the database and

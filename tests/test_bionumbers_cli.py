@@ -18,7 +18,7 @@ import pytest
 from europepmc_double import TABLES_PMCID, FakeEuropePMC, fixture
 from sqlalchemy import create_engine, func, select
 
-from numera_validator import cli, harvest, store
+from numera_validator import cli, harvest, naming, store
 from numera_validator.cache import DocumentCache
 from numera_validator.distractor import Candidate, SecondTextOutput
 from numera_validator.europepmc import VERSION_OF_RECORD, EuropePMC, licence_of
@@ -74,8 +74,12 @@ def passage_holding(phrase: str) -> str:
 
 
 def claim_draft(sentence: str, value: str, unit: str) -> ClaimDraft:
+    """The two naming parts are filled so a harvested draft is an entry (ADR-1700); a questioned
+    run ignores them."""
     return ClaimDraft(
         property_in_paper="aperture",
+        measure="Diameter",
+        measured_object="the FIB-SEM milling aperture",
         value=value,
         unit=unit,
         kind=ClaimKind.SINGLE,
@@ -461,11 +465,7 @@ def test_extracting_a_harvested_run_asks_no_question_and_names_each_item_by_its_
 ):
     cli.main(["harvest", "h1", "--pmcids", TABLES_PMCID, *common(dirs)])
     draft = claim_draft(APERTURE_SENTENCE, "100", "μm").model_copy(
-        update={
-            "property_name": "aperture diameter",
-            "property_class": "SIZE",
-            "organism_name": "Coxiella burnetii",
-        }
+        update={"property_class": "SIZE", "organism_name": "Coxiella burnetii"}
     )
     model = scripted(
         monkeypatch, ExtractionOutput(state="CLAIMS_FOUND", claims=[draft]), distractor_output()
@@ -486,9 +486,12 @@ def test_extracting_a_harvested_run_asks_no_question_and_names_each_item_by_its_
     assert seen[0]["messages"] == [harvest.user_turn()]
     assert seen[0]["max_tokens"] == harvest.MAX_TOKENS > MAX_TOKENS
     (item,) = read_jsonl(dirs.runs / "h1" / cli.ITEMS_FILE, ReviewItem)
-    assert item.question == "aperture diameter (Coxiella burnetii)"
+    assert item.question == "Diameter of the FIB-SEM milling aperture (Coxiella burnetii)"
     assert item.claim.property_class == "SIZE"
-    assert "aperture diameter (Coxiella burnetii)" in seen[1]["messages"][0]["content"]
+    assert (
+        "Diameter of the FIB-SEM milling aperture (Coxiella burnetii)"
+        in (seen[1]["messages"][0]["content"])
+    )
     (result,) = read_results(dirs.runs / "h1" / "results.jsonl")
     assert result.fingerprint.instruction_sha256 == instruction_sha256(harvest.HARVEST_INSTRUCTION)
     assert result.fingerprint.scope == item.claim.fingerprint.scope == harvest.DEFAULT_SCOPE
@@ -533,7 +536,7 @@ def test_a_harvested_run_from_before_scopes_is_read_as_biology(monkeypatch, prov
 def test_a_harvested_item_is_stored_under_its_own_question(monkeypatch, provider, dirs, capsys):
     cli.main(["harvest", "h1", "--pmcids", TABLES_PMCID, *common(dirs)])
     draft = claim_draft(APERTURE_SENTENCE, "100", "μm").model_copy(
-        update={"property_name": "aperture diameter", "organism_name": "Coxiella burnetii"}
+        update={"organism_name": "Coxiella burnetii"}
     )
     scripted(
         monkeypatch, ExtractionOutput(state="CLAIMS_FOUND", claims=[draft]), distractor_output()
@@ -547,7 +550,10 @@ def test_a_harvested_item_is_stored_under_its_own_question(monkeypatch, provider
 
     with engine.begin() as conn:
         assert conn.scalar(select(store.review_item.c.question)) == (
-            "aperture diameter (Coxiella burnetii)"
+            "Diameter of the FIB-SEM milling aperture (Coxiella burnetii)"
+        )
+        assert conn.scalar(select(store.review_item.c.property)) == (
+            "Diameter of the FIB-SEM milling aperture"
         )
         assert conn.scalar(select(store.review_paper.c.question)) == cli.HARVEST_QUESTION
     engine.dispose()
@@ -731,7 +737,14 @@ def test_the_model_is_pinned_to_the_provider_its_price_was_read_from(monkeypatch
 
 
 #: Columns a file written by the first `create_all` lacks.
-NEWER_COLUMNS = {"domain", "topic", "value_read", "answered_by", "value_agreement", "csl_json"}
+NEWER_COLUMNS = {
+    "domain",
+    "topic",
+    "value_read",
+    "answered_by",
+    "value_agreement",
+    "csl_json",
+}
 
 
 def test_upgrade_store_brings_an_older_file_up_to_date(tmp_path, capsys):
@@ -757,6 +770,7 @@ def test_upgrade_store_brings_an_older_file_up_to_date(tmp_path, capsys):
                 )
                 for c in table.columns
                 if c.name not in NEWER_COLUMNS
+                and (table.name, c.name) != ("review_item", "property")
             ],
         )
     old.create_all(engine)
@@ -766,10 +780,71 @@ def test_upgrade_store_brings_an_older_file_up_to_date(tmp_path, capsys):
 
     assert code == 0
     out = capsys.readouterr().out
-    assert "3 column(s) added, 0 paper(s) filled" in out
+    assert "4 column(s) added, 0 paper(s) filled" in out
     assert "reference" not in out, "without --data there is nothing to read a record from"
     assert cli.main(["upgrade-store", "--db-url", url]) == 0
     assert "0 column(s) added" in capsys.readouterr().out
+
+
+def test_name_properties_names_the_unnamed_items_and_says_what_it_refused(
+    monkeypatch, provider, dirs, capsys
+):
+    """The backfill for a store loaded before the two naming parts were asked for (ADR-1700):
+    two items in the store, one named and one refused, every refusal printed with its parts."""
+    cli.main(["harvest", "h1", "--pmcids", TABLES_PMCID, *common(dirs)])
+    drafts = [
+        claim_draft(APERTURE_SENTENCE, "100", "μm"),
+        claim_draft(DWELL_SENTENCE, "2", "μs").model_copy(update={"property_in_paper": "dwell"}),
+    ]
+    scripted(
+        monkeypatch,
+        ExtractionOutput(state="CLAIMS_FOUND", claims=drafts),
+        distractor_output(),
+        distractor_output(),
+    )
+    assert cli.main(["extract", "h1", *common(dirs)]) == 0
+    url = f"sqlite:///{dirs.runs / 'review.db'}"
+    engine = create_engine(url)
+    store.create_all(engine)
+    assert cli.main(["load", "h1", "--runs", str(dirs.runs), "--db-url", url]) == 0
+    with engine.begin() as conn:
+        conn.execute(store.review_item.update().values(property=""))
+    scripted(
+        monkeypatch,
+        naming.PropertyOutput(measure="Diameter", measured_object="the milling aperture"),
+        naming.PropertyOutput(measure="Dwell time", measured_object=""),
+    )
+
+    code = cli.main(
+        [
+            "name-properties",
+            "--db-url",
+            url,
+            "--model",
+            "anthropic/claude-sonnet-5.5",
+            "--ceiling",
+            "1",
+        ]
+    )
+
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "1 item(s) named, 1 refused, 0 failed" in out
+    assert "refused " in out and "'Dwell time' / ''" in out
+    with engine.begin() as conn:
+        named = sorted(conn.scalars(select(store.review_item.c.property)))
+    assert named == ["", "Diameter of the milling aperture"]
+    engine.dispose()
+
+
+def test_name_properties_with_an_unpriced_model_refuses_before_any_call(tmp_path, capsys):
+    url = f"sqlite:///{tmp_path}/demo.sqlite"
+    store.create_all(store.engine_from_url(url))
+
+    code = cli.main(["name-properties", "--db-url", url, "--model", "nobody/nothing"])
+
+    assert code == 2
+    assert "no prices are configured for nobody/nothing" in capsys.readouterr().err
 
 
 def test_upgrade_store_with_the_cache_fills_each_paper_s_record_from_its_full_text(

@@ -27,7 +27,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from numera_validator import curated, environment, harvest, paths, store
+from numera_validator import curated, environment, harvest, naming, paths, store
 from numera_validator.cache import DocumentCache
 from numera_validator.distractor import choose_second_text
 from numera_validator.europepmc import (
@@ -646,6 +646,44 @@ def upgrade_store(args: argparse.Namespace) -> int:
     return 0
 
 
+# --- name-properties --------------------------------------------------------------------------
+
+
+def name_properties(args: argparse.Namespace) -> int:
+    """Name every loaded item that has no property yet: the measure of the object (ADR-1700)."""
+    url = args.db_url or os.environ.get(DB_URL_ENV, "")
+    if not url:
+        print(f"Give --db-url or set {DB_URL_ENV} to the review database.", file=sys.stderr)
+        return 2
+    if args.model not in PRICES:
+        known = sorted(PRICES)
+        print(f"no prices are configured for {args.model}; known: {known}", file=sys.stderr)
+        return 2
+    try:
+        model = _model(args.model)
+    except NoCredential:
+        print(f"Set {API_KEY_ENV} in the environment before naming properties.", file=sys.stderr)
+        return 2
+    done = naming.backfill(
+        _engine(url),
+        model,
+        args.model,
+        ceiling=Ceiling(per_paper=args.ceiling, per_run=args.budget),
+    )
+    print(
+        f"{done.named} item(s) named, {len(done.refused)} refused, {len(done.failed)} failed, "
+        f"${done.spend_usd:.2f} spent"
+    )
+    for refusal in done.refused:
+        print(f"refused {refusal.item_id}: {refusal.measure!r} / {refusal.measured_object!r}")
+    for failed in done.failed:
+        print(f"failed {failed}")
+    if done.stopped:
+        print(done.stopped, file=sys.stderr)
+        return 1
+    return 0
+
+
 # --- simulate-review --------------------------------------------------------------------------
 
 
@@ -782,6 +820,15 @@ def _parser() -> argparse.ArgumentParser:
         "its full text",
     )
     upgrade_cmd.set_defaults(command=upgrade_store)
+
+    name_cmd = commands.add_parser(
+        "name-properties", help="name each loaded item without a property: measure of object"
+    )
+    name_cmd.add_argument("--db-url", default=None, help=f"else {DB_URL_ENV}")
+    name_cmd.add_argument("--model", default=DEFAULT_MODEL, help="the OpenRouter model id")
+    name_cmd.add_argument("--ceiling", type=float, default=0.25, help="USD per paper")
+    name_cmd.add_argument("--budget", type=float, default=2.0, help="USD for the run")
+    name_cmd.set_defaults(command=name_properties)
 
     simulate_cmd = commands.add_parser(
         "simulate-review", help="models review the loaded items in place of people"

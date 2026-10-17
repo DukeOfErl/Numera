@@ -120,6 +120,7 @@ def test_a_run_loads_its_papers_and_items(engine):
     assert (item.item_id, item.pmcid, item.claim_id) == ("i1", "PMC1", "c1")
     assert (item.value, item.unit, item.second_kind) == ("39", "min", "DISTRACTOR")
     assert item.distractor_type == "ADJACENT_CONDITION"
+    assert item.property == "doubling time", "the claim's name, for the reader (ADR-1700)"
     assert ReviewItem.model_validate_json(item.item_json) == an_item("i1")
 
 
@@ -133,6 +134,34 @@ def test_a_paper_s_bibliographic_record_is_loaded_with_it(engine):
 
     (paper,) = rows(engine, store.review_paper)
     assert paper.csl_json == RECORD
+
+
+def test_fill_properties_names_only_the_unnamed_items_and_leaves_item_json_alone(engine):
+    named = an_item("i1")
+    store.load_run(
+        engine, [a_result()], [named, an_item("i2"), an_item("i3")], question=QUESTION, run_id=RUN
+    )
+    with engine.begin() as conn:
+        conn.execute(
+            store.review_item.update()
+            .where(store.review_item.c.item_id.in_(["i2", "i3"]))
+            .values(property="")
+        )
+    asked: list[str] = []
+
+    def property_for(item: ReviewItem) -> str:
+        asked.append(item.item_id)
+        return "Doubling time of Escherichia coli" if item.item_id == "i2" else ""
+
+    written = store.fill_properties(engine, property_for)
+
+    assert written == 1
+    assert sorted(asked) == ["i2", "i3"], "an item already named is not asked about"
+    by_id = {row.item_id: (row.property, row.item_json) for row in rows(engine, store.review_item)}
+    assert by_id["i1"][0] == "doubling time"
+    assert by_id["i2"][0] == "Doubling time of Escherichia coli"
+    assert by_id["i3"][0] == ""
+    assert ReviewItem.model_validate_json(by_id["i2"][1]) == an_item("i2"), "what was shown stays"
 
 
 def test_fill_references_writes_only_the_papers_without_one_and_counts_them(engine):
@@ -630,7 +659,14 @@ def an_old_database() -> tuple[Any, MetaData]:
     answered_by and review_skip existed: the same tables, those columns and that table left out."""
     engine = create_engine("sqlite://")
     old = MetaData()
-    dropped = {"domain", "topic", "value_read", "answered_by", "value_agreement", "csl_json"}
+    dropped = {
+        "domain",
+        "topic",
+        "value_read",
+        "answered_by",
+        "value_agreement",
+        "csl_json",
+    }
     for table in store.METADATA.sorted_tables:
         if table.name == "review_skip":
             continue
@@ -648,7 +684,9 @@ def an_old_database() -> tuple[Any, MetaData]:
                     default=column.default.arg if column.default is not None else None,
                 )
                 for column in table.columns
+                # `curated_entry.property` is as old as the table; `review_item.property` is not.
                 if column.name not in dropped
+                and (table.name, column.name) != ("review_item", "property")
             ],
         )
     old.create_all(engine)
@@ -710,10 +748,10 @@ def test_upgrade_adds_the_missing_columns_and_table_and_fills_domain_and_topic()
 
     done = store.upgrade(engine)
 
-    # Three added by hand (domain, topic, csl_json); value_read and answered_by came with the
-    # rebuild.
+    # Four added by hand (domain, topic, csl_json, property); value_read and answered_by came
+    # with the rebuild.
     assert done == {
-        "columns_added": 3,
+        "columns_added": 4,
         "papers_filled": 2,
         "tables_rebuilt": 1,
         "choices_compared": 0,
