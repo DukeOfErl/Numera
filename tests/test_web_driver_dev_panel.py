@@ -5,8 +5,8 @@ Both directions through the real script, because "absent -- not disabled" is a
 claim about what the page did not draw. The deny case varies the dimension the
 rule reads: a *student* -- an enrolled account with a real role -- and not only a
 visitor with no identity. The panel is the only thing that puts a `dataframe` in
-the sidebar's tab strip, so its presence is asserted on the strip's labels and
-on the table inside the Dev tab.
+the sidebar, under its "Dev" heading (one view since ADR-1850, so no tab strip),
+so its presence is asserted on the heading and on that table.
 """
 
 from __future__ import annotations
@@ -36,22 +36,14 @@ def recent(caught):
     web.RECENT = None
 
 
-def _dev_tab(at):
-    """The Dev tab, or None when the sidebar has no strip at all."""
-    for tab in at.sidebar.tabs:
-        if tab.label == web.DEV_TAB:
-            return tab
-    return None
+def _dev_header(at) -> bool:
+    """Whether the sidebar has the trail's heading."""
+    return web.DEV_TAB in [h.value for h in at.sidebar.subheader]
 
 
 def _panel(at):
-    """The table inside the Dev tab. Empty when there is no such tab."""
-    tab = _dev_tab(at)
-    return list(tab.dataframe) if tab is not None else []
-
-
-def _dev_header(at) -> bool:
-    return _dev_tab(at) is not None
+    """The trail's table: the only dataframe the sidebar draws. Empty when there is none."""
+    return list(at.sidebar.dataframe)
 
 
 # --- both directions, through the page -------------------------------------------------
@@ -85,25 +77,25 @@ def test_a_tester_s_page_has_no_such_section(page, recent, account):
     assert not at.sidebar.dataframe, "no table of trail records anywhere in the sidebar"
 
 
-def test_the_entries_come_first_and_the_trail_second(page, recent):
-    """The strip's order. A reader is here for the entries; the trail is the
-    operator's view of the same session and sits behind them."""
+def test_the_trail_has_a_heading_of_its_own_and_no_strip(page, recent):
+    """ADR-1850: the entries left the sidebar, so there is one view and nothing to switch to."""
     at = page(auth=True, email=DEV.email, enrolled={DEV.email: DEV}).run()
-    assert [t.label for t in at.sidebar.tabs] == [web.ENTRIES_TAB, web.DEV_TAB]
+    assert _dev_header(at)
+    assert not at.sidebar.tabs
 
 
-def test_the_strip_is_below_the_run_status(page, recent):
-    """The spec says where. Read off the sidebar's own children in order, because
-    a tab strip is a block rather than an element and does not appear in the
-    flat `header` list the previous version of this test compared against."""
+def test_the_trail_is_below_the_run_status(page, recent):
+    """The spec says where. Read off the sidebar's own children in order."""
     at = page(auth=True, email=DEV.email, enrolled={DEV.email: DEV}).run()
     kinds = [
-        "session budget" if getattr(child, "value", None) == "Session budget" else child.type
+        getattr(child, "value", None)
+        if getattr(child, "value", None) in ("Session budget", web.DEV_TAB)
+        else child.type
         for child in at.sidebar.children.values()
     ]
-    assert "session budget" in kinds, "control: the run status was drawn"
-    assert "tab_container" in kinds, "control: the strip was drawn"
-    assert kinds.index("session budget") < kinds.index("tab_container")
+    assert "Session budget" in kinds, "control: the run status was drawn"
+    assert web.DEV_TAB in kinds, "control: the trail was drawn"
+    assert kinds.index("Session budget") < kinds.index(web.DEV_TAB)
 
 
 def test_installing_the_panel_s_sink_twice_leaves_one():

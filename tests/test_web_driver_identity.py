@@ -131,6 +131,12 @@ def _sidebar_text(at: AppTest) -> str:
     return " ".join(c.value for c in at.sidebar.caption)
 
 
+def _footer_text(at: AppTest) -> str:
+    """The line under the question box (ADR-1850): every caption outside the sidebar."""
+    sidebar = {id(c) for c in at.sidebar.caption}
+    return " ".join(c.value for c in at.caption if id(c) not in sidebar)
+
+
 # --- 4.6: no `[auth]` -- everything as before -----------------------------------
 
 
@@ -138,7 +144,7 @@ def test_with_no_identity_configured_a_question_is_answered_without_signing_in(p
     """The regression guard for every existing web test, which all run this way."""
     at = page(auth=False).run()
     assert at.chat_input, "the input must be there with no sign-in"
-    assert not at.button, "no sign-in button, no sign-out button"
+    assert not [b for b in at.button if "Sign" in b.label], "no sign-in button, no sign-out button"
     at = _ask(at, "how many?")
     assert not at.exception
     assert any("an answer" in m.value for m in at.markdown)
@@ -151,7 +157,9 @@ def test_with_no_identity_configured_a_question_is_answered_without_signing_in(p
 def test_with_no_identity_configured_the_page_says_so(page):
     at = page(auth=False).run()
     assert messages.NO_SIGN_IN_CONFIGURED in _sidebar_text(at)
-    assert web.RECORDS_NOTE in _sidebar_text(at)
+    # And under the question box, beside what is kept (ADR-1850).
+    assert web.RECORDS_NOTE in _footer_text(at)
+    assert messages.NO_SIGN_IN_CONFIGURED in _footer_text(at)
 
 
 # --- 4.7: `[auth]` configured -------------------------------------------------------
@@ -698,7 +706,9 @@ def test_the_sidebar_says_who_is_signed_in_and_offers_sign_out(page):
     assert messages.SIGNED_IN_AS.format(email=TESTER.email, role="scientist") in _sidebar_text(at)
     assert "Signed in as" not in _sidebar_text(at), "the sign-out button beside it says that"
     assert "Sign out" in [b.label for b in at.sidebar.button]
-    assert web.RECORDS_NOTE in _sidebar_text(at)
+    # Who it is, again under the question box, beside what is kept against them (ADR-1850).
+    assert web.RECORDS_NOTE in _footer_text(at)
+    assert messages.SIGNED_IN_AS.format(email=TESTER.email, role="scientist") in _footer_text(at)
 
 
 def _elements(block):
@@ -775,19 +785,20 @@ def test_the_data_credit_is_one_click_from_every_page_view(page):
 
 
 def test_the_page_says_whose_money_the_questions_cost(page):
-    """On the page itself rather than the side panel, which Streamlit collapses on
-    a phone -- and on every deployment, not only the hosted one. A sentence that
+    """On the page itself rather than the side panel, which is collapsed by default
+    (ADR-1850) -- and on every deployment, not only the hosted one. A sentence that
     appears depending on which branch built the page is drift, not configuration.
     """
     at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER}).run()
-    assert any(web.BUDGET_NOTE in c.value for c in at.main.caption)
+    assert web.BUDGET_NOTE in _footer_text(at)
+    assert web.BUDGET_NOTE not in _sidebar_text(at)
 
 
 def test_the_budget_note_is_there_without_sign_in_too(page):
     """The deny case varies what the old arrangement keyed on -- the deployment,
     which sign-in configuration stands for here -- rather than the wording."""
     at = page(auth=False).run()
-    assert any(web.BUDGET_NOTE in c.value for c in at.main.caption)
+    assert web.BUDGET_NOTE in _footer_text(at)
 
 
 def test_the_mark_is_drawn_inside_the_title_before_the_words(page):

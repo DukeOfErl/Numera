@@ -602,8 +602,8 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_web_driver_dev_panel.py::test_a_tester_s_page_has_no_such_section",
         "test_web_driver_dev_panel.py::test_a_fresh_operator_session_shows_the_section_empty",
         "test_web_driver_dev_panel.py::test_the_table_names_the_question_just_asked",
-        "test_web_driver_dev_panel.py::test_the_entries_come_first_and_the_trail_second",
-        "test_web_driver_dev_panel.py::test_the_strip_is_below_the_run_status",
+        "test_web_driver_dev_panel.py::test_the_trail_has_a_heading_of_its_own_and_no_strip",
+        "test_web_driver_dev_panel.py::test_the_trail_is_below_the_run_status",
         "test_web_driver_dev_panel.py::test_two_sessions_panels_show_only_their_own_records",
         "test_web_driver_dev_panel.py::test_the_panel_s_contents_do_not_reach_the_model",
     ),
@@ -1245,6 +1245,21 @@ COVERED.update(
             "test_references.py::test_a_store_without_the_column_still_loads_with_plain_references",
             "test_references.py::test_the_model_is_never_handed_the_authors",
         ),
+        "Cited entries are numbered through the session": (
+            "test_web_driver.py::test_entries_are_numbered_in_the_order_the_session_meets_them",
+            "test_web_driver.py::test_a_later_answer_keeps_an_entry_s_number",
+            "test_web_driver.py::test_an_identifier_the_corpus_does_not_hold_is_not_numbered",
+            "test_trust_marks.py::test_a_citation_is_a_pill_with_its_number_and_its_stars",
+            "test_trust_marks.py::test_an_identifier_the_session_has_not_numbered_is_left_as_written",
+            "test_web_driver_store.py::test_a_store_answer_carries_pills_an_evidence_list_and_an_opened_entry",
+        ),
+        "An entry is opened beside the answer": (
+            "test_web_driver.py::test_an_entry_opens_beside_the_answer_not_in_the_side_panel",
+            "test_web_driver_store.py::test_choosing_another_number_opens_that_entry",
+            "test_web_driver_store.py::test_a_harvested_entry_opens_with_its_fields_apart_not_its_keywords",
+            "test_web_driver.py::test_twelve_entries_are_buttons_and_thirteen_a_list",
+            "test_web_driver.py::test_no_entry_can_be_chosen_while_a_question_is_answering",
+        ),
         "An answer cites entries, never papers": (
             "test_agent.py::test_the_prompt_leaves_references_to_the_table",
         ),
@@ -1254,21 +1269,21 @@ COVERED.update(
             "test_trust_marks.py::test_the_terminal_draws_stars_after_each_citation_and_leaves_the_legend_to_the_table",
             "test_trust_marks.py::test_a_group_citing_several_entries_names_each_beside_its_stars",
             "test_trust_marks.py::test_stars_the_model_wrote_do_not_become_the_tier",
-            "test_trust_marks.py::test_the_web_superscript_reads_a_label_and_carries_its_stars",
+            "test_trust_marks.py::test_a_citation_is_a_pill_with_its_number_and_its_stars",
             "test_trust_marks.py::test_a_corpus_file_answer_draws_as_it_did",
-            "test_trust_marks.py::test_a_corpus_file_answer_item_carries_no_stars",
-            "test_trust_marks.py::test_the_simulated_mark_s_legend_line_is_not_drawn_as_a_heading",
-            "test_web_driver_store.py::test_a_store_answer_carries_its_stars_its_legend_and_both_new_columns",
-            "test_web_driver_store.py::test_a_corpus_file_answer_draws_none_of_the_store_s_additions",
+            "test_trust_marks.py::test_a_corpus_file_pill_is_the_number_alone",
+            "test_trust_marks.py::test_the_simulated_mark_is_sim_not_a_hash",
+            "test_web_driver_store.py::test_a_store_answer_carries_pills_an_evidence_list_and_an_opened_entry",
+            "test_web_driver_store.py::test_a_corpus_file_answer_has_pills_without_stars",
             "test_trust_marks.py::test_the_objections_are_the_decisions_that_disputed_an_entry",
-            "test_trust_marks.py::test_the_web_trust_cell_carries_the_objections_after_the_stars",
+            "test_trust_marks.py::test_the_trust_cell_carries_the_stars_alone_and_the_legend_says_open_the_entry",
             "test_trust_marks.py::test_the_terminal_lists_the_objections_under_its_table",
             "test_trust_marks.py::test_the_model_never_sees_an_objection",
         ),
         "An entry's caveat marks have a column of their own": (
-            "test_trust_marks.py::test_the_web_table_puts_the_marks_first_and_trust_before_the_id",
+            "test_trust_marks.py::test_the_evidence_list_is_number_entry_value_trust_id",
             "test_trust_marks.py::test_the_terminal_table_puts_the_marks_first_and_trust_before_the_id",
-            "test_trust_marks.py::test_a_corpus_file_web_table_has_marks_but_no_trust_column",
+            "test_trust_marks.py::test_a_corpus_file_evidence_list_has_no_trust_column",
             "test_trust_marks.py::test_a_corpus_file_terminal_table_has_no_trust_column",
             "test_web_driver.py::test_an_entry_with_no_scalar_is_marked_and_its_value_left_blank",
         ),
@@ -1284,11 +1299,6 @@ AWAITING_HARDEN_HARVEST = (
     "Readings of one article from different runs are served together and linked",
 )
 
-# `add-answer-view-redesign`, being built: each moves to COVERED as its tests land.
-AWAITING_THE_REDESIGN = (
-    "Cited entries are numbered through the session",
-    "An entry is opened beside the answer",
-)
 
 # `add-hosted-tracing`. Each requirement names the tests that assert it in both
 # directions; the conditions of the allowance pause are pure and tested beside the
@@ -1364,7 +1374,6 @@ UNMAPPED: dict[str, str] = {
     **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),
     **dict.fromkeys(AWAITING_HARDEN_HARVEST, "harden-harvest is proposed, not built"),
-    **dict.fromkeys(AWAITING_THE_REDESIGN, "add-answer-view-redesign is being built"),
 }
 
 

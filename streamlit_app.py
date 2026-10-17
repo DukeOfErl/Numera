@@ -24,7 +24,14 @@ from scinumbers_ask.corpus import CorpusUnavailable
 # rests on, side by side. The entries table is fixed-width and needs about
 # 640px before it grows a horizontal scrollbar that hides the ID column, which
 # the centred layout's ~700px main area cannot give half of. See READING_SPLIT.
-st.set_page_config(page_title=web.TITLE, page_icon=":material/biotech:", layout="wide")
+# The sidebar is collapsed by default (ADR-1850): it holds the account, the budget and the trail,
+# none of which a reader needs in front of every answer.
+st.set_page_config(
+    page_title=web.TITLE,
+    page_icon=":material/biotech:",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
 try:
     # Before the corpus is resolved. A reader who still exports the old variable
@@ -116,40 +123,17 @@ agent = web.agent_for(st.session_state, repo, admission)
 # is being answered, the ratings on past answers are drawn inert.
 answering = web.question_pending(st.session_state)
 
-# Pinned to the viewport, before anything that could scroll it away.
-web.draw_prototype_banner()
-# Page-level, and here for the same reason the banner is: drawn once, above
-# everything that uses it, rather than once per turn from inside `draw_feedback`.
+# Page-level, drawn once, above everything that uses them, rather than once per turn.
+web.draw_page_style()
 web.draw_feedback_style()
 
-# `anchor=False`: Streamlit gives every heading a link target and shows a chain
-# icon beside it on hover. On a deep-linkable document that is useful; on a page
-# with one title it is a control that does nothing a reader wants.
-web.draw_title()
-# Under the title rather than in the side panel, which Streamlit collapses on a
-# phone: a reader who never opens the panel would otherwise never see this.
-st.caption(web.as_text(web.BUDGET_NOTE))
-if web.may_see_dev_panel(admission):
-    # The corpus size and the conversation's identifier: diagnostics, not things a
-    # tester came for, and behind the same grant as the dev panel rather than a
-    # second permission of their own -- one exists only where there is a code path
-    # to refuse (ADR-0800), and this is the population that panel already refuses.
-    #
-    # The identifier is in the URL regardless, so a reader who needs to reopen this
-    # conversation still can; what goes with the grant is putting it on the page.
-    st.caption(web.as_text(f"{len(repo)} entries · session {session}"))
+# The title, what the data is, and the prototype caveat in amber (ADR-1850).
+web.draw_header(harvested=bool(store))
 
 # Both pinned to the top of the panel, before anything whose length depends on an
 # answer. The entries below are unbounded -- one question can fill the panel -- and
 # a run budget pushed past the scroll is not a standing figure.
 with st.sidebar:
-    # No prototype line here: the pinned banner says it at the top of the page,
-    # where it cannot be scrolled away, and twice is once too many.
-    # What is kept, where a reader can find it without being made to read it
-    # before every question. Not in the pinned banner, which is one line by
-    # design; the sidebar is the page's standing statement about itself, and
-    # this belongs beside the other one.
-    st.caption(web.as_text(web.RECORDS_NOTE))
     # Who this page thinks you are, or that it is nobody's. A person reading
     # under an account they did not expect is a person whose questions are being
     # recorded against the wrong name.
@@ -175,13 +159,18 @@ with st.sidebar:
     # Whose numbers these are. One click rather than one line: it must be present
     # on every page view and need not be read on every page view.
     web.draw_data_credit()
+    if web.may_see_dev_panel(admission):
+        # The corpus size and the conversation's identifier: diagnostics, behind the same grant
+        # as the dev panel (ADR-0800). The identifier is in the URL regardless.
+        st.caption(web.as_text(f"{len(repo)} entries · session {session}"))
     st.divider()
-    # The sidebar's two views, below the run status: the entries a reader came
-    # for, and -- only for roles the grant table allows -- this session's trail.
-    # Made here so the strip sits under the run budget, and filled at the foot of
-    # the script, where the newest question's entries and records both exist.
-    # The refusal is inside `dev_panel_rows`; this line decides nothing.
-    entries_seat, dev_seat = web.sidebar_tabs(admission, session)
+    # This session's trail, for the roles the grant table allows, filled at the foot of the
+    # script where the newest question's records exist. The refusal is inside `dev_panel_rows`.
+    dev_seat = web.dev_seat(admission)
+
+# Before the first question: what the page is for, and questions to start from (ADR-1850).
+if not web.transcript(st.session_state):
+    web.draw_first_view(answering=answering)
 
 for asked, drawn in web.transcript(st.session_state):
     with st.chat_message("user"):
@@ -199,6 +188,7 @@ for asked, drawn in web.transcript(st.session_state):
         web.show(
             drawn,
             after_prose=lambda drawn=drawn: web.draw_feedback(drawn, session, answering=answering),
+            answering=answering,
         )
 
 # Some endings close the run: the budget is spent, the conversation is past its
@@ -221,7 +211,9 @@ if web.run_is_over(web.transcript(st.session_state)):
     )
 # `submit_mode="disable"` because a question runs for as long as the agent takes:
 # leaving the input live invites a second question into the middle of the first.
-elif question := st.chat_input("Ask a question", submit_mode="disable", key=web.ASK_KEY):
+elif question := (
+    st.chat_input("Ask a question", submit_mode="disable", key=web.ASK_KEY) or web.take_example()
+):
     with st.chat_message("user"):
         st.markdown(web.as_text(question))
     # Recorded before it is drawn, and filled in place. The agent persists the turn
@@ -279,8 +271,7 @@ elif question := st.chat_input("Ask a question", submit_mode="disable", key=web.
     # nothing. What it did buy was a second rule about when the page is fresh.
     st.rerun()
 
-# The side panel carries the newest answer's entries, whole and openable -- the
-# main column's table is the first few rows of the same set. Written after the
-# conversation so both tabs reflect the question just asked.
-web.draw_full_entries(web.latest_table(web.transcript(st.session_state)), entries_seat)
+# Under the question box: what is kept, and whose account it is kept against (ADR-1850).
+web.draw_footer(admission)
+# Written after the conversation, so the trail reflects the question just asked.
 web.draw_dev_panel(admission, session, dev_seat)

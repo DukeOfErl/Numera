@@ -61,7 +61,7 @@ from .agent import AskAgent
 from .authorization import Refused, allowed, require
 from .citations import DELIMITED, citations
 from .config import Config, env_setting, format_usd, refuse_retired_env
-from .corpus import Harvest, Origin, load_configured
+from .corpus import Harvest, Origin, entry_key, load_configured
 from .events import Answer, AnswerEntries, EndReason, Event, QuestionEnded, Retrieval
 from .permissions import Identity, Permission
 from .repository import CorpusRepository
@@ -99,30 +99,6 @@ DATA_CREDIT_LABEL = "Data: BioNumbers (Milo et al.)"
 RECORDS_NOTE = messages.RECORDS_NOTE
 BUDGET_NOTE = messages.BUDGET_NOTE
 
-# Pinned to the viewport rather than written into the page. Drawn as an ordinary
-# element it sat above the conversation and scrolled away with the first answer --
-# so the reader who has read several answers, and is therefore most likely to have
-# started trusting them, is the one who can no longer see it.
-#
-# Fixed under Streamlit's own header, with the main container padded so nothing
-# hides behind it. The two test ids are Streamlit's stable ones (verified against
-# 1.61.1); if a future version renames them the banner degrades to sitting at the
-# top of the page, which is where it was before -- it cannot vanish.
-PROTOTYPE_BANNER_CSS = """
-<style>
-[data-testid="stMainBlockContainer"] { padding-top: 4.5rem; }
-.bn-caveat {
-  position: fixed; top: 3.5rem; left: 0; right: 0; z-index: 999;
-  padding: 0.45rem 1rem; text-align: center; font-size: 0.85rem; line-height: 1.3;
-  background: #7a4a00; color: #ffe9c2;
-  border-bottom: 1px solid rgba(255, 233, 194, 0.35);
-}
-@media (prefers-color-scheme: light) {
-  .bn-caveat { background: #ffecb3; color: #4a3000; }
-}
-</style>
-"""
-
 SESSION_KEY = "scinumbers_ask.session"
 
 # The question box's widget key. Named so the page can ask, before it draws
@@ -139,81 +115,11 @@ QUERY_KEY = "session"
 
 DEFAULT_CHECKPOINTS = "checkpoints/ask.sqlite"
 
-# Rows in the table beside the answer, against the terminal's five. Small on
-# purpose: this is the evidence a reader checks the prose against, and a table
-# long enough to scroll is one nobody reads. Nothing is hidden -- every retrieved
-# entry is in the side panel, whole and openable.
-# Two caps, not one. A single cap on the table spent all of its rows on cited
-# entries whenever an answer cited many -- nine cited entries against eight rows
-# dropped one of them and took the uncited section with it. The cited entries are
-# what the prose stands on and a reader checking it needs every one; the uncited
-# are context, and four of them is enough to show the answer had alternatives.
-CITED_ROWS = 10
-UNCITED_ROWS = 4
-
-# Pixel widths in the terminal table's proportions (29:17:13:12:7:18), scaled so
-# the table fits the main column without a horizontal scrollbar. Sized to the
-# column rather than to the content on purpose: a table you have to scroll
-# sideways hides the identifier, which is the one cell a reader is checking. A
-# truncated cell opens in full on a double click, so nothing is lost.
-# Property and Reference are 20% narrower than the terminal's proportions would
-# give them, and they are the two that can afford it: both hold prose that
-# truncates gracefully and opens in full on a double click, where Value, Units
-# and ID hold short strings that either fit or are unreadable. The 62px this
-# frees is what pays for the wider gutter between the columns. Since 2026-10-16 the
-# caveat and Trust columns are paid for by Organism, ID and Reference (below), and
-# the sum still has to fit the evidence column (`test_the_evidence_column_can_hold_its_table`).
-# Trust then took 12px from Units (6, then 6 more, 2026-10-16), so a cell's stars leave room
-# for the start of an objection.
-COLUMN_WIDTHS = {
-    # The caveat marks, headed by nothing (`grounded-answering`): narrow because a row carries a
-    # mark or two at most. Streamlit 1.61.1 takes a pixel width, read 2026-10-16.
-    "": 20,
-    "Property": 152,
-    # Organism, ID and Reference gave up width for the caveat and Trust columns (2026-10-16, the
-    # user's call): an identifier may truncate, since a double click opens the cell in full and the
-    # superscript in the prose carries it whole.
-    "Organism": 88,
-    "Value": 85,
-    "Units": 58,
-    # Drawn only where an entry has a tier, before the identifier it qualifies: `#★★★☆☆⚠` at most.
-    "Trust": 84,
-    "ID": 50,
-    "Reference": 56,
-}
-
-#: How the turn's width is split: the prose on the left, the entries it rests on
-#: to the right of it. Two columns rather than one tall one, so a reader checking
-#: a number against the table is looking at both at once instead of scrolling
-#: between them.
-#:
-#: **The right-hand share has a floor, and it is not a matter of taste.** The
-#: table's widths above are fixed pixels; below their sum the dataframe grows a
-#: horizontal scrollbar, and the first column it takes away is the identifier --
-#: the one cell a reader is checking. `layout="wide"` follows from the same
-#: arithmetic: the centred layout's main area is about 700px, which no split
-#: divides into a side wide enough.
-#:
-#: Even, rather than the 5:6 it started at, and that is the most the evidence
-#: column can give back. Narrowing it further undoes the 20% the table's own
-#: columns just gave up and then some -- at 6:5 the layout would need a wider
-#: browser than it did before either change.
-#:
-#: `test_web_driver.py::test_the_evidence_column_can_hold_its_table` does that
-#: arithmetic, against the stated target below. An earlier version of this comment
-#: claimed the test existed before it did.
+#: How the turn's width is split: the prose on the left, the evidence it rests on to the right,
+#: so a reader checking a number against its entry is looking at both at once. Even, as the
+#: canvas draws it (ADR-1850). The evidence list is HTML and wraps, so no column width has to fit
+#: it any more -- there is no horizontal scrollbar left to take the identifier away.
 READING_SPLIT = (1, 1)
-
-#: The narrowest browser this layout is designed for: a 16-inch laptop at full
-#: width, or any ordinary external monitor. Stated as a number so the split and
-#: the column widths can be checked against it instead of argued about -- every
-#: previous attempt to reason about this in prose got it wrong in one direction
-#: or the other.
-TARGET_BROWSER_WIDTH = 1650
-
-#: What the browser width loses before the two columns get any: Streamlit's
-#: sidebar, the main container's padding, and the gutter between them.
-LAYOUT_CHROME = 336 + 64 + 64
 
 
 class Kind(StrEnum):
@@ -279,6 +185,12 @@ class Item:
     # have no tier (ADR-1630). What the stars mean is said once, with the entries table, and not
     # under the answer as well (the user's call, 2026-10-16).
     stars: tuple[tuple[str, str], ...] = ()
+    # The identifiers an answer cites that the corpus holds, in the order first cited: what the
+    # session numbers (ADR-1850). A citation of anything else gets no pill and stays as written.
+    known: tuple[str, ...] = ()
+    # What a search asked for, for the line that replaces the finished retrieval box; "" for any
+    # other tool.
+    query: str = ""
 
 
 def item_for(event: Event, repo: CorpusRepository | None = None) -> Item | None:
@@ -302,7 +214,7 @@ def item_for(event: Event, repo: CorpusRepository | None = None) -> Item | None:
 def _item_without_identity(event: Event, repo: CorpusRepository | None = None) -> Item | None:
     """What kind of thing this event is. `item_for` adds which question it was."""
     if isinstance(event, Retrieval):
-        return Item(Kind.PROGRESS, messages.retrieval_text(event))
+        return Item(Kind.PROGRESS, messages.retrieval_text(event), query=_query_of(event))
     if isinstance(event, AnswerEntries):
         # Needs the corpus: the event carries identifiers, and the reference
         # deliberately never travels through the agent.
@@ -320,10 +232,18 @@ def _item_without_identity(event: Event, repo: CorpusRepository | None = None) -
         return Item(Kind.WARNING, warning)
     if isinstance(event, Answer):
         trust_of = trust_marks.trust_lookup(repo)
+        held = tuple(
+            dict.fromkeys(
+                str(i)
+                for i in citations(event.text)
+                if repo is not None and repo.get(i) is not None
+            )
+        )
         return Item(
             Kind.ANSWER,
             event.text,
             stars=trust_marks.cited_stars(event.text, trust_of),
+            known=held,
         )
     if isinstance(event, QuestionEnded):
         return Item(
@@ -336,6 +256,46 @@ def _item_without_identity(event: Event, repo: CorpusRepository | None = None) -
             run_budget=event.run_budget,
         )
     return None
+
+
+def _query_of(event: Retrieval) -> str:
+    """What a search asked for, in the reader's words: "cytokinetic ring in S. pombe"."""
+    if event.tool != "search_entries":
+        return ""
+    asked = " ".join(
+        str(event.detail.get(k)) for k in ("property", "keyword") if event.detail.get(k)
+    )
+    organism = event.detail.get("organism")
+    if asked and organism:
+        return f"{asked} in {organism}"
+    return asked or (str(organism) if organism else "")
+
+
+def entry_numbers(turns: Iterable[Iterable[Item]]) -> dict[str, int]:
+    """Each entry's number in the session: 1, 2, 3... in the order the session first meets it.
+
+    Per turn, the identifiers the answer cites (only those the corpus holds) as they first appear,
+    then that turn's evidence rows, cited before uncited. **A function of what is on the page**,
+    not a counter: the live path, the replay of every past turn and a rerun all number alike, so no
+    second record has to be kept in step with the transcript (ADR-1850).
+    """
+    numbers: dict[str, int] = {}
+
+    def meet(entry_id: str) -> None:
+        if entry_id not in numbers:
+            numbers[entry_id] = len(numbers) + 1
+
+    for items in turns:
+        items = list(items)
+        for item in items:
+            if item.kind is Kind.ANSWER:
+                for entry_id in item.known:
+                    meet(entry_id)
+        for item in items:
+            if item.kind is Kind.ENTRIES and item.table is not None:
+                for row in item.table.rows:
+                    meet(str(row.entry_id))
+    return numbers
 
 
 def items_for(events: Iterable[Event], repo: CorpusRepository | None = None) -> Iterator[Item]:
@@ -1659,41 +1619,30 @@ def dev_panel_rows(admission: Admission, session_id: str) -> list[dict[str, Any]
     return RECENT.rows(session_id) if RECENT is not None else []
 
 
-#: What the sidebar's tab strip is called, in the order it is drawn. The entries
-#: come first because they are what a reader is there for; the trail is the
-#: operator's view of the same session and sits behind it.
-ENTRIES_TAB = "Full entries"
+#: The trail's heading in the sidebar, for the roles granted it.
 DEV_TAB = "Dev"
 
 
-def sidebar_tabs(admission: Admission, session_id: str) -> tuple[Any | None, Any | None]:
-    """The sidebar's two views as a tab strip, or no strip at all.
+def dev_seat(admission: Admission) -> Any | None:
+    """Where this session's trail goes in the sidebar, or None where the panel is refused.
 
-    Returns seats to be filled later -- a Streamlit container is bound to where
-    it was made, so the strip is created here, below the run status, and written
-    into at the end of the script when the newest question's entries and trail
-    records both exist.
-
-    **No strip where the dev panel is refused.** A lone tab labelled "Full
-    entries" is a control that does nothing, and a strip whose second tab is
-    missing would be the "disabled, not absent" the spec forbids -- a tester's
-    page must not show that there is a view they cannot open. The entries then
-    draw into the sidebar exactly as they did before tabs existed.
-
-    Whether the panel is refused is asked by trying it, so the rule lives in one
-    place: `dev_panel_rows` holds the `require`, and this reads its answer.
+    One view, so no tab strip (ADR-1850): the entries left the sidebar for the evidence column, and
+    a strip of one tab is a control that does nothing. Absent rather than disabled for every other
+    role, as before: a tester's page must not show that there is a view they cannot open. Whether
+    the panel is refused is asked by trying it, so the rule lives in one place: `dev_panel_rows`
+    holds the `require`, and this reads its answer.
     """
     if not may_see_dev_panel(admission):
-        return None, None
+        return None
     with st.sidebar:
-        entries, dev = st.tabs([ENTRIES_TAB, DEV_TAB])
-    return entries, dev
+        st.subheader(DEV_TAB, anchor=False)
+        return st.container()
 
 
 def draw_dev_panel(admission: Admission, session_id: str, seat: Any | None = None) -> None:
     """This session's trail, into the Dev tab. Nothing at all when refused.
 
-    `seat` is `None` exactly when `sidebar_tabs` refused the panel, so there is
+    `seat` is `None` exactly when `dev_seat` refused the panel, so there is
     nowhere to draw and nothing to draw -- present and *empty* on a fresh
     session, so a dev can tell "nothing yet" from "not permitted", and absent
     rather than empty for everyone else.
@@ -1773,75 +1722,103 @@ def as_text(text: str) -> str:
     return text.replace("$", r"\$")
 
 
-#: A run of citations -- one or more `[[...]]` separated by spaces or a comma --
-#: drawn as one superscript with its identifiers comma-separated (ADR-1240). Words
-#: between two citations make two runs. Built from `citations.DELIMITED`, not a second
-#: pattern (ADR-0410): it once read digits only, and a `[[PMC2652108-1]]` label would
-#: have been drawn as raw brackets. What a group holds is read by `citations` itself.
+#: A run of citations -- one or more `[[...]]` separated by spaces or a comma. Built from
+#: `citations.DELIMITED`, not a second pattern (ADR-0410): it once read digits only, and a
+#: `[[PMC2652108-1]]` label would have been drawn as raw brackets.
 _CITATION_RUN = re.compile(rf"{DELIMITED.pattern}(?:,?\s*{DELIMITED.pattern})*")
-#: Opacity rather than a colour, so the grey follows Streamlit's light or dark theme.
-_CITATION_STYLE = "opacity: 0.6; font-size: 0.72em;"
+
+#: The page's own styles for the pills, the evidence list and the header line (ADR-1850). Colours
+#: are `currentColor` with opacity wherever they can be, so the page follows the reader's light or
+#: dark theme; only the amber prototype line and the caution carry colours of their own.
+PAGE_CSS = """
+<style>
+.sn-pill { display: inline-flex; align-items: center; gap: 0.3em; margin-left: 0.25em;
+  padding: 0 0.4em; border: 1px solid rgba(128, 128, 128, 0.45); border-radius: 4px;
+  font-size: 0.78em; line-height: 1.55; white-space: nowrap; vertical-align: baseline; }
+.sn-pill b { font-weight: 600; }
+.sn-pill .sn-stars, .sn-ev .sn-stars { letter-spacing: 0.02em; }
+.sn-sim { font-style: italic; opacity: 0.7; }
+table.sn-ev { width: 100%; border-collapse: collapse; table-layout: auto; font-size: 0.92rem; }
+table.sn-ev th { text-align: left; font-size: 0.72rem; letter-spacing: 0.06em;
+  text-transform: uppercase; font-weight: 600; opacity: 0.65; padding: 0 0.5rem 0.4rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.45); }
+table.sn-ev td { padding: 0.55rem 0.5rem; vertical-align: top; line-height: 1.35;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.18); }
+table.sn-ev td.sn-n { font-weight: 600; opacity: 0.7; width: 1.8rem; }
+table.sn-ev td.sn-v { white-space: nowrap; font-weight: 600; }
+table.sn-ev td.sn-t, table.sn-ev td.sn-i { white-space: nowrap; }
+.sn-sub { font-size: 0.85em; opacity: 0.65; }
+.sn-mk { font-weight: 400; opacity: 0.75; margin-left: 0.2em; }
+.sn-id { font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; opacity: 0.8; }
+.sn-proto { color: #92400e; font-size: 0.9rem; }
+.sn-proto::before { content: ""; display: inline-block; width: 0.5rem; height: 0.5rem;
+  margin-right: 0.45rem; border-radius: 50%; background: #f59e0b; }
+@media (prefers-color-scheme: dark) { .sn-proto { color: #fbbf24; } }
+</style>
+"""
 
 
-def answer_markdown(text: str, stars: Mapping[str, str] | None = None) -> str:
-    """An answer, ready for `st.markdown(..., unsafe_allow_html=True)`.
+def draw_page_style() -> None:
+    """The page's styles, once per run. Style alone goes to Streamlit's event container, so it
+    takes no space on the page (`st.html`, read from the installed 1.61.1)."""
+    st.html(PAGE_CSS)
 
-    Streamlit's markdown has no superscript, so the citations need HTML, and the
-    answer is model output. **Escaping and the superscripts are one function** so
-    that HTML is never turned on for an answer nobody escaped: the text is escaped
-    first, `$` is kept out of mathematics as `as_text` does, and only then do the
-    `<sup>` tags of our own go in. Markdown itself survives escaping -- `**`, `-`,
-    `#` and `|` are not HTML -- but a `<` or `>` the model meant as markup is shown
-    as the character, which is the safe way round.
 
-    The stored answer keeps `[[...]]`: the parser, the trail and the evaluation
-    all read that form, and only drawing restyles it.
+def _stars_html(stars: str) -> str:
+    """The drawn tier with `sim` set apart: "★★★☆☆ sim ⚠️" is stars, mark, caution."""
+    if not stars:
+        return ""
+    words = stars.split(" ")
+    out = [f'<span class="sn-stars">{html.escape(words[0])}</span>']
+    for word in words[1:]:
+        if word == trust_marks.SIMULATED:
+            out.append(f'<span class="sn-sim">{html.escape(word)}</span>')
+        else:
+            out.append(html.escape(word))
+    return " ".join(out)
 
-    `stars` maps an identifier to its drawn tier (`trust_marks`). Where any identifier in
-    a run has one, each identifier gets a superscript of its own followed by its stars at
-    the prose's own size -- the stars, `#` and `⚠` are read, not footnoted (the user's
-    call, 2026-10-16; ADR-1630). A run with no tiers -- every corpus-file answer -- is the
-    one comma-separated superscript it always was. A group `citations` cannot read --
-    `[[Table 1]]` -- is left as written, and the readable groups beside it in the same run
-    are still drawn: nothing is drawn as a citation that the parser would not count as one,
-    and nothing it would count is left as raw brackets.
+
+def _pill(number: int, entry_id: str, stars: str) -> str:
+    """One citation: the entry's number, then its tier where it has one; the id on hover."""
+    title = html.escape(bionumbers.label(entry_key(entry_id)), quote=True)
+    inner = f"<b>{number}</b>" + (f" {_stars_html(stars)}" if stars else "")
+    return f'<span class="sn-pill" title="{title}">{inner}</span>'
+
+
+def answer_markdown(
+    text: str, stars: Mapping[str, str] | None = None, numbers: Mapping[str, int] | None = None
+) -> str:
+    """An answer, ready for `st.markdown(..., unsafe_allow_html=True)`, its citations as pills.
+
+    The answer is model output, so **escaping and the pills are one function**: HTML is never
+    turned on for an answer nobody escaped. The text is escaped first, `$` is kept out of
+    mathematics as `as_text` does, and only then do our own `<span>`s go in. A `<` the model meant
+    as markup is shown as the character, which is the safe way round.
+
+    Each citation becomes a pill carrying the entry's number in the session (`numbers`, from
+    `entry_numbers`), its stars, `sim` and the caution (ADR-1850; the stars are still drawn by the
+    application, ADR-1630). A group naming anything the session has not numbered -- an identifier
+    the corpus does not hold, or `[[Table 1]]` -- is left as written, and the readable groups
+    beside it are still drawn. `numbers` defaults to numbering this answer alone, in the order it
+    cites.
+
+    The stored answer keeps `[[...]]`: the parser, the trail and the evaluation read that form.
     """
     stars = stars or {}
+    if numbers is None:
+        numbers = {i: n for n, i in enumerate(dict.fromkeys(str(c) for c in citations(text)), 1)}
     escaped = as_text(html.escape(text, quote=False))
 
-    def superscript(run: re.Match) -> str:
-        groups = [group.group(0) for group in DELIMITED.finditer(run.group(0))]
-        if not all(citations(group) for group in groups):
-            return DELIMITED.sub(
-                lambda group: superscript(group) if citations(group.group(0)) else group.group(0),
-                run.group(0),
-            )
-        shown = [str(i) for i in citations(run.group(0))]
-        if not any(i in stars for i in shown):
-            return f'<sup style="{_CITATION_STYLE}">{", ".join(shown)}</sup>'
-        return " ".join(
-            f'<sup style="{_CITATION_STYLE}">{i}</sup>' + (f" {stars[i]}" if i in stars else "")
-            for i in shown
-        )
+    def group(match: re.Match) -> str:
+        ids = [str(i) for i in citations(match.group(0))]
+        if not ids or not all(i in numbers for i in ids):
+            return match.group(0)
+        return "".join(_pill(numbers[i], i, stars.get(i, "")) for i in ids)
 
-    return _CITATION_RUN.sub(superscript, escaped)
+    def run(match: re.Match) -> str:
+        return DELIMITED.sub(group, match.group(0))
 
-
-def markdown_line(line: str) -> str:
-    """A legend line markdown will not restyle: one beginning `#` would be drawn as a heading.
-
-    The simulated mark is `#` (design D6), and its legend line begins with it.
-    """
-    return "\\" + line if line.startswith("#") else line
-
-
-def _row_label(row: entries_table.Row) -> str:
-    """One line identifying an entry, for the side panel's collapsed rows."""
-    value = "" if not row.has_scalar else f"{row.value} {row.units}".strip()
-    parts = [row.property, row.organism, value, bionumbers.label(row.entry_id)]
-    label = " · ".join(part for part in parts if part)
-    marks = _markers(row)
-    return f"{marks} {label}" if marks else label
+    return _CITATION_RUN.sub(run, escaped)
 
 
 def _markers(row: entries_table.Row) -> str:
@@ -1855,13 +1832,54 @@ def _markers(row: entries_table.Row) -> str:
     return marks + (entries_table.NO_SCALAR if not row.has_scalar else "")
 
 
-def _legend(rows: tuple[entries_table.Row, ...]) -> list[str]:
-    """What the markers mean, said before the table rather than after it.
+def _value_cell(row: entries_table.Row) -> str:
+    """The value with its units, then the marks that qualify it (`grounded-answering`)."""
+    value = f"{row.value} {row.units}".strip() if row.has_scalar else ""
+    marks = _markers(row)
+    return html.escape(value) + (
+        f'<span class="sn-mk">{html.escape(marks)}</span>' if marks else ""
+    )
 
-    A legend below the table is read after the rows it explains, which is the
-    wrong order: a reader meets a dagger, wonders, and has to look past the thing
-    they were reading.
+
+def evidence_html(rows: Iterable[entries_table.Row], numbers: Mapping[str, int]) -> str:
+    """The evidence list as one HTML table: #, Entry, Value, Trust, ID (ADR-1850).
+
+    HTML, not a dataframe, so a long property wraps instead of being cut: the store's names run to
+    36 words. Every cell is escaped; the value cell never breaks, so a number is never split across
+    lines (`grounded-answering`). One line, with no blank line inside, so nothing in it is read
+    as markdown. No Trust column for a corpus file, whose entries have no tier.
     """
+    rows = list(rows)
+    tiered = any(row.trust is not None for row in rows)
+    head = "<th>#</th><th>Entry</th><th>Value</th>" + ("<th>Trust</th>" if tiered else "")
+    head += "<th>ID</th>"
+    body = []
+    for row in rows:
+        sub = " · ".join(part for part in (row.organism, row.short_reference) if part)
+        entry = html.escape(row.property) + (
+            f'<div class="sn-sub">{html.escape(sub)}</div>' if sub else ""
+        )
+        cells = [
+            f'<td class="sn-n">{numbers.get(str(row.entry_id), "")}</td>',
+            f"<td>{entry}</td>",
+            f'<td class="sn-v">{_value_cell(row)}</td>',
+        ]
+        if tiered:
+            cells.append(f'<td class="sn-t">{_stars_html(row.stars)}</td>')
+        label = html.escape(bionumbers.label(row.entry_id))
+        cells.append(f'<td class="sn-i"><span class="sn-id">{label}</span></td>')
+        body.append("<tr>" + "".join(cells) + "</tr>")
+    return (
+        '<table class="sn-ev"><thead><tr>'
+        + head
+        + "</tr></thead><tbody>"
+        + "".join(body)
+        + "</tbody></table>"
+    )
+
+
+def _legend(rows: tuple[entries_table.Row, ...]) -> list[str]:
+    """What the marks shown mean, under the list, and only for the marks shown."""
     applying = (
         (entries_table.NOT_RETRIEVED_LEGEND, lambda r: not r.retrieved),
         (entries_table.NO_METHOD_LEGEND, lambda r: not r.method_recorded),
@@ -1876,56 +1894,149 @@ def _legend(rows: tuple[entries_table.Row, ...]) -> list[str]:
     return marks + trust_marks.legend(row.trust for row in rows)
 
 
-def _frame(rows: tuple[entries_table.Row, ...]) -> list[dict[str, Any]]:
-    """The table's cells, in the reference database's column order."""
-    tiered = any(row.trust is not None for row in rows)
-    return [
-        {
-            # The caveat marks have a column of their own, first, so the property cell holds
-            # only the property (`grounded-answering`).
-            "": _markers(row),
-            "Property": row.property,
-            "Organism": row.organism,
-            "Value": row.value if row.has_scalar else "",
-            "Units": row.units,
-            # Only where some entry has a tier: a corpus-file table shows no trust column.
-            **({"Trust": row.trust_cell} if tiered else {}),
-            # A string, not a number: an identifier formatted as a quantity picks
-            # up a thousands separator and stops matching the citation in the prose.
-            "ID": str(row.entry_id),
-            "Reference": row.reference,
-        }
-        for row in rows
-    ]
+def summary_for(table: Table, shown: int) -> str:
+    """How much went unshown, or "" when there is nothing to report.
 
-
-def _draw_entry(row: entries_table.Row) -> None:
-    """The whole entry, behind the row that names it.
-
-    Every field is read from the corpus. Nothing here came from the model, so an
-    opened row is the evidence against which its prose can be checked -- which is
-    the point of being able to open it at all.
+    Guarded as the terminal guards it. `table.rows` includes entries cited without
+    being retrieved while `table.retrieved` counts only retrieved ones, so `shown`
+    can exceed it and the ungated sentence read "showing 4 of 1 entries retrieved".
     """
-    st.markdown(f"**{as_text(row.property)}** — {as_text(row.organism)}")
-    if row.has_scalar:
-        st.markdown(f"{as_text(row.value)} {as_text(row.units)}".strip())
+    if table.retrieved > shown or table.matched > shown:
+        return entries_table.summarise(shown, table.retrieved, table.matched, table.searches)
+    return ""
+
+
+def _uncited_label(count: int) -> str:
+    return f"{count} more {'entry was' if count == 1 else 'entries were'} retrieved but not cited"
+
+
+def draw_evidence(table: Table, numbers: Mapping[str, int]) -> None:
+    """The evidence for one answer: what it cites, what else was retrieved, and what the marks mean.
+
+    Cited entries first and every one of them -- with no side panel any more there is nowhere else
+    for a cited entry to be -- and the uncited ones folded under one row: context for a reader who
+    wants it, and length in front of one who is checking the prose against its evidence.
+    """
+    cited = tuple(row for row in table.rows if row.cited)
+    rest = tuple(row for row in table.rows if not row.cited)
+    with st.container(horizontal=True, vertical_alignment="bottom"):
+        st.markdown("**Evidence for this answer**")
+        counts = f"{len(cited)} cited" + (f" · {len(rest)} more retrieved" if rest else "")
+        st.caption(as_text(counts))
+    if cited:
+        st.html(evidence_html(cited, numbers))
     else:
-        st.caption(entries_table.NO_SCALAR_LEGEND)
-    if row.method:
-        st.markdown(f"*Measurement method.* {as_text(row.method)}")
+        # Not silence: an answer that cited nothing is a fact about the answer.
+        st.markdown(f"**{entries_table.NOTHING_CITED}**")
+    legend = _legend(table.rows)
+    if legend:
+        st.caption(as_text(" · ".join(legend)))
+    if rest:
+        with st.expander(as_text(_uncited_label(len(rest)))):
+            st.html(evidence_html(rest, numbers))
+    note = entries_table.dimension_note(table.rows)
+    if note:
+        st.caption(as_text(note))
+    summary = summary_for(table, len(table.rows))
+    if summary:
+        # Body text, not a caption: how much of the corpus went unlooked-at is one of the few
+        # things a reader can use to judge whether an answer is worth trusting.
+        st.markdown(as_text(summary.removeprefix("… ")))
+
+
+#: Above this many entries the numbered buttons become a wall, so a list is offered instead
+#: (the user's call, 2026-10-17).
+OPEN_BUTTONS_MAX = 12
+
+
+def _open_key(question_id: str) -> str:
+    return f"scinumbers_ask.open.{question_id}"
+
+
+def draw_open_entry(
+    table: Table, numbers: Mapping[str, int], question_id: str, *, answering: bool = False
+) -> None:
+    """Choose an entry by its number and read it in full, beside the answer (ADR-1850).
+
+    Keyed by the question, like the rating, so each turn keeps its own choice. **Not offered while
+    a question is being answered**: a click re-runs the page, which abandons the agent's generator
+    mid-tool-call -- the reason the rating is drawn inert then too. The live path draws this only
+    once the answer is complete; older turns draw it disabled.
+    """
+    by_number = {
+        numbers[str(row.entry_id)]: row for row in table.rows if str(row.entry_id) in numbers
+    }
+    if not by_number:
+        return
+    options = sorted(by_number)
+    first = next(
+        (numbers[str(r.entry_id)] for r in table.rows if r.cited and str(r.entry_id) in numbers),
+        options[0],
+    )
+    key = _open_key(question_id)
+    if len(options) <= OPEN_BUTTONS_MAX:
+        chosen = st.pills(
+            "Open entry",
+            options,
+            default=first,
+            required=True,
+            key=key,
+            disabled=answering,
+            format_func=str,
+        )
     else:
-        st.caption(entries_table.NO_METHOD_LEGEND)
-    if row.comments:
-        st.markdown(f"*Comments.* {as_text(row.comments)}")
-    if row.harvest is not None:
-        _draw_harvest(row.harvest)
-    else:
-        keywords = shown_keywords(row)
-        if keywords:
-            st.caption("Keywords: " + as_text(", ".join(keywords)))
-    reference = row.reference or "(no reference recorded)"
-    pubmed = f" · PubMed {row.reference_pubmed_id}" if row.reference_pubmed_id else ""
-    st.caption(as_text(f"{reference}{pubmed}"))
+        chosen = st.selectbox(
+            "Open entry",
+            options,
+            index=options.index(first),
+            key=key,
+            disabled=answering,
+            format_func=lambda n: f"{n} · {by_number[n].property[:60]}",
+        )
+    if chosen is not None and chosen in by_number:
+        draw_record(by_number[chosen], chosen)
+
+
+def draw_record(row: entries_table.Row, number: int) -> None:
+    """The whole entry, opened. Every field is read from the corpus; nothing came from the model,
+    so this is what the prose can be checked against."""
+    with st.container(border=True):
+        with st.container(horizontal=True, vertical_alignment="center"):
+            st.markdown(as_text(f"**Entry {number}** · `{bionumbers.label(row.entry_id)}`"))
+            if row.trust is not None:
+                st.caption(as_text(f"{row.stars} · {trust_marks.tier_words(row.trust)}"))
+        st.markdown(f"**{as_text(row.property)}**")
+        if row.organism:
+            st.caption(as_text(row.organism))
+        reference = row.reference or "(no reference recorded)"
+        pubmed = (
+            f" · [PubMed {row.reference_pubmed_id}]"
+            f"(https://pubmed.ncbi.nlm.nih.gov/{row.reference_pubmed_id}/)"
+            if row.reference_pubmed_id
+            else ""
+        )
+        st.caption(as_text(reference + pubmed))
+        if row.has_scalar:
+            st.subheader(as_text(f"{row.value} {row.units}".strip()), anchor=False)
+        else:
+            st.caption(entries_table.NO_SCALAR_LEGEND)
+        if row.objections:
+            # What each objecting reviewer said, shown to the reader only -- never to the model
+            # (ADR-1630). Introduced by the reviewer's role, marked where it was simulated.
+            said = "\n".join(f"- {text}" for text in row.objections)
+            st.warning(as_text(f"**A reviewer objected.**\n{said}"), icon=":material/warning:")
+        if row.method:
+            st.markdown(f"*Measurement method.* {as_text(row.method)}")
+        else:
+            st.caption(entries_table.NO_METHOD_LEGEND)
+        if row.comments:
+            st.markdown(f"*Comments.* {as_text(row.comments)}")
+        if row.harvest is not None:
+            _draw_harvest(row.harvest)
+        else:
+            keywords = shown_keywords(row)
+            if keywords:
+                st.caption("Keywords: " + as_text(", ".join(keywords)))
 
 
 def _draw_harvest(harvest: Harvest) -> None:
@@ -1965,134 +2076,6 @@ def shown_keywords(row: entries_table.Row) -> list[str]:
     empties, and which the corpus carries on 10,206 of 14,294 records.
     """
     return [keyword for keyword in row.keywords if keyword]
-
-
-def summary_for(table: Table, shown: int) -> str:
-    """How much went unshown, or "" when there is nothing to report.
-
-    Guarded as the terminal guards it. `table.rows` includes entries cited without
-    being retrieved while `table.retrieved` counts only retrieved ones, so `shown`
-    can exceed it and the ungated sentence read "showing 4 of 1 entries retrieved".
-    """
-    if table.retrieved > shown or table.matched > shown:
-        return entries_table.summarise(shown, table.retrieved, table.matched, table.searches)
-    return ""
-
-
-def _dataframe(rows: tuple[entries_table.Row, ...]) -> None:
-    st.dataframe(
-        _frame(rows),
-        width="stretch",
-        hide_index=True,
-        column_config={
-            name: st.column_config.TextColumn(width=width) for name, width in COLUMN_WIDTHS.items()
-        },
-    )
-
-
-def _draw_table(table: Table) -> None:
-    """The entries table: cited first, separated from the rest.
-
-    Two tables under two headings rather than one with a marker column. The
-    separation is what a reader checking prose against evidence needs, and a
-    column they have to scan for does not give it to them.
-    """
-    every_cited = tuple(row for row in table.rows if row.cited)
-    cited = every_cited[:CITED_ROWS]
-    rest = tuple(row for row in table.rows if not row.cited)[:UNCITED_ROWS]
-    shown = cited + rest
-
-    if cited:
-        st.markdown("**Cited in the answer**")
-        _dataframe(cited)
-    else:
-        # Not silence: an answer that cited nothing is a fact about the answer,
-        # and a table that just began with uncited rows read as though it had.
-        st.markdown(f"**{entries_table.NOTHING_CITED}**")
-    # Loud, not a caption. An answer resting on an entry the table does not show
-    # is the one omission a reader cannot detect by looking, and the table is
-    # where they would look. All of them are in the side panel.
-    missing = len(every_cited) - len(cited)
-    if missing:
-        st.warning(
-            as_text(
-                f"{missing} more cited "
-                f"{'entry is' if missing == 1 else 'entries are'} not shown here — "
-                "every one is in the side panel."
-            ),
-            icon=":material/warning:",
-        )
-    # Between the two tables: a reader meets the marks in the cited rows, reads
-    # what they mean, and carries that into the rows below. Before both it is
-    # explaining marks nobody has seen yet; after both it is too late.
-    for line in _legend(shown):
-        st.caption(as_text(markdown_line(line)))
-    if rest:
-        # Folded away, where the cited table is not. These rows are what the answer
-        # *did not* stand on: context for a reader who wants to know what else was
-        # there, and length in front of one who is checking the prose against its
-        # evidence. The label is the heading, so what is behind it is legible
-        # without opening it.
-        #
-        # Splitting the turn into columns weakened the original argument -- these
-        # rows no longer push anything downwards, they sit beside the prose. It
-        # still holds in the weaker form that matters: the page is as tall as its
-        # tallest column, so an unfolded second table scrolls the prose too.
-        with st.expander(entries_table.UNCITED_BANNER.capitalize()):
-            _dataframe(rest)
-
-    note = entries_table.dimension_note(table.rows)
-    if note:
-        st.caption(as_text(note))
-    summary = summary_for(table, len(shown))
-    if summary:
-        # Body text, not a caption. How much of the corpus went unlooked-at is one
-        # of the few things a reader can use to judge whether an answer is worth
-        # trusting, and it was set in the same grey as the footnotes.
-        st.markdown(as_text(summary.removeprefix("… ")))
-
-
-def draw_full_entries(table: Table | None, seat: Any | None = None) -> None:
-    """Every retrieved entry, whole and openable, in the side panel.
-
-    Drawn whether or not there is anything to put in it, so the panel is part of
-    the page rather than something that appears once a question has been asked --
-    a panel that materialises later reads as a glitch, and other sections will
-    live beside this one.
-
-    All of the entries, not the table's first few: this is where "the rest" is
-    reached, and an entry the answer passed over is part of the evidence. Only
-    the newest question's, because the panel is for reading the answer in front
-    of you and a session's worth would bury it.
-    """
-    with seat if seat is not None else st.sidebar:
-        # The tab's own label is the heading when there is a strip; a header
-        # repeating it underneath is the same word twice.
-        if seat is None:
-            st.header(ENTRIES_TAB, anchor=False)
-        if table is None:
-            st.caption("The entries behind an answer appear here once you ask something.")
-            return
-        for row in table.rows:
-            with st.expander(as_text(_row_label(row))):
-                _draw_entry(row)
-
-
-def latest_table(transcript: Iterable[tuple[str, list[Item]]]) -> Table | None:
-    """The newest question's entries, or None if that question produced none.
-
-    The newest question's, not the newest that had any. Falling back to an older
-    one leaves a previous question's entries under a heading that says "Full
-    entries", with nothing on the page marking them as belonging to a question
-    already answered -- and the main column's warning about rows not shown here
-    would then be pointing at a panel that no longer holds them.
-    """
-    for _, items in reversed(list(transcript)):
-        for item in items:
-            if item.kind is Kind.ENTRIES and item.table is not None:
-                return item.table
-        return None
-    return None
 
 
 #: What the page calls itself, in the tab and at the head of every view of it.
@@ -2163,19 +2146,88 @@ def draw_title(text: str = TITLE) -> None:
     st.markdown(TITLE_HTML.format(mark=mark, text=html.escape(text)), unsafe_allow_html=True)
 
 
-def draw_prototype_banner() -> None:
-    """The caveat, pinned so it is still there after the tenth answer.
+#: Under the title: whose numbers these are, as the page's own subtitle.
+SUBTITLE_STORE = "BioNumbers + values harvested from papers"
+SUBTITLE_CORPUS = "BioNumbers"
 
-    Deliberately not a dismissible one. The page shows identifiers, dimension
-    checks and marked entries -- every signal a reader uses to judge a number
-    solid -- so the statement that none of it has been evaluated has to outlast
-    the reader's growing confidence in it.
+
+def draw_header(*, harvested: bool) -> None:
+    """The title, what the data is, and the prototype caveat, in amber (ADR-1850).
+
+    The caveat used to be pinned to the viewport. The canvas puts it in the header as one amber
+    line; it is still drawn on every view of the page, before anything a reader could trust.
     """
-    st.markdown(PROTOTYPE_BANNER_CSS, unsafe_allow_html=True)
-    # The note is written as markdown, and this element is raw HTML, where `**`
-    # renders as two asterisks. One source of words, two renderings of it.
+    with st.container(horizontal=True, vertical_alignment="center", gap="medium"):
+        draw_title()
+        st.caption(as_text(SUBTITLE_STORE if harvested else SUBTITLE_CORPUS))
     emphasised = PROTOTYPE_NOTE.replace("**", "<strong>", 1).replace("**", "</strong>", 1)
-    st.markdown(f'<div class="bn-caveat">{emphasised}</div>', unsafe_allow_html=True)
+    st.html(f'<div class="sn-proto">{emphasised}</div>')
+
+
+def draw_footer(admission: Admission) -> None:
+    """Under the question box: what is kept, whose money a question spends, and whose account it
+    is kept against. Here rather than in the sidebar, which is collapsed by default (ADR-1850): a
+    request a reader never sees is not a request."""
+    who = (
+        messages.SIGNED_IN_AS.format(
+            email=admission.account.email, role=admission.account.role.value
+        )
+        if admission.configured and admission.account is not None
+        else messages.NO_SIGN_IN_CONFIGURED
+        if not admission.configured
+        else ""
+    )
+    with st.bottom:
+        st.caption(as_text(" ".join(part for part in (RECORDS_NOTE, BUDGET_NOTE, who) if part)))
+
+
+#: Session state for an example question chosen on the first view; read once, as a submitted
+#: question is.
+EXAMPLE_KEY = "scinumbers_ask.example"
+
+#: The first view's examples: questions the store answers, one curated and two harvested.
+EXAMPLES = (
+    "Diameter of the cytokinetic ring in fission yeast",
+    "F-actin concentration in lamellipodia",
+    "How many ribosomes does an E. coli cell have?",
+)
+
+
+def take_example(state: Any = None) -> str | None:
+    """The example question a reader chose, once; None when none was."""
+    state = st.session_state if state is None else state
+    return state.pop(EXAMPLE_KEY, None)
+
+
+def _choose_example(question: str) -> None:
+    st.session_state[EXAMPLE_KEY] = question
+
+
+def draw_first_view(*, answering: bool = False) -> None:
+    """Before the first question: what the page is for, and three questions to start from."""
+    ask, evidence = st.columns(READING_SPLIT, gap="large")
+    with ask:
+        st.subheader("Ask about a scientific quantity", anchor=False)
+        st.markdown(
+            "A size, a concentration, a rate. Answers are grounded in BioNumbers and in values "
+            "harvested from papers and checked by reviewers. Every number links to the entry "
+            "behind it, so you can check it against the source."
+        )
+        st.caption("Try one")
+        with st.container(horizontal=True, gap="small"):
+            for n, question in enumerate(EXAMPLES):
+                st.button(
+                    as_text(question),
+                    key=f"scinumbers_ask.example.{n}",
+                    on_click=_choose_example,
+                    args=(question,),
+                    disabled=answering,
+                )
+    with evidence, st.container(border=True, height=320, vertical_alignment="center"):
+        st.caption(
+            "The entries behind each answer appear here: value, trust tier and source for every "
+            "cited number, and the full record on request."
+        )
 
 
 def run_is_over(transcript: Iterable[tuple[str, list[Item]]]) -> bool:
@@ -2244,13 +2296,13 @@ def run_status(
     return latest
 
 
-def draw(item: Item) -> None:
-    """Draw one item. The only function here that touches the screen."""
+def draw(item: Item, numbers: Mapping[str, int] | None = None) -> None:
+    """Draw one item. `numbers` is the session's numbering (`entry_numbers`) as of this item."""
     if item.kind is Kind.ANSWER:
-        st.markdown(answer_markdown(item.text, dict(item.stars)), unsafe_allow_html=True)
+        st.markdown(answer_markdown(item.text, dict(item.stars), numbers), unsafe_allow_html=True)
     elif item.kind is Kind.ENTRIES:
         if item.table is not None:
-            _draw_table(item.table)
+            draw_evidence(item.table, numbers or entry_numbers([[item]]))
     elif item.kind is Kind.WARNING:
         st.warning(as_text(item.text), icon=":material/warning:")
     elif item.kind is Kind.PROGRESS:
@@ -2273,12 +2325,42 @@ RETRIEVAL_RUNNING = "Searching the corpus…"
 RETRIEVAL_DONE = "Retrieval"
 
 
+def search_line(items: Iterable[Item]) -> str:
+    """The finished retrieval box's label: what was searched, and what came of it (ADR-1850).
+
+    "Searched “cytokinetic ring”, “contractile ring” · 10 retrieved, 6 cited". The box stays, so
+    each call is still there to open; only its label says what a reader wants at a glance.
+    `RETRIEVAL_DONE` where nothing was searched by name -- a lookup of known entries.
+    """
+    items = list(items)
+    asked = list(dict.fromkeys(item.query for item in items if item.query))
+    tables = [item.table for item in items if item.kind is Kind.ENTRIES and item.table]
+    if not asked:
+        return RETRIEVAL_DONE
+    line = "Searched " + ", ".join(f"“{q}”" for q in asked)
+    if tables:
+        cited = sum(1 for row in tables[-1].rows if row.cited)
+        line += f" · {tables[-1].retrieved} retrieved, {cited} cited"
+    return line
+
+
 def _retrieval_box(expanded: bool, state: str = "running", label: str = RETRIEVAL_RUNNING):
     # `as_text` although both callers pass a constant of this project's own words:
     # the escaping scan reads the call, not the call sites, and a parameter is
     # exactly the shape it cannot clear. Wrapping is free -- neither constant holds
     # a dollar -- and the alternative is teaching the scan to chase defaults.
     return st.status(as_text(label), expanded=expanded, state=state)
+
+
+def _numbers_with(current: list[Item], item: Item | None = None) -> dict[str, int]:
+    """The session's numbering as of `item`: every turn on the page, then `current` (the turn
+    being drawn, if the transcript does not hold it yet), then `item` itself."""
+    turns = [items for _, items in transcript(st.session_state)]
+    if not any(turn is current for turn in turns):
+        turns.append(current)
+    if item is not None:
+        turns.append([item])
+    return entry_numbers(turns)
 
 
 def _column_for(item: Item, prose: Any, evidence: Any) -> Any:
@@ -2355,6 +2437,10 @@ def answer(
     """
     box = None
     seat = None
+    # Where the entry chooser goes, reserved under the evidence list and filled once the answer is
+    # complete, for the rating's reason above: a widget is live the moment it is drawn.
+    chooser = None
+    entries: Item | None = None
     prose, evidence = st.columns(READING_SPLIT, gap="large")
     drawn: list[Item] = [] if into is None else into
     for item in items_for(events, repo):
@@ -2369,10 +2455,15 @@ def answer(
             with prose:
                 seat = st.container()
         with box if item.kind is Kind.PROGRESS else _column_for(item, prose, evidence):
-            draw(item)
+            draw(item, _numbers_with(drawn, item))
+            if item.kind is Kind.ENTRIES and item.table is not None:
+                chooser, entries = st.container(), item
         drawn.append(item)
     if box is not None:
-        box.update(label=RETRIEVAL_DONE, state="complete", expanded=False)
+        box.update(label=as_text(search_line(drawn)), state="complete", expanded=False)
+    if chooser is not None and entries is not None and entries.table is not None:
+        with chooser:
+            draw_open_entry(entries.table, _numbers_with(drawn), entries.question_id)
     if after_prose is not None:
         # The generator is spent by now, so there is nothing left for a click to
         # interrupt. A turn that never reached the seam gets the foot of its own
@@ -2506,7 +2597,7 @@ def question_pending(state: Any) -> bool:
     re-runs the script, abandoning the agent's generator mid-tool-call. So the
     page needs to know this *before* it redraws the transcript, not after.
     """
-    return bool(state.get(ASK_KEY))
+    return bool(state.get(ASK_KEY)) or bool(state.get(EXAMPLE_KEY))
 
 
 def draw_feedback(
@@ -2637,7 +2728,12 @@ def _draw_comment_box(
         st.rerun()
 
 
-def show(items: Iterable[Item], after_prose: Callable[[], None] | None = None) -> None:
+def show(
+    items: Iterable[Item],
+    after_prose: Callable[[], None] | None = None,
+    *,
+    answering: bool = False,
+) -> None:
     """Put a finished question's items back on screen after a re-run.
 
     Retrieval is collapsed here, where the live path leaves it open: while a
@@ -2649,10 +2745,13 @@ def show(items: Iterable[Item], after_prose: Callable[[], None] | None = None) -
     two different places, or scrolling back changes the layout.
     """
     items = list(items)
+    # The whole session's numbering: a past turn's numbers were fixed when it was first met, and
+    # nothing later changes them (`entry_numbers`).
+    numbers = _numbers_with(items)
     prose, evidence = st.columns(READING_SPLIT, gap="large")
     progress = [item for item in items if item.kind is Kind.PROGRESS]
     if progress:
-        with prose, _retrieval_box(expanded=False, state="complete", label=RETRIEVAL_DONE):
+        with prose, _retrieval_box(expanded=False, state="complete", label=search_line(items)):
             for item in progress:
                 draw(item)
     for item in items:
@@ -2663,7 +2762,11 @@ def show(items: Iterable[Item], after_prose: Callable[[], None] | None = None) -
                 after_prose()
             after_prose = None
         with _column_for(item, prose, evidence):
-            draw(item)
+            draw(item, numbers)
+            if item.kind is Kind.ENTRIES and item.table is not None:
+                # Disabled, not hidden, while another question is answering: a widget Streamlit
+                # does not render loses its state, and the reader's choice with it.
+                draw_open_entry(item.table, numbers, item.question_id, answering=answering)
     if after_prose is not None:
         with prose:
             after_prose()

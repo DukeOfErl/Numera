@@ -585,7 +585,7 @@ flowchart LR
     entry["Entry<br/><i>+ harvest details, + tier</i>"]
     model["the model<br/><i>tier in words</i>"]
     marks["trust_marks · references<br/><i>stars, # and ⚠; Chicago references</i>"]
-    reader["the reader<br/><i>superscript · table · legend</i>"]
+    reader["the reader<br/><i>pill · evidence list · opened entry</i>"]
     store -- "claims, papers,<br/>decisions → tier" --> loader --> entry
     entry -- "get_entry / search" --> model
     entry -- "tier, paper's record" --> marks --> reader

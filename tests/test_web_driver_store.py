@@ -7,6 +7,7 @@ the store's additions. Over the invented store in `store_double`.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -43,57 +44,62 @@ def _store_answer(store_path, config, tmp_path):
     return repo, agent_with(repo, config, tmp_path, model)
 
 
-def test_a_store_answer_carries_its_stars_its_legend_and_both_new_columns(
+def _html(at) -> str:
+    return " ".join(element.proto.body for element in at.get("html"))
+
+
+def test_a_store_answer_carries_pills_an_evidence_list_and_an_opened_entry(
     monkeypatch, store_path, config, tmp_path
 ):
+    """ADR-1850, through a whole run of the real page."""
     repo, agent = _store_answer(store_path, config, tmp_path)
+    objections.attach(repo, objections.load(store_path))
     at = ask_question(_page(monkeypatch, repo, agent).run(), "F-actin in lamellipodia?")
     assert not at.exception
 
-    drawn = " ".join(m.value for m in at.markdown)
-    # Each identifier footnoted on its own; its stars follow at text size, outside the superscript.
-    assert ">PMC1000001-1</sup> #★★★☆☆⚠️" in drawn
-    assert ">PMC1000001-1.2</sup> ☆☆☆☆☆" in drawn
-    assert "★</sup>" not in drawn and "☆</sup>" not in drawn
+    prose = " ".join(m.value for m in at.markdown)
+    # Each citation a pill: its number in the session, its stars, `sim` and the caution.
+    assert re.sub(r"<[^>]+>", "", prose).count("1 ★★★☆☆ sim ⚠️") == 1
+    assert 'title="PMC1000001-1.2"><b>2</b>' in prose
+    assert "<sup" not in prose and "[[PMC" not in prose
 
-    captions = [c.value for c in at.caption]
-    # Once, with the entries table -- not under the answer as well (the user's call, 2026-10-16).
-    assert captions.count(trust_marks.SCALE_LEGEND) == 1
-    # The simulated mark's line begins with `#`; escaped, it is not drawn as a heading.
-    assert "\\" + trust_marks.SIMULATED_LEGEND in captions
-    assert trust_marks.DISPUTED_LEGEND in captions
+    evidence = _html(at)
+    assert "<th>#</th><th>Entry</th><th>Value</th><th>Trust</th><th>ID</th>" in evidence
+    assert ">PMC1000001-1<" in evidence and ">PMC1000001-1.2<" in evidence
+    # The scale, and the marks shown, said once under the list.
+    legend = [c.value for c in at.caption if trust_marks.SCALE_LEGEND in c.value]
+    assert len(legend) == 1
+    assert trust_marks.SIMULATED_LEGEND in legend[0] and trust_marks.DISPUTED_LEGEND in legend[0]
 
-    table = at.dataframe[0].value
-    assert list(table.columns) == [
-        "",
-        "Property",
-        "Organism",
-        "Value",
-        "Units",
-        "Trust",
-        "ID",
-        "Reference",
-    ]
-    assert dict(zip(table["ID"], table["Trust"], strict=True)) == {
-        "PMC1000001-1": "#★★★☆☆⚠️",
-        "PMC1000001-1.2": "☆☆☆☆☆",
-    }
+    # The entries are chosen by number, and the first cited is open: objections included.
+    (chooser,) = at.get("button_group")
+    assert chooser.options == ["1", "2"]
+    assert any(w.value.startswith("**A reviewer objected.**") for w in at.warning)
+    assert any(store_double.REVIEWER_ISSUE in w.value for w in at.warning)
+    # And nothing of it in the sidebar any more.
+    assert not at.sidebar.expander
 
 
-def test_a_corpus_file_answer_draws_none_of_the_store_s_additions(monkeypatch, config, tmp_path):
+def test_choosing_another_number_opens_that_entry(monkeypatch, store_path, config, tmp_path):
+    repo, agent = _store_answer(store_path, config, tmp_path)
+    at = ask_question(_page(monkeypatch, repo, agent).run(), "F-actin in lamellipodia?")
+    at.get("button_group")[0].set_value(2).run()
+    assert not at.exception
+    assert "**Entry 2** · `PMC1000001-1.2`" in [m.value for m in at.markdown]
+
+
+def test_a_corpus_file_answer_has_pills_without_stars(monkeypatch, config, tmp_path):
     repo = CorpusRepository(load(FIXTURE))
     model = scripted(tool_call("search_entries", property="Cell"), says("1 μm [[100002]]"))
     agent = agent_with(repo, config, tmp_path, model)
     at = ask_question(_page(monkeypatch, repo, agent).run(), "how wide?")
     assert not at.exception
 
-    drawn = " ".join(m.value for m in at.markdown)
-    assert ">100002</sup>" in drawn
-    assert "★" not in drawn and "☆" not in drawn
-    assert trust_marks.SCALE_LEGEND not in [c.value for c in at.caption]
-    table = at.dataframe[0].value
-    assert "Trust" not in table.columns
-    assert list(table.columns)[0] == ""
+    prose = " ".join(m.value for m in at.markdown)
+    assert 'title="BNID 100002"><b>1</b></span>' in prose
+    assert "★" not in prose and "☆" not in prose
+    assert trust_marks.SCALE_LEGEND not in " ".join(c.value for c in at.caption)
+    assert "<th>Trust</th>" not in _html(at)
 
 
 def test_the_page_loads_the_store_from_its_setting_without_building_a_corpus(
@@ -149,8 +155,7 @@ def test_a_harvested_entry_opens_with_its_fields_apart_not_its_keywords(
     "Keywords:" they read as one fused field (seen on PMC2064542-2, 2026-10-16)."""
     repo, agent = _store_answer(store_path, config, tmp_path)
     at = ask_question(_page(monkeypatch, repo, agent).run(), "F-actin in lamellipodia?")
-    opened = next(e for e in at.sidebar.expander if "PMC1000001-1" in e.label)
-    drawn = [m.value for m in opened.markdown] + [c.value for c in opened.caption]
+    drawn = [m.value for m in at.markdown] + [c.value for c in at.caption]
     text = "\n".join(drawn)
     assert "Keywords:" not in text
     assert (
@@ -196,7 +201,7 @@ def _draw_shared_quotes():
         keywords=("biology", "Q", said, said, said),
         harvest=harvest,
     )
-    web._draw_entry(row)
+    web.draw_record(row, 1)
 
 
 def test_conditions_quoting_one_passage_are_named_together():

@@ -11,9 +11,9 @@ model's own knowledge. It is for people who need a figure they can defend.
 Three commitments shape the design:
 
 - **Provenance.** Every figure carries the identifier of the entry it came from, written `[[100002]]`
-  so a citation can never be confused with a quantity, and drawn as a small grey superscript, a run
-  of them comma-separated, so the prose reads through them (ADR-1240). Those entries
-  are shown beside the answer. A number the answer used but the corpus never returned is flagged as
+  so a citation can never be confused with a quantity, and drawn as a small numbered pill, so the
+  prose reads through it and the number finds the entry in the list beside the answer, where it
+  opens in full (ADR-1850). A number the answer used but the corpus never returned is flagged as
   unsupported rather than quietly printed.
 - **Precision.** Units are compared by dimension, so a length is never silently reconciled with a
   volume. Entries with no measurement method, no scalar value, or a value the source only bounded
@@ -73,14 +73,13 @@ value harvested from a paper, in every domain the store holds, each cited by its
 number within that paper — `[[PMC2652108-1]]`. The store is opened read-only and read once at start;
 decisions reviewers make afterwards appear after a restart.
 
-- **Each citation carries its trust tier as stars**, drawn by the app from the store and never
-  written by the model: ★★★★★ curated, then ★★★★☆ to ★☆☆☆☆ for the highest role that approved the
-  entry (senior scientist, scientist, student, AI reviewer), ☆☆☆☆☆ where no reviewer approved it.
-  `#` before the stars marks a tier set by a **simulated** review — a model standing in for that
-  reviewer — and a yellow `⚠️` after them marks an entry a reviewer objected to; in the entries
-  table its Trust cell goes on to say what each objecting reviewer wrote (double click to read it
-  all). A legend under the entries
-  table says so. The rule is ADR-0990's; how it is drawn is ADR-1630.
+- **Each citation carries its trust tier as stars**, in its pill, drawn by the app from the store
+  and never written by the model: ★★★★★ curated, then ★★★★☆ to ★☆☆☆☆ for the highest role that
+  approved the entry (senior scientist, scientist, student, AI reviewer), ☆☆☆☆☆ where no reviewer
+  approved it. `sim` after the stars marks a tier set by a **simulated** review — a model standing
+  in for that reviewer — and a yellow `⚠️` marks an entry a reviewer objected to; open the entry
+  (by its number, under the evidence list) to read what each objecting reviewer wrote. A legend
+  under the list says so. The rule is ADR-0990's; how it is drawn is ADR-1630 and ADR-1850.
 - **The model is told each tier in words** and to decide which entries bear on the question first:
   a rating never makes an entry relevant, it only decides among relevant ones. It does not mention
   ratings in its answer unless asked; the stars and the legend say it.
@@ -813,7 +812,7 @@ addresses, is the one thing Actions does print).
 **Five roles exist — student, scientist, senior scientist, dev and admin — as
 foundations, built and tested now so that ratings can later be weighted by who
 gave them.** Today they differ in one visible thing: dev and admin get an extra
-**Dev** tab in the side panel, showing this session's recent trail. Permissions
+**Dev** section in the side panel, showing this session's recent trail. Permissions
 are a default-deny table, and nothing about a role reaches the agent, so an
 answer cannot depend on who asked
 ([ADR-0800](docs/decisions/0800-default-deny-and-the-pruning-rule.md)).
