@@ -36,6 +36,7 @@ ADR block: `1700`–`1740` (reserved in `CLAUDE.md`).
 - [x] 6.2 `review_item.property`, written on load; `store.fill_properties` and `bionumbers name-properties` for a store loaded earlier
 - [x] 6.3 Tests: the join, the seven refusals, the three dropped drafts, the backfill's resume, failure and budget, the CLI
 - [x] 6.4 Name the 452 entries of `harvest-demo.sqlite` and back it up; read the refusals both ways before trusting the rule (2026-10-17: 452 named, 0 refused, 3 duplicate names remain; median 14 words)
+- [ ] 6.6 The names are long and three are duplicated (see `docs/roadmap.md`, deferred); a tighter instruction and a re-run, after the demo
 - [ ] 6.5 A condition whose quote only points at another paper ("were described previously") is recorded as not stated in this paper, not as the condition (ask-DB session, 2026-10-16)
 
 ## 5. Before hand-over
