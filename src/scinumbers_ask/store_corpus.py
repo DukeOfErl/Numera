@@ -24,6 +24,7 @@ Three things a reader of one function here would not see:
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections import defaultdict
 from datetime import datetime
@@ -33,6 +34,7 @@ from typing import Any
 from sqlalchemy import create_engine, inspect, select, text
 
 from bionumbers import readings, store, tiers
+from bionumbers.quotes import fold
 from bionumbers.records import CandidateKind, ClaimKind, Provenance, ReviewItem
 
 from .citations import LABEL
@@ -75,6 +77,7 @@ def load(setting: str | Path | None) -> tuple[Entry, ...]:
                 (row.run_id, row.pmcid): row for row in conn.execute(select(store.review_paper))
             }
             references = _references(conn)
+            property_names = _property_names(conn)
             items = conn.execute(
                 select(
                     store.review_item.c.item_id,
@@ -92,18 +95,32 @@ def load(setting: str | Path | None) -> tuple[Entry, ...]:
         engine.dispose()
 
     entries = [_curated(row) for row in curated]
-    labels = _labels(items)
+    try:
+        labels = _labels(items)
+    except CorpusUnavailable:
+        raise
+    except Exception as exc:  # a null claim id, say: a sentence, not a traceback
+        raise CorpusUnavailable(f"{path} holds items this reader cannot label: {exc}") from exc
     for row in items:
         paper_row = papers.get((row.run_id, row.pmcid))
-        entries.append(
-            _harvested(
-                row,
-                labels[row.item_id],
-                paper_row,
-                trust.get(row.item_id, tiers.Trust(tiers.Tier.NONE)),
-                references.get((row.run_id, row.pmcid), ""),
+        try:
+            entries.append(
+                _harvested(
+                    row,
+                    labels[row.item_id],
+                    paper_row,
+                    trust.get(row.item_id, tiers.Trust(tiers.Tier.NONE)),
+                    references.get((row.run_id, row.pmcid), ""),
+                    property_names.get(row.item_id, ""),
+                )
             )
-        )
+        except Exception as exc:
+            # An item written by another version of the review's records, or a kind this
+            # reader does not know: both drivers render CorpusUnavailable as a sentence, and
+            # anything else as a traceback.
+            raise CorpusUnavailable(
+                f"{path} holds an item this reader cannot read ({row.item_id}): {exc}"
+            ) from exc
     if not entries:
         raise CorpusUnavailable(f"{path} holds no entries.")
     return tuple(entries)
@@ -186,8 +203,25 @@ def _references(conn: Any) -> dict[tuple[str, str], str]:
     return {(run_id, pmcid): csl or "" for run_id, pmcid, csl in rows}
 
 
+def _property_names(conn: Any) -> dict[str, str]:
+    """Each item's full property name, "<measure> of <object>"; empty for a store without them.
+
+    Read by name for the reason `_references` gives: the column is `harden-harvest`'s (ADR-1700,
+    on `feat/property-names`), and a store written before it simply has none.
+    """
+    if "property" not in {column["name"] for column in inspect(conn).get_columns("review_item")}:
+        return {}
+    rows = conn.execute(text("SELECT item_id, property FROM review_item"))
+    return {item_id: name or "" for item_id, name in rows}
+
+
 def _harvested(
-    row: Any, label: str, paper_row: Any, trust: tiers.Trust, csl_json: str = ""
+    row: Any,
+    label: str,
+    paper_row: Any,
+    trust: tiers.Trust,
+    csl_json: str = "",
+    property_name: str = "",
 ) -> Entry:
     """A harvested value as an `Entry`. Reads the claim and the paper; never the review's text."""
     item = ReviewItem.model_validate_json(row.item_json)
@@ -214,7 +248,9 @@ def _harvested(
 
     return Entry(
         entry_id=label,
-        property=claim.property_in_paper.strip(),
+        # The full name -- the measure and what it is of -- where the store holds one; the
+        # paper's own wording ("average length") otherwise.
+        property=property_name.strip() or claim.property_in_paper.strip(),
         organism=claim.organism_name.strip(),
         units=claim.unit.strip(),
         value=value,
@@ -226,8 +262,18 @@ def _harvested(
         comments="",
         # What a keyword search reaches (design D2): the qualifier a reader searches for often
         # lives in the passage, not in the paper's shorter wording of the property.
+        # The paper's own wording of the property too: once the full name replaces it, a search
+        # for "average length" must still reach the entry.
         keywords=tuple(
-            part for part in (domain, topic, claim.quote.text, *(c.quote for c in stated)) if part
+            part
+            for part in (
+                domain,
+                topic,
+                claim.property_in_paper.strip(),
+                claim.quote.text,
+                *(c.quote for c in stated),
+            )
+            if part
         ),
         range_qualified=approximate,
         range_approximate=approximate,
@@ -251,9 +297,28 @@ def _harvested(
             domain=domain,
             topic=topic,
             reading_uncertain=uncertain,
+            property_in_paper=claim.property_in_paper.strip() if property_name.strip() else "",
         ),
         trust=trust,
     )
+
+
+#: A comparator or a bound in words: the paper gave a limit, not a value.
+_BOUND = re.compile(
+    r"[<>≤≥≲≳]|\b(?:up to|more than|less than|greater than|fewer than|at least|at most|"
+    r"over|under|above|below|exceed(?:s|ing)?)\b",
+    re.I,
+)
+#: An exponent belongs to its number: `5 x 10^2` is one number written with three runs of digits.
+_EXPONENT = re.compile(r"(?:x\s*10\s*\^?\s*|\b10\s*\^\s*|(?<=\d)e)[+-]?\d+", re.I)
+_THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}\b)")
+_DIGIT_RUN = re.compile(r"\d+(?:\.\d+)?")
+
+
+def _numbers_written(text: str) -> int:
+    """How many numbers the paper wrote in `text`, through the parser's own fold."""
+    folded = _THOUSANDS.sub("", fold(text))
+    return len(_DIGIT_RUN.findall(_EXPONENT.sub("", folded)))
 
 
 def _reading(
@@ -269,8 +334,16 @@ def _reading(
     stated with confidence is a wrong answer that looks like a right one. So any disagreement
     cautions, whichever side is wrong -- the parser or the recorded kind.
     """
-    reading = readings.parse(f"{text} {unit}".strip())
+    # The value alone: a unit such as `x 10^6 cells/mL` holds a scale factor, and read together
+    # with the value it multiplies a number the unit still states.
+    reading = readings.parse(text)
     if reading is None:
+        return None, None, None, False, True
+    # The parser reads the first number and what follows it, and is lenient by design: `>500`
+    # reads as 500 and `70 and 100` as 70. A bound, or a number it did not use, is a reading that
+    # does not say what the paper said -- so it is uncertain, whatever the kind.
+    used = len(reading.numbers) + (reading.uncertainty is not None)
+    if _BOUND.search(text) or _numbers_written(text) > used:
         return None, None, None, False, True
     numbers = [float(n) for n in reading.numbers]
     if kind is ClaimKind.SINGLE and len(numbers) == 1:

@@ -1205,6 +1205,7 @@ COVERED.update(
             "test_store_corpus.py::test_a_reading_that_fits_its_kind_gives_numbers",
             "test_store_corpus.py::test_a_reading_that_does_not_fit_its_kind_states_no_number",
             "test_store_corpus.py::test_the_reading_is_kept_only_where_it_fits_the_recorded_kind",
+            "test_store_corpus.py::test_a_scale_factor_in_the_unit_is_not_applied_to_the_value",
             "test_store_corpus.py::test_an_uncertain_reading_is_cautioned_and_given_in_the_paper_s_words",
         ),
         "Nothing written for the review reaches the agent": (

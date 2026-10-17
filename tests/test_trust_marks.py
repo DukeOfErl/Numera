@@ -111,6 +111,20 @@ def test_the_web_superscript_reads_a_label_and_carries_its_stars(store_repo):
     assert "[[" not in drawn, "a label left as raw brackets"
 
 
+def test_a_run_holding_a_group_that_is_not_a_citation_still_draws_the_ones_that_are():
+    """`[[Table 1]]` stays as written; `[[100002]]` beside it is still a superscript."""
+    drawn = web.answer_markdown("8 nm [[100002]], [[Table 1]]")
+    assert ">100002</sup>" in drawn and "[[Table 1]]" in drawn
+    assert "[[100002]]" not in drawn
+
+
+def test_an_uncertain_reading_shows_the_paper_s_words_in_the_value_cell(store_repo):
+    """No number was taken from `10–20`, and the paper's words are still what the cell shows."""
+    (row,) = web._frame(_rows(store_repo, ("PMC1000001-4",)))
+    assert row["Value"] == "10–20"
+    assert entries_table.NO_SCALAR not in row[""]
+
+
 def test_a_group_that_is_not_a_citation_is_not_drawn_as_one():
     assert "<sup" not in web.answer_markdown("see [[Table 1]]")
     assert web.answer_markdown("see [[Table 1]]") == "see [[Table 1]]"

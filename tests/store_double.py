@@ -351,3 +351,15 @@ def with_references(path: Path, records: dict[str, dict]) -> Path:
                 "UPDATE review_paper SET csl_json = ? WHERE pmcid = ?", (json.dumps(record), pmcid)
             )
     return path
+
+
+def with_property_names(path: Path, names: dict[str, str]) -> Path:
+    """Give the store `review_item.property`, as `harden-harvest`'s backfill does, keyed by item id.
+
+    Added by hand for the reason `with_references` gives: this branch's table predates the column.
+    """
+    with sqlite3.connect(path) as conn:
+        conn.execute("ALTER TABLE review_item ADD COLUMN property TEXT NOT NULL DEFAULT ''")
+        for item_id, name in names.items():
+            conn.execute("UPDATE review_item SET property = ? WHERE item_id = ?", (name, item_id))
+    return path

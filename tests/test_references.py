@@ -52,6 +52,11 @@ def test_seven_authors_are_the_first_three_and_et_al():
         json.dumps({k: v for k, v in store_double.ACTIN_CSL.items() if k != "author"}),
         # A collaboration's name: citeproc-py 0.11.1 does not support literal names.
         json.dumps({**store_double.ACTIN_CSL, "author": [{"literal": "Invented Consortium"}]}),
+        # No type: citeproc raised UnboundLocalError. A date in strings, or only `raw`: it
+        # printed "Edition." where the year belongs (code review, 2026-10-17).
+        json.dumps({k: v for k, v in store_double.ACTIN_CSL.items() if k != "type"}),
+        json.dumps({**store_double.ACTIN_CSL, "issued": {"date-parts": [["2009", "5"]]}}),
+        json.dumps({**store_double.ACTIN_CSL, "issued": {"raw": "2009-05"}}),
     ],
 )
 def test_a_record_that_cannot_be_formatted_faithfully_is_not(record):
@@ -94,3 +99,11 @@ def test_the_model_is_never_handed_the_authors(tmp_path):
     shown += tools["search_entries"].invoke({"property": "F-actin"})
     for author in ("Inventa", "Fictor", "Madeup", "Journal of Invented Biology"):
         assert author not in shown, author
+
+
+def test_a_record_citeproc_raises_on_keeps_the_plain_reference(monkeypatch):
+    def raises(*args, **kwargs):
+        raise KeyError("something citeproc did not expect")
+
+    monkeypatch.setattr(references, "CitationStylesBibliography", raises)
+    assert references.chicago(json.dumps(store_double.ACTIN_CSL)) is None

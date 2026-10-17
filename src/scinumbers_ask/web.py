@@ -1801,9 +1801,10 @@ def answer_markdown(text: str, stars: Mapping[str, str] | None = None) -> str:
     a run has one, each identifier gets a superscript of its own followed by its stars at
     the prose's own size -- the stars, `#` and `⚠` are read, not footnoted (the user's
     call, 2026-10-16; ADR-1630). A run with no tiers -- every corpus-file answer -- is the
-    one comma-separated superscript it always was. A run holding a group `citations`
-    cannot read -- `[[Table 1]]` -- is left as written: nothing is drawn as a citation
-    that the parser would not count as one.
+    one comma-separated superscript it always was. A group `citations` cannot read --
+    `[[Table 1]]` -- is left as written, and the readable groups beside it in the same run
+    are still drawn: nothing is drawn as a citation that the parser would not count as one,
+    and nothing it would count is left as raw brackets.
     """
     stars = stars or {}
     escaped = as_text(html.escape(text, quote=False))
@@ -1811,7 +1812,10 @@ def answer_markdown(text: str, stars: Mapping[str, str] | None = None) -> str:
     def superscript(run: re.Match) -> str:
         groups = [group.group(0) for group in DELIMITED.finditer(run.group(0))]
         if not all(citations(group) for group in groups):
-            return run.group(0)
+            return DELIMITED.sub(
+                lambda group: superscript(group) if citations(group.group(0)) else group.group(0),
+                run.group(0),
+            )
         shown = [str(i) for i in citations(run.group(0))]
         if not any(i in stars for i in shown):
             return f'<sup style="{_CITATION_STYLE}">{", ".join(shown)}</sup>'
@@ -1933,6 +1937,8 @@ def _draw_harvest(harvest: Harvest) -> None:
     the quote for its medium, temperature and culture mode at once -- and `method` is left to the
     measurement method line above.
     """
+    if harvest.property_in_paper:
+        st.markdown(f"*In the paper.* {as_text(harvest.property_in_paper)}")
     st.markdown(f"*Quote.* “{as_text(harvest.quote)}”")
     named: dict[str, list[str]] = {}
     for condition in harvest.conditions:

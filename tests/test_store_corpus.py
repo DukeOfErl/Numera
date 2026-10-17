@@ -208,11 +208,29 @@ def test_a_reading_that_does_not_fit_its_kind_states_no_number(by_label):
         ("1,100–2,100", "", "RANGE_OVER_CONDITIONS", True),
         ("0.89 and 1.16", "J/gK", "RANGE_OVER_CONDITIONS", False),
         ("2.3", "μm", "RANGE_OVER_CONDITIONS", False),
+        # A bound, or a number the parser did not use: each was read as a confident single number
+        # in the real store (code review, 2026-10-17). The positives beside them differ only in
+        # the comparator, the second number, or an exponent that belongs to its number.
+        (">500", "nm", "SINGLE", False),
+        ("<1", "mm", "SINGLE", False),
+        ("more than 70", "%", "SINGLE", False),
+        ("up to 260", "µm/min", "SINGLE", False),
+        ("at least 14", "segments", "SINGLE", False),
+        ("70 and 100", "nm", "SINGLE", False),
+        ("500", "nm", "SINGLE", True),
+        ("∼(5 × 10²)", "nm²/s", "SINGLE", True),
+        ("187,000 ± 56,000", "rRNA copies per cell", "WITH_UNCERTAINTY", True),
     ],
 )
 def test_the_reading_is_kept_only_where_it_fits_the_recorded_kind(text, unit, kind, fits):
     *_, uncertain = store_corpus._reading(text, unit, ClaimKind(kind))
     assert uncertain is not fits
+
+
+def test_a_scale_factor_in_the_unit_is_not_applied_to_the_value():
+    """`5` in `x 10^6 cells/mL` is 5 of that unit; read together, it became 5,000,000."""
+    value, *_ = store_corpus._reading("5", "x 10^6 cells/mL", ClaimKind.SINGLE)
+    assert value == 5.0
 
 
 # -- labels, and the id that is saved (D3, ADR-1610) ---------------------------
@@ -482,3 +500,36 @@ def test_a_store_alone_loads_the_store_and_a_file_alone_loads_the_file(store_pat
 def test_a_store_read_as_a_corpus_file_is_refused_by_name(store_path):
     with pytest.raises(CorpusUnavailable, match="is a harvest store, not a corpus file"):
         corpus.load(store_path)
+
+
+# -- what the code review of 2026-10-17 found --------------------------------------------------
+
+A1 = f"{store_double.RUN_A}-{store_double.ACTIN.pmcid}-1-item"
+
+
+def test_a_full_property_name_is_shown_and_the_paper_s_wording_still_found(tmp_path):
+    """`harden-harvest` names each property as "<measure> of <object>" (ADR-1700). Shown in
+    place of the paper's wording, which stays on the entry and in what a search reaches."""
+    full = "Concentration of F-actin in invented lamellipodia"
+    path = store_double.with_property_names(store_double.build(tmp_path / "s.sqlite"), {A1: full})
+    repo = CorpusRepository(store_corpus.load(path))
+    entry = repo.get("PMC1000001-1").entry
+    assert entry.property == full
+    assert entry.harvest.property_in_paper == "F-actin concentration"
+    assert "F-actin concentration" in entry.keywords
+    # An item the backfill left empty keeps the paper's wording, and says nothing twice.
+    other = repo.get("PMC1000001-2").entry
+    assert other.property == "Filament spacing" and other.harvest.property_in_paper == ""
+
+
+def test_a_store_without_property_names_shows_the_paper_s_wording(by_label):
+    assert by_label["PMC1000001-1"].property == "F-actin concentration"
+    assert by_label["PMC1000001-1"].harvest.property_in_paper == ""
+
+
+def test_an_item_this_reader_cannot_read_is_a_sentence_not_a_traceback(tmp_path):
+    path = store_double.build(tmp_path / "s.sqlite")
+    with sqlite3.connect(path) as conn:
+        conn.execute("UPDATE review_item SET item_json = '{}' WHERE item_id = ?", (A1,))
+    with pytest.raises(CorpusUnavailable, match=A1):
+        store_corpus.load(path)

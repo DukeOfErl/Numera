@@ -50,6 +50,14 @@ still shown and still citable. Over the real store this cautions 38 of 452 value
 with confidence is a wrong answer that looks like a right one. So any disagreement cautions,
 whichever side is wrong — the parser or the recorded kind — and the code says so where it decides.
 
+**Amended 2026-10-17, after the branch's code review.** The parser reads the first number and is
+lenient by design, so `>500`, `<1`, "more than 70", "up to 260", "at least 14" and "70 and 100"
+all loaded as confident single numbers -- 10 of the 452 harvested values, checked against the real
+store. A value that states a bound, or holds a number the reading did not use, is now uncertain
+whatever its kind. Measured both ways over the 452: those 10 moved from sure to uncertain, none the
+other way, and no number changed. The value is also parsed on its own, without its unit: read
+together, `5` in `x 10^6 cells/mL` became 5,000,000 in a unit that still says x 10^6.
+
 ## Trade-off accepted
 
 About one harvested value in twelve loses its numbers, including some the parser read correctly and

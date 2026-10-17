@@ -10,8 +10,9 @@ title-cases them, which rewrites biology's notation (`cdc15` to `Cdc15`, `S. pom
 And a period after a quoted title moves inside the quote, which Chicago requires and
 citeproc-py 0.11.1 does not yet do (`punctuation-in-quote`).
 
-Where the record cannot be formatted faithfully -- no record, no author, a collaboration's name,
-which citeproc-py 0.11.1 does not support -- the caller keeps the entry's plain reference. That is
+Where the record cannot be formatted faithfully -- no record, no type, no author, a
+collaboration's name (which citeproc-py 0.11.1 does not support), a date that is not integers,
+or a record citeproc raises on -- the caller keeps the entry's plain reference. That is
 the cheap direction: a plainer reference is still the right paper.
 """
 
@@ -48,11 +49,20 @@ def chicago(csl_json: str) -> str | None:
         item = json.loads(csl_json) if csl_json else None
     except ValueError:
         return None
-    if not isinstance(item, dict) or not item.get("id"):
+    if not isinstance(item, dict) or not item.get("id") or not item.get("type"):
         return None
     authors = item.get("author") or []
-    if not authors or any("family" not in author for author in authors):
+    if not authors or any(not isinstance(a, dict) or "family" not in a for a in authors):
         return None
-    bibliography = CitationStylesBibliography(_style(), CiteProcJSON([item]), formatter.plain)
-    bibliography.register(Citation([CitationItem(item["id"])]))
-    return str(bibliography.bibliography()[0]).replace("”.", ".”")
+    # A year citeproc can read: date-parts of integers. Strings or only `raw` came out as
+    # "Edition." where the year belongs -- a wrong reference where the plain one was right.
+    parts = (item.get("issued") or {}).get("date-parts") or [[]]
+    if not parts[0] or not all(isinstance(n, int) for n in parts[0]):
+        return None
+    try:
+        bibliography = CitationStylesBibliography(_style(), CiteProcJSON([item]), formatter.plain)
+        bibliography.register(Citation([CitationItem(item["id"])]))
+        drawn = str(bibliography.bibliography()[0])
+    except Exception:  # citeproc-py raises on records it does not expect; the plain one stands
+        return None
+    return drawn.replace("”.", ".”")

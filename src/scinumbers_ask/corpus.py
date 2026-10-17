@@ -102,6 +102,9 @@ class Harvest:
     #: The numbers read from the value do not fit the kind of value the extraction recorded, so
     #: no number is stated for it (ADR-1620).
     reading_uncertain: bool = False
+    #: The property in the paper's own words, kept when the store's full name ("<measure> of
+    #: <object>") is the one shown; "" when it is the same.
+    property_in_paper: str = ""
 
 
 #: How many of five a trust tier stands for, keyed by the tier's name (ADR-0990's `Tier` is a string

@@ -266,9 +266,12 @@ def rows_for(
                 reference=_reference(entry),
                 cited=entry_id in cited,
                 method_recorded=bool(entry.measurement_method.strip()),
+                # A harvested value always has the paper's own words to show, read or not: its
+                # `?` mark says when no number was taken from them.
                 has_scalar=entry.value is not None
                 or entry.range_low is not None
-                or entry.range_high is not None,
+                or entry.range_high is not None
+                or entry.harvest is not None,
                 retrieved=entry_id in retrieved,
                 method=" ".join(entry.measurement_method.split()),
                 comments=entry.comments,

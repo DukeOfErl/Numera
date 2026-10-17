@@ -159,7 +159,9 @@ used for search, for presenting a range as a range, and for the dimensional comp
 
 Where the numbers read from a value do not fit the kind of value the extraction recorded — two
 numbers for a single value, one for a range, a central value with a range around it that the reading
-does not keep — the entry SHALL carry a caution saying the value could not be read with certainty,
+does not keep — or where the value states a bound (`>500`, "up to 260", "at least 14") or holds a
+number the reading did not use ("70 and 100"), the entry SHALL carry a caution saying the value
+could not be read with certainty,
 and SHALL NOT be presented to the model as a number it may state. Its text SHALL still be presented,
 and the entry SHALL still be citable.
 
@@ -170,6 +172,15 @@ caution goes where the two disagree, whichever is wrong.
 #### Scenario: A value with an uncertainty
 - **WHEN** a harvested value is written as a number with an uncertainty
 - **THEN** the number and its uncertainty are presented as the paper wrote them
+
+#### Scenario: A value that states a bound
+- **WHEN** a harvested value recorded as a single value is written as a bound, such as `>500 nm`
+- **THEN** the entry carries a caution that its value could not be read with certainty
+- **AND** no number is presented to the model as one it may state
+
+#### Scenario: A unit that holds a scale factor
+- **WHEN** a harvested value `5` has the unit `x 10^6 cells/mL`
+- **THEN** the number read is 5, in that unit
 
 #### Scenario: A reading that does not fit the recorded kind
 - **WHEN** the numbers read from a value disagree with the kind of value the extraction recorded

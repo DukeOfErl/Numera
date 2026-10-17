@@ -22,6 +22,9 @@ any release; `1.0.0` when it stabilizes.
   truncated cell.
 - The system prompt speaks of "scientific quantities" and "a corpus of entries", and asks for "the
   identifier" in a citation rather than "the number".
+- **A harvested entry shows its full property name** -- the measure and what it is of -- where
+  the store holds one (`review_item.property`, harden-harvest), with the paper's own wording in the
+  full entry and still reached by search.
 - **An answer cites entries, never papers.** The prompt tells the model the identifier is the
   only citation and to name no author, title, journal, year or DOI; each entry's reference is in
   the entries table, and asked for one, it says where the reference is. On the web the Trust
@@ -45,6 +48,15 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **A harvested value that states a bound is no longer read as a number.** `>500`, "up to 260"
+  and "70 and 100" were stated to the model as 500, 260 and 70; they are now cautioned and given
+  only in the paper's words (10 of the store's 452 values). A unit holding a scale factor is no
+  longer applied to the value (ADR-1620).
+- On the web, a harvested value whose reading is uncertain shows the paper's words in the Value
+  cell instead of a blank and "no scalar value recorded".
+- An item the store reader cannot read, or a paper record citeproc cannot format, is a sentence
+  or the plain reference, not a traceback. A citation run holding a group that is not a citation
+  still draws the citations beside it.
 - **The validator's quote check no longer passes a wrong value as verified** (code review of 2026-10-15). A quote of a table cell matches only a table cell under the headers it names, so "cell: 39" in a Kd column no longer verifies against "isolated in 1939" elsewhere. A quote that begins or ends on a digit must begin or end where the paper's number does, so "39" is not quoted from "139" or "39.4". A number that ends a sentence ("was 2.4.") is now read. MathML exponents keep their meaning (`10<msup>…8` reads 10⁸, not 108) in the 22 of 130 cached papers that use them, and a formula given as both MathML and TeX is read once. Re-checked against all 2,643 quotes in the demo database: none was a wrong value let through; five quoting a formula now read its exponent marked.
 - **A publisher's terms page is no longer taken for a licence.** A paper's own licence link counts only if it is a Creative Commons licence or public-domain dedication; 10 of 130 cached papers had been credited with `rupress.org/terms` or Nature's editorial policies. None of the demo's papers was affected.
 - **A paper flagged by OpenRouter's moderation fails on its own** instead of stopping the whole run as if the account had been refused.
