@@ -111,7 +111,7 @@ some of the store's papers are NC/ND. The real store is read only in local check
       with an empty header, on CLI and web; empty cell where no caveat applies; the property cell
       holds only the property. Add `?` (`reading_uncertain`) and `∴` (calculated) to
       `Row.markers()` with legend lines. Existing marker tests assert the column, not the prefix
-- [ ] 5.4 Through a whole script run (`.claude/rules/streamlit-driver.md`): the web page shows
+- [x] 5.4 Through a whole script run (`.claude/rules/streamlit-driver.md`): the web page shows
       stars inside the citation superscripts and in the table, the caveat column first, with the
       legend, for a fixture store and for a corpus file. Judge on the page whether four starred
       identifiers in one superscript still read; if not, try stars on first mention only (D6).
@@ -146,7 +146,7 @@ some of the store's papers are NC/ND. The real store is read only in local check
       writable (1), WITH_UNCERTAINTY accepted without an uncertainty (1), an undecided item
       defaulting to curated (5). Newest-first fails 23 because every store test reads entries by
       label; the intended test is among them. Harness kept out of the repository
-- [ ] 7.3 Ask the demo's questions against the real store in the web app and look at the stars,
+- [x] 7.3 Ask the demo's questions against the real store in the web app and look at the stars,
       legend and cautions; probe the OpenRouter key's remaining credit before any live call.
       Terminal half done 2026-10-16 (key $9.53 left before, $0.21 spent): two live questions over
       the real store -- F-actin in lamellipodia, glass transition temperatures -- drew stars, `#`,
@@ -168,3 +168,9 @@ some of the store's papers are NC/ND. The real store is read only in local check
 - [x] 8.3 The model is never handed the formatted reference or the authors
 - [x] 8.4 The prompt: cite entries only, name no paper, and when asked say where the reference is
 - [x] 8.5 The full entry draws a harvested value's quote and conditions apart, not its keywords
+
+**Closed 2026-10-17 by supersession.** 5.4's whole-script runs are done
+(`tests/test_web_driver_store.py`); the two visual judgements on the web page -- 5.4's and 7.3's --
+were never made on this design, because `add-answer-view-redesign` replaces the superscripts, the
+Trust cell and the sidebar entry with numbered pills, an evidence table and an entry card. The
+visual check moves to that change, against what it draws.
