@@ -18,7 +18,9 @@ import pytest
 
 from scinumbers_ask import door_demo
 
-SCRIPT = Path(__file__).resolve().parents[1] / "bin" / "door-demo-chart"
+#: The code behind `bin/door-demo-chart`. The `.py` file, not the extensionless command: testmon
+#: fails with an INTERNALERROR on an executed file with no suffix.
+SCRIPT = Path(__file__).resolve().parents[1] / "bin" / "door_demo_chart.py"
 
 
 def _chart_module():
