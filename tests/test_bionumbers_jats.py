@@ -76,6 +76,109 @@ def test_a_document_without_identifiers_reports_them_empty():
     assert (doc.pmcid, doc.pmid, doc.doi, doc.year) == ("", "", "", None)
 
 
+# --- the bibliographic record (ADR-1750) ------------------------------------------------------
+
+
+def test_the_record_names_the_authors_in_order_and_not_the_editor(coxiella):
+    # Six `<contrib contrib-type="author">`, then a second group holding the editor.
+    assert coxiella.csl["author"] == [
+        {"family": "Botting", "given": "Jack M."},
+        {"family": "Steiner", "given": "Samuel"},
+        {"family": "Graham", "given": "Morven"},
+        {"family": "Liu", "given": "Xinran"},
+        {"family": "Roy", "given": "Craig R."},
+        {"family": "Liu", "given": "Jun"},
+    ]
+
+
+def test_authors_typed_on_the_group_count_and_editors_and_reviewers_typed_there_do_not(
+    brief_report,
+):
+    # `<contrib-group content-type="author">` over untyped contribs, then an editor group and
+    # a reviewer group in the same layout.
+    assert [a["family"] for a in brief_report.csl["author"]] == [
+        "Rosenberg",
+        "Umerov",
+        "Teär",
+        "Ivask",
+    ]
+
+
+def test_the_record_carries_the_journal_the_issue_and_the_identifiers(coxiella):
+    assert coxiella.csl["type"] == "article-journal"
+    assert coxiella.csl["container-title"] == "Infection and Immunity"
+    assert (coxiella.csl["volume"], coxiella.csl["issue"]) == ("94", "6")
+    assert coxiella.csl["DOI"] == "10.1128/iai.00007-26"
+    assert (coxiella.csl["PMID"], coxiella.csl["PMCID"]) == ("42053426", "PMC13248727")
+    assert coxiella.csl["id"] == "PMC13248727"
+    assert coxiella.csl["title"] == coxiella.title
+
+
+def test_the_publication_date_beats_the_collection_date(coxiella):
+    # The fixture states the volume's `collection` date (June) before the article's own (29
+    # April); the article's is the one a citation gives, and `year` agrees with it.
+    assert coxiella.csl["issued"] == {"date-parts": [[2026, 4, 29]]}
+    assert coxiella.year == 2026
+
+
+def test_the_collection_date_loses_even_when_it_is_the_earlier_and_the_first():
+    # A volume dated by its year alone, before an article dated to the day: the article's.
+    doc = read_jats(
+        _front(
+            "<pub-date pub-type='collection'><year>2023</year></pub-date>"
+            "<pub-date pub-type='epub'><day>3</day><month>12</month><year>2023</year></pub-date>"
+        )
+    )
+    assert doc.csl["issued"] == {"date-parts": [[2023, 12, 3]]}
+
+
+def test_a_print_date_beats_an_electronic_one():
+    doc = read_jats(
+        _front(
+            "<pub-date pub-type='epub'><day>3</day><month>12</month><year>2023</year></pub-date>"
+            "<pub-date pub-type='ppub'><month>1</month><year>2024</year></pub-date>"
+        )
+    )
+    assert doc.csl["issued"] == {"date-parts": [[2024, 1]]}
+    assert doc.year == 2024
+
+
+@pytest.mark.parametrize(
+    ("name", "page"),
+    [
+        ("fulltext_PMC13248727.xml", "e00007-26"),  # an <elocation-id>, no pages
+        ("fulltext_PMC13340094.xml", "e03512-25"),  # an article number given as <fpage>
+        ("fulltext_PMC2132865.xml", "1053-1062"),  # <fpage> and <lpage>
+        ("fulltext_PMC2288635.xml", "90"),  # <fpage> alone
+    ],
+)
+def test_the_page_is_the_range_the_first_page_or_the_article_number(name, page):
+    assert _read(EUROPEPMC, name).csl["page"] == page
+
+
+def test_a_collaboration_is_one_literal_author():
+    doc = read_jats(
+        _front(
+            "<contrib-group><contrib contrib-type='author'><collab>The ENCODE Project "
+            "Consortium</collab></contrib><contrib contrib-type='author'><name><surname>Snyder"
+            "</surname><given-names>Michael</given-names></name></contrib></contrib-group>"
+        )
+    )
+    assert doc.csl["author"] == [
+        {"literal": "The ENCODE Project Consortium"},
+        {"family": "Snyder", "given": "Michael"},
+    ]
+
+
+def test_what_the_front_matter_does_not_state_is_absent_not_empty():
+    doc = read_jats(_front("<pub-date><year>2001</year></pub-date>"))
+    assert doc.csl == {"type": "article-journal", "issued": {"date-parts": [[2001]]}}
+
+
+def _front(article_meta: str) -> str:
+    return f"<article><front><article-meta>{article_meta}</article-meta></front><body/></article>"
+
+
 # --- the methods gate -------------------------------------------------------------------------
 
 

@@ -252,6 +252,11 @@ class Paper(Frozen):
     """Harvest mode only: what the paper is about, as whoever chose it named it ("planarians",
     "cytoskeleton"). Free text, finer than the scope, and never shown to the model; the review
     page offers it to a person choosing what to review."""
+    csl_json: str = ""
+    """The bibliographic record as one CSL-JSON item, serialised (ADR-1750): authors, journal,
+    volume, issue, pages, date and identifiers, read from the paper's own front matter. The
+    application formats a citation from it; no model writes one. Empty for a paper read before
+    this field existed, or whose full text was never fetched."""
 
 
 class PaperResult(Frozen):

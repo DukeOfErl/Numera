@@ -114,6 +114,8 @@ review_paper = Table(
     # path is spelled differently on the two backends.
     Column("domain", Text, nullable=False, default=DEFAULT_DOMAIN),
     Column("topic", Text, nullable=False, default=""),
+    # The paper's bibliographic record as CSL-JSON, for the citation a reader is shown (ADR-1750).
+    Column("csl_json", Text, nullable=False, default=""),
 )
 
 #: A paper a reviewer set aside -- "not my field" -- and is not offered again. Recorded rather
@@ -417,6 +419,33 @@ def upgrade(engine: Any) -> dict[str, int]:
             )
             done["choices_compared"] += 1
     return done
+
+
+def fill_references(engine: Any, csl_json_for: Callable[[str], str]) -> int:
+    """Give every paper without a bibliographic record the one `csl_json_for(pmcid)` returns.
+
+    For a store loaded before `csl_json` existed; `upgrade` adds the column and cannot fill it,
+    since the record is in the paper's full text and not in any row. A paper already holding one
+    is left as it is, and one the callable answers empty for stays empty -- so a run over a
+    partial cache fills what it can and the next run fills the rest. Returns the rows written.
+    """
+    with engine.begin() as conn:
+        _bound(conn)
+        unfilled = conn.execute(
+            select(review_paper.c.run_id, review_paper.c.pmcid).where(review_paper.c.csl_json == "")
+        ).all()
+        written = 0
+        for run_id, pmcid in unfilled:
+            record = csl_json_for(pmcid)
+            if not record:
+                continue
+            conn.execute(
+                update(review_paper)
+                .where(review_paper.c.run_id == run_id, review_paper.c.pmcid == pmcid)
+                .values(csl_json=record)
+            )
+            written += 1
+    return written
 
 
 def engine_from_url(url: str, **kwargs: Any) -> Engine:
@@ -996,6 +1025,7 @@ def _paper_row(result: PaperResult, *, question: str, run_id: str, now: datetime
         "loaded_at": now,
         "domain": result.fingerprint.scope or DEFAULT_DOMAIN,
         "topic": paper.topic,
+        "csl_json": paper.csl_json,
     }
 
 
