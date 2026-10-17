@@ -183,3 +183,41 @@ def test_a_run_of_three_keeps_its_written_order():
     `grounded-answering` requires identifiers ordered by where they appear."""
     assert citations("BNIDs 100002, 100003 & 100004") == (100002, 100003, 100004)
     assert citations("see BNIDs 100001, 100002, 100003") == (100001, 100002, 100003)
+
+
+# -- a harvested value's label (ADR-1610) ---------------------------------
+
+
+def test_a_harvested_label_is_read_as_itself():
+    """A label holds two digit runs, which the digit rules refuse. Read as a number, it would
+    become entry 2652108 -- a citation of nothing -- or be dropped as unparsable."""
+    assert citations("[[PMC2652108-1]]") == ("PMC2652108-1",)
+    assert citations(format_citation("PMC2652108-1")) == ("PMC2652108-1",)
+
+
+def test_a_later_extraction_s_label_keeps_its_suffix():
+    """`.2` tells a second extraction of the same paper apart. Dropped, the citation would name
+    the first extraction's value instead."""
+    assert citations("[[PMC2652108-1.2]]") == ("PMC2652108-1.2",)
+
+
+def test_labels_and_bnids_are_read_together_in_written_order():
+    assert citations("[[PMC2652108-1, PMC2652108-3]]") == ("PMC2652108-1", "PMC2652108-3")
+    assert citations("[[100002, PMC2652108-1]] and [[PMC1-2]]") == (
+        100002,
+        "PMC2652108-1",
+        "PMC1-2",
+    )
+
+
+def test_a_group_that_only_resembles_a_label_is_refused():
+    """The negative cases differ from a label in the shape the pattern reads: a third digit run,
+    a missing number, a lower-case prefix, a suffix that is not a number."""
+    for group in ("[[PMC1-2-3]]", "[[PMC1]]", "[[pmc1-2]]", "[[PMC1-2.x]]", "[[PMC-2]]"):
+        assert citations(group) == (), group
+
+
+def test_only_an_integer_is_labelled_a_bnid():
+    """A label is not a BNID; naming it one would attribute it to the wrong database."""
+    assert bionumbers.label(100002) == "BNID 100002"
+    assert bionumbers.label("PMC2652108-1") == "PMC2652108-1"

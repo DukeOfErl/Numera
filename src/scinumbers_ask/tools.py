@@ -13,12 +13,37 @@ from langchain_core.tools import StructuredTool
 
 from .bionumbers import rewrite
 from .citations import format_citation
+from .corpus import TRUST_LEVEL, TRUST_ROLE, Origin
 from .events import Retrieval
 from .repository import DEFAULT_LIMIT, CorpusRepository
 from .trace import QuestionTrace
 from .units import dimensions_of
 
 Emit = Callable[[Retrieval], None]
+
+
+def trust_text(trust, *, short: bool = False) -> str:
+    """An entry's trust tier in words the model reads (design D5); empty where there is none.
+
+    Words, never stars: the stars are drawn by the application from the store, and a model shown
+    them would be tempted to write them (ADR-1630). Who approved, whether that was a simulated
+    review, and whether anyone objected are kept apart, as ADR-0990 keeps them.
+    """
+    if trust is None:
+        return ""
+    tier = str(trust.tier)
+    level = TRUST_LEVEL[tier]
+    if tier == "NONE":
+        who = "no reviewer approved it" if trust.disputed else "not yet reviewed"
+    else:
+        who = TRUST_ROLE[tier] + (", simulated review" if trust.simulated else "")
+    if short:
+        text = f"trust {level}/5, {who}"
+        return text + (", disputed" if trust.disputed else "")
+    text = f"trust: {level} of 5 ({who})"
+    if trust.disputed:
+        text += "; disputed -- a reviewer objected to this entry"
+    return text
 
 
 class ToolBudget:
@@ -123,6 +148,7 @@ def build_tools(
             )
         lines = [
             f"{row.entry_id}\t{row.property}\t{row.organism}\t{row.value} {row.units}".rstrip()
+            + (f"\t{trust_text(row.trust, short=True)}" if row.trust is not None else "")
             for row in result.rows
         ]
         header = (
@@ -132,7 +158,12 @@ def build_tools(
         )
         # Same boundary, same reason: `property` is a column here (ADR-0420).
         lines = [rewrite(line, format_citation) for line in lines]
-        out = [header, "entry_id\tproperty\torganism\tvalue", *lines]
+        columns = "entry_id\tproperty\torganism\tvalue"
+        if any(row.trust is not None for row in result.rows):
+            # One short token per row, so a search over the store costs little more than one
+            # over a corpus file -- and nothing at all is added where no entry has a tier.
+            columns += "\ttrust"
+        out = [header, columns, *lines]
         spanned = dimensions_of([row.units for row in result.rows])
         if len(spanned) > 1:
             # Said here rather than left to the system prompt. The prompt's rule
@@ -147,7 +178,7 @@ def build_tools(
             )
         return "\n".join(out)
 
-    def get_entry(entry_id: int) -> str:
+    def get_entry(entry_id: int | str) -> str:
         if not afford("get_entry", {"entry_id": entry_id}):
             return EXHAUSTED
         found = repo.get(entry_id, trace=trace)
@@ -176,6 +207,8 @@ def build_tools(
         # Written as an instruction rather than a field name: `range_qualified: true`
         # is a flag the model may or may not act on, where a sentence saying what the
         # source did claim leaves less room to round it away.
+        if e.trust is not None:
+            parts.append(trust_text(e.trust))
         for caveat in _caveats(e):
             parts.append(f"caution: {caveat}")
         if e.reference_pubmed_id:
@@ -184,6 +217,8 @@ def build_tools(
             parts.append(f"method: {e.measurement_method}")
         if e.comments:
             parts.append(f"comments: {e.comments}")
+        if e.harvest is not None:
+            parts.extend(_harvested(e.harvest))
         if found.cited_ids:
             # Bare numbers here were citations in no notation at all -- unusable by a
             # model told to cite in one, and unparsable if it copied them.
@@ -230,12 +265,45 @@ def build_tools(
                 "the two bounds of this range may have been taken from different "
                 "quantities in the source, so the range may not be a real interval"
             )
+        harvest = e.harvest
+        if harvest is not None and harvest.reading_uncertain:
+            out.append(
+                "the value could not be read as a number with certainty -- give it in the "
+                "paper's own words, as shown above; do not restate it as a different number"
+            )
+        if harvest is not None and harvest.origin is not Origin.MEASURED:
+            out.append(
+                "this value was calculated, not measured -- say so, and do not present it as a "
+                "measurement"
+            )
         if e.spans_implausibly:
             out.append(
                 "these bounds span more than a millionfold, which no single measurement "
                 "does -- treat the range as unreliable"
             )
         return out
+
+    def _harvested(harvest) -> list[str]:
+        """What a value harvested from a paper carries beyond an entry's fields (design D5).
+
+        The review's own text -- the passage shown to test a reviewer, anything a reviewer wrote --
+        is never here: no entry holds it (`store_corpus`).
+        """
+        origin = {
+            Origin.MEASURED: "measured",
+            Origin.CALCULATED: "calculated by the paper's authors",
+            Origin.CALCULATED_FROM_PUBLISHED: "calculated from values published elsewhere",
+        }[harvest.origin]
+        lines = [f"origin: {origin}", f'quote: "{harvest.quote}"']
+        # `method` is already the entry's own `method:` line; as a condition it would say it twice.
+        lines += [
+            f'condition: {c.name} -- "{c.quote}"' for c in harvest.conditions if c.name != "method"
+        ]
+        if harvest.not_stated:
+            lines.append("not stated: " + ", ".join(harvest.not_stated))
+        lines += [f'calculated from: "{text}"' for text in harvest.inputs]
+        lines.append(f"domain: {harvest.domain}" + (f" / {harvest.topic}" if harvest.topic else ""))
+        return lines
 
     def list_values(field: str, contains: str = "") -> str:
         if not afford("list_values", {"field": field, "contains": contains}):

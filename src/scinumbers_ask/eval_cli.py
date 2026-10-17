@@ -134,10 +134,18 @@ def main(argv: list[str] | None = None) -> None:
         # `None` says "structure only" out loud. The parameter has no default, so a
         # later driver cannot skip the corpus checks by leaving it off.
         if args.command in {"run", "report"} and not corpus:
+            # A reader who configured the app for the harvest store is told why that does not
+            # carry over, rather than only that a corpus is missing.
+            store = (
+                " SCINUMBERS_STORE names a harvest store, which evaluation does not read yet "
+                '("Evaluation over the store", docs/roadmap.md).'
+                if env_setting("SCINUMBERS_STORE")
+                else ""
+            )
             raise CorpusUnavailable(
                 f"{args.command} needs a corpus: pass --corpus or set "
                 f"SCINUMBERS_CORPUS. Checking a question set without one is "
-                f"possible; asking it, or scoring what it returned, is not."
+                f"possible; asking it, or scoring what it returned, is not.{store}"
             )
         entries = load(corpus) if corpus else None
         questions = load_question_set(args.question_set, entries)

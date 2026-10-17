@@ -62,7 +62,7 @@ def app(monkeypatch, repo, agent) -> AppTest:
     is cached for the life of the process: a second test would be served the
     first one's agent.
     """
-    monkeypatch.setattr(web, "resources", lambda corpus=None: repo)
+    monkeypatch.setattr(web, "resources", lambda corpus=None, store=None: repo)
     monkeypatch.setattr(web, "agent_for", lambda state, repo, admission: agent)
     return AppTest.from_file(APP, default_timeout=TIMEOUT)
 
@@ -267,7 +267,7 @@ def test_session_state_holds_the_identifier_and_what_was_drawn_and_nothing_else(
 def test_a_missing_corpus_is_explained_rather_than_raised(monkeypatch):
     from scinumbers_ask.corpus import CorpusUnavailable
 
-    def unavailable(corpus=None):
+    def unavailable(corpus=None, store=None):
         raise CorpusUnavailable("no corpus was supplied")
 
     monkeypatch.setattr(web, "resources", unavailable)
@@ -327,7 +327,7 @@ def counted(monkeypatch, tmp_path):
     counts = {"read": 0, "indexed": 0}
     rows = load(FIXTURE)
 
-    def counting_load(path):
+    def counting_load(path, store=None):
         counts["read"] += 1
         return rows
 
@@ -335,7 +335,7 @@ def counted(monkeypatch, tmp_path):
         counts["indexed"] += 1
         return CorpusRepository(entries)
 
-    monkeypatch.setattr(web, "load", counting_load)
+    monkeypatch.setattr(web, "load_configured", counting_load)
     monkeypatch.setattr(web, "CorpusRepository", counting_repository)
     monkeypatch.setattr(web.trace, "to_file", lambda spec: None)
     monkeypatch.setenv("SCINUMBERS_CHECKPOINTS", str(tmp_path / "c.sqlite"))
@@ -667,7 +667,10 @@ def test_an_entry_with_no_scalar_is_marked_and_its_value_left_blank():
     cell = web._frame((row,))[0]
 
     assert cell["Value"] == "", "the placeholder was repeated in the value column"
-    assert cell["Property"].startswith(entries_table.NO_SCALAR)
+    # In the caveat column of its own, first, and not on the property (add-ask-over-store).
+    assert cell[""] == entries_table.NO_SCALAR
+    assert cell["Property"] == "Length, diameter, volume"
+    assert list(cell)[0] == ""
     assert entries_table.NO_SCALAR_LEGEND in web._legend((row,))
 
 
@@ -712,7 +715,9 @@ def test_the_legend_sits_between_the_two_tables(monkeypatch, repo, config, tmp_p
 def test_every_column_is_given_a_width_so_the_table_does_not_scroll_sideways(repo):
     """A table scrolled sideways hides the identifier, the one cell being checked."""
     table = web.item_for(entries(), repo).table
-    assert set(web._frame(table.rows)[0]) == set(web.COLUMN_WIDTHS)
+    # A corpus file draws no Trust column; every column it does draw has a width, and the
+    # store's table (test_store_corpus.py) draws the Trust column too.
+    assert set(web._frame(table.rows)[0]) == set(web.COLUMN_WIDTHS) - {"Trust"}
     assert sum(web.COLUMN_WIDTHS.values()) <= 700
 
 

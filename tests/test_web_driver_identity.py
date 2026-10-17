@@ -75,7 +75,7 @@ def caught():
 def page(monkeypatch, repo, config, tmp_path):
     """Build the real script with the door set as a test chooses."""
     built: list[str | None] = []
-    monkeypatch.setattr(web, "resources", lambda corpus=None: repo)
+    monkeypatch.setattr(web, "resources", lambda corpus=None, store=None: repo)
     monkeypatch.setenv("SCINUMBERS_CORPUS", FIXTURE)
     monkeypatch.setenv("SCINUMBERS_CHECKPOINTS", str(tmp_path / "c.sqlite"))
     # Something, so `admit` reaches `lookup` rather than concluding "no database".
@@ -464,7 +464,11 @@ def test_an_unverified_address_is_refused_with_its_own_sentence(page, caught):
     assert messages.NOT_ENROLLED not in shown, "the two sentences send readers to different places"
     (refused,) = [r for r in caught.records if r.getMessage() == "signin.unverified"]
     assert refused.fields["email"] == "unverified@example.org"
-    assert web.IDENTITIES == {}, "a refused account must not enter the registry"
+    # The refused account, not the registry as a whole: it is process-wide and keyed by session,
+    # so another test's page run finishing late can leave its own, unrelated session in it.
+    assert all(i.email != "unverified@example.org" for i in web.IDENTITIES.values()), (
+        "a refused account must not enter the registry"
+    )
     # **The way back is one click, not a sign-out.** `st.login` redirects to the
     # provider, which still has its own session and issues a fresh token carrying
     # the now-confirmed address -- so the reader who did what the sentence asked
@@ -666,7 +670,11 @@ def test_a_signed_in_account_that_is_not_enrolled_is_refused_and_recorded(page, 
     (refused,) = [r for r in caught.records if r.getMessage() == "signin.refused"]
     assert refused.fields["email"] == "stranger@example.org"
     assert not getattr(refused, "user_email", None), "refused, so no identity to stamp"
-    assert web.IDENTITIES == {}, "a refused account must not enter the registry"
+    # The refused account, not the registry as a whole: it is process-wide and keyed by session,
+    # so another test's page run finishing late can leave its own, unrelated session in it.
+    assert all(i.email != "stranger@example.org" for i in web.IDENTITIES.values()), (
+        "a refused account must not enter the registry"
+    )
 
 
 def test_a_refusal_is_recorded_once_per_session_not_once_per_rerun(page, caught):
@@ -993,7 +1001,7 @@ def test_two_sessions_get_two_agents_and_one_repository(monkeypatch, tmp_path):
     web.resources.clear()
     counts = {"indexed": 0, "agents": 0}
     rows = load(FIXTURE)
-    monkeypatch.setattr(web, "load", lambda path: rows)
+    monkeypatch.setattr(web, "load_configured", lambda path, store=None: rows)
 
     def counting_repository(entries):
         counts["indexed"] += 1

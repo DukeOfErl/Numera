@@ -50,7 +50,7 @@ PATTERN = re.compile(r"(?i)\bbnids?[\s:#\-=]*(\d+)((?:\s*(?:,|and|&)\s*\d+)*)")
 _RUN = re.compile(r"\d+")
 
 
-def label(entry_id: int) -> str:
+def label(entry_id: int | str) -> str:
     """How an entry from this source is named to a person.
 
     Deliberately not the citation form. A reader is looking at BioNumbers entries,
@@ -62,8 +62,14 @@ def label(entry_id: int) -> str:
 
     They were one function once, and the machine notation leaked into the table the
     moment the model's form changed.
+
+    Only an integer is a BNID. A harvested value's label (`PMC2652108-1`) is shown as
+    itself: calling it a BNID would attribute it to a database it did not come from,
+    which is the opposite of what this function is for.
     """
-    return f"BNID {entry_id}"
+    if isinstance(entry_id, int):
+        return f"BNID {entry_id}"
+    return entry_id
 
 
 def occurrences(text: str) -> tuple[tuple[int, int], ...]:

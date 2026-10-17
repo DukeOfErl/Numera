@@ -60,6 +60,15 @@ ask = [
     # LangChain handler and attribute propagation have moved before.
     # Installed and read: 4.15.6, 2026-09-24.
     "langfuse>=4.15,<5",
+    # The harvest store's tier rule and value parser are imported from `bionumbers`
+    # (ADR-1600), and those reach `bionumbers.records`, a pydantic model. Already
+    # pulled in by LangChain; named because the code imports it directly, and a
+    # transitive dependency is one a resolver may drop.
+    "pydantic>=2.6",
+    # A harvested paper's reference in Chicago author-date, from its CSL-JSON (ADR-1640): a CSL
+    # processor and the CSL project's styles, both read on PyPI 2026-10-16.
+    "citeproc-py>=0.11.1",
+    "citeproc-py-styles>=0.1.6",
 ]
 ingest = [
     "pydantic>=2.6",

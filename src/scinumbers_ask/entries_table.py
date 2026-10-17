@@ -12,8 +12,10 @@ from __future__ import annotations
 import re
 import textwrap
 from dataclasses import dataclass
+from typing import Any
 
-from . import bionumbers
+from . import bionumbers, objections, references, trust_marks
+from .corpus import EntryId, Origin
 from .repository import CorpusRepository
 from .units import dimensions_of
 
@@ -84,6 +86,19 @@ IMPLAUSIBLE_LEGEND = (
     f"{IMPLAUSIBLE} the bounds span more than a millionfold, which no single measurement does"
 )
 
+# Marks a harvested value whose numbers could not be read with certainty: the paper's own words
+# are shown and no number is stated for it (ADR-1620).
+READING_UNCERTAIN = "?"
+READING_UNCERTAIN_LEGEND = (
+    f"{READING_UNCERTAIN} the value could not be read as a number with certainty; "
+    "the paper's own words are shown"
+)
+
+# Marks a harvested value the paper calculated rather than measured, from its own numbers or from
+# values published elsewhere.
+CALCULATED = "\u2234"
+CALCULATED_LEGEND = f"{CALCULATED} calculated, not measured"
+
 # Words that carry no topic. Kept small on purpose -- this is a tie-breaker for
 # rows nobody cited, not a retrieval engine.
 _STOPWORDS = frozenset(
@@ -114,7 +129,7 @@ def _topic_words(text: str) -> frozenset[str]:
 
 @dataclass(frozen=True)
 class Row:
-    entry_id: int
+    entry_id: EntryId
     property: str
     organism: str
     value: str
@@ -135,6 +150,28 @@ class Row:
     qualified: bool = False
     fused: bool = False
     implausible_span: bool = False
+    # Only for an entry read from the harvest store; a corpus-file row leaves all three at their
+    # defaults and draws exactly as before.
+    reading_uncertain: bool = False
+    calculated: bool = False
+    trust: Any = None
+    # What objecting reviewers said, for a disputed entry from the store: shown to a reader who
+    # asks why, never to the model (`objections`).
+    objections: tuple[str, ...] = ()
+    # The harvested value's own fields, for the full entry: its keywords pack the quote and every
+    # condition's quote together for search, so drawn as keywords they read as one fused field.
+    harvest: Any = None
+
+    @property
+    def stars(self) -> str:
+        return trust_marks.stars(self.trust)
+
+    @property
+    def trust_cell(self) -> str:
+        """The stars, then what objecting reviewers said: a double click opens it in full."""
+        if not self.objections:
+            return self.stars
+        return f"{self.stars} {' · '.join(self.objections)}"
 
     def markers(self) -> str:
         # Deliberately not `has_scalar`: the terminal writes "(no scalar value)"
@@ -146,14 +183,18 @@ class Row:
             (QUALIFIED, self.qualified),
             (FUSED, self.fused),
             (IMPLAUSIBLE, self.implausible_span),
+            (READING_UNCERTAIN, self.reading_uncertain),
+            (CALCULATED, self.calculated),
         )
         return "".join(mark for mark, applies in applying if applies)
 
     def cell(self, field: str) -> str:
+        if field == "markers":
+            return self.markers()
         return str(getattr(self, field))
 
 
-def _relevance(repo: CorpusRepository, cited: tuple[int, ...], question: str):
+def _relevance(repo: CorpusRepository, cited: tuple[EntryId, ...], question: str):
     """Score an uncited entry by how much of the topic's wording its property shares.
 
     The topic is the question plus the properties of the entries the answer cited:
@@ -173,7 +214,7 @@ def _relevance(repo: CorpusRepository, cited: tuple[int, ...], question: str):
         if found is not None:
             vocabulary |= _topic_words(found.entry.property)
 
-    def score(entry_id: int) -> int:
+    def score(entry_id: EntryId) -> int:
         found = repo.get(entry_id)
         if found is None:  # pragma: no cover - filtered before scoring
             return 0
@@ -185,8 +226,8 @@ def _relevance(repo: CorpusRepository, cited: tuple[int, ...], question: str):
 
 def rows_for(
     repo: CorpusRepository,
-    cited: tuple[int, ...],
-    retrieved: tuple[int, ...],
+    cited: tuple[EntryId, ...],
+    retrieved: tuple[EntryId, ...],
     question: str = "",
 ) -> tuple[Row, ...]:
     """Cited entries first, then the rest by how close their wording is to the topic.
@@ -197,7 +238,7 @@ def rows_for(
     corpus's own identifier order and so carries no relevance at all -- it is what
     put a 490 um chromosome in the top five of a question about a 1 um cell.
     """
-    ordered: list[int] = [b for b in cited if repo.get(b) is not None]
+    ordered: list[EntryId] = [b for b in cited if repo.get(b) is not None]
     seen = set(ordered)
     rest = []
     for entry_id in retrieved:
@@ -222,12 +263,15 @@ def rows_for(
                 organism=entry.organism,
                 value=entry.value_display,
                 units=entry.units,
-                reference=entry.reference,
+                reference=_reference(entry),
                 cited=entry_id in cited,
                 method_recorded=bool(entry.measurement_method.strip()),
+                # A harvested value always has the paper's own words to show, read or not: its
+                # `?` mark says when no number was taken from them.
                 has_scalar=entry.value is not None
                 or entry.range_low is not None
-                or entry.range_high is not None,
+                or entry.range_high is not None
+                or entry.harvest is not None,
                 retrieved=entry_id in retrieved,
                 method=" ".join(entry.measurement_method.split()),
                 comments=entry.comments,
@@ -236,9 +280,24 @@ def rows_for(
                 qualified=entry.range_qualified,
                 fused=entry.range_fused,
                 implausible_span=entry.spans_implausibly,
+                reading_uncertain=entry.harvest is not None and entry.harvest.reading_uncertain,
+                calculated=entry.harvest is not None
+                and entry.harvest.origin is not Origin.MEASURED,
+                trust=entry.trust,
+                objections=objections.of(repo, entry.record_id)
+                if entry.trust is not None and entry.trust.disputed
+                else (),
+                harvest=entry.harvest,
             )
         )
     return tuple(out)
+
+
+def _reference(entry) -> str:
+    """Chicago author-date where the store holds the paper's record (ADR-1640), else as stored."""
+    if entry.harvest is not None:
+        return references.chicago(entry.harvest.paper.csl_json) or entry.reference
+    return entry.reference
 
 
 def _cell_lines(text: str, width: int) -> list[str]:
@@ -336,6 +395,22 @@ def _methods_block(shown: tuple[Row, ...], width: int) -> list[str]:
     return out
 
 
+def _objections_block(shown: tuple[Row, ...], width: int) -> list[str]:
+    """What reviewers said against each shown entry they disputed.
+
+    The page puts this after the stars, where a double click opens it; a terminal cannot open a
+    cell, so it is listed here, one line an objection, cut to the table.
+    """
+    disputed = [row for row in shown if row.objections]
+    if not disputed:
+        return []
+    out = ["objections raised:"]
+    for row in disputed:
+        prefix = f"  {bionumbers.label(row.entry_id)}  "
+        out += [prefix + _clamp(said, width - len(prefix)) for said in row.objections]
+    return out
+
+
 def _clamp(text: str, width: int) -> str:
     """One line, cut at a word where it can be, with the cut marked."""
     if len(text) <= width or width < 2:
@@ -366,8 +441,9 @@ def render(
     if not rows:
         return ""
     shown = rows[:limit]
-    rule = "  ".join("-" * width for _, _, width in COLUMNS)
-    header = "  ".join(title.ljust(width) for _, title, width in COLUMNS).rstrip()
+    columns = _columns(shown)
+    rule = "  ".join("-" * width for _, _, width in columns)
+    header = "  ".join(title.ljust(width) for _, title, width in columns).rstrip()
     out = [header, rule]
     # Nothing cited draws no transition, so without this the table renders exactly
     # as one whose top rows are the cited ones -- and a reader would take the first
@@ -382,15 +458,10 @@ def render(
             # from the ones it does not. The rest are still shown, because what the
             # corpus held and the answer passed over is part of the evidence.
             out.append(_banner(len(rule)))
-        marks = row.markers()
-        label = f"{marks} {row.property}" if marks else row.property
-        cells = [
-            _cell_lines(label if field == "property" else row.cell(field), width)
-            for field, _, width in COLUMNS
-        ]
+        cells = [_cell_lines(row.cell(field), width) for field, _, width in columns]
         for line_number in range(LINES_PER_ROW):
             line = "  ".join(
-                cells[i][line_number].ljust(width) for i, (_, _, width) in enumerate(COLUMNS)
+                cells[i][line_number].ljust(width) for i, (_, _, width) in enumerate(columns)
             ).rstrip()
             if line:
                 out.append(line)
@@ -403,6 +474,7 @@ def render(
         # a footnote running past the rule reads as a line of a different table.
         out.extend(textwrap.wrap(note, len(rule), subsequent_indent="  "))
     out.extend(_methods_block(shown, len(rule)))
+    out.extend(_objections_block(shown, len(rule)))
     if any(not row.retrieved for row in shown):
         out.append(NOT_RETRIEVED_LEGEND)
     if any(not row.method_recorded for row in shown):
@@ -413,4 +485,38 @@ def render(
         out.append(FUSED_LEGEND)
     if any(row.implausible_span for row in shown):
         out.extend(textwrap.wrap(IMPLAUSIBLE_LEGEND, len(rule), subsequent_indent="  "))
+    if any(row.reading_uncertain for row in shown):
+        out.append(READING_UNCERTAIN_LEGEND)
+    if any(row.calculated for row in shown):
+        out.append(CALCULATED_LEGEND)
+    for line in trust_marks.legend((row.trust for row in shown), terminal=True):
+        out.extend(textwrap.wrap(line, len(rule), subsequent_indent="  "))
     return "\n".join(out)
+
+
+def _columns(shown: tuple[Row, ...]) -> tuple[tuple[str, str, int], ...]:
+    """The columns to draw: the caveat marks first, then the reference page's, trust before the ID.
+
+    The marks have a narrow column of their own, headed by nothing, rather than a prefix on the
+    property (`grounded-answering`): a reader scanning properties no longer reads past symbols,
+    and the marks line up. As wide as the most marks any shown row carries. The trust column
+    appears only where some entry has a tier, so a corpus-file table gains nothing but the marks.
+    """
+    marks = ("markers", "", max(1, *(len(row.markers()) for row in shown)))
+    # The identifier is the cell a reader checks against the prose, and a terminal cannot open a
+    # truncated cell: two labels cut to `PMC265…` were indistinguishable in the first live run
+    # over the store (2026-10-16). So the column is as wide as the longest identifier shown; a
+    # corpus file's BNIDs fit the default and draw exactly as before.
+    widest = max(len(str(row.entry_id)) for row in shown)
+    columns = [
+        marks,
+        *(
+            (field, title, max(width, widest) if field == "entry_id" else width)
+            for field, title, width in COLUMNS
+        ),
+    ]
+    if any(row.trust is not None for row in shown):
+        # Before the identifier, after the units: the order both drivers draw (2026-10-16).
+        at = [field for field, _, _ in columns].index("entry_id")
+        columns.insert(at, ("stars", "Trust", 7))
+    return tuple(columns)

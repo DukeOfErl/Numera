@@ -5,7 +5,8 @@ drives. Everything that is not a screen element lives in `scinumbers_ask.web`,
 so the decisions this page makes can be tested without a browser.
 
 The corpus, the checkpoint store and the trail are read from the environment --
-SCINUMBERS_CORPUS, SCINUMBERS_CHECKPOINTS, SCINUMBERS_TRACE -- since
+SCINUMBERS_CORPUS (or SCINUMBERS_STORE for the harvest store), SCINUMBERS_CHECKPOINTS,
+SCINUMBERS_TRACE -- since
 a Streamlit script is given no arguments of its own.
 """
 
@@ -35,11 +36,16 @@ try:
     # notice written in there would be redrawn for ever. Announced before the
     # build starts, because a minute of blank page is indistinguishable from a
     # hang.
-    corpus = autobuild.corpus_path(
-        env_setting("SCINUMBERS_CORPUS"),
-        lambda text: st.info(web.as_text(text), icon=":material/build:"),
-    )
-    repo = web.resources(corpus)
+    # The harvest store is read as it is and never built, so autobuild is for a corpus file
+    # only. Both named is refused inside `resources` (design D7), not here.
+    store = env_setting("SCINUMBERS_STORE")
+    corpus = env_setting("SCINUMBERS_CORPUS")
+    if not store:
+        corpus = autobuild.corpus_path(
+            corpus,
+            lambda text: st.info(web.as_text(text), icon=":material/build:"),
+        )
+    repo = web.resources(corpus, store)
 except (CorpusUnavailable, NotConfigured) as exc:
     # Both are misconfiguration a person can fix, so the message is the point:
     # Streamlit's exception panel would bury it under a stack the reader did not

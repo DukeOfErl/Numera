@@ -1190,3 +1190,34 @@ def test_an_answer_that_searched_is_not_reported(repo, config, tmp_path):
     )
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
     assert not any(isinstance(e, UngroundedRefusal) for e in events)
+
+
+def test_the_prompt_puts_relevance_before_trust():
+    """`store-corpus`: told only to prefer trusted entries, a model can lead with a five-star value
+    about a neighbouring quantity. So the instruction orders the two, and says a rating never makes
+    an entry relevant."""
+    lowered = SYSTEM_PROMPT.lower()
+    first = lowered.index("decide first which entries bear on the question")
+    assert "never makes an entry relevant" in lowered
+    assert lowered.index("prefer the better-rated one") > first
+    # Told not to mention ratings, approvals or disputes at all: the stars and the legend say it
+    # (ADR-1630). "(trust 3/5)" and "this entry has not been approved" were both seen live.
+    assert "do not mention ratings, approvals or disputes in your answer" in lowered
+    assert "trust 3 of 5" in lowered and "has not been approved" in lowered
+    # ...unless the reader asks about it.
+    assert "only when the reader asks about an entry's rating" in lowered
+
+
+def test_the_prompt_leaves_references_to_the_table():
+    """`grounded-answering`: the identifier is the only citation. A live answer added
+    "(Kamasaki et al., 2007, JCB, doi:...)" -- authors and a journal no entry held."""
+    lowered = SYSTEM_PROMPT.lower()
+    assert "the identifier is the only citation" in lowered
+    for named in ("authors", "title", "journal", "year", "doi"):
+        assert named in lowered.split("the identifier is the only citation")[1][:200], named
+    assert "from what you know" in lowered
+    # Forbidden without an alternative, a model pressed by the reader fills the gap from memory:
+    # so it is told where the reference is, and to say so.
+    asked = lowered.split("when the reader asks which paper a value comes from")[1][:300]
+    assert "do not refuse and do not supply it" in asked
+    assert "reference column of the entries table" in asked and "full listing" in asked

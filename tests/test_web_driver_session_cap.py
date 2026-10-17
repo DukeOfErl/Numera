@@ -28,7 +28,7 @@ def capped(monkeypatch, repo, config, tmp_path):
     """The real script with a cap of two, over a scripted agent."""
     monkeypatch.setenv(web.MAX_SESSIONS_ENV, "2")
     monkeypatch.setenv("SCINUMBERS_CORPUS", FIXTURE)
-    monkeypatch.setattr(web, "resources", lambda corpus=None: repo)
+    monkeypatch.setattr(web, "resources", lambda corpus=None, store=None: repo)
     agent = agent_with(repo, config, tmp_path, scripted(says("an answer")))
     monkeypatch.setattr(web, "agent_for", lambda state, repo, admission: agent)
     web.session_registry.clear()

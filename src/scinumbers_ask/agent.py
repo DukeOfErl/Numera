@@ -30,6 +30,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from . import hosted_trace, run_ledger
 from .citations import FORM, citations
 from .config import Config, NotConfigured, format_usd, warning_for
+from .corpus import EntryId, entry_key
 from .events import (
     Answer,
     AnswerEntries,
@@ -60,14 +61,20 @@ from .trace import QuestionTrace, start_question
 # for a form the scorer did not read, and the only symptom would have been answers
 # reported as uncited.
 SYSTEM_PROMPT = f"""\
-You answer questions about biological quantities using only a corpus of curated \
-entries, reached through your tools. You have no other source.
+You answer questions about scientific quantities using only a corpus of entries, \
+reached through your tools. You have no other source.
 
 Rules, in order of importance:
 
 1. Cite every quantity you state, by its entry identifier, written as "{FORM}" -- \
-the number inside double square brackets, every time. A quantity you cannot \
-attribute to an entry you retrieved does not go in the answer.
+the identifier exactly as the entry gives it, inside double square brackets, every \
+time. A quantity you cannot attribute to an entry you retrieved does not go in the answer. \
+The identifier is the only citation: name no paper -- no authors, title, journal, year \
+or DOI, whether from an entry or from what you know -- because the application shows \
+each entry's reference beside your answer. When the reader asks which paper a value \
+comes from, or for its authors, journal or DOI, do not refuse and do not supply it: \
+say it is given in the Reference column of the entries table shown with your answer, \
+and in that entry's full listing.
 2. Search before you answer, always, even when you are confident the corpus does \
 not cover the question. An answer given without retrieving anything reports what \
 you expected to find, not what is there, and "I did not find it" is only true if \
@@ -84,6 +91,15 @@ them, rather than choosing one silently. If you do prefer one, say that the othe
 differ and why.
 5. If you state a number that appears in no entry -- a conversion, a ratio, an \
 average -- say it is computed and cite the entries behind every input.
+6. Some entries carry a trust rating, from 5 of 5 for a curated entry down to 0 of 5 \
+when no reviewer approved it. Decide first which entries bear on the question; a \
+trust rating never makes an entry relevant, and a highly rated entry about another \
+quantity is still about another quantity. Then, among relevant entries for the same \
+quantity, prefer the better-rated one. Do not mention ratings, approvals or \
+disputes in your answer at all -- no stars, no "trust 3 of 5", no "this entry has \
+not been approved" -- because the application shows them beside each citation. \
+Only when the reader asks about an entry's rating, review or objections, answer \
+that from its trust line.
 
 Cite entries in full each time, including in follow-up answers. Someone reading \
 one answer on its own must still be able to trace every number.
@@ -386,7 +402,7 @@ def _middleware(gate: SpendGate) -> list:
 class _Retrieved:
     """What a question put in front of the model, and how much it passed over."""
 
-    entry_ids: dict[int, None] = field(default_factory=dict)
+    entry_ids: dict[EntryId, None] = field(default_factory=dict)
     matched: int = 0
     searches: int = 0
 
@@ -402,13 +418,13 @@ def _collect(retrieved: _Retrieved, event: Retrieval) -> None:
         retrieved.matched += int(event.detail["matched"])
         retrieved.searches += 1
     for entry_id in event.detail.get("entry_ids") or ():
-        retrieved.entry_ids.setdefault(int(entry_id), None)
+        retrieved.entry_ids.setdefault(entry_key(entry_id), None)
     # Both keys are required. `found` alone is not a fetch marker: list_values
     # reports how many vocabulary values it found under the same key, and reading
     # a entry_id off that raises.
     entry_id = event.detail.get("entry_id")
     if entry_id is not None and event.detail.get("found"):
-        retrieved.entry_ids.setdefault(int(entry_id), None)
+        retrieved.entry_ids.setdefault(entry_key(entry_id), None)
 
 
 def _persisted(saver: SqliteSaver, session_id: str) -> dict:
@@ -558,10 +574,16 @@ class AskAgent:
                 # Cited and retrieved stay separable: "the answer stood on this"
                 # and "this was in front of it" are different statements, and
                 # merging them cannot be undone by a query.
+                #
+                # A harvested entry's label is valid for one load only, so the store's
+                # id goes beside it: a saved answer is resolved by that, never by the
+                # label (ADR-1610). Absent for a corpus file, whose BNIDs are both.
+                saved = self._repo.saved_ids((*event.cited, *event.retrieved))
                 trace.record(
                     "answer.evidence",
                     cited=list(event.cited),
                     retrieved=list(event.retrieved),
+                    **({"saved_ids": saved} if saved else {}),
                 )
             yield event
 

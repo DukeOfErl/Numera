@@ -10,7 +10,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .corpus import EntryId
 
 
 class EndReason(StrEnum):
@@ -109,8 +112,8 @@ class CitationWarning:
     """
 
     question_id: str
-    unknown: tuple[int, ...] = ()
-    unretrieved: tuple[int, ...] = ()
+    unknown: tuple[EntryId, ...] = ()
+    unretrieved: tuple[EntryId, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -123,8 +126,8 @@ class AnswerEntries:
     """
 
     question_id: str
-    cited: tuple[int, ...] = ()
-    retrieved: tuple[int, ...] = ()
+    cited: tuple[EntryId, ...] = ()
+    retrieved: tuple[EntryId, ...] = ()
     # How many entries the searches matched, and how many searches there were.
     # Matched exceeds retrieved whenever a search hit the row cap, and it is the
     # more telling figure: it says how much of the corpus was never looked at.

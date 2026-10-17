@@ -21,6 +21,29 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **Caveat marks have a column of their own**, first in both entries tables, instead of a prefix
+  on the property. On the web the table gains a Trust column between Units and ID where entries
+  have tiers; Organism, ID and Reference are narrower so it still fits.
+- **Citations drawn as superscripts read every citation form** — a `PMC…` label as well as a
+  BNID, and several identifiers in one bracket — because the pattern is now `citations.DELIMITED`
+  rather than a second, digits-only copy.
+- The terminal's ID column widens to the longest identifier shown, since a terminal cannot open a
+  truncated cell.
+- The system prompt speaks of "scientific quantities" and "a corpus of entries", and asks for "the
+  identifier" in a citation rather than "the number".
+- **A harvested entry shows its full property name** -- the measure and what it is of -- where
+  the store holds one (`review_item.property`, harden-harvest), with the paper's own wording in the
+  full entry and still reached by search.
+- **An answer cites entries, never papers.** The prompt tells the model the identifier is the
+  only citation and to name no author, title, journal, year or DOI; each entry's reference is in
+  the entries table, and asked for one, it says where the reference is. On the web the Trust
+  column took 12px from Units.
+- **A harvested entry opens with its fields apart.** The full entry shows the supporting quote,
+  each condition under its name (conditions quoting one passage named together), what the paper
+  does not state and what a calculated value came from -- not the search keywords, which packed
+  them all into one line.
+- A harvest store passed where a corpus file is expected is refused by name instead of reported as
+  a corrupt line, and the evaluation command says why it cannot read the store yet.
 - **One model call under the ledger.** The extractor and the simulated review made the same
   eight-step call in two copies; both now go through `spend.call`, so a guard fixed in one is
   fixed in the other. The two things the review page takes from its deployment, the database and
@@ -38,6 +61,15 @@ any release; `1.0.0` when it stabilizes.
   be started was read as "no git" and the write allowed; it is now refused, and the reader told to
   run it again. An evaluation results file is checked on every append, not only when created.
   Outside any repository, or with no git installed, writes go ahead as before (ADR-1800).
+- **A harvested value that states a bound is no longer read as a number.** `>500`, "up to 260"
+  and "70 and 100" were stated to the model as 500, 260 and 70; they are now cautioned and given
+  only in the paper's words (10 of the store's 452 values). A unit holding a scale factor is no
+  longer applied to the value (ADR-1620).
+- On the web, a harvested value whose reading is uncertain shows the paper's words in the Value
+  cell instead of a blank and "no scalar value recorded".
+- An item the store reader cannot read, or a paper record citeproc cannot format, is a sentence
+  or the plain reference, not a traceback. A citation run holding a group that is not a citation
+  still draws the citations beside it.
 - **The validator's quote check no longer passes a wrong value as verified** (code review of 2026-10-15). A quote of a table cell matches only a table cell under the headers it names, so "cell: 39" in a Kd column no longer verifies against "isolated in 1939" elsewhere. A quote that begins or ends on a digit must begin or end where the paper's number does, so "39" is not quoted from "139" or "39.4". A number that ends a sentence ("was 2.4.") is now read. MathML exponents keep their meaning (`10<msup>…8` reads 10⁸, not 108) in the 22 of 130 cached papers that use them, and a formula given as both MathML and TeX is read once. Re-checked against all 2,643 quotes in the demo database: none was a wrong value let through; five quoting a formula now read its exponent marked.
 - **A publisher's terms page is no longer taken for a licence.** A paper's own licence link counts only if it is a Creative Commons licence or public-domain dedication; 10 of 130 cached papers had been credited with `rupress.org/terms` or Nature's editorial policies. None of the demo's papers was affected.
 - **A paper flagged by OpenRouter's moderation fails on its own** instead of stopping the whole run as if the account had been refused.
@@ -46,6 +78,24 @@ any release; `1.0.0` when it stabilizes.
 - The keepalive no longer reports a failure when a page reload lands mid-poll after waking the app, installs its browser from the same pinned Playwright it then runs under (`--install-browser`), runs on `ubuntu-24.04` rather than the floating `ubuntu-latest` that migrates to Ubuntu 26 on 2026-10-19, and its comments no longer promise a per-run failure mail.
 
 ### Added
+
+- **A harvested value's reference names its authors**, in Chicago author-date, in the entries
+  table and the full entry: read from the paper's CSL-JSON record in the store and formatted by
+  citeproc-py, with the title as the paper wrote it. The model is never handed it (ADR-1640).
+- **The ask agent answers from the harvest store** (`SCINUMBERS_STORE`, or `--store` on the
+  command line): curated BioNumbers entries and every harvested value in every domain, read-only.
+  A harvested value is cited `[[PMC2652108-1]]`, a later extraction of the same paper
+  `[[PMC2652108-1.2]]`; what is saved is the store's own id (ADR-1610). Each entry carries its
+  passage, stated and unstated conditions, paper, and whether it was measured or calculated; a
+  value is stated as a number only where its reading fits the recorded kind (ADR-1620).
+- **Every citation and table row from the store shows its trust tier as stars**, drawn by the
+  application, with `#` for a simulated review and `⚠` for a dispute, and a legend wherever they
+  appear (ADR-1630). The model is told the tier in words and to decide relevance before trust.
+- **Two new caveat marks**: `?` for a value that could not be read with certainty, `∴` for a
+  calculated one.
+- **Why an entry is disputed**: its Trust cell carries what each objecting reviewer wrote, after
+  the stars (double click to read it all); the terminal lists the objections under its table. The
+  model never sees them.
 
 - **A validator prototype: from a property question to reviewed numbers** (`bionumbers`,
   the `validator` extra). `bionumbers discover` searches Europe PMC for open-access research
