@@ -52,4 +52,4 @@ ADR block: `1850`–`1890` (CLAUDE.md is the authority).
 - [x] 7.1 README, `docs/diagrams/architecture.md`, CLAUDE.md, CHANGELOG, roadmap (the door's
       superscripts)
 - [x] 7.2 Spec conformance; `openspec validate --strict`; full suite
-- [ ] 7.3 Yoav looks at the page over the real store, locally
+- [x] 7.3 Yoav looks at the page over the real store, locally (2026-11-17)
