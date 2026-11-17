@@ -15,12 +15,14 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from .citations import DELIMITED, citations
-from .corpus import TRUST_LEVEL
+from .corpus import TRUST_LEVEL, TRUST_ROLE
 
 FULL = "★"
 EMPTY = "☆"
-#: Before the stars: the review that set this tier was a model standing in for a person (ADR-0960).
-SIMULATED = "#"
+#: After the stars: the review that set this tier was a model standing in for a person (ADR-0960).
+#: `sim`, not `#`: papers label their rings and samples "#1–#4", and a `#` beside a citation of one
+#: read as part of it (add-answer-view-redesign, ADR-1850).
+SIMULATED = "sim"
 #: After the stars: some reviewer objected to this entry, whoever approved it (ADR-0990).
 #: The emoji form (U+26A0 U+FE0F), which browsers and the table draw in yellow; the bare U+26A0
 #: draws in the text colour, where a warning does not stand out (the user's call, 2026-10-16).
@@ -31,28 +33,50 @@ SCALE_LEGEND = (
     f"{FULL * 2}{EMPTY * 3} student · {FULL}{EMPTY * 4} AI reviewer · "
     f"{EMPTY * 5} no reviewer approved it, or not yet reviewed"
 )
-SIMULATED_LEGEND = (
-    f"{SIMULATED} before the stars: set by a simulated review, a model standing in for the reviewer"
-)
-#: The page's wording, the user's own (2026-10-16): a double click opens a cell in full, and the
-#: Trust cell carries the objections after the stars.
-DISPUTED_LEGEND = (
-    f"{DISPUTED} : a reviewer objected to this entry. "
-    "Double click the rating in the table to find out why"
-)
+SIMULATED_LEGEND = f"{SIMULATED}: set by a simulated review, a model standing in for the reviewer"
+#: The page opens an entry beside the table, and the objections are there (ADR-1850).
+DISPUTED_LEGEND = f"{DISPUTED} : a reviewer objected to this entry. Open the entry to read why"
 #: The terminal cannot open a cell, so its objections are listed under the table instead.
 DISPUTED_LEGEND_TERMINAL = (
     f"{DISPUTED} : a reviewer objected to this entry; the objections are listed above"
 )
 
 
+#: The whole scale and both marks, for a page whose every answer may carry a tier: said once,
+#: where it stays in view, rather than under each list (the user's call, 2026-10-17).
+FULL_LEGEND = (SCALE_LEGEND, SIMULATED_LEGEND, DISPUTED_LEGEND)
+
+
 def stars(trust: Any) -> str:
-    """`#★★★☆☆⚠` for a tier, or "" where an entry has none."""
+    """`★★★☆☆ sim ⚠️` for a tier, or "" where an entry has none."""
     if trust is None:
         return ""
     level = TRUST_LEVEL[str(trust.tier)]
     drawn = FULL * level + EMPTY * (5 - level)
-    return (SIMULATED if trust.simulated else "") + drawn + (DISPUTED if trust.disputed else "")
+    marks = [SIMULATED] * bool(trust.simulated) + [DISPUTED] * bool(trust.disputed)
+    return " ".join([drawn, *marks])
+
+
+def tier_words(trust: Any) -> str:
+    """Who stands behind a tier, for a reader who opened the entry; "" where there is none."""
+    if trust is None:
+        return ""
+    tier = str(trust.tier)
+    if tier == "CURATED":
+        said = "Curated in BioNumbers"
+    elif tier == "NONE":
+        said = "Not yet approved by any reviewer"
+    else:
+        said = f"Approved by {_article(TRUST_ROLE[tier])} {TRUST_ROLE[tier]}"
+    if trust.simulated:
+        said += " (simulated review)"
+    if trust.disputed:
+        said += "; a reviewer objected"
+    return said
+
+
+def _article(word: str) -> str:
+    return "an" if word[:1].lower() in "aeiou" else "a"
 
 
 def legend(trusts: Iterable[Any], *, terminal: bool = False) -> list[str]:

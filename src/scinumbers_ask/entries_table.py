@@ -161,6 +161,9 @@ class Row:
     # The harvested value's own fields, for the full entry: its keywords pack the quote and every
     # condition's quote together for search, so drawn as keywords they read as one fused field.
     harvest: Any = None
+    # First author and year, for the web table's grey line under the property (ADR-1850); "" where
+    # the reference does not give them with certainty.
+    short_reference: str = ""
 
     @property
     def stars(self) -> str:
@@ -288,6 +291,7 @@ def rows_for(
                 if entry.trust is not None and entry.trust.disputed
                 else (),
                 harvest=entry.harvest,
+                short_reference=_short_reference(entry),
             )
         )
     return tuple(out)
@@ -298,6 +302,14 @@ def _reference(entry) -> str:
     if entry.harvest is not None:
         return references.chicago(entry.harvest.paper.csl_json) or entry.reference
     return entry.reference
+
+
+def _short_reference(entry) -> str:
+    """First author and year: from the paper's record for a harvested entry, else from the
+    reference string BioNumbers wrote (ADR-1850)."""
+    if entry.harvest is not None:
+        return references.short(entry.harvest.paper.csl_json)
+    return references.short_from_bionumbers(entry.reference or "")
 
 
 def _cell_lines(text: str, width: int) -> list[str]:

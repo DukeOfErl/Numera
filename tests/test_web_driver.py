@@ -13,6 +13,7 @@ in `web.items_for` and asserted there rather than read back off the page.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -456,7 +457,7 @@ def test_a_question_that_retrieved_something_still_draws_the_box(
     )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
-    assert [box.label for box in at.status] == ["Retrieval"]
+    assert len(at.status) == 1 and at.status[0].label.startswith("Searched “Cell”")
 
 
 # -- warnings are said, not swallowed --------------------------------------
@@ -576,25 +577,28 @@ def test_the_cited_entries_come_first(repo):
     assert [row.cited for row in table.rows] == [True, False]
 
 
-def test_a_row_names_the_entry_and_its_identifier(repo):
-    table = web.item_for(entries(), repo).table
-    label = web._row_label(table.rows[0])
-    assert "Cell diameter" in label and "Escherichia coli" in label
-    assert "BNID 100002" in label
+def test_an_opened_entry_names_itself_and_its_identifier(monkeypatch, repo, config, tmp_path):
+    model = scripted(
+        tool_call("get_entry", entry_id=100002), says("about 1 micrometre (BNID 100002)")
+    )
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+    at.main.get("button_group")[0].set_value(1).run()
+    drawn = [m.value for m in at.main.markdown]
+    assert "**Entry 1** · `BNID 100002`" in drawn
+    assert "**Cell diameter**" in drawn
 
 
 def test_a_row_without_a_recorded_method_is_marked(repo):
-    """The corpus records no method for 100002, and a marked row says so."""
+    """The corpus records no method for 100002, and a marked row says so, after its value."""
     table = web.item_for(entries(), repo).table
     row = next(r for r in table.rows if r.entry_id == 100002)
     assert not row.method_recorded
-    assert web._row_label(row).startswith(entries_table.NO_METHOD)
+    value = re.search(r'<td class="sn-v">(.*?)</td>', web.evidence_html((row,), {})).group(1)
+    assert entries_table.NO_METHOD in value
 
 
-def test_every_retrieved_entry_is_reachable_even_past_the_cap(monkeypatch, repo, config, tmp_path):
-    """Beyond the cap they are listed rather than dropped: nothing retrieved is hidden."""
-    monkeypatch.setattr(web, "CITED_ROWS", 2)
-    monkeypatch.setattr(web, "UNCITED_ROWS", 1)
+def test_every_retrieved_entry_is_reachable(monkeypatch, repo, config, tmp_path):
+    """Every row is carried: with no side panel, the evidence list is where each one is reached."""
     every = tuple(entry.entry_id for entry in load(FIXTURE))
     table = web.item_for(entries(cited=(), retrieved=every), repo).table
     assert len(table.rows) == len(every) > 2, "rows were dropped rather than carried"
@@ -606,22 +610,26 @@ def test_the_table_reaches_the_main_column_as_a_table(monkeypatch, repo, config,
     )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
-    assert at.dataframe, "no table was drawn"
-    assert any("Cited in the answer" in m.value for m in at.markdown)
+    tables = [h.proto.body for h in at.main.get("html") if 'class="sn-ev"' in h.proto.body]
+    assert tables, "no evidence list was drawn"
+    assert any("Evidence for this answer" in m.value for m in at.markdown)
 
 
-def test_the_openable_entries_are_in_the_side_panel_not_the_main_column(
+def test_an_entry_opens_beside_the_answer_not_in_the_side_panel(
     monkeypatch, repo, config, tmp_path
 ):
-    """The main column is for reading the answer against; the panel is for digging."""
+    """ADR-1850: chosen by number under the list, opened in the evidence column."""
     model = scripted(
         tool_call("get_entry", entry_id=100002), says("about 1 micrometre (BNID 100002)")
     )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
-    labels = [e.label for e in at.sidebar.expander]
-    assert any("BNID 100002" in label for label in labels), labels
-    assert any(t.label == web.ENTRIES_TAB for t in at.sidebar.tabs)
+    assert at.main.get("button_group"), "no way to open an entry"
+    assert not any(m.value.startswith("**Entry") for m in at.main.markdown), "open by default"
+    at.main.get("button_group")[0].set_value(1).run()
+    assert any(m.value.startswith("**Entry 1** · `BNID 100002`") for m in at.main.markdown)
+    assert not [e for e in at.sidebar.expander if e.label != messages.PRIVACY_HEADING]
+    assert not at.sidebar.tabs, "one sidebar view needs no tab strip"
 
 
 def test_an_opened_row_shows_the_entry_the_model_never_saw(monkeypatch, repo, config, tmp_path):
@@ -631,6 +639,7 @@ def test_an_opened_row_shows_the_entry_the_model_never_saw(monkeypatch, repo, co
     )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
+    at.main.get("button_group")[0].set_value(1).run()
     drawn = " ".join(c.value for c in at.caption) + " ".join(m.value for m in at.markdown)
     assert "Nelson DE. J Bacteriol. 2000 p.1719" in drawn
 
@@ -664,13 +673,12 @@ def test_an_entry_with_no_scalar_is_marked_and_its_value_left_blank():
         cited=False,
         has_scalar=False,
     )
-    cell = web._frame((row,))[0]
-
-    assert cell["Value"] == "", "the placeholder was repeated in the value column"
-    # In the caveat column of its own, first, and not on the property (add-ask-over-store).
-    assert cell[""] == entries_table.NO_SCALAR
-    assert cell["Property"] == "Length, diameter, volume"
-    assert list(cell)[0] == ""
+    markup = web.evidence_html((row,), {"106614": 1})
+    value = re.search(r'<td class="sn-v">(.*?)</td>', markup).group(1)
+    assert "(no scalar value)" not in value, "the placeholder was repeated in the value column"
+    # After the value, which is what a mark qualifies (ADR-1850), and not on the property.
+    assert entries_table.NO_SCALAR in value
+    assert "<td>Length, diameter, volume<" in markup
     assert entries_table.NO_SCALAR_LEGEND in web._legend((row,))
 
 
@@ -688,50 +696,47 @@ def test_injected_markup_is_stripped_from_keywords_for_display(repo):
     assert not any("<" in keyword for keyword in rows[0].keywords)
 
 
-def test_the_side_panel_is_there_before_any_question(monkeypatch, repo, config, tmp_path):
-    """A panel that materialises after the first answer reads as a glitch."""
+def test_the_first_view_says_what_the_page_is_for(monkeypatch, repo, config, tmp_path):
+    """ADR-1850: a heading, a paragraph, questions to start from; the evidence column waiting."""
     at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
 
-    assert any(t.label == web.ENTRIES_TAB for t in at.sidebar.tabs)
-    # Every expander bar the standing one, which is the privacy statement and is
-    # there from the first draw by design (ADR-1110).
+    assert "Ask about a scientific quantity" in [h.value for h in at.subheader]
+    labels = [b.label for b in at.button]
+    assert all(question in labels for question in web.EXAMPLES)
+    assert any("entries behind each answer appear here" in c.value for c in at.caption)
     entries = [e for e in at.sidebar.expander if e.label != messages.PRIVACY_HEADING]
     assert not entries, "entries before anything was retrieved"
 
 
-def test_the_legend_sits_between_the_two_tables(monkeypatch, repo, config, tmp_path):
-    """Before both it explains marks nobody has met; after both it is too late."""
+def test_an_example_question_asks_itself(monkeypatch, repo, config, tmp_path):
+    model = scripted(says("about 1 micrometre"))
+    at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run()
+    next(b for b in at.button if b.label == web.EXAMPLES[0]).click().run()
+    assert not at.exception
+    assert any(web.EXAMPLES[0] in m.value for m in at.markdown), "the question was not asked"
+    assert any("about 1 micrometre" in m.value for m in at.markdown)
+    assert "Ask about a scientific quantity" not in [h.value for h in at.subheader]
+
+
+def test_the_legend_sits_under_the_cited_list(monkeypatch, repo, config, tmp_path):
+    """Under the list it explains, for the marks shown (ADR-1850)."""
     model = scripted(
         tool_call("search_entries", property="Cell"), says("about 1 micrometre (BNID 100002)")
     )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
-    headings = [m.value for m in at.markdown]
-    captions = [c.value for c in at.caption]
-    assert any("Cited in the answer" in h for h in headings)
-    assert any(entries_table.NO_METHOD_LEGEND in c for c in captions)
+    assert any("Evidence for this answer" in m.value for m in at.markdown)
+    assert any(entries_table.NO_METHOD_LEGEND in c.value for c in at.caption)
 
 
-def test_every_column_is_given_a_width_so_the_table_does_not_scroll_sideways(repo):
-    """A table scrolled sideways hides the identifier, the one cell being checked."""
-    table = web.item_for(entries(), repo).table
-    # A corpus file draws no Trust column; every column it does draw has a width, and the
-    # store's table (test_store_corpus.py) draws the Trust column too.
-    assert set(web._frame(table.rows)[0]) == set(web.COLUMN_WIDTHS) - {"Trust"}
-    assert sum(web.COLUMN_WIDTHS.values()) <= 700
-
-
-def test_an_identifier_is_a_string_so_it_keeps_matching_the_prose(repo):
-    """As a number it picks up a thousands separator and stops reading as a BNID."""
-    table = web.item_for(entries(), repo).table
-    assert web._frame(table.rows)[0]["ID"] == "100002"
-
-
-# -- the two caps ----------------------------------------------------------
+def test_an_identifier_is_shown_as_the_prose_cites_it(repo):
+    """As a number it picked up a thousands separator and stopped reading as a BNID."""
+    markup = web.evidence_html(web.item_for(entries(), repo).table.rows, {})
+    assert '<span class="sn-id">BNID 100002</span>' in markup
 
 
 def many(cited_count: int, uncited_count: int) -> tuple[entries_table.Row, ...]:
-    """Rows enough to exercise both caps, cited first as `rows_for` orders them."""
+    """Rows enough to show that nothing is capped, cited first as `rows_for` orders them."""
 
     def row(i: int, cited: bool) -> entries_table.Row:
         return entries_table.Row(
@@ -749,39 +754,13 @@ def many(cited_count: int, uncited_count: int) -> tuple[entries_table.Row, ...]:
     )
 
 
-def test_every_cited_entry_is_shown_when_they_fit(repo):
-    """Nine cited entries against a single eight-row cap dropped one of them."""
-    rows = many(cited_count=9, uncited_count=5)
-    cited = tuple(r for r in rows if r.cited)[: web.CITED_ROWS]
-    assert len(cited) == 9, "a cited entry the answer rests on was left out of the table"
-
-
-def test_the_uncited_section_survives_an_answer_that_cited_many(repo):
-    """The single cap spent all its rows on cited entries and the section vanished."""
-    rows = many(cited_count=9, uncited_count=5)
-    rest = tuple(r for r in rows if not r.cited)[: web.UNCITED_ROWS]
-    assert len(rest) == web.UNCITED_ROWS == 4
-
-
-def test_fewer_uncited_entries_than_the_cap_shows_what_there_is(repo):
-    rows = many(cited_count=1, uncited_count=2)
-    assert len(tuple(r for r in rows if not r.cited)[: web.UNCITED_ROWS]) == 2
-
-
-def test_cited_entries_beyond_the_cap_are_announced_not_dropped_silently(
-    monkeypatch, repo, config, tmp_path
-):
-    """The one omission a reader cannot detect by looking at the table."""
-    monkeypatch.setattr(web, "CITED_ROWS", 2)
-    cited = (100001, 100002, 100003)
-    model = scripted(
-        batched_tool_calls(*[("get_entry", {"entry_id": b}) for b in cited]),
-        says("BNIDs 100001, 100002 and 100003"),
-    )
-    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "sizes?")
-
-    warnings = [w.value for w in at.warning]
-    assert any("more cited" in w and "side panel" in w for w in warnings), warnings
+def test_every_entry_is_in_the_list_with_no_cap(repo):
+    """With no side panel, a cap would hide an entry the answer rests on (ADR-1850)."""
+    rows = many(cited_count=15, uncited_count=9)
+    numbers = web.entry_numbers([[web.Item(web.Kind.ENTRIES, table=web.Table(rows))]])
+    cited = web.evidence_html([r for r in rows if r.cited], numbers)
+    rest = web.evidence_html([r for r in rows if not r.cited], numbers)
+    assert cited.count("<tr>") == 15 + 1 and rest.count("<tr>") == 9 + 1
 
 
 def test_nothing_is_announced_when_every_cited_entry_is_shown(monkeypatch, repo, config, tmp_path):
@@ -800,10 +779,8 @@ def test_an_answer_that_cited_nothing_says_so_where_the_cited_table_would_be(
 
     headings = [m.value for m in at.markdown]
     assert any(entries_table.NOTHING_CITED in h for h in headings), headings
-    # The uncited rows are folded away, so their banner is an expander's label
-    # rather than a heading. Still asserted: folded is not the same as unlabelled,
-    # and a reader has to be able to tell what is behind it without opening it.
-    assert any(entries_table.UNCITED_BANNER.capitalize() in e.label for e in at.expander)
+    # The uncited rows are folded away, under a label that says what they are.
+    assert any("retrieved but not cited" in e.label for e in at.expander)
 
 
 def test_the_uncited_rows_are_folded_away_and_the_cited_ones_are_not(
@@ -813,9 +790,8 @@ def test_the_uncited_rows_are_folded_away_and_the_cited_ones_are_not(
 
     The cited rows are what the prose stands on: a reader checking an answer
     against its evidence must not have to open anything to see them. The uncited
-    rows are what it did *not* stand on — context, and length in front of that
-    reader. Folding both would hide the evidence; folding neither is what put the
-    rating and the summary below a screenful of rows nobody asked for.
+    rows are what it did *not* stand on -- context, and length in front of that
+    reader.
     """
     model = scripted(
         tool_call("search_entries", property="Cell"), says("about 1 micrometre (BNID 100002)")
@@ -824,13 +800,11 @@ def test_the_uncited_rows_are_folded_away_and_the_cited_ones_are_not(
 
     folded = at.main.expander
     assert len(folded) == 1, [e.label for e in folded]
-    assert entries_table.UNCITED_BANNER.capitalize() in folded[0].label
+    assert "retrieved but not cited" in folded[0].label
     assert not folded[0].proto.expanded, "the uncited rows were not folded away"
-    assert folded[0].dataframe, "the fold is empty -- the rows went somewhere else"
-    assert any("Cited in the answer" in m.value for m in at.main.markdown), (
-        "the cited heading is gone"
-    )
-    assert len(at.main.dataframe) == 2, "the cited table is behind the fold too"
+    assert any('class="sn-ev"' in h.proto.body for h in folded[0].get("html")), "the fold is empty"
+    lists = [h for h in at.main.get("html") if 'class="sn-ev"' in h.proto.body]
+    assert len(lists) == 2, "the cited list is behind the fold too, or missing"
 
 
 def test_the_uncited_heading_says_what_the_rows_are_not_only_what_they_are_not():
@@ -888,15 +862,34 @@ def test_the_summary_is_not_drawn_when_it_would_undercount_what_is_shown(repo):
     assert web.summary_for(web.Table(item.table.rows, retrieved=99, matched=99), shown)
 
 
-def test_the_side_panel_holds_the_newest_question_or_nothing(repo):
-    """Not the newest question that had entries. Falling back leaves an earlier
-    question's entries under 'Full entries' with nothing saying they are stale --
-    and the main column's 'every one is in the side panel' then points at a panel
-    that no longer holds them."""
-    with_entries = [web.item_for(entries(), repo)]
-    without = [web.Item(web.Kind.ANSWER, "no entries this time")]
-    assert web.latest_table([("q1", with_entries)]) is not None
-    assert web.latest_table([("q1", with_entries), ("q2", without)]) is None
+def _answer(text, *known):
+    return web.Item(web.Kind.ANSWER, text, known=tuple(str(k) for k in known))
+
+
+def test_entries_are_numbered_in_the_order_the_session_meets_them(repo):
+    """ADR-1850: the answer's citations first, as they appear, then the turn's other rows."""
+    first = [
+        _answer("[[100003]] then [[100002]]", 100003, 100002),
+        web.item_for(entries(cited=(100002, 100003), retrieved=(100002, 100003, 100001)), repo),
+    ]
+    numbers = web.entry_numbers([first])
+    assert numbers == {"100003": 1, "100002": 2, "100001": 3}
+
+
+def test_a_later_answer_keeps_an_entry_s_number(repo):
+    first = [_answer("[[100002]]", 100002)]
+    second = [_answer("[[100001]] and [[100002]]", 100001, 100002)]
+    numbers = web.entry_numbers([first, second])
+    assert numbers["100002"] == 1 and numbers["100001"] == 2
+    # Drawn again from the same transcript -- a rerun -- nothing moves.
+    assert web.entry_numbers([first, second]) == numbers
+
+
+def test_an_identifier_the_corpus_does_not_hold_is_not_numbered(repo):
+    """The item knows only what the corpus holds; the rest stays as written in the prose."""
+    item = web.item_for(Answer(question_id="q", text="[[100002]] [[999999]]"), repo)
+    assert item.known == ("100002",)
+    assert web.entry_numbers([[item]]) == {"100002": 1}
 
 
 def ending(reason, **kwargs):
@@ -1016,27 +1009,20 @@ def test_keywords_that_are_all_stripped_markup_draw_no_keyword_line(repo):
     assert web.shown_keywords(row(("cell", ""))) == ["cell"]
 
 
-def test_the_prototype_caveat_is_on_the_page_and_stays_there(monkeypatch, repo, config, tmp_path):
+def test_the_prototype_caveat_is_on_the_page(monkeypatch, repo, config, tmp_path):
     """Not decoration. The page shows entries, identifiers and dimension checks --
     every signal a reader uses to decide a number is solid -- so the one thing it
-    must also say is that this has not been evaluated. In the side panel as well as
-    under the title: a long conversation scrolls the title away, and a caveat only
-    the first question sees is not a caveat.
+    must also say is that this has not been evaluated. In the header, in amber, on
+    every view of the page (ADR-1850; it was pinned to the viewport before).
     """
     at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
-    banner = [m.value for m in at.markdown if '<div class="bn-caveat"' in m.value]
-    assert banner, "the pinned banner was not drawn"
-    # The words survive the markdown-to-HTML rendering: `**` inside a raw HTML
-    # element renders as two asterisks, so the emphasis has to be translated.
+    banner = [h.proto.body for h in at.get("html") if 'class="sn-proto"' in h.proto.body]
+    assert banner, "the prototype line was not drawn"
+    # `**` inside raw HTML renders as two asterisks, so the emphasis has to be translated.
     assert "not yet scientifically trustworthy" in banner[0]
     assert "original source" in banner[0]
     assert "**" not in banner[0], "markdown emphasis left unrendered inside raw HTML"
-    assert "position: fixed" in "".join(m.value for m in at.markdown), (
-        "drawn as an ordinary element it scrolls away with the first answer, and the "
-        "reader who has seen several answers is the one who most needs it"
-    )
     assert not any(web.PROTOTYPE_SHORT in c.value for c in at.sidebar.caption), (
-        "the pinned banner already says this, above everything and unscrollable; "
         "a second copy in the panel is the repetition a reader learns to skip"
     )
 
@@ -1100,57 +1086,41 @@ def test_the_page_refuses_a_retired_variable_before_it_looks_for_a_corpus(monkey
 
 
 def test_a_finished_search_is_not_labelled_as_still_running(monkeypatch, repo, config, tmp_path):
-    """Both paths name the finished box the same thing.
+    """Both paths name the finished box the same thing: what was searched, and what came of it.
 
     The live path opens the box on the first retrieval and relabels it when the
     answer is done; the replay path draws it already finished. They had two
-    literals and had drifted, so every redrawn turn claimed to still be searching
-    a corpus it had finished with. It stayed invisible while the live render was
-    what a reader saw after asking — the rerun that revives older ratings replaced
-    it with the replay render, and that is what exposed it.
+    literals and had drifted, so every redrawn turn claimed to still be searching.
     """
     model = scripted(
         tool_call("search_entries", property="Cell"), says("about 1 micrometre (BNID 100002)")
     )
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
-    assert [box.label for box in at.status] == [web.RETRIEVAL_DONE]
+    (label,) = [box.label for box in at.status]
+    assert label.startswith("Searched “Cell” · ") and label.endswith("cited")
 
     # And still so after another turn puts it through the replay path a second time.
     at = ask(at, "and in yeast?")
     assert web.RETRIEVAL_RUNNING not in [box.label for box in at.status]
+    assert at.status[0].label == label
 
 
-def test_the_evidence_column_can_hold_its_table():
-    """The arithmetic `READING_SPLIT`'s comment claimed was tested, and was not.
-
-    The entries table's widths are fixed pixels. Below their sum the dataframe
-    grows a horizontal scrollbar and the first column it takes away is the
-    identifier — the one cell a reader is checking against the prose. So the
-    evidence column's share of the target width has to cover them.
-
-    Written as a derivation rather than a remembered number: it fails if someone
-    widens a column, skews the split toward the prose, or lowers the target. The
-    only width test before this bounded the table at 700px, which the wide layout
-    made meaningless — it names neither the split nor the layout it now lives in.
-    """
-    usable = web.TARGET_BROWSER_WIDTH - web.LAYOUT_CHROME
-    evidence = usable * web.READING_SPLIT[1] / sum(web.READING_SPLIT)
-    needed = sum(web.COLUMN_WIDTHS.values())
-
-    assert evidence >= needed, (
-        f"the evidence column gets {evidence:.0f}px of a {web.TARGET_BROWSER_WIDTH}px "
-        f"browser and the table needs {needed}px, so it scrolls sideways and hides "
-        f"the ID column. Narrow the columns or widen the split — not the target."
-    )
+def test_the_evidence_list_has_no_fixed_widths_to_overflow(repo):
+    """The width-budget test this replaces guarded a dataframe's fixed pixel columns against a
+    horizontal scrollbar that hid the ID. The list is HTML and wraps (ADR-1850): no column width
+    is fixed, so there is nothing to sum against the evidence column."""
+    markup = web.evidence_html(web.item_for(entries(), repo).table.rows, {})
+    assert "width:" not in markup and "style=" not in markup
+    assert not hasattr(web, "COLUMN_WIDTHS")
 
 
 # --- citations in a drawn answer (ADR-1240) --------------------------------------
 
 
-def test_a_run_of_citations_is_drawn_as_one_grey_superscript():
+def test_a_run_of_citations_is_drawn_as_pills():
     drawn = web.answer_markdown("42 μm³ [[100427]] [[100430]], and 1.1 μm³ [[100004]].")
-    assert '<sup style="opacity: 0.6; font-size: 0.72em;">100427, 100430</sup>' in drawn
-    assert "1.1 μm³ <sup" in drawn and ">100004</sup>." in drawn
+    assert re.sub(r"<[^>]+>", "", drawn) == "42 μm³ 1 2, and 1.1 μm³ 3."
+    assert drawn.count('class="sn-pill"') == 3
     assert "[[" not in drawn
 
 
@@ -1164,10 +1134,78 @@ def test_an_answer_drawn_with_html_allowed_is_escaped_first():
     assert r"\$5" in drawn, "and `$` is still kept out of mathematics"
 
 
-def test_the_page_draws_an_answer_s_citations_as_superscripts(monkeypatch, repo, config, tmp_path):
+def test_the_page_draws_an_answer_s_citations_as_pills(monkeypatch, repo, config, tmp_path):
     model = scripted(says("about 1 micrometre [[100002]] [[100003]] <b>x</b>"))
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
     (drawn,) = [m for m in at.markdown if "micrometre" in m.value]
-    assert ">100002, 100003</sup>" in drawn.value
+    assert 'title="BNID 100002"><b>1</b></span>' in drawn.value
+    assert 'title="BNID 100003"><b>2</b></span>' in drawn.value
     assert "&lt;b&gt;x&lt;/b&gt;" in drawn.value
     assert drawn.proto.allow_html
+
+
+def _draw_turn(count, answering):
+    """One finished turn with `count` cited entries, redrawn as the replay path draws it."""
+    from scinumbers_ask import entries_table, web
+
+    rows = tuple(
+        entries_table.Row(
+            entry_id=100000 + i,
+            property=f"Property {i}",
+            organism="Bacteria Escherichia coli",
+            value="1.0",
+            units="um",
+            reference="A reference",
+            cited=True,
+        )
+        for i in range(count)
+    )
+    web.show(
+        [web.Item(web.Kind.ENTRIES, table=web.Table(rows), question_id="q1")], answering=answering
+    )
+
+
+def test_twelve_entries_are_buttons_and_thirteen_a_list():
+    """Above twelve the buttons become a wall of numbers (the user's call, 2026-10-17)."""
+    at = AppTest.from_function(_draw_turn, args=(12, False), default_timeout=TIMEOUT).run()
+    assert at.get("button_group") and not at.selectbox
+    at = AppTest.from_function(_draw_turn, args=(13, False), default_timeout=TIMEOUT).run()
+    assert at.selectbox and not at.get("button_group")
+    # Nothing opened until chosen, and a way back to nothing (the user's call, 2026-10-17).
+    assert at.selectbox[0].options[0] == web.SHOW_NO_ENTRY and at.selectbox[0].value is None
+    assert at.selectbox[0].options[7] == "7 · Property 6"
+
+
+def test_no_entry_can_be_chosen_while_a_question_is_answering():
+    """A click re-runs the page and would cut the answer off mid-tool-call."""
+    at = AppTest.from_function(_draw_turn, args=(3, True), default_timeout=TIMEOUT).run()
+    assert at.get("button_group")[0].proto.disabled
+    at = AppTest.from_function(_draw_turn, args=(3, False), default_timeout=TIMEOUT).run()
+    assert not at.get("button_group")[0].proto.disabled
+
+
+def test_an_entry_is_closed_until_chosen_and_closed_again_by_its_number():
+    """The user's call (2026-10-17): open by default, a record per turn filled the page."""
+    at = AppTest.from_function(_draw_turn, args=(3, False), default_timeout=TIMEOUT).run()
+    assert not any(m.value.startswith("**Entry") for m in at.markdown)
+    at.get("button_group")[0].set_value(2).run()
+    assert "**Entry 2** · `BNID 100001`" in [m.value for m in at.markdown]
+    # A second click on the open number deselects it in the browser because the pills are not
+    # `required` (st.pills, 1.61.1). AppTest cannot press a selected pill again -- its
+    # `set_value(None)` keeps the last value -- so what is asserted is the setting that does it.
+    assert not at.get("button_group")[0].proto.required
+
+
+def test_a_new_question_closes_every_opened_entry(monkeypatch, repo, config, tmp_path):
+    model = scripted(
+        tool_call("get_entry", entry_id=100002),
+        says("about 1 micrometre [[100002]]"),
+        tool_call("get_entry", entry_id=100003),
+        says("and [[100003]]"),
+    )
+    at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
+    at.main.get("button_group")[0].set_value(1).run()
+    assert any(m.value.startswith("**Entry 1**") for m in at.main.markdown)
+    at = ask(at, "and the other?")
+    assert not at.exception
+    assert not any(m.value.startswith("**Entry") for m in at.main.markdown), "left open"

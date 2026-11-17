@@ -235,9 +235,8 @@ CREDENTIAL_REJECTED = (
     "nothing here can, and asking anyway would only produce an answer with nothing "
     "behind it."
 )
-NO_SIGN_IN_CONFIGURED = (
-    "No sign-in is configured: anyone with this address can ask, and records carry no account."
-)
+#: Short, the user's own wording (2026-10-17): it sits under the question box on every screen.
+NO_SIGN_IN_CONFIGURED = "No user configured."
 # Just who, and as what. The sign-out button sits beside it, which is what says
 # this is your account rather than a fact about somebody.
 SIGNED_IN_AS = "{email}  \n({role})"

@@ -98,6 +98,11 @@ def _recorded(at: AppTest) -> dict:
     return feedback.ratings(at.session_state)
 
 
+def _lists(column):
+    """The evidence lists drawn in a column: HTML tables since ADR-1850, not dataframes."""
+    return [h for h in column.get("html") if 'class="sn-ev"' in h.proto.body]
+
+
 def _turn_columns(at: AppTest) -> list[tuple]:
     """Each turn's (prose, evidence) pair, in the order the turns were drawn.
 
@@ -275,8 +280,8 @@ def test_the_rating_sits_with_the_prose_and_not_with_the_evidence(cites):
 
     assert prose.get("feedback"), "no rating in the prose column"
     assert not evidence.get("feedback"), "the rating went to the evidence column"
-    assert evidence.dataframe, "the fixture drew no table, so this proves nothing"
-    assert not prose.dataframe, "the table stayed in the prose column"
+    assert _lists(evidence), "the fixture drew no table, so this proves nothing"
+    assert not _lists(prose), "the table stayed in the prose column"
 
     inside = _element_order(prose)
     assert inside.index("markdown") < inside.index("feedback"), "the prose came after the rating"
@@ -659,8 +664,8 @@ def test_the_live_path_splits_the_columns_the_same_way_the_replay_does():
     prose, evidence = _turn_columns(at)[0]
     assert prose.get("feedback"), "the live path put no rating in the prose column"
     assert not evidence.get("feedback"), "the live path rated in the evidence column"
-    assert evidence.dataframe, "the live path drew no table in the evidence column"
-    assert not prose.dataframe, "the live path left the table in the prose column"
+    assert _lists(evidence), "the live path drew no table in the evidence column"
+    assert not _lists(prose), "the live path left the table in the prose column"
 
 
 # --- what the *page* hands down, not what the functions do with literals ------

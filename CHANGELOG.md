@@ -21,6 +21,23 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **The answer view is redesigned** (ADR-1850, from Yoav's Claude Design canvas):
+  - Citations are numbered pills (number, stars, `sim`, ⚠), numbered through the session, with
+    the identifier on hover.
+  - The entries are one evidence list beside the answer, with columns #, Entry, Value, Trust and
+    ID. Long property names wrap, and the organism and first author with year sit under each one.
+  - An entry is opened in place by its number, with its full reference, conditions and what any
+    objecting reviewer said.
+  - The sidebar starts collapsed and no longer holds entries.
+  - The prototype line is in the header, in amber.
+  - What is kept, and whose budget pays, is said under the question box.
+  - The finished search box says what was searched and how many entries were retrieved and cited.
+  - The first view offers example questions.
+  - An entry stays closed until its number is chosen, closes on a second click, and every
+    entry closes when a new question is sent.
+  - The trust scale's legend is pinned under the question box.
+- `sim` replaces `#` as the simulated-review mark, in the terminal too: papers label rings and
+  samples "#1–#4".
 - **Caveat marks have a column of their own**, first in both entries tables, instead of a prefix
   on the property. On the web the table gains a Trust column between Units and ID where entries
   have tiers; Organism, ID and Reference are narrower so it still fits.

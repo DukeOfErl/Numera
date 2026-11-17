@@ -81,10 +81,11 @@ what let the blocks drift: no branch can see another's copy.
 | `speed-up-test-loop` | `1300`–`1340` — `1300` written |
 | `add-first-use-heartbeat` | `1350`–`1390` — `1350` written |
 | `add-harvest-prototype` | `1500`–`1590` — `1500`, `1510` written, and `1520`–`1540` hold the validator's renumbered three; archived 2026-10-15; clear of every block on `dev` and the branches as of 2026-10-07 (highest `1350`–`1390`) |
-| `add-ask-over-store` | `1600`–`1690` — `1600`, `1610`, `1620`, `1630`, `1640` written |
+| `add-ask-over-store` | `1600`–`1690` — `1600`, `1610`, `1620`, `1630`, `1640` written; archived 2026-10-17 |
 | `harden-harvest` | `1700`–`1740` — reserved 2026-10-15, after `add-ask-over-store`'s `1600`–`1690` on `feat/ask-over-store` |
 | `add-paper-references` | `1750`–`1790` — `1750` written; archived 2026-10-17 |
 | `fix-guard-fails-closed` | `1800`–`1840` — `1800` written; archived 2026-10-17, after `add-paper-references`' `1750`–`1790` |
+| `add-answer-view-redesign` | `1850`–`1890` — `1850` written; reserved 2026-10-17, after `fix-guard-fails-closed`'s `1800`–`1840` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets
@@ -173,7 +174,7 @@ core, and a test there refuses a name with no file behind it.
 | `bionumbers.py` | The only module that names BioNumbers: its `BNID` notation, read and restated (ADR-0420) |
 | `entries_table.py` | Rows, marks and legends — shared by both drivers |
 | `messages.py` | Wording both drivers use, and `STOP_THE_RUN` |
-| `cli.py` / `web.py` | The two interactive adapters |
+| `cli.py` / `web.py` | The two interactive adapters. `web.py` draws citations as numbered pills (`entry_numbers`, a pure function over the transcript), the evidence list as one HTML table, and an entry opened in place (ADR-1850) |
 | `question_set.py` | The question set: the format, its reader, the entry shapes derived from the corpus, and the tier (`basic` / `compound` / `declining`) that keeps a gain in one kind of question from being paid for out of another |
 | `evaluation.py` | The evaluation driver: asks, records one line per result, resumes, fingerprints what produced each, and refuses a results path git would track |
 | `scoring.py` | Every score needing no model and no prose parser, as pure functions; the outlier check (ADR-0520) |
@@ -189,8 +190,8 @@ core, and a test there refuses a name with no file behind it.
 | `accounts.py` | `lookup(engine, email)` and `insert(...)`: enrolment off one row, **fails closed** — the deliberate inverse of `trail_store` (ADR-0780). Both here so the case-folding rule has one home |
 | `store_corpus.py` | The harvest store as a corpus: read-only, labels, readings, tiers. **The one core module that imports `bionumbers`** (ADR-1600), so a corpus-file run never does |
 | `objections.py` | What objecting reviewers wrote, for the Trust cell and the terminal's list. **Presentation**: reviewers' words never reach the agent; imports `bionumbers` only when a store is loaded (ADR-1600, ADR-1630) |
-| `trust_marks.py` | A tier as stars, `#` and `⚠`, and their legend. **Presentation**: the model is told a tier in words and never shown a star (ADR-1630) |
-| `references.py` | A harvested paper's reference in Chicago author-date, from its CSL-JSON, by citeproc-py. **Presentation**: the model names no paper and is never handed the authors (ADR-1640) |
+| `trust_marks.py` | A tier as stars, `sim` and `⚠`, their legend, and the tier in words for an opened entry. **Presentation**: the model is told a tier in words and never shown a star (ADR-1630, ADR-1850) |
+| `references.py` | A harvested paper's reference in Chicago author-date, from its CSL-JSON, by citeproc-py; first author and year for the evidence list, from the record or BioNumbers' reference string. **Presentation**: the model names no paper and is never handed the authors (ADR-1640, ADR-1850) |
 | `enrol.py` | The two commands that open and close an account: `scinumbers-enrol` mints a capped key and inserts the row, withdrawing the key if the row cannot be written (ADR-0900); `scinumbers-withdraw` disables the row and revokes the key, in that order, so a partial failure leaves a refused account rather than a live one (ADR-1150). A harness module |
 | `pending.py` | The daily check (`scinumbers-pending`): who is **still** stuck at the door, read out of the trail. Resolution is derived from `user_email` and `signin.refused` rather than tracked, so no state is added. **Silent when nobody is stuck** — the contract a cron line rests on. A harness module |
 | `first_use.py` | The hourly check (`scinumbers-first-use`): who was **just seen for the first time**, signing in or asking, read out of the trail with no state kept. Holds a **read-only database URL, never the Neon API key**, and sets its own transaction read-only. **Silent when nobody is new.** The window is computed by the workflow from the previous successful run. A harness module (ADR-1250, ADR-1260, ADR-1290) |

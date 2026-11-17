@@ -5,7 +5,9 @@ Answers a natural-language question using only what was retrieved from the corpu
 attributable to a specific entry. In a project whose premise is verifiable provenance, a plausible
 unsourced number is the worst output the system can produce — worse than admitting ignorance,
 because it looks like the good case.
+
 ## Requirements
+
 ### Requirement: Every quantitative claim cites its entries
 
 Every quantity stated in an answer SHALL carry the identifier of the entry it came from. The system
@@ -78,8 +80,10 @@ answer that tried to cite and failed is otherwise indistinguishable from one tha
 ### Requirement: Every answer is accompanied by the entries behind it
 
 An answer SHALL be accompanied by the corpus entries the question retrieved, presented as a table
-carrying at least the property, the organism, the value, the units, the identifier and the
-reference. Entries an answer cited SHALL be shown before those it did not, and the boundary between
+carrying at least the property, the organism, the value with its units, the identifier and the
+reference -- on the web, a short form of the reference (first author and year) under the property,
+with the full reference in the entry when it is opened. On the web the table SHALL wrap a long
+property rather than cut it, and SHALL sit beside the answer, where the full entry is also opened. Entries an answer cited SHALL be shown before those it did not, and the boundary between
 the two SHALL be visible. Where more entries were retrieved than are shown, the presentation SHALL
 say so.
 
@@ -117,7 +121,7 @@ corpus does not hold, displayed with nothing to say it had been changed.
 #### Scenario: A question is answered
 - **WHEN** an answer is produced
 - **THEN** the entries retrieved for it are presented alongside it
-- **AND** each shows its property, organism, value, units, identifier and reference
+- **AND** each shows its property, organism, value with units, identifier and reference
 
 #### Scenario: A value too wide for its column
 - **WHEN** a value does not fit the space the presentation gives it
@@ -348,3 +352,175 @@ the harness's own count without judging the answer's content.
 - **THEN** the ending says so as its reason
 - **AND** the answer does not describe searching that did not occur
 
+### Requirement: A cited entry from the store is shown with its trust tier as stars
+
+Where the corpus is the harvest store, every citation in an answer and every row of the entries
+shown with it SHALL carry the entry's trust tier as stars on one scale: five for a curated entry,
+then four, three, two and one for the highest reviewer role that approved it — senior scientist,
+scientist, student, AI — and zero where no one approved it. The tier SHALL be the one ADR-0990's
+rule reads off the store's decisions.
+
+The stars SHALL be drawn by the application from the store, never written by the model, and the
+model SHALL NOT be asked to write them. A tier the model writes is a tier it can get wrong, and a
+wrong star rating looks exactly like a right one. Where the model writes stars anyway, they SHALL
+NOT be taken for the tier.
+
+A disputed entry — one a reviewer objected to, whether or not another approved it — SHALL carry a
+caution beside its stars, drawn so it stands out from the text (yellow on the page). What each
+objecting reviewer said SHALL be shown where the reader opens the entry -- on the web, in the
+entry beside the table; in the terminal, which cannot open one, listed under its table -- so a
+reader who sees the caution can learn why. A reviewer's
+words are shown to the reader only, never to the model. The stars say who approved it; the caution says that someone did not, and
+neither is folded into the other.
+
+Wherever a tier was set by a simulated review, the stars SHALL carry a mark saying so (`sim`, after
+the stars: `#` was dropped because papers label their rings and samples "#1–#4"), and what the
+mark means SHALL be stated with the entries the answer rests on. The demo's reviews are models standing in for people,
+and a star a reader takes for a person's judgement is a claim the store does not make.
+
+What the scale means SHALL be stated once for the page, where it stays in view beside the question
+box, because it bears on practically every answer and table: which role each count stands for, what
+the simulated mark and the caution mean and what zero means. It SHALL NOT be repeated under each
+answer or each table. The caveat marks, which depend on the entries shown, keep their legend under
+the table.
+
+An entry from a corpus file carries no tier, and SHALL show no stars — not zero stars, which would
+say that someone looked and no one approved.
+
+#### Scenario: An answer cites a curated entry
+- **WHEN** an answer cites a curated entry
+- **THEN** five stars are shown beside the citation and in its row
+
+#### Scenario: An entry approved by a student and a scientist, and objected to by another student
+- **WHEN** an answer cites an entry a student and a scientist approved and another student objected to
+- **THEN** three stars are shown, for the scientist
+- **AND** a caution is shown beside them
+
+#### Scenario: An entry no one approved
+- **WHEN** an answer cites an entry that reviewers objected to and no one approved
+- **THEN** zero stars are shown, with a caution
+
+#### Scenario: A tier set by a simulated review
+- **WHEN** the review that set an entry's tier was simulated
+- **THEN** its stars carry the simulated mark
+- **AND** what the mark means is stated once for the page, in view beside the question box
+
+#### Scenario: A reader asks why an entry is disputed
+- **WHEN** a reader opens a disputed entry
+- **THEN** it shows what each objecting reviewer said, introduced by the reviewer's role and marked
+  where the review was simulated
+- **AND** its row in the table carries the stars and the caution only
+- **AND** none of it is in anything the model receives
+
+#### Scenario: The model writes stars
+- **WHEN** the model's answer contains star characters beside a citation
+- **THEN** the tier shown is still the one read from the store
+
+#### Scenario: The corpus is a file
+- **WHEN** the corpus is a corpus file
+- **THEN** no stars, caution or simulated mark is shown on any citation or row
+
+### Requirement: An entry's caveat marks have a column of their own
+
+Where the entries behind an answer are shown as a table, the marks that qualify an entry — no
+method recorded, cited but not retrieved, a hedged or fused range, an implausible span, no scalar
+value, a value that could not be read with certainty, a calculated value — SHALL NOT be attached to
+the property. In the terminal they SHALL be shown in a narrow column of their own, before every
+other column, with that cell empty where no mark applies and the header MAY be empty. On the web,
+where the value and its units share one cell, they SHALL follow the value, which is what they
+qualify. The legend SHALL state what each mark shown means, as it does now.
+
+Marks attached to the property make a reader read past symbols to reach the name, and scatter the
+marks at varying offsets where a column lines them up. The marks that qualify a trust tier — a
+dispute, a simulated review — are not caveat marks of the entry and SHALL stay with the stars.
+
+#### Scenario: An entry with caveats
+- **WHEN** an entry with no method recorded is shown in the table
+- **THEN** its mark is in the terminal's first column, and after the value on the web
+- **AND** its property cell holds the property alone
+
+#### Scenario: An entry with none
+- **WHEN** an entry to which no caveat applies is shown
+- **THEN** no mark is shown with it
+
+#### Scenario: A calculated value whose reading is uncertain
+- **WHEN** a harvested entry is calculated and its value could not be read with certainty
+- **THEN** both marks are shown with it
+- **AND** the legend states what each means
+
+### Requirement: An answer cites entries, never papers
+
+The agent SHALL be instructed that an entry's identifier is the only citation an answer carries:
+it SHALL NOT name a paper -- its authors, title, journal, year or DOI -- whether read from an
+entry or recalled from its own knowledge. Each cited entry's reference is shown in the entries
+table, by the application. A reference the model writes is unchecked: live answers over the store
+(2026-10-16) added "(Kamasaki et al., 2007, JCB, doi:…)", whose authors and journal no entry
+holds, and a citation in prose could name a paper other than the one the entry came from.
+A prohibition alone leaves a model pressed by the reader nothing to say but a refusal or a
+reference from memory, so the agent SHALL be told where the reference is, and to say so.
+
+#### Scenario: The agent is given its instructions
+- **WHEN** the agent is given its instructions
+- **THEN** they say to cite by entry identifier only, and to name no paper, author, journal, year
+  or DOI
+
+#### Scenario: The reader asks which paper a value comes from
+- **WHEN** the reader asks for a value's paper, its authors, journal or DOI
+- **THEN** the agent's instructions tell it to say the reference is in the Reference column of the
+  entries table and in the entry's full listing, rather than to refuse or to write it out
+
+### Requirement: Cited entries are numbered through the session
+
+On the web, every citation in an answer SHALL be drawn as one small pill carrying the entry's number
+and, where the entry has a tier, its stars, the simulated mark and the caution. Entries SHALL be
+numbered in the order the session first meets them -- the citations of each answer as they appear,
+then that answer's other entries -- so a pill in an older answer still names one entry, and the
+same entry keeps its number in every later answer. The identifier SHALL remain reachable from the
+pill and SHALL be shown in the table and the opened entry. A citation of an identifier the corpus
+does not hold SHALL get no number and SHALL be left as written. The stored answer, the trail, the
+evaluation and the terminal keep the delimited form.
+
+A long identifier in prose is read past; a number beside every cited value lets a reader match the
+prose to the list at a glance, which is what the list is for.
+
+#### Scenario: Two answers cite one entry
+- **WHEN** a second answer in a session cites an entry the first answer cited
+- **THEN** its pill carries the number the first answer gave it
+
+#### Scenario: A citation the corpus does not hold
+- **WHEN** an answer cites an identifier the corpus does not hold
+- **THEN** no pill is drawn for it and the citation is shown as written
+
+#### Scenario: The page is drawn again
+- **WHEN** the page reruns and redraws the session's answers
+- **THEN** every entry keeps its number
+
+### Requirement: An entry is opened beside the answer
+
+On the web, the full entry SHALL be opened in the evidence column, beside the answer, by choosing its
+number under the table -- from one button per entry, or from a list where there are more than twelve
+-- and not in the side panel. The opened entry SHALL show every field the corpus holds for it that
+the table does not: the full reference with its links, the measurement method, and for a harvested
+value the quote, the property in the paper's words, the conditions, what the paper does not state,
+what a calculated value was calculated from, and what each objecting reviewer said. No entry SHALL be
+open until the reader chooses one; choosing the open one again SHALL close it, the list SHALL offer
+showing no entry, and sending a new question SHALL close every opened entry -- one record per turn,
+open by default, filled the page as a conversation grew. The choice SHALL NOT be offered while the
+agent is still answering, because a click re-runs the page and would cut the answer off.
+
+#### Scenario: A reader opens an entry
+- **WHEN** a reader chooses an entry's number under the table
+- **THEN** that entry is shown in full in the evidence column
+- **AND** before any is chosen, none is shown
+
+#### Scenario: A new question is sent
+- **WHEN** a reader sends a new question
+- **THEN** every entry opened in an earlier turn is closed
+
+#### Scenario: Many entries
+- **WHEN** an answer has more than twelve entries
+- **THEN** the choice is offered as a list rather than as buttons
+
+#### Scenario: The agent is still answering
+- **WHEN** a question is being answered
+- **THEN** no entry can be chosen in any turn until the answer is complete

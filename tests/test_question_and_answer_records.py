@@ -264,11 +264,11 @@ def _wide_corpus(tmp_path) -> CorpusRepository:
 def test_the_whole_retrieved_set_is_recorded_not_the_head_the_driver_shows(config, tmp_path, trail):
     """The record is the agent's evidence, not the table a reader was shown.
 
-    `web.CITED_ROWS` is a presentation limit. Driven with a retrieval larger than
-    it, so a day when that cap leaks into the record fails here rather than
-    quietly halving every evidence row.
+    The page once capped its table at fourteen rows (`CITED_ROWS` and `UNCITED_ROWS`,
+    removed by ADR-1850). Driven with a retrieval larger than that, so a day when a
+    presentation cap leaks into the record fails here rather than quietly halving
+    every evidence row.
     """
-    from scinumbers_ask import web
 
     model = scripted(
         tool_call("search_entries", property="Widget"),
@@ -282,7 +282,7 @@ def test_the_whole_retrieved_set_is_recorded_not_the_head_the_driver_shows(confi
     # would satisfy a length assertion, and a presentation cap leaking in is only
     # one of the ways this can go wrong.
     assert sorted(evidence["retrieved"]) == list(range(900_100, 900_120))
-    assert len(evidence["retrieved"]) > web.CITED_ROWS + web.UNCITED_ROWS
+    assert len(evidence["retrieved"]) > 14
 
 
 def test_a_question_that_retrieved_nothing_records_no_evidence_row(repo, config, tmp_path, trail):
@@ -514,9 +514,12 @@ def test_the_page_says_that_questions_and_answers_are_kept(monkeypatch, repo, co
     assert "is logged" in note and "All app exchange" in note
 
     at = app(monkeypatch, repo, agent_with(repo, config, tmp_path, scripted(says("a")))).run()
-    panel = " ".join(c.value for c in at.sidebar.caption)
-    assert note in panel
-    assert "logged" in panel and "All app exchange" in panel
+    # Under the question box, where every reader meets it -- the sidebar is collapsed by default
+    # (ADR-1850).
+    sidebar = {id(c) for c in at.sidebar.caption}
+    footer = " ".join(c.value for c in at.caption if id(c) not in sidebar)
+    assert note in footer
+    assert "logged" in footer and "All app exchange" in footer
 
 
 def test_the_terminal_says_it_too_including_for_a_single_question(

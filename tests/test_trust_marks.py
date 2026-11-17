@@ -6,7 +6,9 @@ come from the scale in design D6, not from running the code.
 
 from __future__ import annotations
 
+import dataclasses
 import re
+from html.parser import HTMLParser
 
 import pytest
 import store_double
@@ -19,8 +21,9 @@ from scinumbers_ask.tools import ToolBudget, build_tools
 from scinumbers_ask.trace import start_question
 
 #: PMC1000001-1: scientist (simulated), disputed. -4: nobody approved, disputed. -2: AI.
-SCIENTIST_SIMULATED_DISPUTED = "#★★★☆☆⚠️"
-NOBODY_DISPUTED = "☆☆☆☆☆⚠️"
+#: `sim` after the stars, then the caution (ADR-1850's order, the canvas's).
+SCIENTIST_SIMULATED_DISPUTED = "★★★☆☆ sim ⚠️"
+NOBODY_DISPUTED = "☆☆☆☆☆ ⚠️"
 
 
 @pytest.fixture
@@ -33,8 +36,8 @@ def store_repo(tmp_path):
     [
         (Trust(Tier.CURATED), "★★★★★"),
         (Trust(Tier.SENIOR_SCIENTIST), "★★★★☆"),
-        (Trust(Tier.SCIENTIST, simulated=True), "#★★★☆☆"),
-        (Trust(Tier.STUDENT, disputed=True), "★★☆☆☆⚠️"),
+        (Trust(Tier.SCIENTIST, simulated=True), "★★★☆☆ sim"),
+        (Trust(Tier.STUDENT, disputed=True), "★★☆☆☆ ⚠️"),
         (Trust(Tier.AI), "★☆☆☆☆"),
         (Trust(Tier.NONE), "☆☆☆☆☆"),
         (None, ""),
@@ -96,51 +99,59 @@ def test_stars_the_model_wrote_do_not_become_the_tier(store_repo):
     assert f"[[PMC1000001-4]] {NOBODY_DISPUTED} ★★★★★" in text
 
 
-def test_the_web_superscript_reads_a_label_and_carries_its_stars(store_repo):
+def test_a_citation_is_a_pill_with_its_number_and_its_stars(store_repo):
+    """ADR-1850: the number, then the stars, `sim` and the caution; the identifier on hover."""
     item = web.item_for(
-        Answer(question_id="q", text="488 µM [[PMC1000001-1]] [[100001]]."), store_repo
+        Answer(question_id="q", text="488 µM [[PMC1000001-1]] and 2 µm [[100001]]."), store_repo
     )
-    drawn = web.answer_markdown(item.text, dict(item.stars))
-    # The identifier is footnoted; the stars, `#` and `⚠️` are at the prose's size, outside it.
-    sup = '<sup style="opacity: 0.6; font-size: 0.72em;">'
-    assert (
-        f"{sup}PMC1000001-1</sup> {SCIENTIST_SIMULATED_DISPUTED} {sup}100001</sup> ★★★★★." in drawn
+    drawn = web.answer_markdown(item.text, dict(item.stars), {"PMC1000001-1": 4, "100001": 7})
+    assert re.sub(r"<[^>]+>", "", drawn) == (
+        f"488 µM 4 {SCIENTIST_SIMULATED_DISPUTED} and 2 µm 7 ★★★★★."
     )
-    footnoted = re.findall(r"<sup[^>]*>(.*?)</sup>", drawn)
-    assert footnoted == ["PMC1000001-1", "100001"]
-    assert "[[" not in drawn, "a label left as raw brackets"
+    assert 'title="PMC1000001-1"' in drawn and 'title="BNID 100001"' in drawn
+    assert "[[" not in drawn and "<sup" not in drawn
 
 
-def test_a_run_holding_a_group_that_is_not_a_citation_still_draws_the_ones_that_are():
-    """`[[Table 1]]` stays as written; `[[100002]]` beside it is still a superscript."""
-    drawn = web.answer_markdown("8 nm [[100002]], [[Table 1]]")
-    assert ">100002</sup>" in drawn and "[[Table 1]]" in drawn
-    assert "[[100002]]" not in drawn
+def test_a_group_citing_several_entries_is_a_pill_for_each(store_repo):
+    item = web.item_for(Answer(question_id="q", text="[[PMC1000001-1, 100001]]"), store_repo)
+    drawn = web.answer_markdown(item.text, dict(item.stars), {"PMC1000001-1": 1, "100001": 2})
+    assert drawn.count('class="sn-pill"') == 2
 
 
-def test_an_uncertain_reading_shows_the_paper_s_words_in_the_value_cell(store_repo):
-    """No number was taken from `10–20`, and the paper's words are still what the cell shows."""
-    (row,) = web._frame(_rows(store_repo, ("PMC1000001-4",)))
-    assert row["Value"] == "10–20"
-    assert entries_table.NO_SCALAR not in row[""]
+def test_an_identifier_the_session_has_not_numbered_is_left_as_written():
+    """`[[Table 1]]` and an id the corpus does not hold get no pill; one beside them still does."""
+    drawn = web.answer_markdown("8 nm [[100002]], [[999999]], [[Table 1]]", {}, {"100002": 1})
+    assert drawn.count('class="sn-pill"') == 1
+    assert "[[999999]]" in drawn and "[[Table 1]]" in drawn and "[[100002]]" not in drawn
 
 
 def test_a_group_that_is_not_a_citation_is_not_drawn_as_one():
-    assert "<sup" not in web.answer_markdown("see [[Table 1]]")
     assert web.answer_markdown("see [[Table 1]]") == "see [[Table 1]]"
 
 
-def test_a_corpus_file_answer_item_carries_no_stars(repo):
+def test_a_corpus_file_pill_is_the_number_alone(repo):
     item = web.item_for(Answer(question_id="q", text="1 μm [[100002]]"), repo)
     assert item.stars == ()
-    assert ">100002</sup>" in web.answer_markdown(item.text, dict(item.stars))
+    drawn = web.answer_markdown(item.text, dict(item.stars), {"100002": 3})
+    assert re.sub(r"<[^>]+>", "", drawn) == "1 μm 3"
 
 
-def test_the_simulated_mark_s_legend_line_is_not_drawn_as_a_heading():
-    """It begins with `#`, which markdown reads as a heading."""
-    assert trust_marks.SIMULATED_LEGEND.startswith("#")
-    assert web.markdown_line(trust_marks.SIMULATED_LEGEND).startswith("\\#")
-    assert web.markdown_line(trust_marks.SCALE_LEGEND) == trust_marks.SCALE_LEGEND
+def test_the_simulated_mark_is_sim_not_a_hash():
+    """`#` collided with papers' "#1–#4" ring labels beside a citation (ADR-1850)."""
+    assert trust_marks.SIMULATED == "sim"
+    assert "#" not in trust_marks.stars(Trust(Tier.SCIENTIST, simulated=True))
+    assert trust_marks.SIMULATED_LEGEND.startswith("sim")
+
+
+def test_a_tier_is_said_in_words_where_the_entry_is_opened():
+    assert trust_marks.tier_words(Trust(Tier.CURATED)) == "Curated in BioNumbers"
+    assert trust_marks.tier_words(Trust(Tier.AI)) == "Approved by an AI reviewer"
+    assert (
+        trust_marks.tier_words(Trust(Tier.SCIENTIST, simulated=True, disputed=True))
+        == "Approved by a scientist (simulated review); a reviewer objected"
+    )
+    assert trust_marks.tier_words(Trust(Tier.NONE)) == "Not yet approved by any reviewer"
+    assert trust_marks.tier_words(None) == ""
 
 
 # -- in the entries table -----------------------------------------------------
@@ -150,36 +161,87 @@ def _rows(repo, cited):
     return entries_table.rows_for(repo, cited, cited)
 
 
-def test_the_web_table_puts_the_marks_first_and_trust_before_the_id(store_repo):
+def table_cells(markup: str) -> list[list[str]]:
+    """The evidence list's rows as cell texts, tags stripped: the header row first."""
+
+    class Cells(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.rows: list[list[str]] = []
+            self.cell: list[str] | None = None
+
+        def handle_starttag(self, tag, attrs):
+            if tag == "tr":
+                self.rows.append([])
+            elif tag in ("td", "th"):
+                self.cell = []
+
+        def handle_endtag(self, tag):
+            if tag in ("td", "th") and self.cell is not None:
+                self.rows[-1].append(" ".join("".join(self.cell).split()))
+                self.cell = None
+
+        def handle_data(self, data):
+            if self.cell is not None:
+                self.cell.append(data)
+
+    parsed = Cells()
+    parsed.feed(markup)
+    return parsed.rows
+
+
+def test_the_evidence_list_is_number_entry_value_trust_id(store_repo):
+    """ADR-1850: the canvas's five columns; units with the value, the marks after it."""
     rows = _rows(store_repo, ("PMC1000001-2", "PMC1000001-4"))
-    frame = web._frame(rows)
-    assert list(frame[0]) == [
-        "",
-        "Property",
-        "Organism",
-        "Value",
-        "Units",
-        "Trust",
-        "ID",
-        "Reference",
-    ]
-    calculated, uncertain = frame
-    # -2 records no method in the fixture, so it carries that mark as well.
-    assert calculated[""] == entries_table.NO_METHOD + entries_table.CALCULATED
-    assert calculated["Property"] == "Filament spacing", "the property holds only the property"
-    assert calculated["Trust"] == "★☆☆☆☆"
-    assert entries_table.READING_UNCERTAIN in uncertain[""]
-    assert uncertain["Trust"] == NOBODY_DISPUTED
+    head, calculated, uncertain = table_cells(
+        web.evidence_html(rows, {"PMC1000001-2": 3, "PMC1000001-4": 5})
+    )
+    assert head == ["#", "Entry", "Value", "Trust", "ID"]
+    # -2 records no method in the fixture, so it carries that mark as well as the calculated one.
+    assert calculated[0] == "3"
+    assert calculated[1].startswith("Filament spacing"), "the property leads its cell"
+    assert calculated[2] == f"7.1 ± 0.4 nm{entries_table.NO_METHOD}{entries_table.CALCULATED}"
+    assert calculated[3] == "★☆☆☆☆"
+    assert calculated[4] == "PMC1000001-2"
+    # The paper's own words, read or not; its marks after them.
+    assert uncertain[2].startswith("10–20 s") and entries_table.READING_UNCERTAIN in uncertain[2]
+    assert uncertain[3] == NOBODY_DISPUTED
     legend = web._legend(rows)
     assert entries_table.CALCULATED_LEGEND in legend
     assert entries_table.READING_UNCERTAIN_LEGEND in legend
-    assert trust_marks.SCALE_LEGEND in legend
+    # The trust scale is pinned once for the page, not repeated under each list.
+    assert trust_marks.SCALE_LEGEND not in legend
 
 
-def test_a_corpus_file_web_table_has_marks_but_no_trust_column(repo):
-    frame = web._frame(_rows(repo, (100002,)))
-    assert list(frame[0])[0] == ""
-    assert "Trust" not in frame[0]
+def test_the_organism_and_first_author_year_sit_under_the_property(tmp_path):
+    path = store_double.with_references(
+        store_double.build(tmp_path / "s.sqlite"),
+        {store_double.ACTIN.pmcid: store_double.ACTIN_CSL},
+    )
+    repo = CorpusRepository(store_corpus.load(path))
+    _, row = table_cells(web.evidence_html(_rows(repo, ("PMC1000001-1",)), {"PMC1000001-1": 1}))
+    assert row[1].startswith("F-actin concentration")
+    assert row[1].endswith("mouse · Inventa et al. 2009")
+
+
+def test_a_cell_is_escaped_and_a_value_never_breaks(store_repo):
+    rows = _rows(store_repo, ("PMC1000001-2",))
+    markup = web.evidence_html([dataclasses.replace(rows[0], property="<b>bold</b>")], {})
+    assert "<b>bold</b>" not in markup and "&lt;b&gt;bold&lt;/b&gt;" in markup
+    assert 'class="sn-v"' in markup and "\n" not in markup, "one line: nothing read as markdown"
+
+
+def test_a_corpus_file_evidence_list_has_no_trust_column(repo):
+    (head, row) = table_cells(web.evidence_html(_rows(repo, (100002,)), {"100002": 1}))
+    assert head == ["#", "Entry", "Value", "ID"]
+    assert row[3] == "BNID 100002"
+
+
+def test_an_uncertain_reading_shows_the_paper_s_words_in_the_value_cell(store_repo):
+    """No number was taken from `10–20`, and the paper's words are still what the cell shows."""
+    _, row = table_cells(web.evidence_html(_rows(store_repo, ("PMC1000001-4",)), {}))
+    assert row[2].startswith("10–20")
+    assert entries_table.NO_SCALAR not in row[2]
 
 
 def test_the_terminal_table_puts_the_marks_first_and_trust_before_the_id(store_repo):
@@ -239,18 +301,19 @@ def test_the_objections_are_the_decisions_that_disputed_an_entry(tmp_path):
     }
 
 
-def test_the_web_trust_cell_carries_the_objections_after_the_stars(store_with_objections):
+def test_the_trust_cell_carries_the_stars_alone_and_the_legend_says_open_the_entry(
+    store_with_objections,
+):
+    """ADR-1850: the objections moved to the opened entry; the cell keeps the stars and caution."""
     rows = _rows(store_with_objections, ("PMC1000001-1", "PMC1000001-2"))
-    disputed, approved = web._frame(rows)
-    assert (
-        disputed["Trust"]
-        == f"{SCIENTIST_SIMULATED_DISPUTED} student: {store_double.REVIEWER_ISSUE}"
-    )
-    assert approved["Trust"] == "★☆☆☆☆", "an entry nobody objected to shows only its stars"
-    assert trust_marks.DISPUTED_LEGEND in web._legend(rows)
+    assert rows[0].objections == (f"student: {store_double.REVIEWER_ISSUE}",)
+    _, disputed, approved = table_cells(web.evidence_html(rows, {}))
+    assert disputed[3] == SCIENTIST_SIMULATED_DISPUTED
+    assert store_double.REVIEWER_ISSUE not in web.evidence_html(rows, {})
+    assert approved[3] == "★☆☆☆☆"
+    assert trust_marks.DISPUTED_LEGEND in trust_marks.FULL_LEGEND
     assert trust_marks.DISPUTED_LEGEND == (
-        "⚠️ : a reviewer objected to this entry. "
-        "Double click the rating in the table to find out why"
+        "⚠️ : a reviewer objected to this entry. Open the entry to read why"
     )
 
 
