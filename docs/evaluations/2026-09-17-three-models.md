@@ -8,6 +8,11 @@ results file holds corpus text (ADR-0170).
 Run because the comparison on the morning of the same day — **one** repeat each — had Haiku and
 Opus one point apart and was read as a tie. It was noise.
 
+> **Re-scored 2026-09-22.** The figures below are against the expected lists as they read on
+> the day of the run. Four entries have since joined them, and every figure here falls one or
+> two points as a result: see `docs/evaluations/2026-09-22-expected-list-triage.md` for the
+> re-scored table. No conclusion in this note changes.
+
 ## What it says
 
 | Figure | Haiku 4.5 | Opus 4.7 | MiniMax M2.7 |
