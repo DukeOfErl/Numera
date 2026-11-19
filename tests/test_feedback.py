@@ -15,10 +15,10 @@ import pytest
 from conftest import RecordingEngine, agent_with
 
 from agent_doubles import says, scripted
-from scinumbers_ask import feedback, trace, trail_store
-from scinumbers_ask.config import Config
-from scinumbers_ask.events import QuestionStarted
-from scinumbers_ask.feedback import Verdict
+from numera_ask import feedback, trace, trail_store
+from numera_ask.config import Config
+from numera_ask.events import QuestionStarted
+from numera_ask.feedback import Verdict
 
 _Engine = RecordingEngine  # one definition, in conftest
 
@@ -306,7 +306,7 @@ def test_a_rating_carries_the_run_label_the_question_s_records_carry(
     assumed, because the requirement is agreement between the two and not a
     literal.
     """
-    monkeypatch.setenv("SCINUMBERS_RUN", "run-42")
+    monkeypatch.setenv("NUMERA_RUN", "run-42")
     stream = io.StringIO()
     trace.configure(stream)
     agent = agent_with(repo, Config.from_env(), tmp_path, scripted(says("an answer")))
@@ -334,9 +334,9 @@ def test_with_no_run_configured_a_rating_carries_the_same_default_a_question_doe
     rating has to land on the same default the question's records use, not on an
     empty string that reaches the store as NULL."""
     if configured is None:
-        monkeypatch.delenv("SCINUMBERS_RUN", raising=False)
+        monkeypatch.delenv("NUMERA_RUN", raising=False)
     else:
-        monkeypatch.setenv("SCINUMBERS_RUN", configured)
+        monkeypatch.setenv("NUMERA_RUN", configured)
 
     feedback.record_verdict(state, question_id="q1", session_id="s1", verdict=Verdict.UP)
 

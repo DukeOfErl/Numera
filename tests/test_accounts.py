@@ -14,8 +14,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from scinumbers_ask import trail_store
-from scinumbers_ask.accounts import (
+from numera_ask import trail_store
+from numera_ask.accounts import (
     Account,
     AlreadyEnrolled,
     EnrolmentUnavailable,
@@ -25,7 +25,7 @@ from scinumbers_ask.accounts import (
     lookup,
     usable,
 )
-from scinumbers_ask.permissions import Role
+from numera_ask.permissions import Role
 
 
 class _Result:

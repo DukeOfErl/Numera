@@ -20,7 +20,7 @@ from collections import Counter
 
 BASE = "https://www.ebi.ac.uk/europepmc/webservices/rest"
 IN = "/tmp/claude-1000/suppprobe/gap_results_backfilled.jsonl"
-UA = {"User-Agent": "SciNumbers-feasibility-probe/1.0 (research; contact via repo)"}
+UA = {"User-Agent": "Numera-feasibility-probe/1.0 (research; contact via repo)"}
 READABLE = {".xml", ".nxml", ".xlsx", ".docx", ".dotx"}
 
 

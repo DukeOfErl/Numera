@@ -18,11 +18,11 @@ import pytest
 from europepmc_double import TABLES_PMCID, FakeEuropePMC, fixture
 from sqlalchemy import create_engine, func, select
 
-from bionumbers import cli, harvest, store
-from bionumbers.cache import DocumentCache
-from bionumbers.distractor import Candidate, SecondTextOutput
-from bionumbers.europepmc import VERSION_OF_RECORD, EuropePMC, licence_of
-from bionumbers.extraction import (
+from numera_validator import cli, harvest, store
+from numera_validator.cache import DocumentCache
+from numera_validator.distractor import Candidate, SecondTextOutput
+from numera_validator.europepmc import VERSION_OF_RECORD, EuropePMC, licence_of
+from numera_validator.extraction import (
     MAX_TOKENS,
     ClaimDraft,
     ExtractionOutput,
@@ -31,9 +31,9 @@ from bionumbers.extraction import (
     instruction_sha256,
     read_results,
 )
-from bionumbers.jats import read_jats
-from bionumbers.openrouter import API_KEY_ENV
-from bionumbers.records import (
+from numera_validator.jats import read_jats
+from numera_validator.openrouter import API_KEY_ENV
+from numera_validator.records import (
     UNLICENSED,
     CandidateKind,
     ClaimKind,

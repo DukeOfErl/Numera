@@ -1,0 +1,58 @@
+[
+  {
+    "id": "ribosomes-ecoli-vs-yeast",
+    "steps": [
+      {
+        "type": "What is the number of ribosomes in an e.coli cell?"
+      },
+      {
+        "erase_words": 3
+      },
+      {
+        "type": "e.coli vs a budding yeast cell?"
+      }
+    ],
+    "asked": "What is the number of ribosomes in e.coli vs a budding yeast cell?",
+    "answer": "## Ribosomes per cell: E. coli vs. budding yeast\n\n**E. coli** — ribosome numbers depend strongly on growth rate:\n- **~26,300 copies/cell** in exponentially growing E. coli B/r at 37 °C, 40 min generation time [[102015]]\n- **6,800–72,000 copies/cell** across growth rates of 0.6–2.5 doublings/hour (100–24 min doubling time) [[101441]]\n- **30,000–70,000 ribosomes/cell** for a modified K-12 strain under moderate growth at 30 °C [[108600]]\n- **6,500 ribosomes/cell** in stationary phase [[114927]]\n\n**Budding yeast (S. cerevisiae)**:\n- **187,000 ± 56,000 rRNA copies/cell** (recalculated from rRNA data) [[100267]]\n- **~220,000 ribosomes/cell** in G1 phase, by serial ultrathin-section EM [[114951]]\n\n**Summary**: **computed** from the values above, yeast has roughly **~3–34×** more ribosomes than E. coli, consistent with the yeast cell being much larger.",
+    "model": "anthropic/claude-opus-4.7",
+    "recorded": "2026-09-30",
+    "source": "numera-ask --ask, session 730abda7",
+    "edits": "Shortened for the door by Yoav, 2026-09-30: two E. coli bullets (108946, 111527), one yeast bullet (114950), the summary's first sentence and its closing note on 100110 removed. Deletions only; no wording added. Revised 2026-10-01: '3–10×' set in bold. Revised 2026-10-04 at Yoav's request: every ribosome figure set in bold, as in the other examples, and the summary's ratio marked as computed. Marking it computed required recomputing it from the figures kept (ADR-1220): yeast 187,000–220,000 against E. coli 6,500–72,000 gives 187,000/72,000 = 2.6 to 220,000/6,500 = 33.8, so the model's '3–10×' became '~3–34×'."
+  },
+  {
+    "id": "yeast-vs-ecoli-volume",
+    "steps": [
+      {
+        "type": "Is a budding yeast cell bigger than an E. coli cell, and by how much?"
+      }
+    ],
+    "asked": "Is a budding yeast cell bigger than an E. coli cell, and by how much?",
+    "answer": "Yes, a budding yeast cell is substantially bigger than an E. coli cell.\n\n- **Budding yeast (S. cerevisiae)** median haploid cell volume: **42 μm³** [[100427]]\n- **E. coli** total cell volume: **1.1 μm³** [[100004]]\n\n**Computed** from [[100427]] and [[100004]], a yeast cell is roughly **40-fold larger** than an E. coli cell.\n\nFor a sense of the underlying variability, the corpus also gives haploid and diploid yeast volumes between **26–74 μm³** [[100427]] [[100430]] [[103704]] and E. coli volumes between **0.44–4.4 μm³** across growth conditions [[100004]] [[106577]], so the yeast-to-E.-coli volume ratio falls somewhere in the range of **~6–170×** (**computed** from the entries above).",
+    "model": "anthropic/claude-opus-4.7",
+    "recorded": "2026-09-17",
+    "source": "evaluation run opus47-x3-2026-09-17, question yeast-vs-ecoli-volume, repeat 2",
+    "edits": "Rewritten for the door by the editor at Yoav's request, 2026-10-01; only the opening sentence is the model's own wording. Every entry cited is one the run's answer cited. The rule-of-thumb pair (101794 at 60 μm³, 101788 at 1 μm³) is replaced by measured values: median haploid yeast 42 μm³ (100427) and E. coli total volume 1.1 μm³ (100004, Coulter counter); 42/1.1 = 38, stated as roughly 40-fold. Variability: yeast 26–74 μm³ is the envelope of 100427 (40–44), 100430 (31.1–40.6) and 103704 (26–74); E. coli 0.44–4.4 μm³ is the envelope of 100004 (0.44–1.79) and 106577 (1.5–4.4); ratio 26/4.4 = 5.9 to 74/0.44 = 168, stated as ~6–170×. Left out by choice: 100003 (0.1–3.5 μm³ across growth stages, which would stretch the ratio to ~740×) and 103710 (flagged as a possibly fused range). The model's own ratio, ~10–60×, follows from no cited range. Revised 2026-10-01 at Yoav's request: the headline ratio sentence reworded to lead with 'Computed from [[100427]] and [[100004]]', and 'computed' set in bold in both sentences."
+  },
+  {
+    "id": "mouse-cell-sizes",
+    "steps": [
+      {
+        "type": "How do cell sizes vary across mouse cell types? "
+      },
+      {
+        "pause_seconds": 1.0
+      },
+      {
+        "type": "Visualize in a strip chart"
+      }
+    ],
+    "asked": "How do cell sizes vary across mouse cell types? Convert diameters to volumes so they can be compared.",
+    "answer": "Across the mouse cell types in the corpus, cell volumes span roughly **four orders of magnitude**: from the red blood cell at 45.5 μm³ [[104861]] to the oocyte at ~3 × 10⁵ μm³ [[111773]]. Only a few of the entries used are cited here, for brevity.\n\nNotes: When diameters are provided they are converted to the volume of a sphere, V = (π/6)·d³ (**computed**) and red blood cells (discs) are excluded from this conversion. Some discrepancy is evident: for an 18 μm NIH/3T3 fibroblast this conversion gives ~3,050 μm³ [[108905]], with 2,040 μm³ measured directly [[108979]].\n\n```\n                   10¹     10²     10³     10⁴     10⁵     10⁶ μm³\nBlood & immune     ·····●···●·········●·····················  red blood cell, T cell, macrophage\nStem & fibroblast  ··············●━━━●━●━···················  ES cell, MEF, NIH/3T3\nNeuron soma        ····················━━━━·················  cochlear-nucleus neurons\nOocyte             ··································●·●····  Graafian stage, post-ovulation\n```\n\n● one value · ━ a range · log scale",
+    "model": "anthropic/claude-opus-4.7",
+    "recorded": "2026-10-04",
+    "source": "numera-ask --ask, 2026-10-04, session ce9cea77, question 7e0572555dd7",
+    "edits": "Shortened for the door at Yoav's request, 2026-10-04, from a 17-tool-call answer that gave two tables (volumes as stored; diameters with sphere volumes), a summary by size class and caveats. Kept, condensed into the editor's prose: the four-orders-of-magnitude span, the endpoints 45.5 μm³ (104861) and ~3 × 10⁵ μm³ (111773), the list of cell types, the sphere formula, and the disc caveat for red blood cells, all stated by the model. Added by the editor: the NIH/3T3 comparison sentence, joining two figures the model gave in separate tables (3,050 μm³ computed from 108905; 2,040 μm³ measured, 108979); the note that not all entries are cited; and the chart. Every sphere volume the model stated was recomputed (π/6·d³) and agrees to rounding. The chart is drawn by bin/door-demo-chart, not by a model, from ten entries the run cited (ADR-1230); left out: 112783 and 112496 (ranges flagged as possibly fused) and 102927 (a red blood cell diameter; the measured volume 104861 is used). The closing line says charts are upcoming, because plotting is not a feature of the app yet. Revised 2026-10-04 at Yoav's request: the paragraph on cell types and conversion replaced by his 'Notes:' wording (which drops the list of cell types and calls the NIH/3T3 gap a discrepancy), with 'discrepency' corrected and 'excluded' narrowed to 'excluded from this conversion', since the chart still shows the measured red-blood-cell volume. The closing italic line replaced by the notice '*Charts are an upcoming feature in Numera', drawn in red after the answer. Revised 2026-10-04: the chart's annotation 'cochlear nucleus' (a brainstem region, not a cell type) relabelled 'cochlear-nucleus neurons'; 111420 measures the somata of neurons there, type unstated, and the row stays 'Neuron soma' because a soma is not the whole neuron. Revised 2026-10-04 at Yoav's request: the door types the question as 'How do cell sizes vary across mouse cell types? Visualize in a strip chart', with a one-second pause before the second sentence. The question actually put to the agent was 'How do cell sizes vary across mouse cell types? Convert diameters to volumes so they can be compared.'; the answer was recorded for that one, and the app does not draw charts yet.",
+    "notice": "*Charts are an upcoming feature in Numera",
+    "shown": "How do cell sizes vary across mouse cell types? Visualize in a strip chart"
+  }
+]

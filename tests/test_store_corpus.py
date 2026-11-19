@@ -22,15 +22,15 @@ from conftest import agent_with
 from sqlalchemy import insert
 
 from agent_doubles import says, scripted, tool_call
-from bionumbers import store as review_store
-from bionumbers.records import ClaimKind
-from bionumbers.tiers import Tier, Trust
-from scinumbers_ask import corpus, store_corpus
-from scinumbers_ask.corpus import Condition, CorpusUnavailable, Origin
-from scinumbers_ask.events import CitationWarning
-from scinumbers_ask.repository import CorpusRepository
-from scinumbers_ask.tools import ToolBudget, build_tools
-from scinumbers_ask.trace import configure, start_question
+from numera_ask import corpus, store_corpus
+from numera_ask.corpus import Condition, CorpusUnavailable, Origin
+from numera_ask.events import CitationWarning
+from numera_ask.repository import CorpusRepository
+from numera_ask.tools import ToolBudget, build_tools
+from numera_ask.trace import configure, start_question
+from numera_validator import store as review_store
+from numera_validator.records import ClaimKind
+from numera_validator.tiers import Tier, Trust
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -45,7 +45,7 @@ def _loaded_after(statements: str) -> set[str]:
         f"{statements}\n"
         "import sys\n"
         "print(','.join(sorted(m for m in sys.modules "
-        "if m == 'bionumbers' or m.startswith('bionumbers.'))))\n"
+        "if m == 'numera_validator' or m.startswith('numera_validator.'))))\n"
     )
     result = subprocess.run(
         [sys.executable, "-c", probe], capture_output=True, text=True, check=True
@@ -56,8 +56,8 @@ def _loaded_after(statements: str) -> set[str]:
 def test_a_corpus_file_run_never_imports_the_validator_package():
     """ADR-1600: only the store's loader imports `bionumbers`, so a corpus-file run never does."""
     loaded = _loaded_after(
-        "from scinumbers_ask import agent, cli, corpus, entries_table, messages\n"
-        "from scinumbers_ask import repository, tools\n"
+        "from numera_ask import agent, cli, corpus, entries_table, messages\n"
+        "from numera_ask import repository, tools\n"
         f"repository.CorpusRepository(corpus.load({str(FIXTURES / 'corpus_sample.jsonl')!r}))\n"
         f"corpus.load_configured({str(FIXTURES / 'corpus_sample.jsonl')!r}, None)\n"
     )
@@ -94,7 +94,7 @@ def by_label(store_path):
 def test_loading_the_store_imports_the_validator_package():
     """The positive control for the corpus-file test above: the probe sees `bionumbers` when it
     is loaded, so an empty set there means it was not, rather than that the probe sees nothing."""
-    assert "bionumbers.tiers" in _loaded_after("from scinumbers_ask import store_corpus")
+    assert "numera_validator.tiers" in _loaded_after("from numera_ask import store_corpus")
 
 
 def test_the_store_is_opened_so_nothing_can_be_written(store_path):
@@ -487,7 +487,7 @@ def test_naming_both_a_corpus_file_and_a_store_is_refused_naming_both(store_path
         corpus.load_configured(corpus_file, store_path)
     message = str(refused.value)
     assert str(corpus_file) in message and str(store_path) in message
-    assert "SCINUMBERS_CORPUS" in message and "SCINUMBERS_STORE" in message
+    assert "NUMERA_CORPUS" in message and "NUMERA_STORE" in message
 
 
 def test_a_store_alone_loads_the_store_and_a_file_alone_loads_the_file(store_path):

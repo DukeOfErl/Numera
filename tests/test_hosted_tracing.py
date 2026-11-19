@@ -36,9 +36,9 @@ from tracing_doubles import (
 )
 
 from agent_doubles import says, scripted, tool_call
-from scinumbers_ask import feedback, hosted_trace, trace
-from scinumbers_ask.feedback import Verdict
-from scinumbers_ask.hosted_trace import HostedTracer, Setting, Usage, estimate, read_setting
+from numera_ask import feedback, hosted_trace, trace
+from numera_ask.feedback import Verdict
+from numera_ask.hosted_trace import HostedTracer, Setting, Usage, estimate, read_setting
 
 CREDENTIALS = {
     "LANGFUSE_PUBLIC_KEY": "pk-lf-x",
@@ -146,10 +146,10 @@ _IMPORT_PROBE = """
 import os, sys, tempfile, pathlib
 sys.path[:0] = [{tests!r}, {src!r}]
 from agent_doubles import says, scripted
-from scinumbers_ask.agent import AskAgent
-from scinumbers_ask.config import Config, usd
-from scinumbers_ask.corpus import load
-from scinumbers_ask.repository import CorpusRepository
+from numera_ask.agent import AskAgent
+from numera_ask.config import Config, usd
+from numera_ask.corpus import load
+from numera_ask.repository import CorpusRepository
 from conftest import FIXTURE
 agent = AskAgent(CorpusRepository(load(FIXTURE)),
                  Config(model="fake/model", question_ceiling=usd("0.60"), run_budget=usd("1.20")),
@@ -703,9 +703,9 @@ def test_no_traces_yet_makes_the_cost_unknown_and_pauses():
 
 
 def test_the_page_attaches_the_account_digest_and_never_the_address(repo, config, tmp_path):
-    from scinumbers_ask import web
-    from scinumbers_ask.accounts import Account
-    from scinumbers_ask.permissions import Role
+    from numera_ask import web
+    from numera_ask.accounts import Account
+    from numera_ask.permissions import Role
 
     account = Account(email="tester@example.org", role=Role.SCIENTIST, openrouter_key="sk-t")
     admission = web.Admission(web.Door.OPEN, configured=True, account=account)
@@ -724,7 +724,7 @@ def test_the_page_attaches_the_account_digest_and_never_the_address(repo, config
 
 
 def test_an_unconfigured_page_attaches_nothing(repo, config, tmp_path):
-    from scinumbers_ask import web
+    from numera_ask import web
 
     admission = web.Admission(web.Door.OPEN, configured=False)
     agent = agent_with(repo, config, tmp_path, a_question())
@@ -815,7 +815,7 @@ def test_a_tagged_question_carries_the_tag_beside_its_own(repo, config, tmp_path
             ask(agent)
         spans = finished_spans(tracer, exporter)
     tag_sets = {tuple(sorted(s.attributes.get(TRACE_TAGS, ()))) for s in spans}
-    assert tag_sets == {tuple(sorted(("eval", "ask", "scinumbers-ask", "run:dev")))}
+    assert tag_sets == {tuple(sorted(("eval", "ask", "numera-ask", "run:dev")))}
 
 
 def test_an_untagged_question_is_not_marked(repo, config, tmp_path):
@@ -936,9 +936,9 @@ def _secrets(values):
 
 
 def _admitted(email):
-    from scinumbers_ask import web
-    from scinumbers_ask.accounts import Account
-    from scinumbers_ask.permissions import Role
+    from numera_ask import web
+    from numera_ask.accounts import Account
+    from numera_ask.permissions import Role
 
     account = Account(email=email, role=Role.SCIENTIST, openrouter_key="sk")
     return web.Admission(web.Door.OPEN, configured=True, account=account)
@@ -950,7 +950,7 @@ def test_the_tracer_user_is_keyed_and_cannot_be_recomputed_from_a_guessed_addres
     with the key, and is not the unkeyed digest the ledger uses."""
     import hashlib
 
-    from scinumbers_ask import web
+    from numera_ask import web
 
     a, b = _admitted("tester@example.org"), _admitted("other@example.org")
     one = web.trace_user(a, key="k1")
@@ -962,7 +962,7 @@ def test_the_tracer_user_is_keyed_and_cannot_be_recomputed_from_a_guessed_addres
 
 
 def test_without_a_key_nobody_is_attributed_rather_than_attributed_unkeyed():
-    from scinumbers_ask import web
+    from numera_ask import web
 
     with _secrets({}):
         assert web.trace_user(_admitted("tester@example.org")) is None

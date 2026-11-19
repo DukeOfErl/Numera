@@ -56,7 +56,7 @@ jobs:
       # The URL of a role that can read the trail and nothing else
       # (`sql/first_use_reader.sql`). Deliberately not the Neon API key, which
       # can delete the project and is not held by any scheduled job.
-      SCINUMBERS_TRAIL_READ_URL: ${{ secrets.SCINUMBERS_TRAIL_READ_URL }}
+      NUMERA_TRAIL_READ_URL: ${{ secrets.NUMERA_TRAIL_READ_URL }}
       # The operator's own and test addresses, comma-separated. A repository
       # variable and not a literal here, so no address is in a committed file.
       EXCLUDE: ${{ vars.FIRST_USE_EXCLUDE }}
@@ -99,7 +99,7 @@ jobs:
           # The report goes to a file so no reader's address reaches the log.
           PYTHONPATH=src uv run --no-project \
             --with "sqlalchemy==2.0.52" --with "psycopg[binary]==3.3.5" \
-            python -m scinumbers_ask.first_use "${args[@]}" > report.md
+            python -m numera_ask.first_use "${args[@]}" > report.md
       - name: Tell the operator
         run: |
           if [ "$TEST" = "true" ]; then

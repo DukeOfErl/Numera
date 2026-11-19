@@ -20,10 +20,10 @@ from agent_doubles import (
     scripted,
     tool_call,
 )
-from scinumbers_ask import messages
-from scinumbers_ask.agent import RUN_CALL_LIMIT, AskAgent
-from scinumbers_ask.config import FALLBACK_PRICES, Config, ModelPrices, usd
-from scinumbers_ask.events import (
+from numera_ask import messages
+from numera_ask.agent import RUN_CALL_LIMIT, AskAgent
+from numera_ask.config import FALLBACK_PRICES, Config, ModelPrices, usd
+from numera_ask.events import (
     Answer,
     CitationWarning,
     CostProjection,
@@ -32,7 +32,7 @@ from scinumbers_ask.events import (
     SpendWarning,
     UngroundedRefusal,
 )
-from scinumbers_ask.spend import (
+from numera_ask.spend import (
     SpendLedger,
     SpendLimitReached,
     Unpriceable,
@@ -247,7 +247,7 @@ def test_the_retry_predicate_excludes_the_gate_and_unpriceable_responses():
     anyway; retrying an unpriceable response will not make a provider start
     reporting cost.
     """
-    from scinumbers_ask.agent import _retry_on
+    from numera_ask.agent import _retry_on
 
     assert _retry_on(SpendLimitReached(EndReason.SPEND_CEILING, 200, 120)) is False
     assert _retry_on(Unpriceable("no cost")) is False
@@ -265,7 +265,7 @@ def test_declining_at_the_ceiling_does_not_sleep_through_the_backoff(
     """
     import time
 
-    monkeypatch.setattr("scinumbers_ask.agent.RETRY_INITIAL_DELAY", 1.0)
+    monkeypatch.setattr("numera_ask.agent.RETRY_INITIAL_DELAY", 1.0)
     model = scripted(costing(tool_call("search_entries", property="Cell"), 0.000_200))
     agent = AskAgent(repo, tight, str(tmp_path / "r.sqlite"), model=model)
 
@@ -408,7 +408,7 @@ def test_the_projection_is_absent_without_configured_prices(config):
 
 def test_a_flagged_question_is_still_answered(repo, config, tmp_path, monkeypatch):
     """The projection is an estimate, and the gate acts on measured spend alone."""
-    monkeypatch.setattr("scinumbers_ask.agent.project_question_cost", lambda *_: usd("999.00"))
+    monkeypatch.setattr("numera_ask.agent.project_question_cost", lambda *_: usd("999.00"))
     model = scripted(costing(says("about 1 micrometre (BNID 100002)"), 0.000_110))
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
 
@@ -471,7 +471,7 @@ def test_a_run_budget_reached_in_one_session_stops_another(repo, tmp_path):
 def test_spend_is_recorded_as_each_charge_is_made(repo, tmp_path):
     """Not at the end of the question: one that ends by raising must still have its
     spend counted, or a crash loop is free."""
-    from scinumbers_ask import run_ledger
+    from numera_ask import run_ledger
 
     config = Config(model="fake/model", question_ceiling=usd("0.60"), run_budget=usd("1.20"))
     db = str(tmp_path / "c.sqlite")
@@ -487,7 +487,7 @@ def test_a_zero_charge_touches_nothing(tmp_path):
     """A model call the provider reported as free is still a call. Writing a zero
     row would create a run in the ledger that had spent nothing, which reads as a run
     that ran."""
-    from scinumbers_ask import run_ledger
+    from numera_ask import run_ledger
 
     db = str(tmp_path / "c.sqlite")
     run_ledger.add(db, "eval-1", 0)
@@ -540,8 +540,8 @@ def test_the_run_budget_refusal_does_not_report_spend_as_a_fraction_of_the_budge
     from conftest import agent_with
 
     from agent_doubles import costing, says, scripted
-    from scinumbers_ask.config import Config, usd
-    from scinumbers_ask.events import Answer
+    from numera_ask.config import Config, usd
+    from numera_ask.events import Answer
 
     spent = Config(model="fake/model", question_ceiling=usd("0.60"), run_budget=usd("0.000050"))
     agent = agent_with(repo, spent, tmp_path, scripted(costing(says("an answer"), 0.000_110)))
@@ -674,7 +674,7 @@ def test_every_ending_carries_the_run_budget_it_was_measured_against(repo, tight
 
 
 def failing_ledger(monkeypatch, exc):
-    from scinumbers_ask import run_ledger
+    from numera_ask import run_ledger
 
     def broken(*_args, **_kwargs):
         raise exc
@@ -707,7 +707,7 @@ def test_spend_that_could_not_be_recorded_stops_the_question(repo, tight, tmp_pa
     leave every later question reading a stale figure while real money was spent --
     a run budget enforcing a limit against a total that had stopped moving.
     """
-    from scinumbers_ask import run_ledger
+    from numera_ask import run_ledger
 
     store = str(tmp_path / "ask.sqlite")
     model = scripted(costing(says("first (BNID 100002)"), 0.000_010))
@@ -732,7 +732,7 @@ def test_a_ledger_that_writes_nothing_at_all_is_caught_by_the_run_total(
     """The silent version, and the one no exception announces. A write that returns
     cleanly having stored nothing leaves every event, every log line and every
     ending unchanged -- only the total gives it away."""
-    from scinumbers_ask import run_ledger
+    from numera_ask import run_ledger
 
     store = str(tmp_path / "ask.sqlite")
     monkeypatch.setattr(run_ledger, "add", lambda *a, **k: None)

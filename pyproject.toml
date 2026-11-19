@@ -1,5 +1,5 @@
 [project]
-name = "bionumbers"
+name = "numera"
 version = "0.1.0"
 description = "A database of useful biological numbers assembled from the literature, with provenance"
 readme = "README.md"
@@ -18,7 +18,7 @@ validator = [
     "httpx>=0.27",
     "lxml>=5.2",
     "pint>=0.24",
-    # The records every step exchanges (`bionumbers.records`) and the extraction
+    # The records every step exchanges (`numera_validator.records`) and the extraction
     # call's output schema. Already pulled in by `anthropic`; named because the
     # code imports it directly, and a transitive dependency is one a resolver may
     # drop.
@@ -55,13 +55,13 @@ ask = [
     # ours to read. Verified against the installed Streamlit 1.61.1 on 2026-09-16.
     "authlib>=1.3.2",
     # The hosted tracer (ADR-1000). Imported only by `hosted_trace`, and only once
-    # `SCINUMBERS_TRACING` turns it on, so an untraced deployment never starts its
+    # `NUMERA_TRACING` turns it on, so an untraced deployment never starts its
     # OpenTelemetry exporter. Capped below 5: a major version is where its
     # LangChain handler and attribute propagation have moved before.
     # Installed and read: 4.15.6, 2026-09-24.
     "langfuse>=4.15,<5",
     # The harvest store's tier rule and value parser are imported from `bionumbers`
-    # (ADR-1600), and those reach `bionumbers.records`, a pydantic model. Already
+    # (ADR-1600), and those reach `numera_validator.records`, a pydantic model. Already
     # pulled in by LangChain; named because the code imports it directly, and a
     # transitive dependency is one a resolver may drop.
     "pydantic>=2.6",
@@ -83,7 +83,7 @@ ingest = [
 # with the change that uses it. A deterministic evaluation run needs none of it,
 # which is what made it separable at all (ADR-0500).
 eval = []
-# `scinumbers-eval report --sheet` writes HTML with no dependency at all; this
+# `numera-eval report --sheet` writes HTML with no dependency at all; this
 # extra only adds the PDF renderer. Kept out of `eval` deliberately: weasyprint
 # needs system libraries (pango, cairo) that a given machine may not have, and a
 # native dependency that can fail at import has no business being mandatory for a
@@ -97,14 +97,14 @@ sheet = [
 # Console scripts are metadata resolved when invoked, so the ones whose modules
 # are absent on a given branch are simply never run there.
 [project.scripts]
-bionumbers = "bionumbers.cli:main"
-scinumbers-ask = "scinumbers_ask.cli:main"
+numera-validator = "numera_validator.cli:main"
+numera-ask = "numera_ask.cli:main"
 bionumbers-ingest = "bionumbers_ingest.cli:main"
-scinumbers-eval = "scinumbers_ask.eval_cli:main"
-scinumbers-enrol = "scinumbers_ask.enrol:main"
-scinumbers-withdraw = "scinumbers_ask.enrol:withdraw_main"
-scinumbers-pending = "scinumbers_ask.pending:main"
-scinumbers-first-use = "scinumbers_ask.first_use:main"
+numera-eval = "numera_ask.eval_cli:main"
+numera-enrol = "numera_ask.enrol:main"
+numera-withdraw = "numera_ask.enrol:withdraw_main"
+numera-pending = "numera_ask.pending:main"
+numera-first-use = "numera_ask.first_use:main"
 
 [dependency-groups]
 dev = [
@@ -155,7 +155,7 @@ markers = [
     # The corpus is an external input kept out of the repository (ADR-0170), so
     # the default suite runs on the six-entry fixture -- which is exactly the
     # blind spot these checks exist to cover.
-    "corpus: needs a real corpus at SCINUMBERS_CORPUS; run with `pytest -m corpus`",
+    "corpus: needs a real corpus at NUMERA_CORPUS; run with `pytest -m corpus`",
     # Spawns a real subprocess. Five such tests are 30 per cent of the suite's
     # runtime, and a fault-seeding or mutation run pays that for every mutant --
     # neither can reach a subprocess boundary from a parser change. NOT deselected by
@@ -189,4 +189,4 @@ select = ["E", "F", "I", "UP", "B"]
 # Without this ruff reads the packages as third-party and removes the blank line
 # separating them from real third-party imports, making every test file worse.
 [tool.ruff.lint.isort]
-known-first-party = ["bionumbers", "scinumbers_ask", "bionumbers_ingest", "agent_doubles"]
+known-first-party = ["numera_validator", "numera_ask", "bionumbers_ingest", "agent_doubles"]

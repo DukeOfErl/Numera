@@ -12,10 +12,10 @@ import io
 from conftest import agent_with
 
 from agent_doubles import says, scripted, tool_call
-from scinumbers_ask import entries_table
-from scinumbers_ask.citations import citations, format_citation
-from scinumbers_ask.cli import render, run
-from scinumbers_ask.events import AnswerEntries, CitationWarning
+from numera_ask import entries_table
+from numera_ask.citations import citations, format_citation
+from numera_ask.cli import render, run
+from numera_ask.events import AnswerEntries, CitationWarning
 
 FIRST, SECOND = 100001, 100002
 
@@ -173,7 +173,7 @@ def test_the_table_is_skipped_when_the_driver_has_no_corpus(repo):
 
 def test_the_search_reports_which_entries_it_returned(repo, config, tmp_path):
     """What makes both the table and the citation check possible."""
-    from scinumbers_ask.events import Retrieval
+    from numera_ask.events import Retrieval
 
     model = scripted(tool_call("search_entries", property="Cell"), says("done"))
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
@@ -184,7 +184,7 @@ def test_the_search_reports_which_entries_it_returned(repo, config, tmp_path):
 
 def test_the_identifiers_are_not_printed_on_the_progress_line(repo, config, tmp_path):
     """Fifty of them would bury what the search was actually for."""
-    from scinumbers_ask.events import Retrieval
+    from numera_ask.events import Retrieval
 
     event = Retrieval(
         question_id="q",
@@ -324,8 +324,8 @@ def test_fetching_an_entry_is_not_counted_as_a_search(repo, config, tmp_path):
 
 def _repo_of(*specs):
     """A repository over entries written for a test, where the fixture has no case."""
-    from scinumbers_ask.corpus import Entry
-    from scinumbers_ask.repository import CorpusRepository
+    from numera_ask.corpus import Entry
+    from numera_ask.repository import CorpusRepository
 
     return CorpusRepository(
         tuple(
@@ -514,7 +514,7 @@ def test_one_implementation_reads_the_source_notation(repo):
     route through the same function object, so a change to the notation cannot reach
     one caller and miss the other.
     """
-    from scinumbers_ask import bionumbers, citations, repository
+    from numera_ask import bionumbers, citations, repository
 
     assert repository.cross_references is bionumbers.cross_references
     assert citations.cross_references is bionumbers.cross_references
@@ -660,7 +660,7 @@ def test_a_long_method_is_cut_to_the_table_and_says_so():
 
 
 def an_entry(**kwargs):
-    from scinumbers_ask.corpus import Entry
+    from numera_ask.corpus import Entry
 
     base = dict(
         entry_id=1,

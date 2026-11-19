@@ -12,17 +12,17 @@ from pathlib import Path
 
 import pytest
 
-from scinumbers_ask.agent import AskAgent
-from scinumbers_ask.config import Config, usd
-from scinumbers_ask.corpus import load
-from scinumbers_ask.repository import CorpusRepository
+from numera_ask.agent import AskAgent
+from numera_ask.config import Config, usd
+from numera_ask.corpus import load
+from numera_ask.repository import CorpusRepository
 
 FIXTURE = str(Path(__file__).parent / "fixtures" / "corpus_sample.jsonl")
 
 
 @pytest.fixture(autouse=True)
 def _fast_retries(monkeypatch):
-    monkeypatch.setattr("scinumbers_ask.agent.RETRY_INITIAL_DELAY", 0.0)
+    monkeypatch.setattr("numera_ask.agent.RETRY_INITIAL_DELAY", 0.0)
 
 
 @pytest.fixture(autouse=True)
@@ -39,7 +39,7 @@ def _trail_stays_in_the_tmp_dir(tmp_path, monkeypatch):
     Set through the documented environment variable rather than by patching, so the
     path a real run takes is the one under test.
     """
-    monkeypatch.setenv("SCINUMBERS_TRACE", str(tmp_path / "trace.jsonl"))
+    monkeypatch.setenv("NUMERA_TRACE", str(tmp_path / "trace.jsonl"))
 
 
 @pytest.fixture(autouse=True)
@@ -56,7 +56,7 @@ def _the_suite_does_not_call_the_model_provider(monkeypatch):
     The cache is cleared on both sides: `_allowance` is `st.cache_data`, which
     outlives a test, so one test's answer would otherwise become the next one's.
     """
-    from scinumbers_ask import allowance, web
+    from numera_ask import allowance, web
 
     monkeypatch.setattr(allowance, "fetch", lambda api_key, **kwargs: allowance.Allowance())
     # `probe` too: the page passes it to `admit` as the sign-in credential check,
@@ -129,12 +129,12 @@ def _streamlit_reads_no_secrets_file_on_this_machine(tmp_path_factory):
 def _no_test_reaches_a_hosted_tracer(monkeypatch):
     """Every test starts with hosted tracing off and the process's tracer unbuilt.
 
-    Without this a developer whose shell has `SCINUMBERS_TRACING=langfuse` would
+    Without this a developer whose shell has `NUMERA_TRACING=langfuse` would
     send every question the suite asks -- fixture corpus text, scripted prompts --
     to their Langfuse project, and a vendor switch left set would do the same to
     LangSmith. Tests that want a tracer install one with an in-memory exporter.
     """
-    from scinumbers_ask import hosted_trace
+    from numera_ask import hosted_trace
 
     for name in (
         hosted_trace.SETTING,
@@ -149,6 +149,23 @@ def _no_test_reaches_a_hosted_tracer(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_retired_setting_from_the_developer_s_shell(monkeypatch):
+    """Every test starts with no retired environment name set.
+
+    A retired name refuses the run wherever a setting is read (ADR-0400, ADR-1900), which
+    is right for a run and wrong for the suite: a developer who still exports
+    `SCINUMBERS_TRACING` would see every test that reads configuration fail, and the
+    suite would be describing their shell rather than the code. Tests of the refusal set
+    the retired name themselves, after this has run.
+    """
+    from numera_ask.config import RENAMED_ENV, WITHDRAWN_ENV
+    from numera_validator.environment import RENAMED
+
+    for name in (*RENAMED_ENV, *WITHDRAWN_ENV, *RENAMED):
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _each_test_starts_with_no_open_sessions():
     """The session cap's registry is a cached resource: one per process, which
     is what a cap on a server needs and exactly wrong for a test process that
@@ -156,7 +173,7 @@ def _each_test_starts_with_no_open_sessions():
     test in a run is turned away with "try again shortly" -- sixty failures
     that pass one at a time. Imported lazily so tests that never touch the web
     driver do not pay for Streamlit."""
-    from scinumbers_ask import web
+    from numera_ask import web
 
     web.session_registry.clear()
     yield

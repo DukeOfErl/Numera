@@ -21,11 +21,11 @@ from conftest import FIXTURE, agent_with, ask_question
 from streamlit.testing.v1 import AppTest
 
 from agent_doubles import batched_tool_calls, costing, says, scripted, tool_call
-from scinumbers_ask import entries_table, messages, web
-from scinumbers_ask.agent import AskAgent
-from scinumbers_ask.cli import render
-from scinumbers_ask.corpus import load
-from scinumbers_ask.events import (
+from numera_ask import entries_table, messages, web
+from numera_ask.agent import AskAgent
+from numera_ask.cli import render
+from numera_ask.corpus import load
+from numera_ask.events import (
     Answer,
     AnswerEntries,
     CitationWarning,
@@ -37,7 +37,7 @@ from scinumbers_ask.events import (
     Retrieval,
     SpendWarning,
 )
-from scinumbers_ask.repository import CorpusRepository
+from numera_ask.repository import CorpusRepository
 
 APP = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 
@@ -50,9 +50,9 @@ TIMEOUT = 30
 # matched by a wildcard: a rule that permitted anything under a namespace would
 # permit the copies of the conversation and the spend it exists to forbid.
 FEEDBACK_PREFIXES = (
-    "scinumbers_ask.feedback",
-    "scinumbers_ask.verdict.",
-    "scinumbers_ask.comment.",
+    "numera_ask.feedback",
+    "numera_ask.verdict.",
+    "numera_ask.comment.",
 )
 
 
@@ -249,13 +249,13 @@ def test_session_state_holds_the_identifier_and_what_was_drawn_and_nothing_else(
     supply (ADR-0830).
 
     The rule keeps its teeth: anything else namespaced here still fails, and the
-    allowance is a prefix rather than a wildcard, so `scinumbers_ask.spend` or a
+    allowance is a prefix rather than a wildcard, so `numera_ask.spend` or a
     second copy of the conversation would still be caught.
     """
     model = scripted(says("an answer"))
     at = ask(app(monkeypatch, repo, agent_with(repo, config, tmp_path, model)).run(), "how wide?")
 
-    kept = {k for k in at.session_state.filtered_state if k.startswith("scinumbers_ask.")}
+    kept = {k for k in at.session_state.filtered_state if k.startswith("numera_ask.")}
     feedback_keys = {k for k in kept if k.startswith(FEEDBACK_PREFIXES)}
     assert kept - feedback_keys == {
         web.SESSION_KEY,
@@ -266,7 +266,7 @@ def test_session_state_holds_the_identifier_and_what_was_drawn_and_nothing_else(
 
 
 def test_a_missing_corpus_is_explained_rather_than_raised(monkeypatch):
-    from scinumbers_ask.corpus import CorpusUnavailable
+    from numera_ask.corpus import CorpusUnavailable
 
     def unavailable(corpus=None, store=None):
         raise CorpusUnavailable("no corpus was supplied")
@@ -339,7 +339,7 @@ def counted(monkeypatch, tmp_path):
     monkeypatch.setattr(web, "load_configured", counting_load)
     monkeypatch.setattr(web, "CorpusRepository", counting_repository)
     monkeypatch.setattr(web.trace, "to_file", lambda spec: None)
-    monkeypatch.setenv("SCINUMBERS_CHECKPOINTS", str(tmp_path / "c.sqlite"))
+    monkeypatch.setenv("NUMERA_CHECKPOINTS", str(tmp_path / "c.sqlite"))
     yield counts
     web.resources.clear()
 
@@ -1074,13 +1074,13 @@ def test_the_page_refuses_a_retired_variable_before_it_looks_for_a_corpus(monkey
     already failed -- and the reader would be told a corpus is missing when what is
     wrong is the name of the variable holding its path.
     """
-    monkeypatch.delenv("SCINUMBERS_CORPUS", raising=False)
+    monkeypatch.delenv("NUMERA_CORPUS", raising=False)
     monkeypatch.setenv("BIONUMBERS_ASK_CORPUS", "/somewhere/corpus.jsonl")
 
     at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
 
     errors = [e.value for e in at.error]
-    assert any("SCINUMBERS_CORPUS" in text for text in errors), errors
+    assert any("NUMERA_CORPUS" in text for text in errors), errors
     assert not any("No corpus path supplied" in text for text in errors), errors
     assert not at.exception, "the page raised instead of explaining"
 
@@ -1146,7 +1146,7 @@ def test_the_page_draws_an_answer_s_citations_as_pills(monkeypatch, repo, config
 
 def _draw_turn(count, answering):
     """One finished turn with `count` cited entries, redrawn as the replay path draws it."""
-    from scinumbers_ask import entries_table, web
+    from numera_ask import entries_table, web
 
     rows = tuple(
         entries_table.Row(

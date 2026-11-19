@@ -50,7 +50,7 @@ Append to the copy's `pyproject.toml`, and add `src` to the pytest path:
 ```toml
 # pythonpath must become ["src", "tests"] — see gotcha 3
 [tool.mutmut]
-source_paths = ["src/scinumbers_ask"]
+source_paths = ["src/numera_ask"]
 also_copy = ["tests/", "openspec/", "docs/", "pyproject.toml", "README.md", "streamlit_app.py"]
 pytest_add_cli_args_test_selection = ["tests/"]
 pytest_add_cli_args = ["--deselect", "tests/test_repository.py::test_the_repository_exposes_no_way_to_change_the_corpus"]
@@ -59,7 +59,7 @@ pytest_add_cli_args = ["--deselect", "tests/test_repository.py::test_the_reposit
 Then run, filtered to one module:
 
 ```bash
-cd "$W" && "$REPO/.venv/bin/mutmut" run 'scinumbers_ask.citations*'
+cd "$W" && "$REPO/.venv/bin/mutmut" run 'numera_ask.citations*'
 "$REPO/.venv/bin/mutmut" results | grep survived      # the run log uses 🎉/🙁; results says "survived"
 "$REPO/.venv/bin/mutmut" show <mutant-name>           # the diff
 ```

@@ -15,9 +15,9 @@ import pytest
 from conftest import agent_with
 
 from agent_doubles import costing, says, scripted, tool_call
-from scinumbers_ask.config import Config, usd
-from scinumbers_ask.events import QuestionEnded
-from scinumbers_ask.trace import configure, start_question
+from numera_ask.config import Config, usd
+from numera_ask.events import QuestionEnded
+from numera_ask.trace import configure, start_question
 
 
 def records(buf: io.StringIO) -> list[dict]:
@@ -63,7 +63,7 @@ def test_the_application_tag_names_this_application():
     nothing anywhere reporting a fault.
     """
     config = start_question("dev").run_config("ask")
-    assert "scinumbers-ask" in config["tags"]
+    assert "numera-ask" in config["tags"]
 
 
 def test_the_run_label_defaults_rather_than_going_missing():
@@ -72,9 +72,9 @@ def test_the_run_label_defaults_rather_than_going_missing():
 
 
 def test_a_blank_environment_value_does_not_produce_an_unlabelled_run(monkeypatch):
-    monkeypatch.setenv("SCINUMBERS_RUN", "   ")
+    monkeypatch.setenv("NUMERA_RUN", "   ")
     assert Config.from_env().run_label == "dev"
-    monkeypatch.setenv("SCINUMBERS_RUN", "eval-2026-08-24")
+    monkeypatch.setenv("NUMERA_RUN", "eval-2026-08-24")
     assert Config.from_env().run_label == "eval-2026-08-24"
 
 
@@ -130,7 +130,7 @@ def test_a_provider_reporting_no_tokens_is_recorded_as_unknown_not_zero():
     """Zero tokens is a measurement; no tokens is an absence. They must differ."""
     from langchain_core.messages import AIMessage
 
-    from scinumbers_ask.spend import SpendLedger
+    from numera_ask.spend import SpendLedger
 
     ledger = SpendLedger(model="m", prices=None)
     charge = ledger.add_response(
@@ -143,8 +143,8 @@ def test_a_provider_reporting_no_tokens_is_recorded_as_unknown_not_zero():
 def test_usage_metadata_is_read_when_the_provider_shape_is_absent():
     """The framework's normalised form, which a different client may populate instead."""
     from agent_doubles import reports_usage_only
-    from scinumbers_ask.config import ModelPrices
-    from scinumbers_ask.spend import SpendLedger
+    from numera_ask.config import ModelPrices
+    from numera_ask.spend import SpendLedger
 
     ledger = SpendLedger(model="m", prices=ModelPrices(1_000_000, 5_000_000))
     charge = ledger.add_response([reports_usage_only("ok", input_tokens=1_000, output_tokens=100)])
@@ -157,8 +157,8 @@ def test_tokens_from_several_assistant_messages_in_one_response_are_summed():
     from langchain_core.messages import AIMessage
 
     from agent_doubles import OPENROUTER_RESPONSE_METADATA, reports_usage_only
-    from scinumbers_ask.config import ModelPrices
-    from scinumbers_ask.spend import SpendLedger
+    from numera_ask.config import ModelPrices
+    from numera_ask.spend import SpendLedger
 
     # Prices configured, because the second message reports usage and no cost --
     # without them the ledger correctly refuses rather than guessing.
@@ -179,7 +179,7 @@ def test_a_known_count_beside_an_unknown_one_keeps_the_known_figure():
     from langchain_core.messages import AIMessage
 
     from agent_doubles import OPENROUTER_RESPONSE_METADATA
-    from scinumbers_ask.spend import SpendLedger
+    from numera_ask.spend import SpendLedger
 
     ledger = SpendLedger(model="m", prices=None)
     charge = ledger.add_response(
@@ -211,13 +211,13 @@ def test_the_driver_writes_a_trail_when_it_runs(tmp_path, monkeypatch):
     """
     from conftest import FIXTURE
 
-    from scinumbers_ask.cli import main
-    from scinumbers_ask.trace import DEFAULT_FILE
+    from numera_ask.cli import main
+    from numera_ask.trace import DEFAULT_FILE
 
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     # This test is about the default path, so it opts out of the autouse fixture
     # that redirects the trail -- and chdirs first, so the default is written here.
-    monkeypatch.delenv("SCINUMBERS_TRACE", raising=False)
+    monkeypatch.delenv("NUMERA_TRACE", raising=False)
     monkeypatch.chdir(tmp_path)
     with pytest.raises(SystemExit):
         main(["--corpus", FIXTURE, "--checkpoints", str(tmp_path / "c.sqlite"), "--ask", "q"])
@@ -227,7 +227,7 @@ def test_the_driver_writes_a_trail_when_it_runs(tmp_path, monkeypatch):
 
 
 def test_the_trail_is_written_as_json_lines_to_the_given_path(tmp_path):
-    from scinumbers_ask.trace import to_file
+    from numera_ask.trace import to_file
 
     path = tmp_path / "nested" / "trace.jsonl"
     to_file(str(path))
@@ -240,7 +240,7 @@ def test_the_trail_is_written_as_json_lines_to_the_given_path(tmp_path):
 def test_the_trail_can_be_sent_to_stderr(capsys):
     """Never stdout: the rendered answer and the table go there, and interleaving
     JSON with them would corrupt both."""
-    from scinumbers_ask.trace import to_file
+    from numera_ask.trace import to_file
 
     to_file("-")
     start_question("run-b").record("search", matched=1)
@@ -254,7 +254,7 @@ def test_an_empty_spec_adds_no_handler_and_writes_no_file(tmp_path, monkeypatch)
     empty, which reads as a trail that recorded nothing."""
     import logging
 
-    from scinumbers_ask.trace import LOGGER_NAME, to_file
+    from numera_ask.trace import LOGGER_NAME, to_file
 
     logger = logging.getLogger(LOGGER_NAME)
     monkeypatch.setattr(logger, "handlers", [])

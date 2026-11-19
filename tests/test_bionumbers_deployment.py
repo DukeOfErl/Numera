@@ -1,17 +1,17 @@
 """What the review page takes from the deployment: its database, and a person's rung.
 
 The one module in the validator that reaches the ask app, so the tests here are the only ones in
-the package that stub `scinumbers_ask.web`.
+the package that stub `numera_ask.web`.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from bionumbers import deployment
-from bionumbers.records import ReviewerRole
-from scinumbers_ask.accounts import Account
-from scinumbers_ask.permissions import Role
+from numera_ask.accounts import Account
+from numera_ask.permissions import Role
+from numera_validator import deployment
+from numera_validator.records import ReviewerRole
 
 
 class TestStoreEngine:

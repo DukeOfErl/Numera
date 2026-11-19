@@ -2,7 +2,7 @@
 
 import pytest
 
-from bionumbers.cache import DocumentCache
+from numera_validator.cache import DocumentCache
 
 
 @pytest.fixture

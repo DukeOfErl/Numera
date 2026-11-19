@@ -35,7 +35,7 @@ change's; the link between readings here is what makes `-n.2` explainable to a r
 
 ## Impact
 
-- `src/bionumbers/extraction.py` (the bound), `cli.py` (comment lines, the run-path guard),
+- `src/numera_validator/extraction.py` (the bound), `cli.py` (comment lines, the run-path guard),
   `store.py` and `review.py` (serving and linking across runs), the review page's engine.
 - The store gains whatever records the link between readings; additive, as every store change on
   this prototype has been.

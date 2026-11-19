@@ -2,9 +2,9 @@
 
 Every word here is made up. The real store holds passages from papers some of which are licensed
 NC or ND, and none of that text may enter the repository. What is real is the shape: items are
-`bionumbers.records.ReviewItem`s loaded by `bionumbers.store.load_run`, so a change to either is a
-change this fixture meets, rather than a hand-written JSON that keeps agreeing with the loader that
-was written beside it.
+`numera_validator.records.ReviewItem`s loaded by `numera_validator.store.load_run`, so a change to
+either is a change this fixture meets, rather than a hand-written JSON that keeps agreeing with the
+loader that was written beside it.
 
 Planted markers: every string the agent must never see carries one of `NEVER_SHOWN`, so a test can
 look for them in everything an entry holds.
@@ -19,8 +19,8 @@ from pathlib import Path
 
 from sqlalchemy import insert
 
-from bionumbers import store
-from bionumbers.records import (
+from numera_validator import store
+from numera_validator.records import (
     CandidateKind,
     Claim,
     ClaimKind,
@@ -341,12 +341,12 @@ ACTIN_CSL = {
 def with_references(path: Path, records: dict[str, dict]) -> Path:
     """Give the store `review_paper.csl_json`, as `upgrade-store` does, and fill it per PMCID.
 
-    Added here rather than through `bionumbers.store`, whose table on this branch predates the
+    Added here rather than through `numera_validator.store`, whose table on this branch predates the
     column: the ask side must read a store with it and a store without it alike.
     """
     with sqlite3.connect(path) as conn:
-        # `bionumbers.store` creates the column since `add-paper-references` (ADR-1750); a store
-        # built before it, the case `store_corpus` must also read, lacks it.
+        # `numera_validator.store` creates the column since `add-paper-references` (ADR-1750); a
+        # store built before it, the case `store_corpus` must also read, lacks it.
         columns = {row[1] for row in conn.execute("PRAGMA table_info(review_paper)")}
         if "csl_json" not in columns:
             conn.execute("ALTER TABLE review_paper ADD COLUMN csl_json TEXT NOT NULL DEFAULT ''")

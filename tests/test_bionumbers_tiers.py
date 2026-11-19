@@ -12,9 +12,9 @@ import pytest
 from sqlalchemy import create_engine
 from test_bionumbers_store import QUESTION, RUN, a_result, an_item
 
-from bionumbers import store, tiers
-from bionumbers.records import ReviewerRole
-from bionumbers.tiers import Tier, Trust, trust_of
+from numera_validator import store, tiers
+from numera_validator.records import ReviewerRole
+from numera_validator.tiers import Tier, Trust, trust_of
 
 
 @dataclass(frozen=True)

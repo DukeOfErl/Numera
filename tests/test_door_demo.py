@@ -12,8 +12,8 @@ import re
 
 import pytest
 
-from scinumbers_ask import door_demo
-from scinumbers_ask.door_demo import Erase, Pause, Scenario, Type
+from numera_ask import door_demo
+from numera_ask.door_demo import Erase, Pause, Scenario, Type
 
 
 def test_every_scenario_types_the_question_it_shows():
@@ -180,7 +180,7 @@ def test_the_page_is_titled_as_a_demo_and_carries_every_question():
     for scenario in door_demo.scenarios():
         question = scenario.shown or scenario.asked
         assert json.dumps(question)[1:-1] in page or question in page
-    assert '<div class="title">What can SciNumbers do?</div>' in page
+    assert '<div class="title">What can Numera do?</div>' in page
     assert "a real answer from" not in page
 
 

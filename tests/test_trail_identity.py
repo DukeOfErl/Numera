@@ -17,8 +17,8 @@ import json
 from conftest import agent_with
 
 from agent_doubles import says, scripted
-from scinumbers_ask import trace, web
-from scinumbers_ask.events import (
+from numera_ask import trace, web
+from numera_ask.events import (
     Answer,
     EndReason,
     QuestionEnded,

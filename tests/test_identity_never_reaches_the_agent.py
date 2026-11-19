@@ -24,11 +24,11 @@ import pytest
 from conftest import RecordingEngine, agent_with
 
 from agent_doubles import says, scripted, tool_call
-from scinumbers_ask import feedback, trace, web
-from scinumbers_ask.agent import AskAgent
-from scinumbers_ask.feedback import Verdict
-from scinumbers_ask.permissions import Identity, Role
-from scinumbers_ask.trail_store import TrailHandler, TrailStore
+from numera_ask import feedback, trace, web
+from numera_ask.agent import AskAgent
+from numera_ask.feedback import Verdict
+from numera_ask.permissions import Identity, Role
+from numera_ask.trail_store import TrailHandler, TrailStore
 
 # --- a destination that keeps what was written ----------------------------------
 
@@ -107,7 +107,7 @@ def test_no_key_reads_the_environment_exactly_as_before(
 
 def test_no_key_anywhere_is_still_the_not_configured_ending(repo, config, tmp_path, monkeypatch):
     """The parameter must not have turned "unset" into a crash."""
-    from scinumbers_ask.events import EndReason, QuestionEnded
+    from numera_ask.events import EndReason, QuestionEnded
 
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     agent = AskAgent(repo, config, str(tmp_path / "none.sqlite"))

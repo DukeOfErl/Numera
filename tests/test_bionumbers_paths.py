@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from bionumbers.paths import EUROPEPMC_DIR, RUNS_DIR
+from numera_validator.paths import EUROPEPMC_DIR, RUNS_DIR
 
 ROOT = Path(__file__).resolve().parents[1]
 

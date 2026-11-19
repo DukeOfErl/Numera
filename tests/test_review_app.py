@@ -22,8 +22,11 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.pool import StaticPool
 from streamlit.testing.v1 import AppTest
 
-from bionumbers import deployment, records, review, store
-from bionumbers.records import (
+from numera_ask import messages, web
+from numera_ask.accounts import Account
+from numera_ask.permissions import Role
+from numera_validator import deployment, records, review, store
+from numera_validator.records import (
     CandidateKind,
     Claim,
     ClaimKind,
@@ -37,9 +40,6 @@ from bionumbers.records import (
     ReviewItem,
     SecondTextKind,
 )
-from scinumbers_ask import messages, web
-from scinumbers_ask.accounts import Account
-from scinumbers_ask.permissions import Role
 
 APP = Path(__file__).resolve().parents[1] / "review_app.py"
 TIMEOUT = 30

@@ -12,8 +12,8 @@ import json
 import pytest
 from sqlalchemy import create_engine, func, select
 
-from bionumbers import cli, curated, store
-from bionumbers.curated import Refusal
+from numera_validator import cli, curated, store
+from numera_validator.curated import Refusal
 
 
 def an_entry(**changes) -> dict:

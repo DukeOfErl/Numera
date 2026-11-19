@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCES = [ROOT / "src" / "scinumbers_ask" / "web.py", ROOT / "streamlit_app.py"]
+SOURCES = [ROOT / "src" / "numera_ask" / "web.py", ROOT / "streamlit_app.py"]
 
 # Streamlit calls whose first argument is rendered as markdown. Two kinds: the
 # body of a text element, and the *label* of a widget or container -- Streamlit

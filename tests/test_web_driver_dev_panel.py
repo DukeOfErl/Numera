@@ -18,10 +18,10 @@ import logging
 import pytest
 from test_web_driver_identity import DEV, TESTER, _ask, caught, page  # noqa: F401 - fixtures
 
-from scinumbers_ask import trace, web
-from scinumbers_ask.accounts import Account
-from scinumbers_ask.authorization import Refused
-from scinumbers_ask.permissions import Role
+from numera_ask import trace, web
+from numera_ask.accounts import Account
+from numera_ask.authorization import Refused
+from numera_ask.permissions import Role
 
 STUDENT = Account(email="student@example.org", role=Role.STUDENT, openrouter_key="sk-student")
 ADMIN = Account(email="admin@example.org", role=Role.ADMIN, openrouter_key="sk-admin")
@@ -248,7 +248,7 @@ def test_the_panel_s_contents_do_not_reach_the_model(page, recent, repo, config,
     model = scripted(says("first"), says("second"))
     agent = agent_with(repo, config, tmp_path, model)
     at = page(auth=True, email=DEV.email, enrolled={DEV.email: DEV})
-    import scinumbers_ask.web as w
+    import numera_ask.web as w
 
     w_agent_for = w.agent_for
     w.agent_for = lambda state, repo_, admission: agent

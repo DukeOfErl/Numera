@@ -35,7 +35,7 @@ its absence caused a specific failure in a comparable project.
 - The named test file that is the specification: `tests/…`
 - Read it first. **Do not edit it.** If a test looks wrong, say so and stop.
 - Verify cheaply — that one test file, or
-  `python -c "import scinumbers_ask.<module>"`. Do not run the full suite.
+  `python -c "import numera_ask.<module>"`. Do not run the full suite.
 
 ## What the work actually involves
 

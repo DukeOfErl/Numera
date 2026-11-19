@@ -19,8 +19,8 @@ import pytest
 from sqlalchemy import Column, MetaData, Table, create_engine, insert, select, text
 from sqlalchemy.exc import OperationalError
 
-from bionumbers import store
-from bionumbers.records import (
+from numera_validator import store
+from numera_validator.records import (
     UNLICENSED,
     CandidateKind,
     Claim,

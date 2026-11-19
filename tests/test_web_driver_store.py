@@ -16,9 +16,9 @@ from conftest import FIXTURE, agent_with, ask_question
 from streamlit.testing.v1 import AppTest
 
 from agent_doubles import says, scripted, tool_call
-from scinumbers_ask import autobuild, objections, store_corpus, trust_marks, web
-from scinumbers_ask.corpus import load
-from scinumbers_ask.repository import CorpusRepository
+from numera_ask import autobuild, objections, store_corpus, trust_marks, web
+from numera_ask.corpus import load
+from numera_ask.repository import CorpusRepository
 
 APP = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 TIMEOUT = 30
@@ -33,8 +33,8 @@ def _page(monkeypatch, repo, agent, store="invented-store.sqlite") -> AppTest:
     # The page reads which corpus it is from the setting, as a deployment does; the repository
     # itself is handed in.
     if store:
-        monkeypatch.setenv("SCINUMBERS_STORE", store)
-        monkeypatch.delenv("SCINUMBERS_CORPUS", raising=False)
+        monkeypatch.setenv("NUMERA_STORE", store)
+        monkeypatch.delenv("NUMERA_CORPUS", raising=False)
     monkeypatch.setattr(web, "resources", lambda corpus=None, store=None: repo)
     monkeypatch.setattr(web, "agent_for", lambda state, repo, admission: agent)
     return AppTest.from_file(APP, default_timeout=TIMEOUT)
@@ -113,16 +113,16 @@ def test_a_corpus_file_answer_has_pills_without_stars(monkeypatch, config, tmp_p
 def test_the_page_loads_the_store_from_its_setting_without_building_a_corpus(
     monkeypatch, store_path, config, tmp_path
 ):
-    """Through the real cached loader: SCINUMBERS_STORE alone is enough, and the corpus builder
+    """Through the real cached loader: NUMERA_STORE alone is enough, and the corpus builder
     is never consulted for a store (design D7)."""
 
     def no_build(*args, **kwargs):
         raise AssertionError("autobuild was asked to build a corpus for a store")
 
     web.resources.clear()
-    monkeypatch.delenv("SCINUMBERS_CORPUS", raising=False)
-    monkeypatch.setenv("SCINUMBERS_STORE", str(store_path))
-    monkeypatch.setenv("SCINUMBERS_CHECKPOINTS", str(tmp_path / "c.sqlite"))
+    monkeypatch.delenv("NUMERA_CORPUS", raising=False)
+    monkeypatch.setenv("NUMERA_STORE", str(store_path))
+    monkeypatch.setenv("NUMERA_CHECKPOINTS", str(tmp_path / "c.sqlite"))
     monkeypatch.setattr(web.trace, "to_file", lambda spec: None)
     monkeypatch.setattr(autobuild, "corpus_path", no_build)
     seen = {}
@@ -146,8 +146,8 @@ def test_the_page_loads_the_store_from_its_setting_without_building_a_corpus(
 
 def test_the_page_refuses_both_settings_at_once(monkeypatch, store_path, tmp_path):
     web.resources.clear()
-    monkeypatch.setenv("SCINUMBERS_CORPUS", FIXTURE)
-    monkeypatch.setenv("SCINUMBERS_STORE", str(store_path))
+    monkeypatch.setenv("NUMERA_CORPUS", FIXTURE)
+    monkeypatch.setenv("NUMERA_STORE", str(store_path))
     monkeypatch.setattr(web.trace, "to_file", lambda spec: None)
     try:
         at = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
@@ -177,8 +177,8 @@ def test_a_harvested_entry_opens_with_its_fields_apart_not_its_keywords(
 
 
 def _draw_shared_quotes():
-    from scinumbers_ask import entries_table, web
-    from scinumbers_ask.corpus import Condition, Harvest, Origin, Paper
+    from numera_ask import entries_table, web
+    from numera_ask.corpus import Condition, Harvest, Origin, Paper
 
     said = "Strains and growth conditions were described previously."
     harvest = Harvest(

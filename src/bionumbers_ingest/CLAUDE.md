@@ -30,7 +30,7 @@ Five things about it that reading one module will not tell you:
   uses `<` as a less-than sign in prose. A tag is recognised only by a real HTML element name.
 - **Records are buffered, not streamed, between cleaning and the writer**, because each carries a
   digest of the whole source, which is unknown until the last byte. Roughly 70 MB; ADR-0240.
-- **Four booleans are the contract with `scinumbers_ask`**, not the flag names: `range_fused`,
+- **Four booleans are the contract with `numera_ask`**, not the flag names: `range_fused`,
   `range_qualified`, `range_one_sided` and `range_approximate`. `parse_flags` is cleaning's own
   vocabulary and may change — the last two became fields because the consumer was reading them out of
   that list by name, where a rename would have turned them silently false. ADR-0230.

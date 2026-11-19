@@ -24,10 +24,10 @@ from datetime import UTC, datetime
 import pytest
 from conftest import write_all_shapes_corpus
 
-from scinumbers_ask import eval_cli, evaluation, hosted_trace
-from scinumbers_ask.evaluation import RunNotApproved, run_evaluation
-from scinumbers_ask.hosted_trace import HostedTracer, Setting, Usage
-from scinumbers_ask.question_set import load_question_set
+from numera_ask import eval_cli, evaluation, hosted_trace
+from numera_ask.evaluation import RunNotApproved, run_evaluation
+from numera_ask.hosted_trace import HostedTracer, Setting, Usage
+from numera_ask.question_set import load_question_set
 
 #: Six questions, one per entry shape: a run refuses a set that leaves a shape out.
 QUESTIONS = [
@@ -231,7 +231,7 @@ def test_with_tracing_off_no_tag_is_in_force(tmp_path, questions, monkeypatch):
 
 @pytest.fixture
 def run(tmp_path, monkeypatch, asks):
-    """`scinumbers-eval run` over six questions, stopped where the first would be asked."""
+    """`numera-eval run` over six questions, stopped where the first would be asked."""
     path = tmp_path / "questions.jsonl"
     path.write_text("".join(json.dumps(q) + "\n" for q in QUESTIONS))
     corpus = write_all_shapes_corpus(tmp_path)

@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import pytest
 
-from scinumbers_ask import bionumbers
-from scinumbers_ask.bionumbers import MIN_DIGITS, cross_references, label, rewrite
-from scinumbers_ask.citations import format_citation
+from numera_ask import bionumbers
+from numera_ask.bionumbers import MIN_DIGITS, cross_references, label, rewrite
+from numera_ask.citations import format_citation
 
 
 def test_the_plural_marker_parses():
@@ -132,8 +132,8 @@ def test_the_corpus_keeps_the_sources_words_and_the_model_gets_ours(repo):
     """ADR-0420. Three surfaces, and only the model's is restated: the stored entry is
     the source's evidence, the reader is owed the attribution, and the model is owed one
     notation. Normalising at ingest would have collapsed all three into ours."""
-    from scinumbers_ask.tools import build_tools
-    from scinumbers_ask.trace import QuestionTrace
+    from numera_ask.tools import build_tools
+    from numera_ask.trace import QuestionTrace
 
     stored = repo.get(100001).entry
     assert "BNID 102065" in stored.comments, "the corpus must keep the source's words"
@@ -198,10 +198,10 @@ def test_every_field_handed_to_the_model_is_restated_not_just_the_obvious_two(tm
     """
     import json
 
-    from scinumbers_ask.corpus import load
-    from scinumbers_ask.repository import CorpusRepository
-    from scinumbers_ask.tools import build_tools
-    from scinumbers_ask.trace import QuestionTrace
+    from numera_ask.corpus import load
+    from numera_ask.repository import CorpusRepository
+    from numera_ask.tools import build_tools
+    from numera_ask.trace import QuestionTrace
 
     record = {
         "entry_id": 101734,

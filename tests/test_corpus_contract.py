@@ -22,7 +22,7 @@ from bionumbers_ingest.parsing import iter_rows
 
 # The twelve keys the consumer models, and the JSON types it accepts for each.
 #
-# SOURCE: `scinumbers_ask.corpus.Entry` and its `_number` / `_keywords` coercions,
+# SOURCE: `numera_ask.corpus.Entry` and its `_number` / `_keywords` coercions,
 # on branch `feat/ask-agent`. Restated here as a literal rather than imported,
 # because that branch is not on this one. Two copies of a contract drift, so this
 # list is deliberately the ONLY copy in this branch, and the round-trip test at
@@ -130,14 +130,14 @@ def test_one_unusable_line_costs_the_whole_corpus(tmp_path):
 
 
 def test_round_trip_through_the_real_loader(tmp_path, sample_html):
-    """Live only once `scinumbers_ask` is importable — i.e. after the merge to dev.
+    """Live only once `numera_ask` is importable — i.e. after the merge to dev.
 
     Skipped on this branch by design. It becomes the authority over the literal
     above at exactly the moment loader drift would otherwise start going unnoticed.
     Verified by hand in the meantime; see task 5.5.
     """
     corpus_mod = pytest.importorskip(
-        "scinumbers_ask.corpus",
+        "numera_ask.corpus",
         reason="the consumer lives on feat/ask-agent; live after the merge to dev",
     )
     out = tmp_path / "corpus.jsonl"

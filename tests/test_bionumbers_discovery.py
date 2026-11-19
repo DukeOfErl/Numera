@@ -20,8 +20,8 @@ from europepmc_double import (
     unreachable_client,
 )
 
-from bionumbers.cache import DocumentCache
-from bionumbers.europepmc import (
+from numera_validator.cache import DocumentCache
+from numera_validator.europepmc import (
     USER_AGENT,
     EuropePMC,
     FullText,
@@ -30,7 +30,7 @@ from bionumbers.europepmc import (
     http_client,
     licence_of,
 )
-from bionumbers.records import UNLICENSED
+from numera_validator.records import UNLICENSED
 
 TERMS = '"doubling time" AND "Escherichia coli"'
 SECTIONS = ("RESULTS", "TABLE")

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import httpx
 
-from bionumbers.europepmc import http_client
+from numera_validator.europepmc import http_client
 
 FIXTURES = Path(__file__).parent / "fixtures" / "europepmc"
 

@@ -11,8 +11,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from bionumbers import harvest
-from bionumbers.extraction import (
+from numera_validator import harvest
+from numera_validator.extraction import (
     INSTRUCTION,
     ClaimDraft,
     ExtractionOutput,
@@ -20,9 +20,9 @@ from bionumbers.extraction import (
     extract,
     instruction_sha256,
 )
-from bionumbers.jats import read_jats
-from bionumbers.records import CONDITION_FIELDS, CandidateKind, ClaimKind, Paper, PaperState
-from bionumbers.spend import Ceiling, Ledger
+from numera_validator.jats import read_jats
+from numera_validator.records import CONDITION_FIELDS, CandidateKind, ClaimKind, Paper, PaperState
+from numera_validator.spend import Ceiling, Ledger
 
 FIXTURES = Path(__file__).parent / "fixtures" / "europepmc"
 MEASURED_SENTENCE = "are present for 65 min on average"

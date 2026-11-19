@@ -13,12 +13,12 @@ from html.parser import HTMLParser
 import pytest
 import store_double
 
-from bionumbers.tiers import Tier, Trust
-from scinumbers_ask import cli, entries_table, objections, store_corpus, trust_marks, web
-from scinumbers_ask.events import Answer, AnswerEntries
-from scinumbers_ask.repository import CorpusRepository
-from scinumbers_ask.tools import ToolBudget, build_tools
-from scinumbers_ask.trace import start_question
+from numera_ask import cli, entries_table, objections, store_corpus, trust_marks, web
+from numera_ask.events import Answer, AnswerEntries
+from numera_ask.repository import CorpusRepository
+from numera_ask.tools import ToolBudget, build_tools
+from numera_ask.trace import start_question
+from numera_validator.tiers import Tier, Trust
 
 #: PMC1000001-1: scientist (simulated), disputed. -4: nobody approved, disputed. -2: AI.
 #: `sim` after the stars, then the caution (ADR-1850's order, the canvas's).

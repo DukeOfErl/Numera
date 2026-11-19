@@ -22,7 +22,7 @@ kept out of the repository (ADR-0170) and the default suite runs on a six-entry
 fixture -- a fixture written to match the same assumptions the markers encode,
 which is precisely why it cannot test them.
 
-    SCINUMBERS_CORPUS=/path/to/corpus.jsonl uv run pytest -m corpus
+    NUMERA_CORPUS=/path/to/corpus.jsonl uv run pytest -m corpus
 """
 
 from __future__ import annotations
@@ -32,15 +32,15 @@ from collections.abc import Callable
 
 import pytest
 
-from scinumbers_ask.corpus import Entry, load
-from scinumbers_ask.entries_table import FUSED, IMPLAUSIBLE, NO_METHOD, NO_SCALAR, QUALIFIED
-from scinumbers_ask.units import dimension
+from numera_ask.corpus import Entry, load
+from numera_ask.entries_table import FUSED, IMPLAUSIBLE, NO_METHOD, NO_SCALAR, QUALIFIED
+from numera_ask.units import dimension
 
 pytestmark = [
     pytest.mark.corpus,
     pytest.mark.skipif(
-        not os.environ.get("SCINUMBERS_CORPUS"),
-        reason="set SCINUMBERS_CORPUS to check the markers against a real corpus",
+        not os.environ.get("NUMERA_CORPUS"),
+        reason="set NUMERA_CORPUS to check the markers against a real corpus",
     ),
 ]
 
@@ -80,7 +80,7 @@ MARKERS: dict[str, Callable[[Entry], bool]] = {
 
 @pytest.fixture(scope="module")
 def entries() -> tuple[Entry, ...]:
-    return load(os.environ["SCINUMBERS_CORPUS"])
+    return load(os.environ["NUMERA_CORPUS"])
 
 
 @pytest.mark.parametrize("description", list(MARKERS))
@@ -150,7 +150,7 @@ TEXT_FIELDS = (
 
 
 def _fields_carrying_the_notation(entries) -> dict[str, int]:
-    from scinumbers_ask.bionumbers import cross_references
+    from numera_ask.bionumbers import cross_references
 
     counts: dict[str, int] = {}
     for entry in entries:
@@ -200,10 +200,10 @@ def test_no_field_hands_the_model_a_notation_it_is_not_asked_to_write(entries):
     floor refuses and which therefore passes through as the source's words, correctly.
     The claim is that no *readable* citation in the source's form survives.
     """
-    from scinumbers_ask.bionumbers import cross_references
-    from scinumbers_ask.repository import CorpusRepository
-    from scinumbers_ask.tools import build_tools
-    from scinumbers_ask.trace import QuestionTrace
+    from numera_ask.bionumbers import cross_references
+    from numera_ask.repository import CorpusRepository
+    from numera_ask.tools import build_tools
+    from numera_ask.trace import QuestionTrace
 
     repo = CorpusRepository(entries)
     tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), lambda _e: None)}

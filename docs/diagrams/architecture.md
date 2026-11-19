@@ -143,7 +143,7 @@ flowchart TB
     web --> fb
     fb -- "a reader's judgement" --> trace
     web --> identity
-    agent -- "a callback, only if<br/>SCINUMBERS_TRACING=langfuse" --> ht
+    agent -- "a callback, only if<br/>NUMERA_TRACING=langfuse" --> ht
     web -- "who asked, as a digest" --> ht
     fb -- "a copy of the rating" --> ht
     ht -. "best-effort" .-> lf
@@ -211,7 +211,7 @@ is not stamped on anything, because the address is the identity (ADR-0880).
 sequenceDiagram
     autonumber
     actor Operator
-    participant Cmd as scinumbers-enrol
+    participant Cmd as numera-enrol
     participant Neon as neon.py
     participant OR as OpenRouter
     participant Accounts as accounts.py
@@ -309,7 +309,7 @@ sequenceDiagram
     autonumber
     participant Tick as GitHub schedule
     participant Job as first-use.yml
-    participant Cmd as scinumbers-first-use
+    participant Cmd as numera-first-use
     participant Trail as the trail (read-only role)
     participant Issue as the "first use" issue
     actor Operator
@@ -446,7 +446,7 @@ judgements to a file of its own. It is deferred to `add-judged-faithfulness`.
 sequenceDiagram
     autonumber
     actor Operator
-    participant CLI as bionumbers discover / extract
+    participant CLI as numera-validator discover / extract
     participant EPMC as Europe PMC
     participant Reader as jats.py
     participant Model as one extraction call
@@ -546,7 +546,7 @@ Not shown: an issue may be raised at either step in place of what remains.*
 sequenceDiagram
     autonumber
     actor Operator
-    participant CLI as bionumbers simulate-review
+    participant CLI as numera-validator simulate-review
     participant Sim as simulated_review.py
     participant Screen as review.py
     participant Model as model (OpenRouter)

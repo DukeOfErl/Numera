@@ -27,7 +27,7 @@ import pytest
 from conftest import FIXTURE, RecordingEngine
 from streamlit.testing.v1 import AppTest
 
-from scinumbers_ask import trace, trail_store, web
+from numera_ask import trace, trail_store, web
 
 APP = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 TIMEOUT = 30
@@ -53,8 +53,8 @@ def script(monkeypatch, tmp_path):
     this process is served the first one's agent -- and, more to the point here,
     the first one's trail installation, which is the thing under test.
     """
-    monkeypatch.setenv("SCINUMBERS_CORPUS", FIXTURE)
-    monkeypatch.setenv("SCINUMBERS_CHECKPOINTS", str(tmp_path / "c.sqlite"))
+    monkeypatch.setenv("NUMERA_CORPUS", FIXTURE)
+    monkeypatch.setenv("NUMERA_CHECKPOINTS", str(tmp_path / "c.sqlite"))
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     web.resources.clear()
     yield AppTest.from_file(APP, default_timeout=TIMEOUT)

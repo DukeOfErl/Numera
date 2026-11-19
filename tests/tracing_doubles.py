@@ -17,8 +17,8 @@ from langfuse._client.attributes import LangfuseOtelSpanAttributes as A
 from langfuse._client.resource_manager import LangfuseResourceManager
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from scinumbers_ask import hosted_trace
-from scinumbers_ask.hosted_trace import HostedTracer, Setting
+from numera_ask import hosted_trace
+from numera_ask.hosted_trace import HostedTracer, Setting
 
 UNREACHABLE = "http://127.0.0.1:9"
 

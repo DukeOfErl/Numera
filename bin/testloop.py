@@ -51,7 +51,7 @@ INERT_FILES = frozenset({"CHANGELOG.md"})
 #: killed is worse than a slow one: it reads as a failed commit. So a cap well under the
 #: fast setting, with an override for a machine that has the room.
 DEFAULT_WORKERS = 3
-WORKERS_ENV = "SCINUMBERS_TEST_WORKERS"
+WORKERS_ENV = "NUMERA_TEST_WORKERS"
 
 #: Used only if git cannot be asked: `git rev-parse --local-env-vars` as git 2.43 gives it.
 LOCAL_GIT_VARIABLES = (

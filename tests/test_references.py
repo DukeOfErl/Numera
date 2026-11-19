@@ -14,10 +14,10 @@ import sqlite3
 import pytest
 import store_double
 
-from scinumbers_ask import entries_table, references, store_corpus
-from scinumbers_ask.repository import CorpusRepository
-from scinumbers_ask.tools import ToolBudget, build_tools
-from scinumbers_ask.trace import start_question
+from numera_ask import entries_table, references, store_corpus
+from numera_ask.repository import CorpusRepository
+from numera_ask.tools import ToolBudget, build_tools
+from numera_ask.trace import start_question
 
 
 def _chicago(**changes) -> str | None:

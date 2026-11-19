@@ -23,7 +23,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from bionumbers.distractor import (
+from numera_validator.distractor import (
     SECOND_TEXT_INSTRUCTION,
     Candidate,
     admissible,
@@ -31,7 +31,7 @@ from bionumbers.distractor import (
     excluded_forms,
     texts_on_the_page,
 )
-from bionumbers.records import (
+from numera_validator.records import (
     CandidateKind,
     Claim,
     ClaimKind,
@@ -46,7 +46,7 @@ from bionumbers.records import (
     ReviewItem,
     SecondTextKind,
 )
-from bionumbers.spend import Ceiling, Ledger
+from numera_validator.spend import Ceiling, Ledger
 
 QUESTION = "What is the doubling time of Escherichia coli?"
 PAPER = Paper(pmcid="PMC9000001", title="Division timing in glucose and acetate", year=2026)

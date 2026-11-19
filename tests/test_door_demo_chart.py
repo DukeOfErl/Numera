@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from scinumbers_ask import door_demo
+from numera_ask import door_demo
 
 #: The code behind `bin/door-demo-chart`. The `.py` file, not the extensionless command: testmon
 #: fails with an INTERNALERROR on an executed file with no suffix.
@@ -71,10 +71,10 @@ def test_the_chart_says_charts_are_not_yet_a_feature():
 
 @pytest.mark.corpus
 def test_every_value_drawn_is_the_corpus_value():
-    configured = os.environ.get("SCINUMBERS_CORPUS")
+    configured = os.environ.get("NUMERA_CORPUS")
     if not configured:
-        pytest.skip("set SCINUMBERS_CORPUS to a real corpus")
-    from scinumbers_ask.corpus import load
+        pytest.skip("set NUMERA_CORPUS to a real corpus")
+    from numera_ask.corpus import load
 
     entries = {e.entry_id: e for e in load(configured)}
     for _, entry_id, units, low, high, _ in chart.ENTRIES:

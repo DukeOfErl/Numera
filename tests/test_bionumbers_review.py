@@ -1,8 +1,8 @@
 """What the review page shows, asserted without a browser.
 
-Everything here is a pure function of one `ReviewItem`, which is the point of `bionumbers.review`
-existing at all: the page is a script Streamlit re-runs from the top, and only the order and
-lifetime of its elements need `AppTest` (`tests/test_review_app.py`).
+Everything here is a pure function of one `ReviewItem`, which is the point of
+`numera_validator.review` existing at all: the page is a script Streamlit re-runs from the top, and
+only the order and lifetime of its elements need `AppTest` (`tests/test_review_app.py`).
 
 The builders below take every field a rule reads as a parameter -- the item id, the value, the
 provenance, the location -- rather than filling them from a shared default. A rule reading a field
@@ -16,8 +16,8 @@ import dataclasses
 
 import pytest
 
-from bionumbers import review
-from bionumbers.records import (
+from numera_validator import review
+from numera_validator.records import (
     CONDITION_FIELDS,
     CandidateKind,
     Claim,

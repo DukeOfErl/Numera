@@ -43,7 +43,7 @@ SEED = 20260918
 N = int(os.environ.get("GAP_N", "60"))
 MAX_SUPP_MB = 40  # bundles run to 163 MB; cap and record the skip
 OUT = os.environ.get("GAP_OUT", "/tmp/claude-1000/suppprobe/gap_results.jsonl")
-UA = {"User-Agent": "SciNumbers-feasibility-probe/1.0 (research; contact via repo)"}
+UA = {"User-Agent": "Numera-feasibility-probe/1.0 (research; contact via repo)"}
 
 
 def get(url: str, timeout: int = 90) -> bytes:

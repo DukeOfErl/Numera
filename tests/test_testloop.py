@@ -25,7 +25,7 @@ def testloop():
 
 @pytest.mark.parametrize(
     "path",
-    ["src/scinumbers_ask/units.py", "tests/test_units.py", "src/bionumbers_ingest/cleaning.py"],
+    ["src/numera_ask/units.py", "tests/test_units.py", "src/bionumbers_ingest/cleaning.py"],
 )
 def test_python_under_src_and_tests_is_left_to_testmon(testloop, path):
     assert testloop.reasons_for_full_suite([path]) == []
@@ -37,7 +37,7 @@ def test_python_under_src_and_tests_is_left_to_testmon(testloop, path):
         "README.md",  # quoted by wording tests
         "CLAUDE.md",
         "sql/accounts.sql",
-        "src/scinumbers_ask/door_demo.json",  # a data file inside src/: not Python
+        "src/numera_ask/door_demo.json",  # a data file inside src/: not Python
         "tests/fixtures/entries.json",  # likewise inside tests/
         "openspec/specs/user-identity/spec.md",
         ".claude/rules/testing.md",
@@ -68,7 +68,7 @@ def test_a_prefix_is_not_a_substring(testloop):
 
 
 def test_one_unvouched_file_among_selectable_ones_names_only_itself(testloop):
-    staged = ["src/scinumbers_ask/units.py", "README.md", "CHANGELOG.md", "tests/test_units.py"]
+    staged = ["src/numera_ask/units.py", "README.md", "CHANGELOG.md", "tests/test_units.py"]
     assert testloop.reasons_for_full_suite(staged) == ["README.md"]
 
 

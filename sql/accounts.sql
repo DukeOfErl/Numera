@@ -3,7 +3,7 @@
 -- Lives in the same Neon database as `trail`, read through the same engine
 -- (ADR-0780). Enrolment is an operator action performed here, by hand, and
 -- nowhere in the application: there is no page for it, and so no permission
--- gates it. `scinumbers_ask.accounts.lookup` reads one row by email at sign-in.
+-- gates it. `numera_ask.accounts.lookup` reads one row by email at sign-in.
 --
 -- `openrouter_key` is a *runtime* key minted at OpenRouter's Management API with
 -- a hard monthly limit (`limit_reset: monthly`), stored in the clear. Why that is
@@ -31,7 +31,7 @@ create table if not exists accounts (
     -- OpenRouter's handle for the key above, and the only thing that can withdraw
     -- it. The Management API deletes a key by its *hash*, which is returned once,
     -- at creation -- so a deployment that stores the key and not the hash holds a
-    -- live credential it cannot revoke through any API. `scinumbers-enrol` used
+    -- live credential it cannot revoke through any API. `numera-enrol` used
     -- the hash for its compensating revoke and then discarded it, which is why
     -- rows enrolled before this column exist with no way to withdraw them but the
     -- OpenRouter dashboard. Null for those rows, and for an account enrolled with
@@ -60,13 +60,13 @@ create unique index if not exists accounts_email_lower on accounts (lower(email)
 -- insert into accounts (email, role, openrouter_key)
 -- values ('tester@example.org', 'scientist', 'sk-or-v1-...');
 
--- Withdraw an account without deleting what it wrote. Prefer `scinumbers-withdraw`,
+-- Withdraw an account without deleting what it wrote. Prefer `numera-withdraw`,
 -- which does this *and* revokes the credential at OpenRouter; this statement alone
 -- refuses the reader while leaving a live key in the hands of whoever holds it.
 --
 -- update accounts set disabled = true where email = 'tester@example.org';
 
--- Re-admitting a withdrawn account. `scinumbers-enrol` refuses an address that
+-- Re-admitting a withdrawn account. `numera-enrol` refuses an address that
 -- already has a row, withdrawn or not, and says which -- reinstating is deliberately
 -- not a side effect of enrolling (ADR-1150), because a mistyped address that matched
 -- a withdrawn one would hand somebody a fresh credential.

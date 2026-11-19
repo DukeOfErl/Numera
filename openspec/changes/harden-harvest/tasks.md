@@ -14,7 +14,7 @@ ADR block: `1700`–`1740` (reserved in `CLAUDE.md`).
 
 ## 3. Small fixes (was 6.8, 6.9; review finding 8)
 
-- [ ] 3.1 The review page keeps one engine across reruns when its database comes from `BIONUMBERS_REVIEW_DB_URL`
+- [ ] 3.1 The review page keeps one engine across reruns when its database comes from `NUMERA_REVIEW_DB_URL`
 - [ ] 3.2 A line whose first non-blank character is `#` is a comment in a PMCID file; test with an indented comment
 - [ ] 3.3 The committable-run-folder guard lives in the operation that creates the run folder, called once
 

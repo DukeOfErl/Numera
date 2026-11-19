@@ -16,9 +16,9 @@ import pytest
 from conftest import agent_with, write_all_shapes_corpus
 
 from agent_doubles import OutOfCreditModel, costing, says, scripted, tool_call
-from scinumbers_ask.config import Config, usd
-from scinumbers_ask.corpus import load
-from scinumbers_ask.evaluation import (
+from numera_ask.config import Config, usd
+from numera_ask.corpus import load
+from numera_ask.evaluation import (
     Provenance,
     Result,
     ResultsFileError,
@@ -32,8 +32,8 @@ from scinumbers_ask.evaluation import (
     run_evaluation,
     session_for,
 )
-from scinumbers_ask.events import EndReason
-from scinumbers_ask.question_set import Question
+from numera_ask.events import EndReason
+from numera_ask.question_set import Question
 
 PROVENANCE = Provenance(
     recorded_at="2026-09-04T12:00:00+00:00",
@@ -586,7 +586,7 @@ def test_a_results_file_git_would_track_is_refused_before_it_is_written(tmp_path
         # about. Skipped rather than passed vacuously: an exported tarball, and the
         # throwaway copy a mutation run works in, are both trees without one.
         pytest.skip("not a git checkout, so there is no tracking to refuse")
-    tracked = Path("src") / "scinumbers_ask" / "leaked-results.jsonl"
+    tracked = Path("src") / "numera_ask" / "leaked-results.jsonl"
     try:
         with pytest.raises(ResultsWouldBeCommitted, match="git would track"):
             append_result(tracked, a_result("q1"))
@@ -602,7 +602,7 @@ def test_a_results_file_already_on_a_tracked_path_is_still_refused():
     some other way -- copied in, or written while git did not answer -- is not grandfathered."""
     if not Path(".git").exists():
         pytest.skip("not a git checkout, so there is no tracking to refuse")
-    tracked = Path("src") / "scinumbers_ask" / "leaked-results.jsonl"
+    tracked = Path("src") / "numera_ask" / "leaked-results.jsonl"
     tracked.write_text("", encoding="utf-8")
     try:
         with pytest.raises(ResultsWouldBeCommitted, match="git would track"):

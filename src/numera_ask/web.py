@@ -1,0 +1,2785 @@
+"""Web driver: the second adapter over the same agent.
+
+Streamlit re-runs its whole script on every interaction, so a driver built on it
+has nowhere to keep anything between one question and the next except session
+state. That suits the port rather than straining it: the conversation, the
+accumulated spend and the ceiling in force all live in the checkpoint, and the
+only thing this driver keeps is the session identifier that reaches them --
+alongside a transcript of what has already been drawn, which is output rather
+than state, and which the agent survives losing.
+
+Events become items here, and the page draws from the items. The indirection
+earns its place twice over. Streamlit composes successive writes to one screen
+location into the last of them, so anything rendered in place and then
+overwritten is unobservable afterwards -- to a reader scrolling back and to a
+test alike; items are ordinary Python and can be asserted on directly. And the
+agent's stream can be drained once, by a caller that is not drawing anything,
+which is what lets the same events be rendered twice: now, and again on the
+re-run after the next question.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import html
+import json
+import logging
+import os
+import re
+import sys
+import threading
+import time
+import uuid
+from collections import OrderedDict
+from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping
+from dataclasses import dataclass, field, replace
+from datetime import datetime
+from enum import StrEnum
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+import streamlit as st
+
+from . import (
+    accounts,
+    allowance,
+    bionumbers,
+    door_demo,
+    entries_table,
+    feedback,
+    hosted_trace,
+    messages,
+    objections,
+    trace,
+    trail_store,
+    trust_marks,
+)
+from .accounts import Account, EnrolmentUnavailable
+from .agent import AskAgent
+from .authorization import Refused, allowed, require
+from .citations import DELIMITED, citations
+from .config import Config, env_setting, format_usd, refuse_retired_env
+from .corpus import Harvest, Origin, entry_key, load_configured
+from .events import Answer, AnswerEntries, EndReason, Event, QuestionEnded, Retrieval
+from .permissions import Identity, Permission
+from .repository import CorpusRepository
+
+# Namespaced, because session state is one flat dictionary shared with every
+# widget key on the page: an unprefixed "session_id" is one careless `key=` away
+# from being overwritten by a text input.
+# One line on screen, which is the constraint: a banner that wraps becomes a block a
+# reader learns to skip. Specific on both counts a vaguer line would lose --
+# *not trustworthy* rather than merely unpolished, and *the original source* rather
+# than "the cited entry", which reads as this page's own rendering of it and is the
+# one thing checking it cannot verify. The README makes the same claim; if one
+# changes, change both.
+PROTOTYPE_NOTE = (
+    "**Prototype — not yet scientifically trustworthy.** "
+    "Verify every number against the original source."
+)
+PROTOTYPE_SHORT = "Prototype — verify numbers against the original source."
+
+# Whose data this is, wherever the app runs. Not deployment wording -- every answer
+# rests on someone else's decades of curation, and the citation belongs beside the
+# numbers whether one person is reading them locally or a hundred are online. The
+# licensing of the underlying export is unresolved (ADR-0170), which is a reason to
+# be scrupulous about attribution rather than an excuse to omit it.
+DATA_CREDIT = (
+    "Data: BioNumbers (Milo et al., Nucl. Acids Res. 2010;38:D750–D753) — "
+    "verify each figure at its source."
+)
+DATA_CREDIT_LABEL = "Data: BioNumbers (Milo et al.)"
+
+# Re-exported rather than restated: the sentence is shared with the terminal
+# driver and lives in `messages` for the same reason every warning does. The page
+# reads it from here so that `streamlit_app.py` needs one import, as it does for
+# every other piece of wording on the page.
+RECORDS_NOTE = messages.RECORDS_NOTE
+BUDGET_NOTE = messages.BUDGET_NOTE
+
+SESSION_KEY = "numera_ask.session"
+
+# The question box's widget key. Named so the page can ask, before it draws
+# anything, whether a question is about to run -- Streamlit restores widget state
+# at the top of the run, so the submitted question is readable there, ahead of the
+# `st.chat_input` call that returns it. `question_pending` is that question.
+ASK_KEY = "numera_ask.question"
+TRANSCRIPT_KEY = "numera_ask.transcript"
+
+# The session identifier lives in the URL as well as in session state. Session
+# state dies with the server; the checkpoint it points at does not, so without
+# this a restart would orphan every conversation on disk and start a new one.
+QUERY_KEY = "session"
+
+DEFAULT_CHECKPOINTS = "checkpoints/ask.sqlite"
+
+#: How the turn's width is split: the prose on the left, the evidence it rests on to the right,
+#: so a reader checking a number against its entry is looking at both at once. Even, as the
+#: canvas draws it (ADR-1850). The evidence list is HTML and wraps, so no column width has to fit
+#: it any more -- there is no horizontal scrollbar left to take the identifier away.
+READING_SPLIT = (1, 1)
+
+
+class Kind(StrEnum):
+    """What an item is, so the page can choose how to draw it.
+
+    The driver decides what kind of thing an event is; the page decides what that
+    kind looks like. Keeping those apart is what makes the decision testable
+    without a browser, since the second half is the part no test can see.
+    """
+
+    PROGRESS = "progress"
+    WARNING = "warning"
+    ANSWER = "answer"
+    ENTRIES = "entries"
+    ENDING = "ending"
+
+
+@dataclass(frozen=True)
+class Table:
+    """The entries an answer is presented with, already selected and ordered.
+
+    Carried on the item rather than looked up when drawn, so a re-run can redraw a
+    past answer's table without the repository and without re-running its search.
+    """
+
+    rows: tuple[entries_table.Row, ...] = ()
+    retrieved: int = 0
+    matched: int = 0
+    searches: int = 0
+
+
+@dataclass(frozen=True)
+class Item:
+    kind: Kind
+    text: str = ""
+    table: Table | None = None
+    # Decided here rather than at the screen, for the reason the whole module is
+    # shaped this way (ADR-0100): whether the run is over is a decision, and a
+    # test can read it off an item where it cannot read it off a drawn page.
+    ends_the_run: bool = False
+    # Decided here for the same reason, and carried rather than looked up later: the
+    # ending's reason is available at this point and gone by the time the page draws.
+    stop_advice: str = ""
+    # The reason itself, beside the advice derived from it, so the page can pick
+    # the wording for a signed-in reader at draw time -- which is when it knows
+    # whether there is an operator who is not the reader.
+    reason: EndReason | None = None
+    run_spend: int = 0
+    run_budget: int = 0
+    # The question that produced this item. Carried so a thing on screen can be
+    # traced back to the question behind it -- which is what a rating on an answer
+    # will have to name, and what joins it to that question's trail.
+    #
+    # It cannot be retrofitted: an item already drawn has no record of where it
+    # came from, and the alternative keys are wrong rather than merely awkward.
+    # The transcript's list index looks stable because the list is append-only,
+    # but the transcript lives in session state alone -- reload the same
+    # `?session=` and indices restart at 0 while the conversation continues, so
+    # `(session, 0)` would name two different questions.
+    question_id: str = ""
+    # An answer's citations with the stars drawn for each -- read off the corpus when the item is
+    # made, so a redrawn transcript needs no repository. Empty for a corpus file, whose entries
+    # have no tier (ADR-1630). What the stars mean is said once, with the entries table, and not
+    # under the answer as well (the user's call, 2026-10-16).
+    stars: tuple[tuple[str, str], ...] = ()
+    # The identifiers an answer cites that the corpus holds, in the order first cited: what the
+    # session numbers (ADR-1850). A citation of anything else gets no pill and stays as written.
+    known: tuple[str, ...] = ()
+    # What a search asked for, for the line that replaces the finished retrieval box; "" for any
+    # other tool.
+    query: str = ""
+
+
+def item_for(event: Event, repo: CorpusRepository | None = None) -> Item | None:
+    """One item for an event, or None for one the page does not draw.
+
+    Every event the agent emits produces an item, warnings included: a warning that
+    reaches this function and falls through is a fact the agent established and the
+    page never said, which is worse than an ugly one.
+
+    The question identifier is stamped here, once, rather than passed at each of
+    the branches below. Every event carries it, so there is nothing to decide --
+    and a branch added later would otherwise drop it silently, producing an item
+    that cannot be traced to its question and nothing that would say so.
+    """
+    item = _item_without_identity(event, repo)
+    if item is None:
+        return None
+    return replace(item, question_id=getattr(event, "question_id", ""))
+
+
+def _item_without_identity(event: Event, repo: CorpusRepository | None = None) -> Item | None:
+    """What kind of thing this event is. `item_for` adds which question it was."""
+    if isinstance(event, Retrieval):
+        return Item(Kind.PROGRESS, messages.retrieval_text(event), query=_query_of(event))
+    if isinstance(event, AnswerEntries):
+        # Needs the corpus: the event carries identifiers, and the reference
+        # deliberately never travels through the agent.
+        if repo is None:
+            return None
+        rows = entries_table.rows_for(repo, event.cited, event.retrieved, event.question)
+        if not rows:
+            return None
+        return Item(
+            Kind.ENTRIES,
+            table=Table(rows, len(event.retrieved), event.matched, event.searches),
+        )
+    warning = messages.warning_text(event)
+    if warning is not None:
+        return Item(Kind.WARNING, warning)
+    if isinstance(event, Answer):
+        trust_of = trust_marks.trust_lookup(repo)
+        held = tuple(
+            dict.fromkeys(
+                str(i)
+                for i in citations(event.text)
+                if repo is not None and repo.get(i) is not None
+            )
+        )
+        return Item(
+            Kind.ANSWER,
+            event.text,
+            stars=trust_marks.cited_stars(event.text, trust_of),
+            known=held,
+        )
+    if isinstance(event, QuestionEnded):
+        return Item(
+            Kind.ENDING,
+            messages.ending_text(event),
+            ends_the_run=event.reason in messages.STOP_THE_RUN,
+            stop_advice=messages.run_over_advice(event.reason) or "",
+            reason=event.reason,
+            run_spend=event.run_spend,
+            run_budget=event.run_budget,
+        )
+    return None
+
+
+def _query_of(event: Retrieval) -> str:
+    """What a search asked for, in the reader's words: "cytokinetic ring in S. pombe"."""
+    if event.tool != "search_entries":
+        return ""
+    asked = " ".join(
+        str(event.detail.get(k)) for k in ("property", "keyword") if event.detail.get(k)
+    )
+    organism = event.detail.get("organism")
+    if asked and organism:
+        return f"{asked} in {organism}"
+    return asked or (str(organism) if organism else "")
+
+
+def entry_numbers(turns: Iterable[Iterable[Item]]) -> dict[str, int]:
+    """Each entry's number in the session: 1, 2, 3... in the order the session first meets it.
+
+    Per turn, the identifiers the answer cites (only those the corpus holds) as they first appear,
+    then that turn's evidence rows, cited before uncited. **A function of what is on the page**,
+    not a counter: the live path, the replay of every past turn and a rerun all number alike, so no
+    second record has to be kept in step with the transcript (ADR-1850).
+    """
+    numbers: dict[str, int] = {}
+
+    def meet(entry_id: str) -> None:
+        if entry_id not in numbers:
+            numbers[entry_id] = len(numbers) + 1
+
+    for items in turns:
+        items = list(items)
+        for item in items:
+            if item.kind is Kind.ANSWER:
+                for entry_id in item.known:
+                    meet(entry_id)
+        for item in items:
+            if item.kind is Kind.ENTRIES and item.table is not None:
+                for row in item.table.rows:
+                    meet(str(row.entry_id))
+    return numbers
+
+
+def items_for(events: Iterable[Event], repo: CorpusRepository | None = None) -> Iterator[Item]:
+    """Each event's item, as the event arrives.
+
+    A generator, because a question's events arrive over its whole life -- a
+    search finishes long before the answer exists -- and draining before drawing
+    would leave the page blank for all of it. The caller must drain: stopping
+    part way leaves the question half-asked, with the model paid for and the
+    checkpoint not written.
+    """
+    return (item for item in (item_for(event, repo) for event in events) if item is not None)
+
+
+def session_id(
+    state: MutableMapping[str, Any], params: MutableMapping[str, Any] | None = None
+) -> str:
+    """The session this browser tab is continuing, created on first use.
+
+    Held in two places, because neither survives what the other does. Session
+    state is per-tab and keeps two browsers apart, but dies when the server does.
+    The URL survives a restart and a reload, and is what makes a session something
+    a person can bookmark or hand to someone else -- but it is shared by anyone
+    given the link, so it is where the identifier is *recovered*, never where it
+    is decided.
+
+    Takes both mappings rather than reaching for `st.session_state` and
+    `st.query_params`, so a test can hold two of either.
+    """
+    params = {} if params is None else params
+    if SESSION_KEY not in state:
+        # Same width as the terminal driver's, so a session started in one can be
+        # continued in the other by copying it.
+        state[SESSION_KEY] = params.get(QUERY_KEY) or uuid.uuid4().hex[:8]
+    params[QUERY_KEY] = state[SESSION_KEY]
+    return state[SESSION_KEY]
+
+
+def tab_id(state: MutableMapping[str, Any]) -> str:
+    """This browser session's own identity, for the session cap alone.
+
+    Minted here and never read from the URL, which is what separates it from the
+    conversation token above. The token is supplied by whoever holds the link, so
+    ten testers opening one shared bookmark would register as a single tab: the
+    cap would bound nothing, and any one of them signing out would free the place
+    the other nine were sitting in. That is ADR-0830's reasoning about the link,
+    applied to the thing the cap counts.
+
+    Per browser session, because that is what costs the host -- one Streamlit
+    session and one agent.
+    """
+    if TAB_KEY not in state:
+        state[TAB_KEY] = uuid.uuid4().hex[:8]
+    return state[TAB_KEY]
+
+
+def transcript(state: MutableMapping[str, Any]) -> list[tuple[str, list[Item]]]:
+    """What has already been drawn, so a re-run can put it back on screen.
+
+    Output, not state: the conversation itself is in the checkpoint, so losing
+    this loses the page's history and not the agent's. A reload shows an empty
+    page continuing a session that still remembers everything.
+    """
+    if TRANSCRIPT_KEY not in state:
+        state[TRANSCRIPT_KEY] = []
+    return state[TRANSCRIPT_KEY]
+
+
+# --- the door ---------------------------------------------------------------------
+
+#: Session-state keys for what `admit` and `agent_for` hold. Namespaced like the
+#: others: one flat dictionary, shared with every widget on the page.
+#: This browser session's own key, apart from the conversation it is in.
+TAB_KEY = "numera_ask.tab"
+ADMISSION_KEY = "numera_ask.admission"
+#: The address whose unverified refusal has already been recorded this session.
+#: Not the admission -- that is decided fresh; see `admit`.
+UNVERIFIED_KEY = "numera_ask.unverified_recorded"
+#: The address that has already asked for its confirmation email again. Held so a
+#: reader clicking twice does not write two rows, and so the button can become its
+#: own acknowledgement rather than looking as if it did nothing.
+#:
+#: **The address, not a boolean.** `st.session_state` outlives a sign-out on the
+#: same tab, so a flag would show the next account an acknowledgement it never
+#: asked for -- the same shape as the bug `end_session` exists to prevent. Keyed on
+#: who asked, it corrects itself without depending on an exit path remembering it.
+RESEND_ASKED_KEY = "numera_ask.resend_asked"
+AGENT_KEY = "numera_ask.agent"
+
+
+class Door(StrEnum):
+    """What the page may do before it draws anything."""
+
+    OPEN = "open"
+    SIGN_IN = "sign in"
+    UNVERIFIED = "address not verified"
+    NOT_ENROLLED = "not enrolled"
+    NO_CREDENTIAL = "no credential"
+    CREDENTIAL_REJECTED = "credential rejected"
+    UNAVAILABLE = "enrolment check unavailable"
+    NO_ACCOUNTS_DATABASE = "no accounts database"
+
+
+@dataclass(frozen=True)
+class Admission:
+    """The door's answer for this session, and the account behind it if open.
+
+    `configured` is carried so the page can say the right thing in the
+    unconfigured case -- there is no sign-in, records carry no account -- without
+    reading secrets a second time.
+    """
+
+    door: Door
+    configured: bool
+    account: Account | None = None
+
+    @property
+    def identity(self) -> Identity | None:
+        """Who, and as what -- for the grant table and the sidebar, never the agent."""
+        return None if self.account is None else self.account.identity
+
+
+def identity_configured() -> bool:
+    """Whether `[auth]` is in secrets. Absent means: run exactly as before.
+
+    Not `st.user.is_logged_in`, which does not exist as an attribute at all when
+    `[auth]` is absent (read from the installed Streamlit 1.61.1, not remembered).
+    A missing secrets file is "not configured", by the same types
+    `_is_not_configured` names for the trail.
+    """
+    try:
+        return "auth" in st.secrets
+    except Exception as exc:  # noqa: BLE001 - narrowed by `_is_not_configured`
+        if _is_not_configured(exc):
+            return False
+        raise
+
+
+#: What makes a sub-table under `[auth]` a provider rather than one of the
+#: section's own settings.
+#:
+#: **Not "is it a mapping".** `client_kwargs` is a documented mapping under
+#: `[auth]` -- read from the installed Streamlit 1.61.1,
+#: `auth_util.generate_default_provider_section`, which lifts it into the default
+#: provider's own section -- so the shape test admits it and the door grows a
+#: "Sign in with client_kwargs" button that cannot work. A discriminator taken
+#: from the record beats one reasoned from the shape of the input.
+#:
+#: `client_id` is the key, because it is one of the three
+#: `validate_auth_credentials` requires of any provider section. A sub-table
+#: carrying it and nothing else still fails, loudly and in Streamlit's own words,
+#: which is the right place for that error.
+PROVIDER_KEY = "client_id"
+
+#: Which configured providers the door actually offers.
+#:
+#: **Not a filter on what is configured, but on what is shown.** Google's client
+#: stays in secrets, `providers()` still finds it, and `st.login()` would still use
+#: it -- every line of the multi-provider machinery is exercised by the tests and
+#: none of it is removed. What changes is that the door draws one button, because
+#: Auth0 signs a reader in with their Google account anyway and two buttons for one
+#: account was a choice nobody needed to make (ADR-1100).
+#:
+#: Restoring the Google button is this tuple, and nothing else -- which is true
+#: only because the labels follow the button *count* rather than being written for
+#: today's arrangement (`messages.SIGN_IN_ALONE`). Shortening Auth0's label by hand
+#: made this promise false for one release: restoring would have drawn "Sign in
+#: with Google" beside a bare "Sign in".
+OFFERED_PROVIDERS = ("auth0",)
+
+#: The unnamed provider: `st.login()` with no argument, whose credentials sit
+#: directly in `[auth]`. Deliberately not passed to `st.login` as a name --
+#: Streamlit resolves a name against a sub-table, and a sub-table called
+#: `default` is a different thing from the section's own credentials.
+DEFAULT_PROVIDER = "default"
+
+
+def _auth_section() -> Mapping | None:
+    """`[auth]` as a mapping, or None where there is no usable section.
+
+    Its own function because two rules read it and they must not disagree about
+    what "no section" means: `providers` asks which providers are complete, and
+    `offered_providers` asks whether an incomplete one is nonetheless *there*.
+    """
+    try:
+        section = st.secrets["auth"]
+    except KeyError:
+        # A secrets file that exists and has no `[auth]`. Streamlit raises a
+        # plain KeyError here, which `_is_not_configured` does not and should not
+        # match -- it is not one of Streamlit's own error types, and widening
+        # that predicate would make it answer "not configured" to any missing
+        # key anywhere.
+        return None
+    except Exception as exc:  # noqa: BLE001 - narrowed by `_is_not_configured`
+        if _is_not_configured(exc):
+            return None
+        raise
+    return section if isinstance(section, Mapping) else None
+
+
+def _offered_but_incomplete(configured: list[str]) -> list[str]:
+    """Offered providers that are present in `[auth]` yet were not counted.
+
+    A sub-table with no `client_id` is invisible to `providers`, which is right
+    for deciding what can be drawn and wrong for deciding what the operator
+    meant. Without this distinction, `[auth.auth0]` left carrying only a
+    `client_secret` -- a rotation half-finished in the deployment's secrets box --
+    looks exactly like a machine where Auth0 was never configured, and the door
+    silently widens back to the Google button ADR-1100 withdrew.
+    """
+    section = _auth_section() or {}
+    return [
+        name
+        for name in OFFERED_PROVIDERS
+        if name not in configured and isinstance(section.get(name), Mapping)
+    ]
+
+
+def providers() -> list[str]:
+    """Every configured way in, in the order secrets lists them.
+
+    `"default"` is the provider whose credentials sit directly in `[auth]` --
+    which is where the Google client has always been -- and is present only when
+    `client_id` is there beside `redirect_uri` and `cookie_secret`. A sub-table
+    carrying `client_id` is a named provider, which is what `st.login(name)`
+    takes.
+
+    Returns names without repeats: a sub-table literally called `default`
+    alongside the section's own credentials would otherwise be offered twice, and
+    two buttons sharing a key is a `StreamlitDuplicateElementKey` that takes the
+    whole door down rather than the one button.
+
+    A deployment with no `[auth]`, in a secrets file or out of it, gets an empty
+    list and never reaches a button.
+    """
+    section = _auth_section()
+    if section is None:
+        return []
+    found = [DEFAULT_PROVIDER] if PROVIDER_KEY in section else []
+    found += [
+        name
+        for name, value in section.items()
+        if isinstance(value, Mapping) and PROVIDER_KEY in value
+    ]
+    return list(dict.fromkeys(found))
+
+
+def offered_providers() -> list[str]:
+    """The buttons to draw: what is configured, narrowed to what is offered.
+
+    **A door with no button is never the right answer**, so two things can widen
+    it back. If the offered set matches nothing configured -- a developer's machine
+    with only the Google client, say -- every configured provider is drawn instead
+    of none. And `[auth]` present but carrying no credentials at all still draws
+    the default button, because `st.login()` then raises Streamlit's own
+    "credentials are missing" error naming the keys: the visitor is stuck either
+    way and the operator is not.
+    """
+    configured = providers()
+    offered = [name for name in configured if name in OFFERED_PROVIDERS]
+    if not offered:
+        # The widening still happens -- a door with no button is never the right
+        # answer -- but it stops being silent. Half a credential is the operator's
+        # mistake and only the operator can fix it, so it goes where they look.
+        for name in _offered_but_incomplete(configured):
+            trail_store.complain(
+                f"[auth.{name}] is configured without {PROVIDER_KEY}, so it cannot be "
+                f"offered and the door has widened to {configured or [DEFAULT_PROVIDER]}",
+                KeyError(PROVIDER_KEY),
+            )
+    return offered or configured or [DEFAULT_PROVIDER]
+
+
+def signed_in_claims() -> Mapping[str, Any] | None:
+    """What the identity provider asserts about this reader, or None.
+
+    The whole claim set rather than the address alone, because whether the
+    provider has *verified* that address is one of the claims and the door has to
+    read it. Streamlit stores the ID token's claims whole and adds `is_logged_in`
+    and `provider` (read from the installed 1.61.1, `starlette_auth_routes.py`);
+    nothing here is a name the reader typed, and the system accepts no credential
+    of its own.
+    """
+    user = st.user.to_dict()
+    if not user.get("is_logged_in"):
+        return None
+    return user
+
+
+def address_verified(claims: Mapping[str, Any]) -> bool:
+    """Whether the provider says it has verified this address.
+
+    **Absence refuses.** A provider that says nothing is one whose accounts this
+    app cannot tell apart from an impersonation: where sign-up is open, anyone
+    can register an enrolled tester's address, and the claim is the only thing
+    separating them. The two directions cost differently -- a wrongly refused
+    reader reads one sentence and clicks a link, a wrongly admitted one reads
+    somebody else's answers under their name -- so the missing case goes to the
+    cheap side (ADR-0890).
+
+    Exactly `True` or the string `"true"`. Not `1`, which `== True` in Python and
+    would let a truthy check through anything a provider happened to send.
+    """
+    value = claims.get("email_verified")
+    return value is True or value == "true"
+
+
+def admit(
+    state: MutableMapping[str, Any],
+    engine: Any | Callable[[], Any | None] | None,
+    session_id: str,
+    *,
+    check_key: Callable[[str], Any] | None = None,
+    credential_required: bool = True,
+) -> Admission:
+    """Decide the door, reading enrolment once per account.
+
+    `credential_required=False` is for a page that makes no model call -- the
+    review page -- where an enrolled account without a key is admitted and
+    `check_key` is not consulted. The ask page keeps the default: there a missing
+    key is a closed door, because `agent_for` would otherwise have nothing to hand
+    the agent but the environment's own key.
+
+    The enrolment row is held in session state keyed by the email, so a rerun
+    does not pay a database round trip and a different account signing in on the
+    same tab is looked up afresh. The unavailable check is deliberately *not*
+    held: a database that wakes up admits the reader on the next rerun, so a
+    person told "try again shortly" who tries again is actually retried.
+
+    **What the held row means for an operator: withdrawal takes effect at the
+    reader's next page load, not at once.** Disabling an account, changing its
+    role or rotating its key changes nothing for a tab that is already open,
+    because neither this row nor the agent built from it is re-read while the
+    tab lives. Re-reading per question was considered and rejected (a database
+    round trip per question); if a key must be cut off immediately, revoke it at
+    the provider, which the next model call will meet.
+
+    This decides the door only; it does not register identity. The caller maps
+    the account to its *effective* session (`effective_session`) and stamps
+    that, because under sign-in the conversation is keyed on the account and not
+    on the reader-supplied URL token (ADR-0830) -- so a session id passed here,
+    which comes from the URL, is not where identity is keyed.
+
+    `engine` may be an engine or a zero-argument callable returning one; the
+    callable is invoked only on the one path that needs it -- configured, signed
+    in, and not already held -- so an unconfigured or not-signed-in rerun pays
+    nothing, and a misconfigured trail URL does not `complain` on every click.
+
+    **Fails closed.** No engine, or one that cannot be read, is `UNAVAILABLE`,
+    never `OPEN`: the accounts module says why the trail's fail-open reasoning
+    does not transfer, and the page says a different sentence so the operator is
+    not sent looking for a row that exists. An enrolled account with no
+    credential is `NO_CREDENTIAL`, a door of its own so the page has one gate and
+    never an agent that could fall back to the environment's key.
+
+    A refused sign-in is recorded with the email in the record's own fields --
+    there is no identity to stamp, because the person was refused one.
+    """
+    if not identity_configured():
+        return Admission(Door.OPEN, configured=False)
+    claims = signed_in_claims()
+    email = (claims or {}).get("email") or None
+    if claims is None or email is None:
+        state.pop(ADMISSION_KEY, None)
+        return Admission(Door.SIGN_IN, configured=True)
+    if not address_verified(claims):
+        # **Decided fresh on every rerun, recorded once.** The decision is not
+        # held because `end_session` does not clear this key, so a cached refusal
+        # would outlive the reader signing out, verifying and signing back in on
+        # the same tab -- exactly the sequence the sentence asks them to perform.
+        # The *record* is held, because every other refusal is written once per
+        # account per session and this one would otherwise be an insert per
+        # click: bounded, but the only door that charges the trail for a reader
+        # rereading it.
+        if state.get(UNVERIFIED_KEY) != email:
+            state[UNVERIFIED_KEY] = email
+            trace.QuestionTrace(
+                question_id="",
+                session_id=session_id,
+                run_label=Config.from_env().run_label,
+            ).record("signin.unverified", email=email)
+        return Admission(Door.UNVERIFIED, configured=True)
+    state.pop(UNVERIFIED_KEY, None)
+    held = state.get(ADMISSION_KEY)
+    if held is not None and held[0] == email:
+        return held[1]
+    resolved = engine() if callable(engine) else engine
+    if resolved is None:
+        # Not `UNAVAILABLE`: that says "try again shortly", and this never comes
+        # right on its own. `[auth]` configured without `[connections.usage]` is
+        # the likeliest first-deploy mistake, and it should send the operator to
+        # `sql/accounts.sql` rather than leave every visitor waiting for a retry
+        # that cannot succeed.
+        trail_store.complain(
+            "no accounts database is configured",
+            EnrolmentUnavailable("[auth] is set but [connections.usage] is not"),
+        )
+        return Admission(Door.NO_ACCOUNTS_DATABASE, configured=True)
+    try:
+        account = accounts.lookup(resolved, email)
+    except EnrolmentUnavailable as exc:
+        trail_store.complain("enrolment check unavailable", exc)
+        return Admission(Door.UNAVAILABLE, configured=True)
+    if account is None:
+        trace.QuestionTrace(
+            question_id="",
+            session_id=session_id,
+            run_label=Config.from_env().run_label,
+        ).record("signin.refused", email=email)
+        admission = Admission(Door.NOT_ENROLLED, configured=True)
+    elif not credential_required:
+        # Enrolled is enough where no model is called; the key is not this page's business.
+        admission = Admission(Door.OPEN, configured=True, account=account)
+    elif not account.openrouter_key:
+        admission = Admission(Door.NO_CREDENTIAL, configured=True, account=account)
+    elif check_key is not None and check_key(account.openrouter_key).rejected:
+        # Asked once, here, rather than left for the first question to discover.
+        # A key the provider refuses produces a question whose model call fails,
+        # whose tools retrieve nothing, and whose answer reports finding nothing
+        # in the corpus -- a broken credential wearing the face of a thin corpus.
+        # Only an outright rejection closes this door: an unreachable provider
+        # leaves `rejected` false, because locking every tester out over a blip
+        # would be the worse failure.
+        admission = Admission(Door.CREDENTIAL_REJECTED, configured=True, account=account)
+    else:
+        admission = Admission(Door.OPEN, configured=True, account=account)
+    state[ADMISSION_KEY] = (email, admission)
+    return admission
+
+
+def account_scope(admission: Admission) -> str | None:
+    """What the run ledger is narrowed by, or `None` for one shared pot.
+
+    Per account, because each account's questions are paid for by its own
+    credential: one shared ledger meant the first tester to spend the run budget
+    closed the door on every other, while their own keys were untouched and the
+    panel showed each of them the aggregate as if it were theirs.
+
+    A digest rather than the address. The agent is handed this, and the agent is
+    handed no identity (ADR-0820); a funding scope it cannot turn back into a
+    person is the same kind of value as the credential it already holds.
+    """
+    if not admission.configured or admission.account is None:
+        return None
+    return hashlib.sha256(admission.account.email.encode()).hexdigest()[:16]
+
+
+def trace_user(admission: Admission, key: str | None = None) -> str | None:
+    """Who asked, as the hosted tracer is told it: a digest keyed with a secret this host holds.
+
+    Not `account_scope`. That is an unsalted hash of the address, fine for a
+    ledger key nobody outside reads, and reversible by anyone who can guess an
+    address -- which a third party holding the traces could, for a handful of
+    named testers. Keyed with `[auth]`'s `cookie_secret`, which the host already
+    has and never sends anywhere, the value is stable per account and opens
+    nothing without the key (ADR-1020).
+
+    `None` without sign-in, and `None` when no key can be read: an unkeyed value
+    is exactly what this replaces, so there is no fallback to one.
+    """
+    if not admission.configured or admission.account is None:
+        return None
+    if key is None:
+        try:
+            key = str(st.secrets["auth"]["cookie_secret"])
+        except Exception:  # noqa: BLE001 - no key means no attribution, never an unkeyed one
+            return None
+    if not key:
+        return None
+    email = admission.account.email.strip().lower().encode()
+    return "u-" + hmac.new(key.encode(), email, hashlib.sha256).hexdigest()[:16]
+
+
+def attributed(admission: Admission) -> Any:
+    """Who asked, attached to the hosted trace of every question asked inside this block.
+
+    As `trace_user`: keyed, stable per account, `None` without sign-in (ADR-1020).
+    Attached here, around the page's consumption of the event stream, so the agent
+    is handed nothing new -- the trail's identity is stamped at the sink the same
+    way (ADR-0820). A no-op when tracing is off.
+    """
+    return hosted_trace.current().attributed(trace_user(admission))
+
+
+def effective_session(admission: Admission, url_session: str) -> str:
+    """The key the conversation, the identity stamp and the dev panel all use.
+
+    Under sign-in it is derived from **the account and the link token together**,
+    and each half is doing a job:
+
+    - *The account*, because the token alone is supplied by whoever holds the
+      link. Keyed on the token, a second reader opening a shared link took over
+      the first's identity stamp, and every later record of the first reader was
+      attributed to the second (ADR-0830).
+    - *The token*, because a conversation has to be escapable. It is the
+      LangGraph thread, and a thread that fills up (`CONVERSATION_BOUND`) refuses
+      every further question. Keyed on the account alone the key was a pure
+      function of the email, so a full conversation could not be left: a fresh
+      link did nothing, signing out gave the same key back, and the page's own
+      advice -- "reload with a fresh `?session=`" -- was impossible to follow.
+
+    Together: two accounts on one link get two conversations, and one account can
+    start a new one whenever it wants. The cap does not use this key at all; it
+    counts tabs (`tab_id`).
+
+    Where identity is not configured -- a developer's machine -- the token *is*
+    the conversation, exactly as before any of this.
+    """
+    if admission.configured and admission.account is not None:
+        seed = f"{admission.account.email}|{url_session}".encode()
+        return f"acct:{hashlib.sha256(seed).hexdigest()[:16]}"
+    return url_session
+
+
+def establish_identity(admission: Admission, session_id: str) -> None:
+    """Stamp this session with the signed-in account, or clear it if there is none.
+
+    Called by the driver every rerun of an open page, keyed on the *effective*
+    session, so a session pruned for idleness and then returned to is re-stamped
+    rather than silently losing its account on the next question -- the bug a
+    held admission that never re-registered used to have.
+    """
+    if admission.identity is not None:
+        # **The door's one positive record, written here and not in `admit`.**
+        # Until it existed the trail held only refusals, so "nobody tried today"
+        # and "everybody got in" looked identical -- and nothing marked a reader's
+        # problem as solved, because a person who signed in and asked nothing left
+        # no trace of having got through. `pending.py` reads it; without it a
+        # resolved request goes on being reported daily, which is how it was found.
+        #
+        # Here rather than in `admit` because the stamp is registered *below*, so a
+        # record written a line later carries `user_email` and `user_role` from the
+        # filter like every other record of a signed-in session. Written at the
+        # door instead, it would have carried neither -- and "every record carries
+        # the account" is a spec requirement with a test behind it, which is what
+        # caught the first attempt.
+        #
+        # Only on the first establishment: this runs on every rerun of an open
+        # page. A session pruned for idleness and returned to records again, which
+        # is right -- that is an arrival, and the reader had gone away.
+        arriving = session_id not in IDENTITIES
+        remember_identity(session_id, admission.identity)
+        if arriving:
+            trace.QuestionTrace(
+                question_id="",
+                session_id=session_id,
+                run_label=Config.from_env().run_label,
+            ).record("signin.admitted")
+    else:
+        forget_identity(session_id)
+
+
+def end_session(conversation_id: str, tab_id: str | None = None) -> None:
+    """Forget everything this deployment holds for one session, in one place.
+
+    The identity stamp, the panel's rows and the cap's heartbeat are three
+    per-session stores; a sign-out that cleared only one left the next account on
+    the same tab able to see the last one's panel rows. One function so a new
+    store, or a new exit path, has one place to join rather than a checklist.
+
+    Two keys, because the stores count different things: the stamp and the panel
+    belong to the *conversation*, the cap's place to the *tab*. Signing out of one
+    tab frees that tab and ends the conversation -- which is what signing out
+    means; the account's other tabs meet the door again on their next rerun.
+    """
+    forget_identity(conversation_id)
+    if RECENT is not None:
+        RECENT.forget(conversation_id)
+    if tab_id is not None:
+        session_registry().drop(tab_id)
+
+
+def checkpoint_path() -> str:
+    """Where the conversation store lives, its directory created on demand: the
+    checkpointer creates the file but not the directory above it."""
+    checkpoints = env_setting("NUMERA_CHECKPOINTS", DEFAULT_CHECKPOINTS)
+    directory = os.path.dirname(checkpoints)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    return checkpoints
+
+
+def agent_for(
+    state: MutableMapping[str, Any], repo: CorpusRepository, admission: Admission
+) -> AskAgent:
+    """One agent per browser session, funded by this account's credential.
+
+    Built into session state rather than under `st.cache_resource`, because the
+    credential is per person and a cached agent is per server (ADR-0820). The
+    repository -- the expensive index -- stays shared; an agent is a config, a
+    reference and a path. Rebuilt if the credential changes under the same tab.
+
+    **Raises for an enrolled account with no credential**, rather than building
+    one: an agent made with `api_key=None` falls back to the environment, so an
+    unconfigured deployment's own key would quietly fund a tester the operator
+    never issued one to. The page never meets that raise, because such an account
+    met `Door.NO_CREDENTIAL` before it got here; the raise is the backstop for a
+    caller that skipped the door.
+
+    Where no identity is configured, `None` is the environment's key, exactly
+    as before this change. Called only for an `OPEN` admission -- an enrolled
+    account with no credential is `NO_CREDENTIAL`, a closed door -- so this never
+    returns `None` and the page never holds an optional agent. It raises rather
+    than fall back to the environment's key for a configured account that
+    reaches here without one, which the door should already have prevented.
+    """
+    if admission.configured:
+        account = admission.account
+        if account is None or not account.openrouter_key:
+            raise ValueError("agent_for called for a configured account with no credential")
+        key: str | None = account.openrouter_key
+    else:
+        key = None
+    held = state.get(AGENT_KEY)
+    if held is not None and held[0] == key:
+        return held[1]
+    agent = AskAgent(
+        repo,
+        Config.from_env(),
+        checkpoint_path(),
+        api_key=key,
+        budget_scope=account_scope(admission),
+    )
+    state[AGENT_KEY] = (key, agent)
+    return agent
+
+
+def request_resend(session_id: str) -> None:
+    """Record that this reader never received their confirmation email.
+
+    A separate event from `signin.unverified`, which fires for *everybody* at
+    sign-up and mostly for people who click the link a minute later -- querying
+    that would hand the operator a list of readers who are fine. This one fires
+    only when somebody says they are stuck, which is the list worth acting on.
+
+    Written once per session: the held flag also turns the button into its own
+    acknowledgement, so a reader who sees nothing happen does not click again.
+    """
+    email = (signed_in_claims() or {}).get("email") or ""
+    if st.session_state.get(RESEND_ASKED_KEY) == email:
+        return
+    st.session_state[RESEND_ASKED_KEY] = email
+    trace.QuestionTrace(
+        question_id="",
+        session_id=session_id,
+        run_label=Config.from_env().run_label,
+    ).record("signin.resend_requested", email=email)
+
+
+def _sign_out(conversation_id: str, tab_id: str | None = None) -> None:
+    end_session(conversation_id, tab_id)
+    st.logout()
+
+
+def draw_privacy() -> None:
+    """What is kept about a reader, collapsed.
+
+    **On the doors and nowhere else.** It was drawn in the side panel too, on the
+    reasoning that a reader who signed in weeks ago never meets the door again --
+    which is true, and was outweighed: the panel is where a reader works, and a
+    standing legal expander among the controls is furniture. What the obligation
+    actually requires is that the statement be reachable *before* anyone signs in,
+    and that is the door, which is also the address the consent screen points at.
+
+    A caption rather than markdown, like the two shorter notes it extends -- and,
+    incidentally, out of `at.markdown`, which the door's "nothing else is drawn"
+    test reads.
+    """
+    with st.expander(as_text(messages.PRIVACY_HEADING)):
+        st.caption(as_text(messages.PRIVACY))
+
+
+def draw_examples() -> None:
+    """Recorded questions and their real answers, played on a loop (ADR-1210).
+
+    On the sign-in door only. A refused reader is being told something they have to
+    act on, and a moving example beside that sentence competes with it.
+
+    `st.iframe` runs the frame's scripts with same-origin access, which is why
+    Streamlit warns against handing it model output: `door_demo.page` escapes every
+    answer before it becomes markup, and the answers are committed, not fetched.
+    """
+    st.iframe(door_demo.page(), height=door_demo.HEIGHT)
+
+
+def draw_closed_door(admission: Admission, session_id: str, tab_id: str | None = None) -> None:
+    """What a visitor sees instead of the page. Sign-in and nothing else, or the
+    one sentence that says why not -- and, on the sign-in door, recorded examples
+    of what lies behind it. The caller stops the script after this."""
+    draw_title()
+    if admission.door is Door.SIGN_IN:
+        st.info(as_text(messages.SIGN_IN_NEEDED), icon=":material/login:")
+        offered = offered_providers()
+        for provider in offered:
+            # `st.login()` and `st.login("name")` are different calls: the
+            # no-argument form means the credentials in `[auth]` itself, and
+            # passing "default" is not a synonym for it.
+            args = () if provider == DEFAULT_PROVIDER else (provider,)
+            st.button(
+                # Through `as_text` like every other string that reaches the
+                # page: an unlabelled provider's button carries its name out of
+                # secrets, and a `$` there would open inline mathematics and eat
+                # the rest of the label. The literal labels do not need it; the
+                # rule is on the call, not on today's values.
+                as_text(messages.sign_in_label(provider, alone=len(offered) == 1)),
+                key=f"sign-in-{provider}",
+                on_click=st.login,
+                args=args,
+                icon=":material/login:",
+            )
+        draw_examples()
+    elif admission.door is Door.UNVERIFIED:
+        st.error(as_text(messages.UNVERIFIED), icon=":material/mark_email_unread:")
+        # Back through the same provider rather than out and in again. The claim
+        # is read here, in the driver, for the driver's own purpose: which button
+        # to offer. It is still not part of the session key and still reaches no
+        # record (ADR-0880) -- the address is the identity, and this is only the
+        # route back to it.
+        provider = (signed_in_claims() or {}).get("provider") or DEFAULT_PROVIDER
+        st.button(
+            as_text(messages.CONFIRMED_IT),
+            key="confirmed-email",
+            on_click=st.login,
+            args=() if provider == DEFAULT_PROVIDER else (provider,),
+            type="primary",
+            icon=":material/refresh:",
+        )
+        # The email that never arrived, which was the one dead end left on this
+        # door. Nothing is sent from here -- the request is recorded where the
+        # operator looks (`sql/signin.sql`) and they resend from the provider.
+        asked = st.session_state.get(RESEND_ASKED_KEY)
+        if asked is not None and asked == (signed_in_claims() or {}).get("email"):
+            st.info(as_text(messages.RESEND_NOTED), icon=":material/mark_email_read:")
+        else:
+            st.button(
+                as_text(messages.RESEND_REQUEST),
+                key="resend-request",
+                on_click=request_resend,
+                args=(session_id,),
+                icon=":material/outgoing_mail:",
+            )
+        # Still offered, for the reader who confirmed nothing and wants to come
+        # back as somebody else.
+        st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id))
+    elif admission.door is Door.NOT_ENROLLED:
+        st.error(as_text(messages.NOT_ENROLLED), icon=":material/person_off:")
+        st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id))
+    elif admission.door is Door.NO_CREDENTIAL:
+        st.error(as_text(messages.NO_CREDENTIAL), icon=":material/key_off:")
+        st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id))
+    elif admission.door is Door.CREDENTIAL_REJECTED:
+        st.error(as_text(messages.CREDENTIAL_REJECTED), icon=":material/key_off:")
+        st.button("Sign out", on_click=_sign_out, args=(session_id, tab_id))
+    elif admission.door is Door.NO_ACCOUNTS_DATABASE:
+        st.error(as_text(messages.NO_ACCOUNTS_DATABASE), icon=":material/database_off:")
+    elif admission.door is Door.UNAVAILABLE:
+        st.error(as_text(messages.ENROLMENT_CHECK_UNAVAILABLE), icon=":material/cloud_off:")
+        # A widget, so the retry the docstring promises can happen without the
+        # reader reloading: Streamlit only reruns on interaction.
+        st.button("Try again", on_click=lambda: None, icon=":material/refresh:")
+    # Under every door rather than under the sign-in one. A person refused here
+    # has had their address recorded by the attempt, which is the moment the
+    # question "what do you keep about me" is most reasonable -- and the door that
+    # admits nobody is the one where it is hardest to ask anyone.
+    draw_privacy()
+
+
+#: The button's own key, which Streamlit also emits as the CSS class
+#: `st-key-<key>` (read from the installed 1.61.1). That is what makes the rule
+#: below reach this button and no other.
+SIGN_OUT_KEY = "sign-out"
+
+#: Narrower than this and the identity row has nowhere left to go.
+SIDEBAR_MIN_WIDTH_PX = 300
+
+# Three rules the layout cannot express on its own.
+#
+# The row is a flex container, and a flex item may be squeezed below the size of
+# its own content: a narrow panel shrank the button until "Sign out" broke across
+# two lines, and then until the frame no longer contained it. `flex: 0 0 auto`
+# says this item keeps its content's width and the caption beside it does the
+# yielding, which is the right way round -- an email can wrap, a control cannot.
+#
+# `min-width` on the panel itself, because the reader can drag it narrower than
+# anything here can survive. The selector is Streamlit's stable test id, verified
+# against 1.61.1; if a future version renames it the rule stops applying and the
+# panel goes back to being draggable to nothing, which is where it is today.
+SIDEBAR_CSS = f"""
+<style>
+[data-testid="stSidebar"] {{ min-width: {SIDEBAR_MIN_WIDTH_PX}px; }}
+.st-key-{SIGN_OUT_KEY} {{ flex: 0 0 auto; }}
+.st-key-{SIGN_OUT_KEY} button {{ white-space: nowrap; }}
+</style>
+"""
+
+
+def draw_identity(admission: Admission, session_id: str, tab_id: str | None = None) -> None:
+    """Who the page thinks you are -- or that it is nobody's, so the state is
+    visible rather than inferred."""
+    if not admission.configured:
+        st.caption(as_text(messages.NO_SIGN_IN_CONFIGURED))
+        return
+    account = admission.account
+    if account is None:
+        st.button(
+            "Sign out", on_click=_sign_out, args=(session_id, tab_id), icon=":material/logout:"
+        )
+        return
+    # One row, because the two belong to each other: the button is what you do
+    # about the name beside it. Centred vertically so the caption's two lines sit
+    # level with the button rather than riding above it. `st.container(horizontal=)`
+    # and its alignment arguments are read from the installed Streamlit 1.61.1.
+    st.markdown(SIDEBAR_CSS, unsafe_allow_html=True)
+    # A horizontal container rather than two columns: columns divide the panel by
+    # proportion, so a wide panel put the button far from the name it belongs to,
+    # and a narrow one squeezed it. This packs both to the left at the size of
+    # their own content, whatever the panel is doing.
+    with st.container(
+        horizontal=True, horizontal_alignment="left", vertical_alignment="center", gap="small"
+    ):
+        st.caption(
+            as_text(messages.SIGNED_IN_AS.format(email=account.email, role=account.role.value))
+        )
+        # An ordinary button. Tertiary was tried for one release and drew no
+        # border or fill at all, which reads as a stray line of text rather than
+        # something to click -- smaller, and no longer recognisable as the way
+        # out.
+        st.button(
+            "Sign out",
+            key=SIGN_OUT_KEY,
+            on_click=_sign_out,
+            args=(session_id, tab_id),
+            icon=":material/logout:",
+        )
+
+
+#: The secrets section naming the durable trail's database.
+#: `[connections.usage]` in `.streamlit/secrets.toml`, or the same content pasted
+#: into Community Cloud's secrets box.
+TRAIL_CONNECTION = "usage"
+
+
+def trail_destination() -> Any | None:
+    """The engine for the durable trail, or None when none is configured.
+
+    None is the ordinary case on a developer's machine and must stay ordinary:
+    refusing to start without a telemetry database would make the absence of
+    telemetry an outage, which is a worse version of the problem the durable
+    trail was introduced to solve.
+
+    `st.connection` is used rather than a hand-built engine because it caches the
+    engine at global scope across sessions. Without that, every rerun would pay
+    TCP, TLS and Postgres auth before its INSERT -- which is the cost that would
+    make writing on the render path untenable.
+
+    The timeouts are passed here because `create_engine` takes them at
+    construction and they cannot be applied later from inside `record`. That
+    makes them the one guard in this arrangement belonging to the caller rather
+    than to the operation, which is why they are named here and in
+    `trail_store.CONNECT_TIMEOUT_S` rather than left to a default.
+    """
+    try:
+        return st.connection(
+            TRAIL_CONNECTION,
+            type="sql",
+            pool_pre_ping=True,
+            # Both figures come from `trail_store` rather than being written here
+            # as well: this engine cannot be built by `engine_from_url`, but the
+            # two must provably agree, and a duplicated literal is a thing that
+            # drifts. The container sleeps after 12 hours of no traffic, so the
+            # far side has dropped every connection the pool believes it holds.
+            pool_recycle=trail_store.POOL_RECYCLE_S,
+            connect_args={"connect_timeout": trail_store.CONNECT_TIMEOUT_S},
+        ).engine
+    except Exception as exc:  # noqa: BLE001 - neither absence nor a bad URL stops the app
+        # Both mean "no sink", and neither stops the app -- but they are not the
+        # same thing to an operator, and an earlier version reported neither.
+        #
+        # Absence is the ordinary case on a developer's machine and says nothing.
+        # A configured-but-broken destination is a mistake somebody wants told
+        # about, and the likeliest one is the first thing
+        # `.streamlit/secrets.toml.example` warns against: pasting the provider's
+        # `postgresql://` rather than `postgresql+psycopg://`. That raises inside
+        # `create_engine`, here, before any connection is attempted -- so it never
+        # reaches the store's own reporting, and the operator would see nothing at
+        # all. "Looks configured, records nothing" is this change's own failure.
+        if _is_not_configured(exc):
+            return None
+        trail_store.complain("trail destination unusable", exc)
+        return None
+
+
+def _is_not_configured(exc: BaseException) -> bool:
+    """Whether this means "no section in secrets" rather than "a broken one".
+
+    By type, not by message text: the wording is Streamlit's to change, and a
+    rule matching on prose goes quietly false the day it does. The two directions
+    cost differently -- a misconfiguration misread as absence is silent, which is
+    the failure being fixed, while absence misread as a misconfiguration is one
+    stray line in a log. So anything unrecognised is reported.
+    """
+    from streamlit.errors import StreamlitAPIException, StreamlitSecretNotFoundError
+
+    return isinstance(exc, StreamlitAPIException | StreamlitSecretNotFoundError)
+
+
+def install_trail(engine: Any | None) -> Any | None:
+    """Attach the durable sink. Separate from `resources` so a test can call it.
+
+    Thin on purpose: what it must not do is decide anything. The refusal to let a
+    failed write break a question lives in `trail_store`, not here -- a tolerance
+    written into this driver would protect this driver, and the terminal and the
+    evaluation harness would inherit an operation that raises.
+    """
+    return trail_store.install(engine, logger_name=trace.LOGGER_NAME)
+
+
+#: Which identity each open session is signed in as. Process-wide, keyed by the
+#: session identifier every trail record already carries, and read by nothing
+#: but `IdentityStamp`. Populated at sign-in, forgotten at sign-out and when the
+#: session registry prunes the session.
+#:
+#: This is where identity stops. The agent is never handed it; `trace.py` never
+#: sees it; `feedback.py` writes through the same logger and is stamped without
+#: knowing. `tests/test_driver_independence.py` asserts over the source that none
+#: of those three names it (ADR-0810, ADR-0820).
+IDENTITIES: dict[str, Identity] = {}
+
+
+def remember_identity(session_id: str, identity: Identity) -> None:
+    IDENTITIES[session_id] = identity
+
+
+def forget_identity(session_id: str) -> None:
+    IDENTITIES.pop(session_id, None)
+
+
+class IdentityStamp(logging.Filter):
+    """Stamps the account and role onto every trail record of a known session.
+
+    A `logging.Filter` on the trail's *logger*, so it runs before any handler --
+    the file, the durable store and the dev panel all see the stamped record --
+    and so it survives `trace.configure`, which clears the logger's handlers and
+    leaves its filters alone. `TrailHandler.emit` already reads `user_email` and
+    `user_role` off the record; a record from a session that is nobody's carries
+    neither attribute, and the handler's `or None` writes NULL.
+
+    The role is written as its value at the moment of the record, never looked
+    up afterwards: a rating's weight is the weight the role carried when it was
+    given (ADR-0810).
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        identity = IDENTITIES.get(getattr(record, "session_id", None) or "")
+        if identity is not None:
+            record.user_email = identity.email
+            record.user_role = identity.role.value
+        return True
+
+
+def _install_once(kind: type, make: Callable[[], Any]) -> Any:
+    """Replace any attachment of `kind` on the trail's logger with a fresh one.
+
+    The idempotence is load-bearing (`trail_store.install`'s docstring says why:
+    a stacked handler writes each record once per rerun, and Streamlit reruns
+    the whole script on every interaction). Handlers and filters are removed and
+    added through different methods, so this branches on which `kind` is.
+    `trail_store.install` keeps its own copy: it is in the core, which may not
+    import this driver.
+    """
+    logger = logging.getLogger(trace.LOGGER_NAME)
+    made = make()
+    if isinstance(made, logging.Filter):
+        for existing in [f for f in logger.filters if isinstance(f, kind)]:
+            logger.removeFilter(existing)
+        logger.addFilter(made)
+    else:
+        for existing in [h for h in logger.handlers if isinstance(h, kind)]:
+            logger.removeHandler(existing)
+        logger.addHandler(made)
+    return made
+
+
+def install_identity_stamp() -> None:
+    """Attach the stamp to the trail's logger, once."""
+    _install_once(IdentityStamp, IdentityStamp)
+
+
+# --- the session cap --------------------------------------------------------------------
+
+#: How many sessions the deployment holds open at once, and how long a session
+#: may go quiet before its place is freed. Both from the environment, so a host
+#: with more memory can raise one without a code change; the defaults are the
+#: design's (ADR-0790).
+MAX_SESSIONS_ENV = "NUMERA_MAX_SESSIONS"
+SESSION_IDLE_ENV = "NUMERA_SESSION_IDLE_S"
+DEFAULT_MAX_SESSIONS = 20
+DEFAULT_SESSION_IDLE_S = 600
+
+
+@dataclass
+class SessionRegistry:
+    """Which browser sessions are live, by heartbeat -- and what "live" cannot mean.
+
+    Streamlit offers no reliable disconnect hook, so a session is live for as
+    long as it has rerun within `idle_s`. Every rerun of an admitted session
+    touches it; one that stops rerunning is pruned when its window passes. A
+    closed tab therefore counts as live until then -- **the registry over-counts,
+    and so admits fewer than the cap, never more.** That is the cheap direction
+    for a guard that protects the host, and ADR-0790 says so where an operator
+    tempted to raise the cap will read it.
+
+    **Keyed on the browser session, not on the conversation, and the difference
+    is load-bearing.** Under sign-in one account is one conversation across all
+    its tabs (ADR-0830), so counting conversations would count *accounts*: eight
+    testers with five tabs each is forty Streamlit sessions and forty agents,
+    which the cap exists to bound, reported as eight. What costs the host is a
+    tab. So each entry is a tab, and it remembers which conversation that tab
+    belongs to -- which is what lets pruning clear the identity stamp and the
+    panel's rows for a conversation once its *last* tab has gone, and not while
+    another is still open.
+
+    Not keyed on the client's address: `st.context.ip_address` is supplied by
+    the client and is not evidence of anything.
+
+    The clock is an attribute so a test can move it without patching `time` for
+    every other module in the process. The lock is not decoration: Streamlit runs
+    one script thread per browser session against this single cached object, so
+    two reruns prune concurrently, and a check-then-set on the count can admit
+    over the cap.
+    """
+
+    max_sessions: int = DEFAULT_MAX_SESSIONS
+    idle_s: float = DEFAULT_SESSION_IDLE_S
+    clock: Callable[[], float] = time.monotonic
+    #: tab -> (last seen, the conversation that tab is in)
+    _last_seen: dict[str, tuple[float, str]] = field(default_factory=dict)
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def prune(self) -> None:
+        """Drop tabs past their idle window, and the stores of conversations that
+        no live tab is left in."""
+        with self._lock:
+            cutoff = self.clock() - self.idle_s
+            expired = [tab for tab, (seen, _) in self._last_seen.items() if seen < cutoff]
+            emptied = {self._last_seen.pop(tab, (0.0, ""))[1] for tab in expired}
+            still_open = {conversation for _, conversation in self._last_seen.values()}
+            # Inside the lock, and that matters. Released here, another tab's
+            # thread could complete its whole prologue in the gap -- re-admit,
+            # re-stamp -- and this loop would then wipe the stamp it had just
+            # set, so that tab's next question is recorded against nobody while
+            # its sidebar still names an account. Neither callee takes a lock,
+            # so there is no nesting here to deadlock on.
+            for conversation in emptied - still_open:
+                forget_identity(conversation)
+                if RECENT is not None:
+                    RECENT.forget(conversation)
+
+    def live(self) -> int:
+        self.prune()
+        with self._lock:
+            return len(self._last_seen)
+
+    def admit(
+        self, session_id: str, conversation_id: str | None = None, *, continuing: bool = False
+    ) -> bool:
+        """Touch a known tab, or admit a new one if there is room.
+
+        A tab already counted is always re-admitted and never ended: the cap
+        refuses the door, it does not clear the room. `continuing` says this tab
+        already holds a conversation -- so one pruned for idleness while its
+        reader was mid-conversation is re-admitted rather than turned away, which
+        "no open session is ended" requires and pruning alone would break. A
+        genuinely new tab at the cap is refused and **not recorded**, so a refused
+        visitor's retry costs nothing.
+
+        `conversation_id` defaults to the tab's own id, which is what an
+        unconfigured deployment wants: there, the two are the same thing.
+        """
+        self.prune()
+        with self._lock:
+            known = session_id in self._last_seen
+            if known or continuing or len(self._last_seen) < self.max_sessions:
+                self._last_seen[session_id] = (
+                    self.clock(),
+                    conversation_id if conversation_id is not None else session_id,
+                )
+                return True
+        return False
+
+    def drop(self, session_id: str) -> None:
+        """Free one tab's place immediately, on sign-out."""
+        with self._lock:
+            self._last_seen.pop(session_id, None)
+
+
+def _number(name: str, default: float) -> float:
+    """A setting read from the environment, falling back rather than crashing.
+
+    `int("twenty")` raises outside `streamlit_app.py`'s `NotConfigured` handler,
+    so a typo in a deployment variable took the whole page down with a stack
+    trace where every other misconfiguration gets a sentence. A bad value here
+    means the default and a line on the operator's log.
+    """
+    raw = env_setting(name, "")
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        print(f"{name}={raw!r} is not a number; using {default}", file=sys.stderr)
+        return default
+
+
+@st.cache_resource
+def session_registry() -> SessionRegistry:
+    """One registry per server, which is what a cap on the server needs."""
+    return SessionRegistry(
+        max_sessions=int(_number(MAX_SESSIONS_ENV, DEFAULT_MAX_SESSIONS)),
+        idle_s=_number(SESSION_IDLE_ENV, DEFAULT_SESSION_IDLE_S),
+    )
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def _allowance(api_key: str) -> allowance.Allowance:
+    """The provider's figure, asked for at most every two minutes per key.
+
+    Cached because this is drawn on every rerun -- every thumb, every expander --
+    and a network call on each would put the provider in the path of a click.
+    Two minutes is short enough that a tester watching their allowance run down
+    sees it move, and long enough that clicking about costs nothing.
+    """
+    return allowance.fetch(api_key)
+
+
+def spend_line(spent: int, cap: int, admission: Admission) -> str:
+    """One line for the run budget, carrying the key's own ceiling behind it.
+
+    Two captions before this -- the budget, then the key -- and a reader had to
+    work out which of the two would stop them first. The budget is what this app
+    enforces and goes first; the key is the provider's cap behind it and goes in
+    the parenthesis.
+
+    The parenthesis is absent, rather than empty or guessed, where a reader has
+    no key of their own or the provider says nothing we recognise: an
+    unconfigured deployment's key is the operator's and its balance is not a
+    tester's business, and a figure that might be wrong is worse here than none,
+    because this is the number a tester would act on.
+    """
+    line = f"{format_usd(spent)} of {format_usd(cap)}"
+    account = admission.account
+    if not admission.configured or account is None or not account.openrouter_key:
+        return line
+    on_key = allowance.as_text(_allowance(account.openrouter_key))
+    return f"{line} ({on_key})" if on_key else line
+
+
+def draw_data_credit() -> None:
+    """The attribution, behind a popover rather than under the spend figure.
+
+    Attribution has to be present and does not have to be read on every visit:
+    as a caption it was a third standing line in a panel whose job is the run's
+    own state. A popover keeps it one click from every page view -- which is what
+    the obligation asks -- without spending a line on it.
+    """
+    with st.popover(DATA_CREDIT_LABEL, icon=":material/database:", width="stretch"):
+        st.caption(as_text(DATA_CREDIT))
+
+
+def draw_try_later() -> None:
+    """The page at the cap: one sentence, before sign-in is offered, so the cap
+    also bounds the OAuth round trips. The caller stops the script after this."""
+    draw_title()
+    st.warning(as_text(messages.TRY_LATER), icon=":material/hourglass_top:")
+    # This is a door too, and it was the one door without the statement on it.
+    # `admit` has already run and recorded the sign-in by the time the cap
+    # refuses, so the reader's address is kept and the page that turns them away
+    # was the one page from which they could not read what is kept -- which is
+    # the case ADR-1110 argues is when asking matters most.
+    draw_privacy()
+
+
+# --- the dev panel: a third sink on the same logger ---------------------------------
+
+#: How many of a session's questions the panel keeps. Five, per the spec; the
+#: bound is what makes holding this in process memory acceptable.
+PANEL_QUESTIONS = 5
+PANEL_COLUMNS = ("when", "question", "event", "detail")
+
+
+@dataclass
+class _PanelQuestion:
+    """One question's rows for the panel, and the text to name it by.
+
+    `text` starts as the question id and is replaced when `question.asked`
+    arrives -- the other records of a question carry only its id. Held per
+    (session, question) so one session's records can never rename or erase
+    another's, which a bare-question-id map could do for two sessions that
+    share an id.
+    """
+
+    text: str
+    rows: list[dict[str, Any]] = field(default_factory=list)
+
+
+class RecentTrail(logging.Handler):
+    """Keeps each session's trail records for its last few questions, in memory.
+
+    The third sink on the trail's logger, beside the file and the durable store,
+    and like them attached after `trace.to_file` because `configure` clears the
+    handlers. Unlike them it needs no file and no database, which is why the
+    panel works on a developer's machine -- the place it is most used.
+
+    One dict, keyed by `session_id`, of that session's last few questions in the
+    order they were asked. The panel's "this session's only" is then a property
+    of the data structure rather than a filter at render: there is no query here
+    that could be widened by mistake, and nothing shared between sessions to key
+    inconsistently. Rows without a session or without a question -- a refused
+    sign-in has neither -- are not a question's records and are not kept.
+
+    Never raises out of `emit`: the trail's other handlers hold the same line,
+    and a panel that could break a question would be a poor trade.
+    """
+
+    def __init__(self, questions: int = PANEL_QUESTIONS) -> None:
+        super().__init__(logging.INFO)
+        self.questions = questions
+        self._sessions: dict[str, OrderedDict[str, _PanelQuestion]] = {}
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            session = getattr(record, "session_id", None) or None
+            question_id = getattr(record, "question_id", None) or None
+            if session is None or question_id is None:
+                return
+            fields = getattr(record, "fields", {}) or {}
+            event = record.getMessage()
+            questions = self._sessions.setdefault(session, OrderedDict())
+            question = questions.get(question_id)
+            if question is None:
+                question = _PanelQuestion(text=question_id)
+                questions[question_id] = question
+                while len(questions) > self.questions:
+                    questions.popitem(last=False)
+            if event == "question.asked" and "question" in fields:
+                question.text = str(fields["question"])
+            # A shallow copy of the fields rather than a JSON dump: the dump is
+            # what `TrailHandler` already pays on the durable path, and doing it
+            # again here charged every session -- including every tester whose
+            # rows nobody can read -- for a rendering only a dev's page performs.
+            # Copied rather than referenced because the caller's dict is not ours.
+            question.rows.append(
+                {
+                    "when": datetime.fromtimestamp(record.created),
+                    "event": event,
+                    "fields": dict(fields),
+                }
+            )
+        except Exception:  # noqa: BLE001 - a panel must not break a question
+            return
+
+    def rows(self, session_id: str) -> list[dict[str, Any]]:
+        """This session's rows, oldest first, each named by its question's text."""
+        return [
+            {
+                "when": r["when"],
+                "question": question.text,
+                "event": r["event"],
+                "detail": json.dumps(r["fields"], default=str),
+            }
+            for question in self._sessions.get(session_id, {}).values()
+            for r in question.rows
+        ]
+
+    def forget(self, session_id: str) -> None:
+        self._sessions.pop(session_id, None)
+
+
+#: The one installed handler, read by `dev_panel_rows`. None until `resources`
+#: runs, which on every real page it has.
+RECENT: RecentTrail | None = None
+
+
+def install_recent_trail() -> RecentTrail:
+    """Attach the panel's sink, once, after `trace.to_file` for the reason
+    `install_trail` gives. Idempotent: an existing one is replaced, not stacked."""
+    global RECENT
+    RECENT = _install_once(RecentTrail, RecentTrail)
+    return RECENT
+
+
+def may_see_dev_panel(admission: Admission) -> bool:
+    """Whether to *draw* the tab. Presentation's question; the refusal is
+    `dev_panel_rows`'.
+
+    Both read the grant table through the same `allowed` -- `require` is `allowed`
+    plus a raise -- so the two cannot disagree about a role. Asked separately
+    because answering it by calling the accessor rendered the whole panel just to
+    see whether it would raise, and then rendered it again to draw it: two full
+    serialisations per rerun, on every click, for exactly the sessions that have
+    rows.
+    """
+    return not admission.configured or allowed(admission.identity, Permission.DEV_PANEL)
+
+
+def dev_panel_rows(admission: Admission, session_id: str) -> list[dict[str, Any]]:
+    """This session's recent trail -- **the operation the permission guards.**
+
+    `require` is here, in the accessor, and not on the page: whatever asks for
+    these rows -- the sidebar, a test, a later page -- meets the same refusal,
+    and a page that merely hid the section would have enforced nothing. Refused
+    with no identity, and for every role the table does not grant.
+
+    Where no identity is configured the rows are given: a session that is
+    nobody's is the developer's. That is the deferred decision the spec and the
+    roadmap both record -- to be decided again before this panel shows anything
+    more than the session's own trail.
+    """
+    if admission.configured:
+        require(admission.identity, Permission.DEV_PANEL)
+    return RECENT.rows(session_id) if RECENT is not None else []
+
+
+#: The trail's heading in the sidebar, for the roles granted it.
+DEV_TAB = "Dev"
+
+
+def dev_seat(admission: Admission) -> Any | None:
+    """Where this session's trail goes in the sidebar, or None where the panel is refused.
+
+    One view, so no tab strip (ADR-1850): the entries left the sidebar for the evidence column, and
+    a strip of one tab is a control that does nothing. Absent rather than disabled for every other
+    role, as before: a tester's page must not show that there is a view they cannot open. Whether
+    the panel is refused is asked by trying it, so the rule lives in one place: `dev_panel_rows`
+    holds the `require`, and this reads its answer.
+    """
+    if not may_see_dev_panel(admission):
+        return None
+    with st.sidebar:
+        st.subheader(DEV_TAB, anchor=False)
+        return st.container()
+
+
+def draw_dev_panel(admission: Admission, session_id: str, seat: Any | None = None) -> None:
+    """This session's trail, into the Dev tab. Nothing at all when refused.
+
+    `seat` is `None` exactly when `dev_seat` refused the panel, so there is
+    nowhere to draw and nothing to draw -- present and *empty* on a fresh
+    session, so a dev can tell "nothing yet" from "not permitted", and absent
+    rather than empty for everyone else.
+    """
+    if seat is None:
+        return
+    try:
+        rows = dev_panel_rows(admission, session_id)
+    except Refused:
+        return
+    import pandas as pd
+
+    with seat:
+        # No caption explaining what this is: the only people who can open this
+        # tab are the ones who built it.
+        st.dataframe(pd.DataFrame(rows, columns=list(PANEL_COLUMNS)), hide_index=True)
+
+
+@st.cache_resource(show_spinner="Loading the corpus…")
+def resources(corpus: str | None = None, store: str | None = None) -> CorpusRepository:
+    """The corpus index, built once for the life of the server, and the trail's
+    sinks attached beside it.
+
+    Cached because the indexes are built over the whole corpus and Streamlit
+    would otherwise rebuild them on every interaction; task 8.2 verifies that
+    they are not. Configuration comes from the environment because a Streamlit
+    script has no argv to read it from.
+
+    The agent is no longer built here: it holds a credential, and a credential
+    is per person where a cached resource is per server. `agent_for` builds one
+    per session (ADR-0820).
+    """
+    refuse_retired_env()
+    trace.to_file(env_setting("NUMERA_TRACE", trace.DEFAULT_FILE))
+    # **After `to_file`, and the order is load-bearing.** `to_file` calls
+    # `trace.configure`, which clears the logger's handlers -- so installing the
+    # durable sink first would attach it and then silently throw it away, leaving
+    # an app that looks configured and records nothing. Exactly the failure this
+    # whole change exists to end, reintroduced two lines further up.
+    # `test_web_driver_trail.py` pins the ordering rather than this comment.
+    install_trail(trail_destination())
+    # Beside the sinks rather than at sign-in: the stamp reads the registry at
+    # record time, so it is installed once per process and knows nobody until a
+    # session signs in. A logger-level filter would survive `to_file` either way;
+    # it sits here so that everything attached to the trail is attached in one
+    # place.
+    install_identity_stamp()
+    install_recent_trail()
+    # The corpus path is resolved by the caller, outside this function. Anything
+    # drawn inside a cached function is recorded and replayed on every cache hit,
+    # so an `st.info` announcing a build would be redrawn at the top of the page
+    # for the life of the server -- a notice that was true once and false for every
+    # rerun after it.
+    if corpus is None:
+        corpus = env_setting("NUMERA_CORPUS")
+    if store is None:
+        store = env_setting("NUMERA_STORE")
+    repo = CorpusRepository(load_configured(corpus, store))
+    if store:
+        # What objecting reviewers said, beside the tables only -- never in an entry (ADR-1630).
+        objections.attach(repo, objections.load(store))
+    return repo
+
+
+def as_text(text: str) -> str:
+    """Escape what Streamlit's markdown would read as something other than text.
+
+    `$` opens inline mathematics. An ending line carries two of them -- "$0.008181
+    (run $0.008181)" -- so the cost between was typeset as an equation and both
+    signs were consumed as delimiters, leaving a figure with no currency on it.
+
+    Applied at the point of drawing rather than where the text is built: the item
+    carries what the ending says, and how to stop a renderer misreading it is the
+    renderer's problem. The terminal driver prints the same string and needs none
+    of this.
+    """
+    return text.replace("$", r"\$")
+
+
+#: A run of citations -- one or more `[[...]]` separated by spaces or a comma. Built from
+#: `citations.DELIMITED`, not a second pattern (ADR-0410): it once read digits only, and a
+#: `[[PMC2652108-1]]` label would have been drawn as raw brackets.
+_CITATION_RUN = re.compile(rf"{DELIMITED.pattern}(?:,?\s*{DELIMITED.pattern})*")
+
+#: The page's own styles for the pills, the evidence list and the header line (ADR-1850). Colours
+#: are `currentColor` with opacity wherever they can be, so the page follows the reader's light or
+#: dark theme; only the amber prototype line and the caution carry colours of their own.
+PAGE_CSS = """
+<style>
+.sn-pill { display: inline-flex; align-items: center; gap: 0.3em; margin-left: 0.25em;
+  padding: 0 0.4em; border: 1px solid rgba(128, 128, 128, 0.45); border-radius: 4px;
+  font-size: 0.78em; line-height: 1.55; white-space: nowrap; vertical-align: baseline; }
+.sn-pill b { font-weight: 600; }
+.sn-pill .sn-stars, .sn-ev .sn-stars { letter-spacing: 0.02em; }
+.sn-sim { font-style: italic; opacity: 0.7; }
+table.sn-ev { width: 100%; border-collapse: collapse; table-layout: auto; font-size: 0.92rem; }
+table.sn-ev th { text-align: left; font-size: 0.72rem; letter-spacing: 0.06em;
+  text-transform: uppercase; font-weight: 600; opacity: 0.65; padding: 0 0.5rem 0.4rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.45); }
+table.sn-ev td { padding: 0.55rem 0.5rem; vertical-align: top; line-height: 1.35;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.18); }
+table.sn-ev td.sn-n { font-weight: 600; opacity: 0.7; width: 1.8rem; }
+table.sn-ev td.sn-v { white-space: nowrap; font-weight: 600; }
+table.sn-ev td.sn-t, table.sn-ev td.sn-i { white-space: nowrap; }
+.sn-sub { font-size: 0.85em; opacity: 0.65; }
+.sn-mk { font-weight: 400; opacity: 0.75; margin-left: 0.2em; }
+.sn-id { font-family: ui-monospace, Menlo, monospace; font-size: 0.85em; opacity: 0.8; }
+.sn-proto { color: #92400e; font-size: 0.9rem; }
+.sn-proto::before { content: ""; display: inline-block; width: 0.5rem; height: 0.5rem;
+  margin-right: 0.45rem; border-radius: 50%; background: #f59e0b; }
+@media (prefers-color-scheme: dark) { .sn-proto { color: #fbbf24; } }
+</style>
+"""
+
+
+def draw_page_style() -> None:
+    """The page's styles, once per run. Style alone goes to Streamlit's event container, so it
+    takes no space on the page (`st.html`, read from the installed 1.61.1)."""
+    st.html(PAGE_CSS)
+
+
+def _stars_html(stars: str) -> str:
+    """The drawn tier with `sim` set apart: "★★★☆☆ sim ⚠️" is stars, mark, caution."""
+    if not stars:
+        return ""
+    words = stars.split(" ")
+    out = [f'<span class="sn-stars">{html.escape(words[0])}</span>']
+    for word in words[1:]:
+        if word == trust_marks.SIMULATED:
+            out.append(f'<span class="sn-sim">{html.escape(word)}</span>')
+        else:
+            out.append(html.escape(word))
+    return " ".join(out)
+
+
+def _pill(number: int, entry_id: str, stars: str) -> str:
+    """One citation: the entry's number, then its tier where it has one; the id on hover."""
+    title = html.escape(bionumbers.label(entry_key(entry_id)), quote=True)
+    inner = f"<b>{number}</b>" + (f" {_stars_html(stars)}" if stars else "")
+    return f'<span class="sn-pill" title="{title}">{inner}</span>'
+
+
+def answer_markdown(
+    text: str, stars: Mapping[str, str] | None = None, numbers: Mapping[str, int] | None = None
+) -> str:
+    """An answer, ready for `st.markdown(..., unsafe_allow_html=True)`, its citations as pills.
+
+    The answer is model output, so **escaping and the pills are one function**: HTML is never
+    turned on for an answer nobody escaped. The text is escaped first, `$` is kept out of
+    mathematics as `as_text` does, and only then do our own `<span>`s go in. A `<` the model meant
+    as markup is shown as the character, which is the safe way round.
+
+    Each citation becomes a pill carrying the entry's number in the session (`numbers`, from
+    `entry_numbers`), its stars, `sim` and the caution (ADR-1850; the stars are still drawn by the
+    application, ADR-1630). A group naming anything the session has not numbered -- an identifier
+    the corpus does not hold, or `[[Table 1]]` -- is left as written, and the readable groups
+    beside it are still drawn. `numbers` defaults to numbering this answer alone, in the order it
+    cites.
+
+    The stored answer keeps `[[...]]`: the parser, the trail and the evaluation read that form.
+    """
+    stars = stars or {}
+    if numbers is None:
+        numbers = {i: n for n, i in enumerate(dict.fromkeys(str(c) for c in citations(text)), 1)}
+    escaped = as_text(html.escape(text, quote=False))
+
+    def group(match: re.Match) -> str:
+        ids = [str(i) for i in citations(match.group(0))]
+        if not ids or not all(i in numbers for i in ids):
+            return match.group(0)
+        return "".join(_pill(numbers[i], i, stars.get(i, "")) for i in ids)
+
+    def run(match: re.Match) -> str:
+        return DELIMITED.sub(group, match.group(0))
+
+    return _CITATION_RUN.sub(run, escaped)
+
+
+def _markers(row: entries_table.Row) -> str:
+    """The terminal's markers, plus the one only this driver needs.
+
+    The value column here is blank where the corpus holds no scalar, so the
+    absence is marked and explained once in the legend rather than spelled out in
+    every such row.
+    """
+    marks = row.markers()
+    return marks + (entries_table.NO_SCALAR if not row.has_scalar else "")
+
+
+def _value_cell(row: entries_table.Row) -> str:
+    """The value with its units, then the marks that qualify it (`grounded-answering`)."""
+    value = f"{row.value} {row.units}".strip() if row.has_scalar else ""
+    marks = _markers(row)
+    return html.escape(value) + (
+        f'<span class="sn-mk">{html.escape(marks)}</span>' if marks else ""
+    )
+
+
+def evidence_html(rows: Iterable[entries_table.Row], numbers: Mapping[str, int]) -> str:
+    """The evidence list as one HTML table: #, Entry, Value, Trust, ID (ADR-1850).
+
+    HTML, not a dataframe, so a long property wraps instead of being cut: the store's names run to
+    36 words. Every cell is escaped; the value cell never breaks, so a number is never split across
+    lines (`grounded-answering`). One line, with no blank line inside, so nothing in it is read
+    as markdown. No Trust column for a corpus file, whose entries have no tier.
+    """
+    rows = list(rows)
+    tiered = any(row.trust is not None for row in rows)
+    head = "<th>#</th><th>Entry</th><th>Value</th>" + ("<th>Trust</th>" if tiered else "")
+    head += "<th>ID</th>"
+    body = []
+    for row in rows:
+        sub = " · ".join(part for part in (row.organism, row.short_reference) if part)
+        entry = html.escape(row.property) + (
+            f'<div class="sn-sub">{html.escape(sub)}</div>' if sub else ""
+        )
+        cells = [
+            f'<td class="sn-n">{numbers.get(str(row.entry_id), "")}</td>',
+            f"<td>{entry}</td>",
+            f'<td class="sn-v">{_value_cell(row)}</td>',
+        ]
+        if tiered:
+            cells.append(f'<td class="sn-t">{_stars_html(row.stars)}</td>')
+        label = html.escape(bionumbers.label(row.entry_id))
+        cells.append(f'<td class="sn-i"><span class="sn-id">{label}</span></td>')
+        body.append("<tr>" + "".join(cells) + "</tr>")
+    return (
+        '<table class="sn-ev"><thead><tr>'
+        + head
+        + "</tr></thead><tbody>"
+        + "".join(body)
+        + "</tbody></table>"
+    )
+
+
+def _legend(rows: tuple[entries_table.Row, ...]) -> list[str]:
+    """What the caveat marks shown mean, under the list, and only for the marks shown. The trust
+    scale is not here: it bears on every answer and is said once, pinned (`draw_footer`)."""
+    applying = (
+        (entries_table.NOT_RETRIEVED_LEGEND, lambda r: not r.retrieved),
+        (entries_table.NO_METHOD_LEGEND, lambda r: not r.method_recorded),
+        (entries_table.NO_SCALAR_LEGEND, lambda r: not r.has_scalar),
+        (entries_table.QUALIFIED_LEGEND, lambda r: r.qualified),
+        (entries_table.FUSED_LEGEND, lambda r: r.fused),
+        (entries_table.IMPLAUSIBLE_LEGEND, lambda r: r.implausible_span),
+        (entries_table.READING_UNCERTAIN_LEGEND, lambda r: r.reading_uncertain),
+        (entries_table.CALCULATED_LEGEND, lambda r: r.calculated),
+    )
+    return [legend for legend, applies in applying if any(applies(row) for row in rows)]
+
+
+def summary_for(table: Table, shown: int) -> str:
+    """How much went unshown, or "" when there is nothing to report.
+
+    Guarded as the terminal guards it. `table.rows` includes entries cited without
+    being retrieved while `table.retrieved` counts only retrieved ones, so `shown`
+    can exceed it and the ungated sentence read "showing 4 of 1 entries retrieved".
+    """
+    if table.retrieved > shown or table.matched > shown:
+        return entries_table.summarise(shown, table.retrieved, table.matched, table.searches)
+    return ""
+
+
+def _uncited_label(count: int) -> str:
+    return f"{count} more {'entry was' if count == 1 else 'entries were'} retrieved but not cited"
+
+
+def draw_evidence(table: Table, numbers: Mapping[str, int]) -> None:
+    """The evidence for one answer: what it cites, what else was retrieved, and what the marks mean.
+
+    Cited entries first and every one of them -- with no side panel any more there is nowhere else
+    for a cited entry to be -- and the uncited ones folded under one row: context for a reader who
+    wants it, and length in front of one who is checking the prose against its evidence.
+    """
+    cited = tuple(row for row in table.rows if row.cited)
+    rest = tuple(row for row in table.rows if not row.cited)
+    with st.container(horizontal=True, vertical_alignment="bottom"):
+        st.markdown("**Evidence for this answer**")
+        counts = f"{len(cited)} cited" + (f" · {len(rest)} more retrieved" if rest else "")
+        st.caption(as_text(counts))
+    if cited:
+        st.html(evidence_html(cited, numbers))
+    else:
+        # Not silence: an answer that cited nothing is a fact about the answer.
+        st.markdown(f"**{entries_table.NOTHING_CITED}**")
+    legend = _legend(table.rows)
+    if legend:
+        st.caption(as_text(" · ".join(legend)))
+    if rest:
+        with st.expander(as_text(_uncited_label(len(rest)))):
+            st.html(evidence_html(rest, numbers))
+    note = entries_table.dimension_note(table.rows)
+    if note:
+        st.caption(as_text(note))
+    summary = summary_for(table, len(table.rows))
+    if summary:
+        # Body text, not a caption: how much of the corpus went unlooked-at is one of the few
+        # things a reader can use to judge whether an answer is worth trusting.
+        st.markdown(as_text(summary.removeprefix("… ")))
+
+
+#: Above this many entries the numbered buttons become a wall, so a list is offered instead
+#: (the user's call, 2026-10-17).
+OPEN_BUTTONS_MAX = 12
+
+
+OPEN_PREFIX = "numera_ask.open."
+
+
+def _open_key(question_id: str) -> str:
+    return f"{OPEN_PREFIX}{question_id}"
+
+
+def draw_open_entry(
+    table: Table, numbers: Mapping[str, int], question_id: str, *, answering: bool = False
+) -> None:
+    """Choose an entry by its number and read it in full, beside the answer (ADR-1850).
+
+    **Closed until chosen**, and closed again by choosing the open number a second time: opened
+    by default, a record per turn filled the page as a conversation grew (the user's call,
+    2026-10-17). Above twelve entries the list has "Show no entry" first for the same reason.
+    Every turn's choice is cleared when a new question is sent (`close_entries`).
+
+    Keyed by the question, like the rating, so each turn keeps its own choice. **Not offered while
+    a question is being answered**: a click re-runs the page, which abandons the agent's generator
+    mid-tool-call -- the reason the rating is drawn inert then too. The live path draws this only
+    once the answer is complete; older turns draw it disabled.
+    """
+    by_number = {
+        numbers[str(row.entry_id)]: row for row in table.rows if str(row.entry_id) in numbers
+    }
+    if not by_number:
+        return
+    options = sorted(by_number)
+    key = _open_key(question_id)
+    if len(options) <= OPEN_BUTTONS_MAX:
+        # Single selection, not required: a click on the selected pill deselects it.
+        chosen = st.pills(
+            "Open entry", options, default=None, key=key, disabled=answering, format_func=str
+        )
+    else:
+        chosen = st.selectbox(
+            "Open entry",
+            [None, *options],
+            index=0,
+            key=key,
+            disabled=answering,
+            format_func=lambda n: (
+                SHOW_NO_ENTRY if n is None else f"{n} · {by_number[n].property[:60]}"
+            ),
+        )
+    if chosen is not None and chosen in by_number:
+        draw_record(by_number[chosen], chosen)
+
+
+#: The list's first option above twelve entries: nothing opened.
+SHOW_NO_ENTRY = "Show no entry"
+
+
+def close_entries(state: MutableMapping[str, Any]) -> None:
+    """Close every turn's opened entry, as a new question is sent.
+
+    Deleting a widget's key resets it to its default -- nothing chosen -- on the run that follows,
+    so the page answering a new question does not carry a column of old records above it.
+    """
+    for key in [k for k in state if str(k).startswith(OPEN_PREFIX)]:
+        del state[key]
+
+
+def draw_record(row: entries_table.Row, number: int) -> None:
+    """The whole entry, opened. Every field is read from the corpus; nothing came from the model,
+    so this is what the prose can be checked against."""
+    with st.container(border=True):
+        with st.container(horizontal=True, vertical_alignment="center"):
+            st.markdown(as_text(f"**Entry {number}** · `{bionumbers.label(row.entry_id)}`"))
+            if row.trust is not None:
+                st.caption(as_text(f"{row.stars} · {trust_marks.tier_words(row.trust)}"))
+        st.markdown(f"**{as_text(row.property)}**")
+        if row.organism:
+            st.caption(as_text(row.organism))
+        reference = row.reference or "(no reference recorded)"
+        pubmed = (
+            f" · [PubMed {row.reference_pubmed_id}]"
+            f"(https://pubmed.ncbi.nlm.nih.gov/{row.reference_pubmed_id}/)"
+            if row.reference_pubmed_id
+            else ""
+        )
+        st.caption(as_text(reference + pubmed))
+        if row.has_scalar:
+            st.subheader(as_text(f"{row.value} {row.units}".strip()), anchor=False)
+        else:
+            st.caption(entries_table.NO_SCALAR_LEGEND)
+        if row.objections:
+            # What each objecting reviewer said, shown to the reader only -- never to the model
+            # (ADR-1630). Introduced by the reviewer's role, marked where it was simulated.
+            said = "\n".join(f"- {text}" for text in row.objections)
+            st.warning(as_text(f"**A reviewer objected.**\n{said}"), icon=":material/warning:")
+        if row.method:
+            st.markdown(f"*Measurement method.* {as_text(row.method)}")
+        else:
+            st.caption(entries_table.NO_METHOD_LEGEND)
+        if row.comments:
+            st.markdown(f"*Comments.* {as_text(row.comments)}")
+        if row.harvest is not None:
+            _draw_harvest(row.harvest)
+        else:
+            keywords = shown_keywords(row)
+            if keywords:
+                st.caption("Keywords: " + as_text(", ".join(keywords)))
+
+
+def _draw_harvest(harvest: Harvest) -> None:
+    """A harvested value's passage and conditions, each under its own name.
+
+    Not its keywords: those pack the quote and every condition's quote into one list for search
+    (`store_corpus`), and drawn as one line they read as a single fused field. Conditions quoting
+    the same passage are named together -- a paper's "described previously" sentence is often
+    the quote for its medium, temperature and culture mode at once -- and `method` is left to the
+    measurement method line above.
+    """
+    if harvest.property_in_paper:
+        st.markdown(f"*Property name in the paper.* {as_text(harvest.property_in_paper)}")
+    st.markdown(f"*Quote.* “{as_text(harvest.quote)}”")
+    named: dict[str, list[str]] = {}
+    for condition in harvest.conditions:
+        if condition.name != "method":
+            named.setdefault(condition.quote, []).append(condition.name.replace("_", " "))
+    for quote, names in named.items():
+        st.markdown(f"*{as_text(', '.join(names)).capitalize()}.* “{as_text(quote)}”")
+    if harvest.not_stated:
+        not_stated = ", ".join(name.replace("_", " ") for name in harvest.not_stated)
+        st.caption(as_text(f"Not stated in the paper: {not_stated}"))
+    if harvest.origin is not Origin.MEASURED:
+        st.caption(entries_table.CALCULATED_LEGEND)
+        for text in harvest.inputs:
+            st.markdown(f"*Calculated from.* “{as_text(text)}”")
+    topic = f" / {harvest.topic}" if harvest.topic else ""
+    st.caption(as_text(f"{harvest.domain}{topic}"))
+
+
+def shown_keywords(row: entries_table.Row) -> list[str]:
+    """The keywords that will actually appear, markup already stripped.
+
+    Testing `row.keywords` instead drew a bare "Keywords: " for every entry whose
+    only keyword was the injected `<IMG SRC=...>` -- which `_without_markup`
+    empties, and which the corpus carries on 10,206 of 14,294 records.
+    """
+    return [keyword for keyword in row.keywords if keyword]
+
+
+#: What the page calls itself, in the tab and at the head of every view of it.
+TITLE = "Numera"
+
+#: The mark, beside the title. Kept as the file it arrived as -- the provenance
+#: manifest inside it is 7.7KB of the 8.3KB, and stripping it to save bytes would
+#: also discard the record of where the artwork came from. What is stripped is at
+#: render time, for the page only.
+LOGO = Path(__file__).resolve().parents[2] / "assets" / "numera-mark.svg"
+
+#: The one structural colour in the mark, which becomes the reader's text colour.
+LOGO_INK = "#15181C"
+
+#: The page title, with the mark inlined before it.
+#:
+#: Inlined rather than linked as an `<img>`, because an image is a document of its
+#: own: `currentColor` inside it resolves against the image, not the page, and the
+#: mark's near-black strokes would be all but invisible to a reader on a dark
+#: theme. Nothing here pins a theme, so that is a reader's choice to respect
+#: rather than a case to ignore. Inlined, the strokes inherit the heading's colour
+#: and the red accent stays the red accent in both.
+TITLE_HTML = '<h1 class="bn-title">{mark}<span>{text}</span></h1>'
+TITLE_CSS = """
+<style>
+.bn-title { display: flex; align-items: center; gap: 0.5rem; }
+.bn-title svg { height: 1em; width: auto; flex: 0 0 auto; }
+</style>
+"""
+
+
+@lru_cache(maxsize=1)
+def logo_svg() -> str:
+    """The mark as markup ready to inline, or "" when the file is not there.
+
+    Empty rather than raising: the page is the product and the logo is decoration,
+    so a missing or unreadable asset costs the mark and nothing else. Read once per
+    process -- it cannot change under a running server.
+
+    The provenance manifest goes here rather than in the file: it is 7.7KB of
+    metadata that no browser reads, and it would otherwise be re-sent on every
+    rerun of every session.
+    """
+    try:
+        markup = LOGO.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    markup = re.sub(r"<metadata>.*?</metadata>", "", markup, flags=re.DOTALL)
+    return markup.replace(LOGO_INK, "currentColor")
+
+
+def draw_title(text: str = TITLE) -> None:
+    """The title, with the mark before the words where there is one.
+
+    Raw HTML because the mark has to sit *inside* the heading: `st.title` takes
+    markdown, and a markdown image is an `<img>`, which is the arrangement the
+    theme note above rules out. This is the page's own markup and the project's
+    own asset -- no corpus text and no reader's text reaches it.
+
+    Streamlit's heading anchor is not lost here so much as never created, which is
+    what the rest of the page asks for anyway.
+    """
+    mark = logo_svg()
+    if not mark:
+        st.title(as_text(text), anchor=False)
+        return
+    st.markdown(TITLE_CSS, unsafe_allow_html=True)
+    st.markdown(TITLE_HTML.format(mark=mark, text=html.escape(text)), unsafe_allow_html=True)
+
+
+def draw_header() -> None:
+    """The title and the prototype caveat, in amber (ADR-1850).
+
+    The caveat used to be pinned to the viewport. The canvas puts it in the header as one amber
+    line; it is still drawn on every view of the page, before anything a reader could trust.
+    """
+    draw_title()
+    emphasised = PROTOTYPE_NOTE.replace("**", "<strong>", 1).replace("**", "</strong>", 1)
+    st.html(f'<div class="sn-proto">{emphasised}</div>')
+
+
+def draw_footer(admission: Admission, *, harvested: bool = False) -> None:
+    """Under the question box: what is kept, whose money a question spends, and whose account it
+    is kept against. Here rather than in the sidebar, which is collapsed by default (ADR-1850): a
+    request a reader never sees is not a request."""
+    who = (
+        messages.SIGNED_IN_AS.format(
+            email=admission.account.email, role=admission.account.role.value
+        )
+        if admission.configured and admission.account is not None
+        else messages.NO_SIGN_IN_CONFIGURED
+        if not admission.configured
+        else ""
+    )
+    with st.bottom:
+        if harvested:
+            # The trust scale, pinned with the question box: it bears on practically every
+            # answer and list, where the caveat marks depend on the entries shown (the user's
+            # call, 2026-10-17).
+            st.caption(as_text(" · ".join(trust_marks.FULL_LEGEND)))
+        st.caption(as_text(" ".join(part for part in (RECORDS_NOTE, BUDGET_NOTE, who) if part)))
+
+
+#: Session state for an example question chosen on the first view; read once, as a submitted
+#: question is.
+EXAMPLE_KEY = "numera_ask.example"
+
+#: The first view's examples: questions the store answers, one curated and two harvested.
+EXAMPLES = (
+    "Diameter of the cytokinetic ring in fission yeast",
+    "F-actin concentration in lamellipodia",
+    "How many ribosomes does an E. coli cell have?",
+)
+
+
+def take_example(state: Any = None) -> str | None:
+    """The example question a reader chose, once; None when none was."""
+    state = st.session_state if state is None else state
+    return state.pop(EXAMPLE_KEY, None)
+
+
+def _choose_example(question: str) -> None:
+    st.session_state[EXAMPLE_KEY] = question
+
+
+def draw_first_view(*, answering: bool = False) -> None:
+    """Before the first question: what the page is for, and three questions to start from."""
+    ask, evidence = st.columns(READING_SPLIT, gap="large")
+    with ask:
+        st.subheader("Ask about a scientific quantity", anchor=False)
+        st.markdown(
+            "A size, a concentration, a rate. Try asking about one in a given organism. Answers "
+            "are grounded in values harvested from papers, checked by reviewers and provided "
+            "with a trust-tier."
+        )
+        st.caption("Try one")
+        with st.container(horizontal=True, gap="small"):
+            for n, question in enumerate(EXAMPLES):
+                st.button(
+                    as_text(question),
+                    key=f"numera_ask.example.{n}",
+                    on_click=_choose_example,
+                    args=(question,),
+                    disabled=answering,
+                )
+    with evidence, st.container(border=True, height=320, vertical_alignment="center"):
+        st.caption(
+            "The entries behind each answer appear here: value, trust tier and source for every "
+            "cited number, and the full record on request."
+        )
+
+
+def run_is_over(transcript: Iterable[tuple[str, list[Item]]]) -> bool:
+    """Whether any question ended the run, so the page should stop taking them.
+
+    The terminal returns from its read loop on these endings; without the same
+    check here the chat input stays live and every further question replays an
+    identical refusal, which reads as a broken app rather than a limit reached.
+    Any question, not the last: nothing un-spends a run budget.
+    """
+    return any(
+        item.ends_the_run for _, items in transcript for item in items if item.kind is Kind.ENDING
+    )
+
+
+def run_over_advice(
+    transcript: Iterable[tuple[str, list[Item]]], *, signed_in: bool = False
+) -> str:
+    """What to say about the ending that shut the door, or "" for nothing to add.
+
+    `signed_in` picks the wording for a reader who is not the funder -- a tester
+    whose key an operator issued -- so the last line on screen tells them whom to
+    ask, rather than the funder-neutral sentence written for a developer on their
+    own key. Decided here, at draw time, because whether there is such an
+    operator is a fact about the deployment and not about the ending.
+
+    The page's own line -- start a new session -- is right for a spent budget and a
+    full conversation, and wrong for a key with no credit: the new session's first
+    question meets the same refusal. So the ending that stopped the run gets to
+    replace it.
+
+    The first such ending, not the last: it is the one that closed the run, and
+    whatever ended a question after that describes a run that was already over.
+    """
+    for _, items in transcript:
+        for item in items:
+            if item.kind is Kind.ENDING and item.ends_the_run and item.stop_advice:
+                if signed_in and item.reason is not None:
+                    return messages.run_over_advice(item.reason, signed_in=True) or item.stop_advice
+                return item.stop_advice
+    return ""
+
+
+def run_status(
+    transcript: Iterable[tuple[str, list[Item]]],
+    fallback: tuple[int, int] | None = None,
+) -> tuple[int, int] | None:
+    """What the run has spent and what it may spend.
+
+    Read from the ending events where there is one, rather than from configuration,
+    because a session resumed in a process configured differently spends against
+    the budget it was created with -- reading the environment would report a cap
+    this run is not subject to.
+
+    `fallback` covers the interval before the first answer, where no ending exists
+    to read. It is the run's own recorded spend against the configured budget,
+    which is the same pair the first ending will carry. Without it the panel gained
+    a section the moment a question completed, and a layout that grows under the
+    reader is a worse surprise than a bar reading zero.
+    """
+    latest = fallback
+    for _, items in transcript:
+        for item in items:
+            if item.kind is Kind.ENDING and item.run_budget:
+                latest = (item.run_spend, item.run_budget)
+    return latest
+
+
+def draw(item: Item, numbers: Mapping[str, int] | None = None) -> None:
+    """Draw one item. `numbers` is the session's numbering (`entry_numbers`) as of this item."""
+    if item.kind is Kind.ANSWER:
+        st.markdown(answer_markdown(item.text, dict(item.stars), numbers), unsafe_allow_html=True)
+    elif item.kind is Kind.ENTRIES:
+        if item.table is not None:
+            draw_evidence(item.table, numbers or entry_numbers([[item]]))
+    elif item.kind is Kind.WARNING:
+        st.warning(as_text(item.text), icon=":material/warning:")
+    elif item.kind is Kind.PROGRESS:
+        st.caption(f"· {as_text(item.text)}")
+    else:
+        st.caption(as_text(item.text))
+
+
+#: The retrieval box, running and finished. Two names because the box outlives
+#: the search: the live path opens it on the first retrieval and relabels it when
+#: the answer is done, and the replay path draws it already finished.
+#:
+#: Constants rather than two literals, because they drifted. The replay path was
+#: drawing a search that had finished under the present-tense label, so every past
+#: turn claimed to still be searching. Invisible while the live render was the one
+#: the reader saw after asking; the rerun that revives older ratings replaced it
+#: with the replay render, and a test that had only ever covered the live path
+#: failed.
+RETRIEVAL_RUNNING = "Searching the corpus…"
+RETRIEVAL_DONE = "Retrieval"
+
+
+def search_line(items: Iterable[Item]) -> str:
+    """The finished retrieval box's label: what was searched, and what came of it (ADR-1850).
+
+    "Searched “cytokinetic ring”, “contractile ring” · 10 retrieved, 6 cited". The box stays, so
+    each call is still there to open; only its label says what a reader wants at a glance.
+    `RETRIEVAL_DONE` where nothing was searched by name -- a lookup of known entries.
+    """
+    items = list(items)
+    asked = list(dict.fromkeys(item.query for item in items if item.query))
+    tables = [item.table for item in items if item.kind is Kind.ENTRIES and item.table]
+    if not asked:
+        return RETRIEVAL_DONE
+    line = "Searched " + ", ".join(f"“{q}”" for q in asked)
+    if tables:
+        cited = sum(1 for row in tables[-1].rows if row.cited)
+        line += f" · {tables[-1].retrieved} retrieved, {cited} cited"
+    return line
+
+
+def _retrieval_box(expanded: bool, state: str = "running", label: str = RETRIEVAL_RUNNING):
+    # `as_text` although both callers pass a constant of this project's own words:
+    # the escaping scan reads the call, not the call sites, and a parameter is
+    # exactly the shape it cannot clear. Wrapping is free -- neither constant holds
+    # a dollar -- and the alternative is teaching the scan to chase defaults.
+    return st.status(as_text(label), expanded=expanded, state=state)
+
+
+def _numbers_with(current: list[Item], item: Item | None = None) -> dict[str, int]:
+    """The session's numbering as of `item`: every turn on the page, then `current` (the turn
+    being drawn, if the transcript does not hold it yet), then `item` itself."""
+    turns = [items for _, items in transcript(st.session_state)]
+    if not any(turn is current for turn in turns):
+        turns.append(current)
+    if item is not None:
+        turns.append([item])
+    return entry_numbers(turns)
+
+
+def _column_for(item: Item, prose: Any, evidence: Any) -> Any:
+    """Which of the turn's two columns this item belongs in.
+
+    Everything the reader reads goes left -- prose, the warnings about it, the
+    rating, the ending. Only the entries table goes right, because it is the one
+    thing they check the prose *against*, and side by side is the whole reason
+    for splitting the turn at all.
+    """
+    return evidence if item.kind is Kind.ENTRIES else prose
+
+
+def _ends_the_prose(item: Item) -> bool:
+    """Whether this item is the first thing after the answer's prose.
+
+    The turn arrives as prose, then any warning about that prose, then the table
+    of entries, then the ending. The rating goes at this seam, at the foot of the
+    prose it is about.
+
+    It used to earn its place by keeping the rating above a table long enough to
+    push it off the screen. The table is in the next column now, so that argument
+    is gone and the seam is kept for the plainer one: a reader forms a view at the
+    end of the prose, and that is where the control should be waiting.
+
+    Shared by the live path and the replay path deliberately. They draw the same
+    turn in two different places, and a seam computed twice is a seam that moves.
+    """
+    return item.kind in (Kind.ENTRIES, Kind.ENDING)
+
+
+def answer(
+    events: Iterable[Event],
+    repo: CorpusRepository | None = None,
+    into: list[Item] | None = None,
+    after_prose: Callable[[], None] | None = None,
+) -> list[Item]:
+    """Draw a question's items as they arrive, recording each into `into` as it goes.
+
+    Each progress line is its own element rather than one line rewritten in
+    place. Streamlit composes successive writes to one screen location into the
+    last of them, so a rewritten line would leave no trace of the sequence -- for
+    a reader scrolling back or for a test (ADR-0100).
+
+    `into` is the transcript's own list, filled in place, so a failure while
+    drawing cannot lose the question. Returning the items and letting the caller
+    append them meant a raising `draw` skipped the append entirely, while the agent
+    had already persisted the turn -- the page forgot a question the model
+    remembered, and the next answer was built on context nothing on screen showed.
+
+    The box is opened by the first retrieval rather than before the loop, because a
+    question that retrieves nothing -- a refusal, a spent key, an answer the model
+    gave straight -- otherwise left an empty "Retrieval" box on screen, claiming a
+    search that never happened. `show` has always guarded this on the replay path;
+    only the live path drew it unconditionally.
+
+    Opening it late also places it where the first retrieval falls rather than
+    always at the top, so a warning raised before any tool call now appears above
+    it instead of below. That is the order the events actually arrived in.
+
+    `after_prose` gets a *seat* at the seam `_ends_the_prose` names, and is called
+    into it once the generator is exhausted. **It must not be called at the seam
+    itself**, which is what this did first and is a defect a reader found by
+    clicking: a widget is live in the browser the moment it renders, a click on it
+    re-runs the script, and a re-run abandons this generator at whatever yield it
+    had reached. The agent persists the turn as it goes, so a rating pressed while
+    the answer was still arriving cancelled the tool call it was in the middle of
+    and left the turn half-finished.
+
+    A Streamlit container is bound to the place it was made, so reserving one at
+    the seam and filling it later puts the control exactly where calling at the
+    seam did -- without it existing while there is still work to interrupt. The
+    same trick the retrieval box already used, for the same reason.
+    """
+    box = None
+    seat = None
+    # Where the entry chooser goes, reserved under the evidence list and filled once the answer is
+    # complete, for the rating's reason above: a widget is live the moment it is drawn.
+    chooser = None
+    entries: Item | None = None
+    prose, evidence = st.columns(READING_SPLIT, gap="large")
+    drawn: list[Item] = [] if into is None else into
+    for item in items_for(events, repo):
+        if item.kind is Kind.PROGRESS and box is None:
+            # Created inside the column, drawn into afterwards. A Streamlit
+            # container is bound to the place it was made, so `with box` works
+            # from anywhere once it exists -- which is what lets the loop keep
+            # one flat shape while writing into two columns.
+            with prose:
+                box = _retrieval_box(expanded=True)
+        if after_prose is not None and seat is None and _ends_the_prose(item):
+            with prose:
+                seat = st.container()
+        with box if item.kind is Kind.PROGRESS else _column_for(item, prose, evidence):
+            draw(item, _numbers_with(drawn, item))
+            if item.kind is Kind.ENTRIES and item.table is not None:
+                chooser, entries = st.container(), item
+        drawn.append(item)
+    if box is not None:
+        box.update(label=as_text(search_line(drawn)), state="complete", expanded=False)
+    if chooser is not None and entries is not None and entries.table is not None:
+        with chooser:
+            draw_open_entry(entries.table, _numbers_with(drawn), entries.question_id)
+    if after_prose is not None:
+        # The generator is spent by now, so there is nothing left for a click to
+        # interrupt. A turn that never reached the seam gets the foot of its own
+        # column, which is where the seam would have put it anyway.
+        with seat if seat is not None else prose:
+            after_prose()
+    return drawn
+
+
+#: Shown above the comment box. Short on purpose: a hint that wraps into a
+#: paragraph is one nobody reads, and this one has to survive being skimmed.
+#:
+#: It asks for an identifier by name because per-entry rating is not built, and
+#: what readers choose to write about entries is the evidence for whether it
+#: should be (ADR-0740). "e.g. 102345" rather than "e.g. BNID 102345": readers
+#: copy the format they are shown, and the bare number is what a query can find
+#: either way.
+FEEDBACK_HINT = "What was wrong? If an entry is incorrect, please give its ID (e.g. 102345)."
+
+FEEDBACK_THANKS = "Thanks — recorded."
+
+# The thumbs, in orange. `st.feedback` has no colour parameter in 1.61.1 -- its
+# whole signature is options, key, default, disabled, on_change, args, kwargs,
+# width -- so this is CSS over the rendered control.
+#
+# Orange rather than red, though both were offered. Red on a thumbs *up* reads as
+# an alarm about the thing the reader just approved of; orange is an attention
+# colour and not an error one, so the same rule can cover both thumbs without one
+# of them saying something wrong.
+#
+# **`stFeedback`, not `stButtonGroup`, and the difference was a shipped bug.**
+# `st.feedback` has its own module and enqueues as `"feedback"`, so the frontend
+# renders its `Feedback` component -- test ids `stFeedback` and
+# `stFeedbackButton`. `stButtonGroup` belongs to `st.pills` and
+# `st.segmented_control`. The first version of this rule named the latter, matched
+# nothing, and the thumbs stayed grey.
+#
+# The test that was supposed to prevent that asserted the id appeared in the
+# frontend bundle. It does -- in `ButtonGroup.DMpjOF8Q.js`, for a different
+# widget. So a grep-level check passed while the feature was dead, which is why
+# `test_the_colour_rule_names_an_id_st_feedback_actually_renders` now reads the
+# id out of the `Feedback` component's own bundle instead of looking for a string
+# anywhere in `static/`.
+#
+# **This degrades to nothing.** If a future version renames either id the rule
+# matches nothing and the thumbs keep their default colour -- a strictly safer
+# failure than the prototype banner's, which falls back to sitting in the page.
+#
+# **`:not(:disabled)` is the load-bearing part, and it took three attempts to get
+# right.** `answer-feedback` requires that a rating, once given, is *shown* as
+# settled. Streamlit does that itself: `Feedback`'s `&:disabled` rule replaces the
+# button's colour with `fadedText40` when selected and `fadedText10` when not.
+#
+# But it sets that colour on the *button*, and the icon is a separate span whose
+# own class declares `color: inherit` -- specificity 0,1,0. A rule reading
+# `[data-testid="stFeedback"] [data-testid="stIconMaterial"]` is 0,2,0, so it wins,
+# `inherit` never resolves, and the disabled colour has nothing to propagate to.
+# The thumbs would stay fully orange after rating, with `cursor: not-allowed` as
+# the only remaining signal -- the requirement quietly unmet by a stylesheet.
+# There is no `!important` in that bundle to save it.
+#
+# So the rule declines to apply to a disabled control rather than overriding it.
+# That also avoids naming which half of the pair is selected --
+# `stFeedbackButtonActive` is the markup most likely to move under us, and letting
+# Streamlit keep its own state styling means never having to track it.
+#: **Live thumbs only. The settled state is deliberately left alone.**
+#:
+#: Two attempts to style a *rated* thumb both went wrong — first by relying on
+#: Streamlit's disabled colour reaching the icon through `inherit`, then by
+#: fading it with `opacity` — and neither could be checked from here, because
+#: nothing in this suite renders CSS. The `:disabled` half also had a consequence
+#: nobody wanted: the control is disabled while any question is answering, not
+#: only once rated, so every earlier turn's thumbs changed appearance for the
+#: duration of every run.
+#:
+#: So the rule colours the thumbs and stops. Whatever a rated thumb looks like is
+#: Streamlit's business, and the widget is still disabled, still `aria-checked`,
+#: and still shows `cursor: not-allowed`.
+FEEDBACK_CSS = """
+<style>
+[data-testid="stFeedback"] [data-testid="stIconMaterial"] { color: #ff9d3c; }
+@media (prefers-color-scheme: light) {
+  [data-testid="stFeedback"] [data-testid="stIconMaterial"] { color: #c2410c; }
+}
+</style>
+"""
+
+
+def draw_feedback_style() -> None:
+    """Emit the thumbs' colour rule, once for the page.
+
+    Once, not per rating: `draw_feedback` runs for every turn in the transcript,
+    and a `<style>` block per turn is the same rule repeated as many times as the
+    conversation is long. It is a page-level element, so it is drawn where the
+    page's other one is.
+    """
+    st.markdown(FEEDBACK_CSS, unsafe_allow_html=True)
+
+
+def question_id_of(items: Iterable[Item]) -> str:
+    """The question a turn's items came from, or "" if none say.
+
+    Empty rather than raising: an item drawn before this field existed, or a turn
+    that produced nothing but an ending, is a turn with no rating rather than a
+    crash on a page somebody is reading.
+    """
+    for item in items:
+        if item.question_id:
+            return item.question_id
+    return ""
+
+
+def is_ratable(items: Iterable[Item]) -> bool:
+    """Whether this turn has something a reader could form a view about.
+
+    An answer. Not an ending alone: a question that stopped at a spend ceiling or
+    a missing key produced nothing the reader can judge, and offering a thumb
+    there collects a verdict on the infrastructure while looking like a verdict on
+    the science.
+    """
+    items = list(items)
+    return bool(question_id_of(items)) and any(item.kind is Kind.ANSWER for item in items)
+
+
+def question_pending(state: Any) -> bool:
+    """Whether a question has been submitted and is about to be answered.
+
+    True for the whole of the run that answers it, including the part before the
+    agent is called -- which is the point. Every control already on the page is
+    live in the browser while that run is working, and a click on any of them
+    re-runs the script, abandoning the agent's generator mid-tool-call. So the
+    page needs to know this *before* it redraws the transcript, not after.
+    """
+    return bool(state.get(ASK_KEY)) or bool(state.get(EXAMPLE_KEY))
+
+
+def draw_feedback(
+    items: Iterable[Item], session_id: str, state: Any = None, *, answering: bool = False
+) -> None:
+    """Offer a rating for one answered turn, and a comment once it has been rated.
+
+    **Drawn once per turn per script run**, which is a property of where it is
+    called rather than of anything here: the transcript loop redraws past turns
+    and the live branch draws the new one, and the new turn joins the transcript
+    only after that loop has finished. Move the append above the loop and this
+    draws twice, which is a `DuplicateWidgetID` and not a subtle failure --
+    `test_web_driver_feedback.py` pins it anyway, because the subtle version is
+    what happens if the keys ever stop being unique.
+
+    Keys derive from the question identifier, never from the turn's position.
+    Position looks stable because the transcript is append-only, but it lives in
+    session state alone -- reopening the same `?session=` restarts it at 0 while
+    the conversation continues, so two different questions would share a key. The
+    loud version of that is a duplicate-key error; the quiet version is a rating
+    landing on the wrong answer with no error at all.
+    """
+    state = st.session_state if state is None else state
+    items = list(items)
+    if not is_ratable(items):
+        return
+    question_id = question_id_of(items)
+    given = feedback.rating_for(state, question_id)
+
+    st.feedback(
+        "thumbs",
+        key=_verdict_key(question_id),
+        # `or answering`: inert for the whole of a run that is answering a
+        # question. Everything on the page is clickable while the agent works, and
+        # a click re-runs the script, which abandons the generator at whatever
+        # yield it had reached -- so a thumb on a *past* answer could cancel the
+        # tool call of the question being asked now.
+        # Disabled once given, rather than left live. Clicking a selected thumb
+        # clears it, and Streamlit discards the state of a widget it did not
+        # render -- so an un-disabled control lets a reader wipe the comment box
+        # out from under their own half-typed comment. A rating is final for the
+        # answer (`answer-feedback`), and the control should look final too.
+        disabled=given is not None or answering,
+        on_change=_took_a_verdict,
+        args=(question_id, session_id, state),
+    )
+    if given is None:
+        return
+    # Only disapproval opens the box. The hint asks what was *wrong*, which is a
+    # question nobody can answer about an answer they just approved -- a reader
+    # who thumbs up and is then asked what went wrong reads it as the page not
+    # having registered the click. Approval is the cheap signal, and the whole
+    # point of it being cheap is that it asks for nothing further.
+    if given.verdict is not feedback.Verdict.DOWN or given.commented:
+        st.caption(FEEDBACK_THANKS)
+        return
+    _draw_comment_box(question_id, session_id, state, answering=answering)
+
+
+def _verdict_key(question_id: str) -> str:
+    return f"numera_ask.verdict.{question_id}"
+
+
+def _comment_key(question_id: str) -> str:
+    return f"numera_ask.comment.{question_id}"
+
+
+def _took_a_verdict(question_id: str, session_id: str, state: Any) -> None:
+    """Record on the click, not on the comment.
+
+    Most readers who rate will do nothing else, and a design that waits for a
+    second action to commit the first collects nothing from them.
+    """
+    verdict = feedback.Verdict.from_widget(state.get(_verdict_key(question_id)))
+    if verdict is None:
+        return
+    feedback.record_verdict(state, question_id=question_id, session_id=session_id, verdict=verdict)
+
+
+def _draw_comment_box(
+    question_id: str, session_id: str, state: Any, *, answering: bool = False
+) -> None:
+    """The comment, offered only after disapproval, and inside a form of its own.
+
+    **The thumb must stay outside this form** -- inside one it would read `None`
+    until the form submitted, so the box could never appear conditionally on it
+    at all. The form holds the text and its button, which is what a form is for:
+    several widgets submitted as one act.
+
+    It is a form rather than a text area beside a button because the plain pair
+    takes two actions to send. Typing leaves the text uncommitted; the first
+    click or Ctrl+Enter commits it and reruns; only a second one presses Send.
+    A `disabled=` on the button made that worse rather than better -- the first
+    click landed on a disabled control and did nothing at all. A form submits the
+    text and the press together, so one action sends.
+
+    **Where the draft actually lives, corrected.** This used to say the draft was
+    held in the widget's own session-state key. It is not: a form batches its
+    widgets and sends nothing to the server until the submit button is pressed
+    (`streamlit/elements/form.py` -- "all widget values inside the form will be
+    sent to Streamlit in a batch"), so before submit that key still holds `""`.
+    The draft is in the browser, kept by the frontend re-rendering the same
+    widget key across re-runs.
+
+    In practice that holds, and drawing the box disabled rather than skipping it
+    is still what keeps the widget mounted. But it is the frontend's behaviour and
+    not a guarantee this code provides, so `answer-feedback`'s "a comment in
+    progress SHALL NOT be lost when the page is redrawn" rests on something
+    nothing here can enforce and nothing here can test -- `AppTest.set_value`
+    writes straight into server-side widget state, which is exactly what a browser
+    does *not* do before submit, so the test that appears to cover this would pass
+    even if the draft were dropped.
+    """
+    key = _comment_key(question_id)
+    with st.form(key=f"{key}.form", border=False):
+        # Drawn while a question is being answered, not skipped -- only disabled.
+        # Streamlit discards the state of a widget it did not render, so leaving
+        # this out for the duration of a run would take a half-typed comment with
+        # it, which is exactly what the rating is disabled rather than hidden to
+        # avoid.
+        text = st.text_area(FEEDBACK_HINT, key=key, height=80, disabled=answering)
+        sent = st.form_submit_button("Send", disabled=answering)
+    # Empty is a no-op rather than a refusal: the button cannot be disabled for it
+    # without reintroducing the two-action problem above, and there is nothing to
+    # tell a reader who pressed Send with nothing typed that they do not know.
+    if sent and text.strip():
+        feedback.record_comment(state, question_id=question_id, session_id=session_id, text=text)
+        st.rerun()
+
+
+def show(
+    items: Iterable[Item],
+    after_prose: Callable[[], None] | None = None,
+    *,
+    answering: bool = False,
+) -> None:
+    """Put a finished question's items back on screen after a re-run.
+
+    Retrieval is collapsed here, where the live path leaves it open: while a
+    question is running the progress is the only thing to look at, and once it
+    has an answer the progress is the thing in the way.
+
+    `after_prose` lands at the same seam as on the live path, by the same
+    predicate -- a past turn and the turn just answered must not put the rating in
+    two different places, or scrolling back changes the layout.
+    """
+    items = list(items)
+    # The whole session's numbering: a past turn's numbers were fixed when it was first met, and
+    # nothing later changes them (`entry_numbers`).
+    numbers = _numbers_with(items)
+    prose, evidence = st.columns(READING_SPLIT, gap="large")
+    progress = [item for item in items if item.kind is Kind.PROGRESS]
+    if progress:
+        with prose, _retrieval_box(expanded=False, state="complete", label=search_line(items)):
+            for item in progress:
+                draw(item)
+    for item in items:
+        if item.kind is Kind.PROGRESS:
+            continue
+        if after_prose is not None and _ends_the_prose(item):
+            with prose:
+                after_prose()
+            after_prose = None
+        with _column_for(item, prose, evidence):
+            draw(item, numbers)
+            if item.kind is Kind.ENTRIES and item.table is not None:
+                # Disabled, not hidden, while another question is answering: a widget Streamlit
+                # does not render loses its state, and the reader's choice with it.
+                draw_open_entry(item.table, numbers, item.question_id, answering=answering)
+    if after_prose is not None:
+        with prose:
+            after_prose()

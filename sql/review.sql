@@ -6,7 +6,7 @@
 -- failure, and a decision is a first-class record with a foreign key whose writer must fail closed.
 -- Both differences are the point (ADR-0930); one table would have to lose one of them.
 --
--- `bionumbers.store` declares the same columns as SQLAlchemy Core tables and is the only writer.
+-- `numera_validator.store` declares the same columns as SQLAlchemy Core tables and is the only writer.
 -- **This file and that module must agree**, and nothing enforces it at runtime — a column added in
 -- one alone passes every test and is missing where it matters — so `tests/test_bionumbers_store.py`
 -- parses this file and compares the names. Keep one column per line for that reason.
@@ -30,7 +30,7 @@
 --
 -- `licence` is here so a reader can see on what terms the paper's text was allowed in at all. A
 -- paper whose licence is `UNLICENSED` may still have this row: it is bibliography and a state.
--- `bionumbers.store.load_run` refuses to write any *item* for it, because an item carries the
+-- `numera_validator.store.load_run` refuses to write any *item* for it, because an item carries the
 -- paper's own sentences and those are never written past the disk cache.
 create table if not exists review_paper (
     run_id           text not null,
@@ -51,7 +51,7 @@ create table if not exists review_paper (
     topic            text not null default '',
     -- The bibliographic record as one CSL-JSON item (ADR-1750): authors, journal, volume, issue,
     -- pages, date and identifiers, read from the paper's front matter. The application formats
-    -- the citation a reader sees from it. Empty until `bionumbers upgrade-store --data` fills it
+    -- the citation a reader sees from it. Empty until `numera-validator upgrade-store --data` fills it
     -- from the cached full text; nothing here can, since no row holds the authors.
     csl_json         text not null default '',
     primary key (run_id, pmcid)
@@ -136,7 +136,7 @@ create table if not exists review_item (
 --
 -- A reviewer may raise an issue instead at either step: the item cannot be judged as it stands.
 -- `issue` holds the text and `approved` stays null; `chosen_supporting` is null if no text had
--- been chosen yet. A verdict is never stored beside an issue. `bionumbers.store` has one writer
+-- been chosen yet. A verdict is never stored beside an issue. `numera_validator.store` has one writer
 -- per step and no other way in; there is no check constraint, since one cannot be added to a
 -- deployed table by an idempotent statement and a rule only fresh databases enforce reads as one
 -- they all do.
@@ -144,7 +144,7 @@ create table if not exists review_item (
 -- `answered_by` is the model the provider says answered, where it differs from `reviewer_model`:
 -- a router names itself in the request and the routed model in the reply. Null for a person.
 -- `value_agreement` is how `value_read` stands to the stored value — MATCHES,
--- SAME_NUMBER_DIFFERENT_UNIT, DIFFERS or UNREADABLE (`bionumbers.readings`) — computed when the
+-- SAME_NUMBER_DIFFERENT_UNIT, DIFFERS or UNREADABLE (`numera_validator.readings`) — computed when the
 -- choice is written, so a person's reading and a model's are compared the same way.
 --
 -- `reviewer_role` is the rung of the trust ladder the reviewer stands on (`AI`, `STUDENT`,
@@ -186,7 +186,7 @@ create index if not exists review_decision_item_reviewer on review_decision (ite
 -- BioNumbers' own entries as the curated tier (ADR-1510): measured, referenced, and with nothing
 -- in the entry itself that gives cause for doubt — no fused or one-sided range, a readable unit,
 -- no "rule of thumb". Shown beside harvested entries at the top of the trust order. Replaced whole
--- on every load by `bionumbers curate`: no decision points at a curated entry. The corpus these
+-- on every load by `numera-validator curate`: no decision points at a curated entry. The corpus these
 -- come from is an external input with unresolved licensing; this table is a copy of part of it.
 create table if not exists curated_entry (
     entry_id    integer primary key,

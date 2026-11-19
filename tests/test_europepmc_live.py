@@ -10,8 +10,8 @@ import httpx
 import pytest
 from europepmc_double import NOT_INDEXED_PMID, OPEN_ACCESS_PMCID, OPEN_ACCESS_PMID, PAYWALLED_PMID
 
-from bionumbers.europepmc import EuropePMC
-from bionumbers.retrieval import (
+from numera_validator.europepmc import EuropePMC
+from numera_validator.retrieval import (
     ArtifactKind,
     RetrievedDocument,
     SourceIdentifier,

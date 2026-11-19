@@ -20,18 +20,18 @@ A person may narrow what they are shown to one domain or one topic, and may set 
 ("not my field"); the simulated reviewers get none of this (ADR-0980). Those are page arguments
 to the serving query, and the runner never passes them.
 
-Everything that is not a screen element is in `bionumbers.review` -- and in `bionumbers.deployment`
-for the two things taken from the deployment, its database and a person's rung -- so what the page
-decides is tested without a browser and only the order and lifetime of the elements needs `AppTest`
-(`.claude/rules/streamlit-driver.md`).
+Everything that is not a screen element is in `numera_validator.review` -- and in
+`numera_validator.deployment` for the two things taken from the deployment, its database and a
+person's rung -- so what the page decides is tested without a browser and only the order and
+lifetime of the elements needs `AppTest` (`.claude/rules/streamlit-driver.md`).
 """
 
 import time
 
 import streamlit as st
 
-from bionumbers import deployment, review, store
-from scinumbers_ask import web
+from numera_ask import web
+from numera_validator import deployment, review, store
 
 #: The one sentence for a deployment with no database behind it. It names the secrets section
 #: rather than describing the symptom, because the operator's next move is to write that section --
@@ -122,16 +122,16 @@ def _text_card(shown, *, chosen: bool, choosable: bool, key: str) -> bool:
 #: `session_state` after a save, the first version of this, left the buttons clicked and the
 #: comment typed in the browser (seen by Yoav on 2026-09-22): the widget's own state outlived the
 #: key. A fresh key is the mechanism Streamlit documents for a fresh widget.
-CHOICE_KEY = "bionumbers.review.choice"
-VALUE_KEY = "bionumbers.review.value"
-VERDICT_KEY = "bionumbers.review.verdict"
-COMMENT_KEY = "bionumbers.review.comment"
-ISSUE_KEY = "bionumbers.review.issue"
+CHOICE_KEY = "numera_validator.review.choice"
+VALUE_KEY = "numera_validator.review.value"
+VERDICT_KEY = "numera_validator.review.verdict"
+COMMENT_KEY = "numera_validator.review.comment"
+ISSUE_KEY = "numera_validator.review.issue"
 #: `(item id, step, monotonic seconds)` for the screen now showing. Keyed by the item and the step
 #: because the script reruns on every click: a clock restarted per run would measure the last
 #: interaction rather than the decision, and one never restarted would charge this screen with the
 #: time spent on the last.
-STARTED_KEY = "bionumbers.review.started"
+STARTED_KEY = "numera_validator.review.started"
 
 #: The buttons' labels. Raising an issue is two clicks -- the button opens a box, and a second
 #: button confirms it -- so an issue is never one stray click away from a verdict, and the
@@ -144,12 +144,12 @@ CONFIRM_ISSUE = "Confirm the issue"
 CANCEL_ISSUE = "Cancel issue"
 SKIP_PAPER = "Skip this paper"
 #: The screen whose issue box is open, if any: `<item id>:<step>`.
-RAISING_KEY = "bionumbers.review.raising"
+RAISING_KEY = "numera_validator.review.raising"
 
 #: The filters' keys and their "no filter" option. One selectbox each, in the sidebar, so the
 #: choice survives from item to item; `ANY` is a label, never a stored value.
-DOMAIN_KEY = "bionumbers.review.domain"
-TOPIC_KEY = "bionumbers.review.topic"
+DOMAIN_KEY = "numera_validator.review.domain"
+TOPIC_KEY = "numera_validator.review.topic"
 ANY = "All"
 
 # Wide, because the two texts sit side by side (Yoav, 2026-10-09): a reviewer compares them, and

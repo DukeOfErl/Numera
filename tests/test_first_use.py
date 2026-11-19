@@ -17,8 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from scinumbers_ask import first_use
-from scinumbers_ask.first_use import URL_ENV, FirstSeen, first_seen, main
+from numera_ask import first_use
+from numera_ask.first_use import URL_ENV, FirstSeen, first_seen, main
 
 SIGNED_IN = datetime(2026, 10, 2, 14, 3, tzinfo=UTC)
 ASKED = datetime(2026, 10, 2, 14, 9, tzinfo=UTC)
@@ -206,9 +206,9 @@ def test_importing_first_use_never_loads_the_neon_control_plane():
     # Checked in a fresh process, because this one has long since imported `neon` for
     # other tests: what matters is that `first_use` does not pull it in by itself.
     program = (
-        "import sys, scinumbers_ask.first_use; "
-        "bad = [m for m in ('scinumbers_ask.neon', 'scinumbers_ask.pending', "
-        "'scinumbers_ask.enrol') if m in sys.modules]; "
+        "import sys, numera_ask.first_use; "
+        "bad = [m for m in ('numera_ask.neon', 'numera_ask.pending', "
+        "'numera_ask.enrol') if m in sys.modules]; "
         "sys.exit(1 if bad else 0)"
     )
     result = subprocess.run([sys.executable, "-c", program], capture_output=True, text=True)

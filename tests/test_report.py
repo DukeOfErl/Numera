@@ -15,10 +15,10 @@ from dataclasses import replace
 import pytest
 from conftest import write_all_shapes_corpus
 
-from scinumbers_ask.corpus import Entry, load
-from scinumbers_ask.evaluation import Provenance, Result
-from scinumbers_ask.question_set import Question, Tier
-from scinumbers_ask.report import expected_taken_from_the_set, render
+from numera_ask.corpus import Entry, load
+from numera_ask.evaluation import Provenance, Result
+from numera_ask.question_set import Question, Tier
+from numera_ask.report import expected_taken_from_the_set, render
 
 PROVENANCE = Provenance(
     recorded_at="2026-09-05T09:00:00+00:00",

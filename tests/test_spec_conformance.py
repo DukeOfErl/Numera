@@ -414,7 +414,7 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_door_demo.py::test_the_page_is_titled_as_a_demo_and_carries_every_question",
         "test_door_demo.py::test_every_shortened_answer_says_what_was_changed",
         # The chart's last clause, "as the corpus stores it", is a `corpus`-marked
-        # test: it needs SCINUMBERS_CORPUS and is deselected by default.
+        # test: it needs NUMERA_CORPUS and is deselected by default.
         "test_door_demo_chart.py::test_every_mark_sits_where_its_volume_is_on_the_drawn_axis",
         "test_door_demo_chart.py::test_the_door_shows_exactly_the_chart_the_script_draws",
         "test_door_demo_chart.py::test_the_chart_says_charts_are_not_yet_a_feature",
@@ -1129,6 +1129,11 @@ COVERED.update(
             "test_config.py::test_a_setting_read_without_a_driver_is_still_refused",
             "test_config.py::test_the_replacement_named_is_one_the_code_actually_reads",
             "test_config.py::test_no_retired_name_is_still_being_read",
+            "test_config.py::test_no_replacement_is_itself_retired",
+            "test_config.py::test_a_name_retired_twice_is_refused_with_the_current_name",
+            "test_validator_environment.py::test_a_retired_name_is_refused_at_the_read",
+            "test_validator_environment.py::test_the_command_reports_a_retired_name_and_stops",
+            "test_validator_environment.py::test_the_model_client_refuses_a_retired_key_name",
             "test_terminal_driver.py::test_a_retired_variable_is_refused_before_the_corpus_is_looked_for",
             "test_web_driver.py::test_the_page_refuses_a_retired_variable_before_it_looks_for_a_corpus",
         ),
