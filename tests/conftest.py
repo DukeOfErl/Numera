@@ -101,6 +101,30 @@ def _the_suite_does_not_read_the_developer_s_secrets():
     st.secrets = original
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _streamlit_reads_no_secrets_file_on_this_machine(tmp_path_factory):
+    """Point Streamlit's own secrets loader at an empty file for the whole run.
+
+    The fixture above replaces `st.secrets`, but an `AppTest` run parses secrets
+    itself, from the files the `secrets.files` option lists -- by default the
+    developer's `~/.streamlit/secrets.toml` and this checkout's -- and copies every
+    top-level key into `os.environ` while it does. That put the tracing switch, the
+    Langfuse keys and the trail database's URL into a page test's environment, so
+    hosted tracing came on with real keys behind the per-test clearing in
+    `_no_test_reaches_a_hosted_tracer`. Session-scoped so it is in place before the
+    first page loads in each worker. `tests/test_suite_reads_no_local_secrets.py`
+    holds it.
+    """
+    from streamlit import config
+
+    empty = tmp_path_factory.mktemp("streamlit-secrets") / "secrets.toml"
+    empty.write_text("")
+    original = config.get_option("secrets.files")
+    config.set_option("secrets.files", [str(empty)])
+    yield
+    config.set_option("secrets.files", original)
+
+
 @pytest.fixture(autouse=True)
 def _no_test_reaches_a_hosted_tracer(monkeypatch):
     """Every test starts with hosted tracing off and the process's tracer unbuilt.

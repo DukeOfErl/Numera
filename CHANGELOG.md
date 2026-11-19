@@ -74,6 +74,11 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **The test suite no longer reads the developer's secrets files.** A page test parsed
+  `.streamlit/secrets.toml` through Streamlit's own loader, which copies top-level keys into the
+  environment, so on a machine with hosted tracing configured it switched Langfuse tracing on with
+  the real keys and tried to reach the real trail database. Streamlit is now pointed at an empty
+  secrets file for the whole run, and a test holds that.
 - **The git-tracking guard refuses when git gives no answer.** A timeout or a git that could not
   be started was read as "no git" and the write allowed; it is now refused, and the reader told to
   run it again. An evaluation results file is checked on every append, not only when created.
