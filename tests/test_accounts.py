@@ -153,7 +153,7 @@ def test_an_unreadable_table_raises_rather_than_answering_none(engine):
             ConnectionError('could not translate host name "db.example.invalid"'),
             "db.example.invalid",
         ),
-        (PermissionError('password authentication failed for user "scinumbers"'), "password"),
+        (PermissionError('password authentication failed for user "numera"'), "password"),
     ],
     ids=["a misconfigured address", "an unreachable host", "a refused password"],
 )

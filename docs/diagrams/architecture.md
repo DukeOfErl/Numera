@@ -113,7 +113,7 @@ flowchart TB
         units[units.py]
         sc[store_corpus.py]
     end
-    bn[["bionumbers<br/>tiers · readings"]]
+    bn[["numera_validator<br/>tiers · readings"]]
     pg[("Postgres<br/>append-only trail")]
     lf[("Langfuse Cloud EU<br/>one trace per question")]
 
@@ -136,7 +136,7 @@ flowchart TB
     table --> tm
     tm --> corpus
     sc --> corpus
-    sc -- "the only import of<br/>bionumbers (ADR-1600)" --> bn
+    sc -- "the only import of<br/>numera_validator (ADR-1600)" --> bn
     trace -. "logging handler" .-> store
     store -. "best-effort" .-> pg
     web -- "supplies the engine" --> store

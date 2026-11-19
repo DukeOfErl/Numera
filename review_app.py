@@ -92,9 +92,7 @@ export default function (component) {
   card.onclick = () => { if (data.choosable) setTriggerValue("clicked", data.label) }
 }
 """
-_CARD = st.components.v2.component(
-    "scinumbers_text_card", html=_CARD_HTML, css=_CARD_CSS, js=_CARD_JS
-)
+_CARD = st.components.v2.component("numera_text_card", html=_CARD_HTML, css=_CARD_CSS, js=_CARD_JS)
 
 
 def _text_card(shown, *, chosen: bool, choosable: bool, key: str) -> bool:

@@ -237,7 +237,7 @@ def _cards(at: AppTest):
         c
         for c in _elements(at)
         if type(c.proto).__name__ == "BidiComponent"
-        and c.proto.component_name == "scinumbers_text_card"
+        and c.proto.component_name == "numera_text_card"
     ]
 
 

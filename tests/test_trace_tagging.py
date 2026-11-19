@@ -263,3 +263,12 @@ def test_an_empty_spec_adds_no_handler_and_writes_no_file(tmp_path, monkeypatch)
     to_file("")
     assert logger.handlers == []
     assert not list(tmp_path.iterdir())
+
+
+def test_the_logger_is_named_for_the_package():
+    """Log filters and the trace read the package's name; a rename that leaves this string
+    behind is silent, which is how `rename-to-scinumbers` came to add the tag assertion above."""
+    import numera_ask
+    from numera_ask.trace import LOGGER_NAME
+
+    assert LOGGER_NAME == numera_ask.__name__

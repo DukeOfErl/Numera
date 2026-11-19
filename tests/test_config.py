@@ -187,6 +187,21 @@ def test_a_name_retired_twice_is_refused_with_the_current_name(monkeypatch):
     assert "SCINUMBERS_CORPUS" not in str(raised.value)
 
 
+#: Every `SCINUMBERS_*` setting the code read before rename-to-numera, from a survey of `dev`
+#: at ecc1cf4 -- written out here, not derived from `RENAMED_ENV`, because a test built from
+#: the map loses its case when an entry is deleted. `SCINUMBERS_TEST_WORKERS` is absent on
+#: purpose: only `bin/testloop.py` reads it (ADR-1900).
+RETIRED_BY_NUMERA = (
+    "CORPUS", "STORE", "RUN", "TRACING", "CHECKPOINTS", "TRACE", "TRAIL_READ_URL",
+    "RUN_BUDGET_USD", "QUESTION_CEILING_USD", "MODEL", "MAX_SESSIONS", "SESSION_IDLE_S",
+)  # fmt: skip
+
+
+@pytest.mark.parametrize("suffix", RETIRED_BY_NUMERA)
+def test_each_name_retired_by_the_numera_rename_is_refused(suffix):
+    assert RENAMED_ENV.get(f"SCINUMBERS_{suffix}") == f"NUMERA_{suffix}"
+
+
 def test_no_retired_name_is_still_being_read():
     """The other direction, and the one the first version of this exempted.
 

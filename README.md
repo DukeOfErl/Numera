@@ -160,7 +160,11 @@ your `PATH`:
 | `numera-enrol` | enrol one tester: mint a capped credential and record the account |
 | `numera-eval` | the evaluation harness: `check`, `run`, `report` |
 | `bionumbers-ingest` | build a corpus from the published export |
-| `bionumbers` | **declared, not yet built.** The grounding validator's entry point, for a package this repository does not contain — running it raises `ModuleNotFoundError`. Left in place because the name belongs to that work package; see `docs/roadmap.md` |
+| `numera-validator` | the validator prototype: `discover`, `harvest`, `extract`, `load`, `curate`, `status`, `simulate-review`, `upgrade-store` (see [The validator prototype](#the-validator-prototype-numera_validator)) |
+
+One package keeps the old name on purpose. `bionumbers_ingest` and its command read BioNumbers' own
+export, so they are named for the source they adapt; everything named for the project says Numera
+(ADR-0400, ADR-1900).
 
 A bare `numera-enrol` is `command not found` until the virtualenv is on your
 path. Three ways, in increasing permanence:
@@ -582,8 +586,8 @@ on a crash — is holding it.
 shell that asked for it, and nowhere else:
 
 ```bash
-mkdir -p ~/.config/scinumbers
-chmod 700 ~/.config/scinumbers
+mkdir -p ~/.config/numera
+chmod 700 ~/.config/numera
 touch ~/.config/numera/enrol.env
 chmod 600 ~/.config/numera/enrol.env      # before anything secret is in it
 nano ~/.config/numera/enrol.env           # or your editor
@@ -918,7 +922,7 @@ layer — a model separating an answer into claims — is deferred to `add-judge
 hand-labelled reference a judge must be validated against came back 29 sound of 30, and cannot gate
 anything.
 
-## The validator prototype (`bionumbers`)
+## The validator prototype (`numera_validator`)
 
 The ask agent answers from a curated corpus. The validator goes the other way: from a **property
 question** to the open-access literature, out of which it extracts candidate numbers with their
