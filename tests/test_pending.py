@@ -227,9 +227,9 @@ def test_the_missing_variable_is_named(monkeypatch, capsys, missing):
 
 def test_waiting_returns_rows_rather_than_a_report():
     """Returned, not printed, so a second caller is not made to parse prose."""
-    engine = _Engine({"signin.resend_requested": [("a@b.org", WHEN, 3)]})
+    engine = _Engine({"signin.resend_requested": [("a@example.org", WHEN, 3)]})
     no_email, not_enrolled = waiting(engine)
-    assert no_email == [Waiting(address="a@b.org", last_seen=WHEN, times=3)]
+    assert no_email == [Waiting(address="a@example.org", last_seen=WHEN, times=3)]
     assert not_enrolled == []
     assert any("statement_timeout" in s for s in engine.conn.statements)
 

@@ -12,6 +12,11 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **A commit that adds an email address is refused** (`bin/check_addresses.py`, a pre-commit
+  hook). Placeholders on the reserved example domains pass, and so do the named exceptions: the
+  open-access paper fixtures, and the privacy policy's contact line. A personal address in a
+  docstring example has been replaced with a description.
+
 - **Each harvested paper carries its bibliographic record.** Authors in the paper's order,
   journal, volume, issue, pages, date and identifiers, read from the JATS front matter the
   harvest already parses and kept as one CSL-JSON item (`review_paper.csl_json`), so the
