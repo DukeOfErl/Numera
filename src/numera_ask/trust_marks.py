@@ -4,7 +4,7 @@
 it, so the model is never shown a star and cannot learn to write one (ADR-1630). The model is told
 a tier in words by `tools.trust_text`; this module draws the same tier for a person.
 
-Reads a tier by its name (`corpus.TRUST_LEVEL`), so neither driver imports `bionumbers`
+Reads a tier by its name (`corpus.TRUST_LEVEL`), so neither driver imports `numera_validator`
 (ADR-1600). An entry with no tier -- one from a corpus file -- draws as nothing at all: not zero
 stars, which would say that someone looked and no one approved.
 """

@@ -1131,6 +1131,8 @@ COVERED.update(
             "test_config.py::test_no_retired_name_is_still_being_read",
             "test_config.py::test_no_replacement_is_itself_retired",
             "test_config.py::test_each_name_retired_by_the_numera_rename_is_refused",
+            "test_config.py::test_no_setting_this_project_names_is_read_past_the_guard",
+            "test_first_use.py::test_the_retired_url_name_is_refused_by_name",
             "test_config.py::test_a_name_retired_twice_is_refused_with_the_current_name",
             "test_validator_environment.py::test_a_retired_name_is_refused_at_the_read",
             "test_validator_environment.py::test_the_command_reports_a_retired_name_and_stops",

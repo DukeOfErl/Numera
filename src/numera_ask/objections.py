@@ -31,8 +31,8 @@ def load(store: str | Path) -> dict[str, tuple[str, ...]]:
     "did not approve"; each is introduced by the reviewer's role, and marked simulated where a model
     stood in for that role.
     """
-    # Imported here, not at the top: a corpus-file run never imports `bionumbers` (ADR-1600), and
-    # the drivers import this module on every run.
+    # Imported here, not at the top: a corpus-file run never imports `numera_validator`
+    # (ADR-1600), and the drivers import this module on every run.
     from sqlalchemy import create_engine, select
 
     from numera_validator.store import review_decision

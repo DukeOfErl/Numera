@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    # Annotation only. A corpus-file run never imports `bionumbers` (ADR-1600); the store's
+    # Annotation only. A corpus-file run never imports `numera_validator` (ADR-1600); the store's
     # loader, which does, is the one thing that puts a `Trust` here.
     from numera_validator.tiers import Trust
 
@@ -108,8 +108,9 @@ class Harvest:
 
 
 #: How many of five a trust tier stands for, keyed by the tier's name (ADR-0990's `Tier` is a string
-#: enum, so its name is its value). Keyed by name so that neither the tools nor the drivers import
-#: `bionumbers` to read a tier (ADR-1600). One scale for the model's view and the reader's stars.
+#: enum, so its name is its value). Keyed by name so that neither the tools nor the drivers
+#: import `numera_validator` to read a tier (ADR-1600). One scale for the model's view and the
+#: reader's stars.
 TRUST_LEVEL = {
     "CURATED": 5,
     "SENIOR_SCIENTIST": 4,

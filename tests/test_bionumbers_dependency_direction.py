@@ -1,6 +1,6 @@
 """The validator's dependency direction, asserted over the source (design D9).
 
-Core modules of `bionumbers` import no Streamlit and nothing from `numera_ask`; only
+Core modules of `numera_validator` import no Streamlit and nothing from `numera_ask`; only
 `deployment.py` (the page's database and a person's rung) and the root `review_app.py` (the
 driver) may. `review.py` is core: the simulated review builds its screens from it. Nothing in Python
 enforces this -- `import streamlit` inside `store.py` would run perfectly -- so it is read from the
@@ -49,6 +49,9 @@ REVIEW_APP_ALLOWED_MODULES = {
     "numera_validator.review",
     "numera_validator.store",
     "numera_validator.records",
+    # For `RetiredSetting` alone: the page reports a retired setting as a sentence, so it has to
+    # name the refusal it catches (ADR-1900). Standard library only.
+    "numera_validator.environment",
     "numera_ask.web",
 }
 

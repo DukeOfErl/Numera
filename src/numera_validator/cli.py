@@ -1,4 +1,4 @@
-"""The `bionumbers` command: discover, extract, load, status, simulate-review.
+"""The `numera-validator` command: discover, extract, load, status, simulate-review.
 
 One driver over the pipeline's steps, in the order the design fixes them (D1, ADR-1520):
 discovery writes what may be read, extraction reads it under the two ceilings and writes what

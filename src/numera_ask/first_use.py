@@ -32,12 +32,12 @@ indistinguishable from a quiet hour.
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from . import trail_store
+from .config import NotConfigured, env_setting
 from .trail_store import BATCH_CONNECT_TIMEOUT_S, BATCH_STATEMENT_TIMEOUT_MS
 
 URL_ENV = "NUMERA_TRAIL_READ_URL"
@@ -182,7 +182,13 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 2
-    url = os.environ.get(URL_ENV)
+    try:
+        # Through the guarded reader, so the retired `SCINUMBERS_TRAIL_READ_URL` is refused by
+        # name rather than ignored in favour of "set it first" (ADR-1900).
+        url = env_setting(URL_ENV)
+    except NotConfigured as refused:
+        print(str(refused), file=sys.stderr)
+        return 2
     if not url:
         print(NO_URL, file=sys.stderr)
         return 2

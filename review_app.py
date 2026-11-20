@@ -31,7 +31,7 @@ import time
 import streamlit as st
 
 from numera_ask import web
-from numera_validator import deployment, review, store
+from numera_validator import deployment, environment, review, store
 
 #: The one sentence for a deployment with no database behind it. It names the secrets section
 #: rather than describing the symptom, because the operator's next move is to write that section --
@@ -177,7 +177,13 @@ reviewer = admission.account.email if admission.account else None
 # can set a tier as a model's does.
 reviewer_role = deployment.reviewer_role_of(admission.account)
 
-engine = deployment.store_engine()
+try:
+    engine = deployment.store_engine()
+except environment.RetiredSetting as refused:
+    # Misconfiguration a person can fix, said in their terms: the ask page answers a retired name
+    # the same way (`streamlit_app.py`), and a traceback would bury the one sentence that matters.
+    st.error(str(refused))
+    st.stop()
 
 preference = store.Preference()
 with st.sidebar:

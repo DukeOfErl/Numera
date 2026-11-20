@@ -36,7 +36,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def _loaded_after(statements: str) -> set[str]:
-    """Which `bionumbers` modules a fresh interpreter holds after running `statements`.
+    """Which `numera_validator` modules a fresh interpreter holds after running `statements`.
 
     A fresh interpreter because this process has imported everything the suite touches, so asking
     `sys.modules` here would report what some other test loaded.
@@ -54,7 +54,8 @@ def _loaded_after(statements: str) -> set[str]:
 
 
 def test_a_corpus_file_run_never_imports_the_validator_package():
-    """ADR-1600: only the store's loader imports `bionumbers`, so a corpus-file run never does."""
+    """ADR-1600: only the store's loader imports `numera_validator`, so a corpus-file run never
+    does."""
     loaded = _loaded_after(
         "from numera_ask import agent, cli, corpus, entries_table, messages\n"
         "from numera_ask import repository, tools\n"
@@ -92,8 +93,9 @@ def by_label(store_path):
 
 
 def test_loading_the_store_imports_the_validator_package():
-    """The positive control for the corpus-file test above: the probe sees `bionumbers` when it
-    is loaded, so an empty set there means it was not, rather than that the probe sees nothing."""
+    """The positive control for the corpus-file test above: the probe sees `numera_validator` when
+    it is loaded, so an empty set there means it was not, rather than that the probe sees
+    nothing."""
     assert "numera_validator.tiers" in _loaded_after("from numera_ask import store_corpus")
 
 

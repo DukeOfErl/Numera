@@ -116,7 +116,7 @@ is a description of the code.
 ## Architecture
 
 Three work packages, three packages under `src/`, one dependency extra each, so no two branches edit
-the same source tree: `bionumbers_ingest` (`ingest`), `numera_ask` (`ask`), `bionumbers`
+the same source tree: `bionumbers_ingest` (`ingest`), `numera_ask` (`ask`), `numera_validator`
 (`validator`). All three are here now; the validator is a prototype (ADR-1520) and is described in
 its own subsection below.
 
@@ -189,8 +189,8 @@ core, and a test there refuses a name with no file behind it.
 | `permissions.py` | `Role`, `Permission`, `Identity`, and `GRANTS` — the default-deny table as data, with the pruning rule above it (ADR-0800) |
 | `authorization.py` | `allowed` / `require` / `Refused`: the one refusal, called inside the operation it guards, never by the page |
 | `accounts.py` | `lookup(engine, email)` and `insert(...)`: enrolment off one row, **fails closed** — the deliberate inverse of `trail_store` (ADR-0780). Both here so the case-folding rule has one home |
-| `store_corpus.py` | The harvest store as a corpus: read-only, labels, readings, tiers. **The one core module that imports `bionumbers`** (ADR-1600), so a corpus-file run never does |
-| `objections.py` | What objecting reviewers wrote, for the Trust cell and the terminal's list. **Presentation**: reviewers' words never reach the agent; imports `bionumbers` only when a store is loaded (ADR-1600, ADR-1630) |
+| `store_corpus.py` | The harvest store as a corpus: read-only, labels, readings, tiers. **The one core module that imports `numera_validator`** (ADR-1600), so a corpus-file run never does |
+| `objections.py` | What objecting reviewers wrote, for the Trust cell and the terminal's list. **Presentation**: reviewers' words never reach the agent; imports `numera_validator` only when a store is loaded (ADR-1600, ADR-1630) |
 | `trust_marks.py` | A tier as stars, `sim` and `⚠`, their legend, and the tier in words for an opened entry. **Presentation**: the model is told a tier in words and never shown a star (ADR-1630, ADR-1850) |
 | `references.py` | A harvested paper's reference in Chicago author-date, from its CSL-JSON, by citeproc-py; first author and year for the evidence list, from the record or BioNumbers' reference string. **Presentation**: the model names no paper and is never handed the authors (ADR-1640, ADR-1850) |
 | `enrol.py` | The two commands that open and close an account: `numera-enrol` mints a capped key and inserts the row, withdrawing the key if the row cannot be written (ADR-0900); `numera-withdraw` disables the row and revokes the key, in that order, so a partial failure leaves a refused account rather than a live one (ADR-1150). A harness module |
@@ -237,7 +237,7 @@ batches several into one hop; `question_ceiling` and `run_budget` bound spend;
 `CONVERSATION_BOUND` bounds a session's tokens. Each is configured where it binds
 and reported when it is reached (ADR-0180).
 
-### `bionumbers` — the validator prototype
+### `numera_validator` — the validator prototype
 
 A **fixed pipeline, not an agent** (ADR-1520): discovery → fetch → JATS reader → one structured
 extraction call → mechanical quote check → one retry → one second-text call → JSONL → Postgres → a

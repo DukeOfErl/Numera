@@ -797,3 +797,14 @@ def test_the_walk_over_the_page_sees_a_token_that_is_there(page):
     """The negative of the leak test: the walk must be able to find a token at all."""
     at = page.run()
     assert _on_screen(at, FIRST_SUPPORTING) or _on_screen(at, SECOND_SUPPORTING)
+
+
+def test_a_retired_setting_is_a_sentence_on_the_page_not_a_traceback(monkeypatch):
+    """The store comes from the environment here (no `[connections.usage]` in the empty secrets),
+    so a retired name refuses at `store_engine` -- said as the ask page says it (ADR-1900)."""
+    monkeypatch.setenv("BIONUMBERS_REVIEW_DB_URL", "sqlite:///old.sqlite")
+
+    at = AppTest.from_file(str(APP), default_timeout=TIMEOUT).run()
+
+    assert not at.exception
+    assert any("BIONUMBERS_REVIEW_DB_URL is now NUMERA_REVIEW_DB_URL" in e.value for e in at.error)

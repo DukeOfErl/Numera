@@ -192,8 +192,8 @@ one of the above.
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `OPENROUTER_API_KEY` | — | required; a question ends as `not_configured` without it |
-| `NUMERA_CORPUS` | — | path to the JSONL corpus; required unless `NUMERA_STORE` is set |
-| `NUMERA_STORE` | — | path to the harvest store (a SQLite file), read instead of a corpus file; see [Asking the harvest store](#asking-the-harvest-store). Setting both is refused |
+| `NUMERA_CORPUS` | — | path to the JSONL corpus; required unless `NUMERA_STORE` is set. Today that is BioNumbers' own export as converted by `bionumbers-ingest`: the name says what the agent reads, not where the entries came from, so a second source in the same format would use it too |
+| `NUMERA_STORE` | — | path to the harvest store (a SQLite file), read instead of a corpus file: numbers harvested from papers, with their reviews, beside the curated BioNumbers entries. See [Asking the harvest store](#asking-the-harvest-store). Setting both is refused |
 | `NUMERA_MODEL` | `anthropic/claude-opus-4.7` | the model, as an OpenRouter slug |
 | `NUMERA_QUESTION_CEILING_USD` | `0.60` | hard per-question limit; the warning is derived at 80% of it |
 | `NUMERA_RUN_BUDGET_USD` | `1.20` | total across every question in a run; where sign-in is configured, per account rather than shared |

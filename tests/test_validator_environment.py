@@ -41,3 +41,12 @@ def test_the_model_client_refuses_a_retired_key_name(monkeypatch):
 
     with pytest.raises(environment.RetiredSetting, match="NUMERA_OPENROUTER_API_KEY"):
         openrouter.OpenRouterModel()
+
+
+def test_the_validator_refuses_every_old_corpus_name_the_ask_package_refuses():
+    """Written out, not derived from either map: the corpus setting has had three names."""
+    from numera_ask.config import RENAMED_ENV
+
+    old_corpus_names = {"BIONUMBERS_ASK_CORPUS", "SCINUMBERS_CORPUS"}
+    assert {k for k, v in environment.RENAMED.items() if v == "NUMERA_CORPUS"} == old_corpus_names
+    assert {k for k, v in RENAMED_ENV.items() if v == "NUMERA_CORPUS"} == old_corpus_names

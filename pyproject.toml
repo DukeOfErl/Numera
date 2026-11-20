@@ -60,7 +60,7 @@ ask = [
     # LangChain handler and attribute propagation have moved before.
     # Installed and read: 4.15.6, 2026-09-24.
     "langfuse>=4.15,<5",
-    # The harvest store's tier rule and value parser are imported from `bionumbers`
+    # The harvest store's tier rule and value parser are imported from `numera_validator`
     # (ADR-1600), and those reach `numera_validator.records`, a pydantic model. Already
     # pulled in by LangChain; named because the code imports it directly, and a
     # transitive dependency is one a resolver may drop.

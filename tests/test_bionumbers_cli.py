@@ -1,4 +1,4 @@
-"""The `bionumbers` command, driven end to end over fixtures and doubles.
+"""The `numera-validator` command, driven end to end over fixtures and doubles.
 
 Nothing here reaches a network or a model. Europe PMC is the recorded double behind the command's
 `_europepmc` seam; the model is a scripted double behind `_model`, whose answers quote the real

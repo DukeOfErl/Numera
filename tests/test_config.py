@@ -198,8 +198,43 @@ RETIRED_BY_NUMERA = (
 
 
 @pytest.mark.parametrize("suffix", RETIRED_BY_NUMERA)
-def test_each_name_retired_by_the_numera_rename_is_refused(suffix):
-    assert RENAMED_ENV.get(f"SCINUMBERS_{suffix}") == f"NUMERA_{suffix}"
+def test_each_name_retired_by_the_numera_rename_is_refused(monkeypatch, suffix):
+    """Set the old name and read the new one, as a run would: the refusal itself, not the map."""
+    old, new = f"SCINUMBERS_{suffix}", f"NUMERA_{suffix}"
+    monkeypatch.setenv(old, "anything")
+
+    with pytest.raises(NotConfigured) as raised:
+        env_setting(new)
+
+    assert f"{old} is now {new}" in str(raised.value)
+
+
+def test_no_setting_this_project_names_is_read_past_the_guard():
+    """A `NUMERA_*` setting read with a bare `os.environ` is never refused by its old name.
+
+    `numera-first-use` read its URL that way, so the retired `SCINUMBERS_TRAIL_READ_URL` was
+    silently ignored while the map above claimed to refuse it -- and the read finder further up,
+    which resolves `os.environ.get(URL_ENV)` to the new name, counted it as a read. Found by
+    review on 2026-11-20. Only names this project owns: OpenRouter's, Neon's and LangSmith's own
+    variables are read directly on purpose. `config.py` is the guard itself and is skipped.
+
+    A text match on `os.environ` and `getenv`: a read spelled some other way gets past it, which
+    is why `test_first_use.py` also checks the refusal itself. Seeded both ways on 2026-11-20.
+    """
+    offenders = []
+    for path in [*(ROOT / "src" / "numera_ask").glob("*.py"), ROOT / "streamlit_app.py"]:
+        if path.name == "config.py":
+            continue
+        text = path.read_text(encoding="utf-8")
+        constants = dict(re.findall(r'(?m)^([A-Z][A-Z0-9_]*) = "([A-Z][A-Z0-9_]*)"$', text))
+        for number, line in enumerate(text.splitlines(), 1):
+            if "os.environ" in line or "getenv" in line:
+                names = re.sub(
+                    r"\b[A-Z][A-Z0-9_]*\b", lambda m, c=constants: c.get(m[0], m[0]), line
+                )
+                if "NUMERA_" in names:
+                    offenders.append(f"{path.name}:{number}")
+    assert offenders == []
 
 
 def test_no_retired_name_is_still_being_read():

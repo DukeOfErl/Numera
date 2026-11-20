@@ -6,7 +6,7 @@ read-only, and returns the same `Entry` records a corpus file yields, so everyth
 (repository, tools, drivers) keeps one code path. **Ports and adapters**: the corpus file and the
 store are two adapters onto the one `Entry` port.
 
-The only module in `numera_ask` that imports `bionumbers` (ADR-1600): the tier rule and the
+The only module in `numera_ask` that imports `numera_validator` (ADR-1600): the tier rule and the
 value parser each have one definition, there, and a corpus-file run never loads this module.
 
 Three things a reader of one function here would not see:
