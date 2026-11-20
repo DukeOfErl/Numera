@@ -31,9 +31,9 @@ any release; `1.0.0` when it stabilizes.
     The older `BIONUMBERS_ASK_*` names now point straight at their `NUMERA_*` replacement.
   - **Rename these outside the repository in the same moment the deployment moves to this code**,
     or the deployed app will refuse to start: the Streamlit Cloud secrets (`SCINUMBERS_*` and the
-    tracing switch), the Actions secret `SCINUMBERS_TRAIL_READ_URL` (read by `first-use.yml` as
-    `NUMERA_TRAIL_READ_URL`), and `~/.config/scinumbers/enrol.env`, now
-    `~/.config/numera/enrol.env`. A local `.streamlit/secrets.toml` with top-level
+    tracing switch) and `~/.config/scinumbers/enrol.env`, now `~/.config/numera/enrol.env`. The
+    Actions secret keeps its name, `SCINUMBERS_TRAIL_READ_URL`: `first-use.yml` exports it as
+    `NUMERA_TRAIL_READ_URL`, so the hourly job keeps working whenever this reaches `main`. A local `.streamlit/secrets.toml` with top-level
     `SCINUMBERS_TRACING` needs the same rename. `SCINUMBERS_TEST_WORKERS` is not refused; the test
     loop simply stops reading it.
   - Open browser sessions and LangGraph checkpoints written under the old module paths do not

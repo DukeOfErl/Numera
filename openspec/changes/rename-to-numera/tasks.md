@@ -72,6 +72,8 @@ was done the same way (`rename-to-scinumbers`, task 1.1).
 
 ## 5. Prepared here, switched at deploy time (not in this change)
 
-- [ ] 5.1 Streamlit Cloud secrets, the Actions secret `SCINUMBERS_TRAIL_READ_URL` (and the workflow
-      that reads it), `~/.config/scinumbers/enrol.env`: listed in the CHANGELOG and the brief with
-      their new names, renamed in the same moment `deploy/streamlit-cloud` moves to this code
+- [ ] 5.1 Streamlit Cloud secrets (`SCINUMBERS_*`, the tracing switch) and
+      `~/.config/scinumbers/enrol.env` (now `~/.config/numera/enrol.env`): listed in the CHANGELOG
+      and the brief, renamed in the same moment `deploy/streamlit-cloud` moves to this code. The
+      Actions secret `SCINUMBERS_TRAIL_READ_URL` keeps its name; `first-use.yml` exports it as
+      `NUMERA_TRAIL_READ_URL` (done here), so that job does not wait on the deploy
