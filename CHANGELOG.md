@@ -21,6 +21,10 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **The review page has its own secrets section**, `[connections.review]` (ADR-2000). It read the
+  trail's `[connections.usage]` before, so from a checkout whose secrets point the trail at Neon it
+  opened a database with no review tables and failed. With no review section it uses
+  `NUMERA_REVIEW_DB_URL`, as it already did on a machine with no secrets file.
 - **The project is named Numera** (ADR-1900). The distribution is `numera`; the packages are
   `numera_ask` and `numera_validator`; the commands are `numera-ask`, `numera-eval`,
   `numera-enrol`, `numera-withdraw`, `numera-pending`, `numera-first-use` and `numera-validator`;

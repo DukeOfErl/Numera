@@ -13,36 +13,50 @@ decision in one place.
 
 from __future__ import annotations
 
+import streamlit as st
 from sqlalchemy import Engine
 
-from numera_ask import web
 from numera_ask.accounts import Account
 from numera_ask.permissions import Role
 from numera_validator import environment, store
 from numera_validator.records import ReviewerRole
 
-#: The variable `numera-validator load` reads, naming the store where no `[connections.usage]` is
-#: set.
+#: The secrets section naming the review store. Its own section, not the trail's
+#: `[connections.usage]`: on a developer's machine that one points at the Neon trail, which holds no
+#: review tables, and the page opened it anyway (ADR-2000).
+REVIEW_CONNECTION = "review"
+
+#: The variable `numera-validator load` reads, and the page's store where the secrets name none.
 DB_URL_ENV = "NUMERA_REVIEW_DB_URL"
 
 
-def store_engine() -> Engine | None:
-    """The engine holding the review tables, or None where the deployment configures none.
+def review_destination() -> Engine | None:
+    """The engine `[connections.review]` names, or None where the secrets have no such section.
 
-    The same `[connections.usage]` section, and so the same database, as the trail and the accounts
-    table: the review tables are three more tables in it, and a second secrets section would be a
-    second thing to get wrong on a deployment whose first symptom is a page nobody can use.
-
-    `web.trail_destination` is reused rather than a second `st.connection` call because it caches
-    the engine at global scope across sessions -- a fresh engine per rerun would pay TCP, TLS and
-    Postgres auth before every `next_item`, on a page that reruns on every click.
-
-    Where no `[connections.usage]` is configured, `NUMERA_REVIEW_DB_URL` names the store
-    instead, so a run loaded into a local SQLite file can be reviewed on the machine that produced
-    it. Secrets win when both are present: the deployed page must not be redirected by an
-    environment variable.
+    `st.connection` caches the engine across sessions, as `web.trail_destination` does for the
+    trail: the page reruns on every click, and a fresh engine would pay TCP, TLS and Postgres auth
+    before each `next_item`. A section that is present but unusable is raised rather than read as
+    absence, so the page cannot quietly fall through to some other store than the one configured.
     """
-    configured = web.trail_destination()
+    from streamlit.errors import StreamlitAPIException, StreamlitSecretNotFoundError
+
+    try:
+        return st.connection(REVIEW_CONNECTION, type="sql", pool_pre_ping=True).engine
+    except (StreamlitAPIException, StreamlitSecretNotFoundError):
+        # Absence, by type and not by message, as `web._is_not_configured` decides it.
+        return None
+
+
+def store_engine() -> Engine | None:
+    """The engine holding the review tables, or None where nothing names one.
+
+    `[connections.review]` first, then `NUMERA_REVIEW_DB_URL`. Never the trail's
+    `[connections.usage]`: it used to be, on the reasoning that a second section is a second thing
+    to get wrong, but no review page is deployed, while every developer's secrets name the trail --
+    so the page read a database with no review tables and failed (ADR-2000). A configured section
+    still wins over the environment, so a deployed page cannot be redirected by a variable.
+    """
+    configured = review_destination()
     if configured is not None:
         return configured
     url = environment.read(DB_URL_ENV).strip()

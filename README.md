@@ -943,6 +943,11 @@ numera-validator load <run-id> --db-url "$NUMERA_REVIEW_DB_URL"   # after applyi
 streamlit run review_app.py
 ```
 
+The review page finds its store in `[connections.review]` in `.streamlit/secrets.toml`, or else in
+`NUMERA_REVIEW_DB_URL`. It never uses the trail's `[connections.usage]`, which holds no review
+tables (ADR-2000). Where the secrets have `[auth]`, the page signs readers in as the ask app does,
+so run it on the port `redirect_uri` names (`--server.port 8502`).
+
 - **Harvest** is the other way in (ADR-0950): `numera-validator harvest <run-id> --pmcids PMC1,PMC2`
   starts a run from papers chosen ahead of any question, and `extract` then asks each one for
   the numbers worth reusing, at most twenty per paper. `--scope` names the domain whose classes
