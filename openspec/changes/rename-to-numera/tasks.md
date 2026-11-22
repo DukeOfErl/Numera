@@ -68,7 +68,7 @@ was done the same way (`rename-to-scinumbers`, task 1.1).
       report with its reason
 - [x] 4.3 Seed one defect into a copy: drop a `SCINUMBERS_*` entry from `RENAMED_ENV`; the refusal
       test must fail
-- [ ] 4.4 The app runs locally on port 8502 with `NUMERA_STORE` set, and signs in
+- [x] 4.4 The app runs locally on port 8502 with `NUMERA_STORE` set, and signs in
 
 ## 5. Prepared here, switched at deploy time (not in this change)
 
