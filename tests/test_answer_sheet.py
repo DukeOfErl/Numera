@@ -14,10 +14,10 @@ from pathlib import Path
 import pytest
 from conftest import FIXTURE
 
-from scinumbers_ask.answer_sheet import render_html, write_answer_sheet
-from scinumbers_ask.corpus import Entry, load
-from scinumbers_ask.evaluation import Provenance, Result, ResultsWouldBeCommitted
-from scinumbers_ask.question_set import Question, Tier
+from numera_ask.answer_sheet import render_html, write_answer_sheet
+from numera_ask.corpus import Entry, load
+from numera_ask.evaluation import Provenance, Result, ResultsWouldBeCommitted
+from numera_ask.question_set import Question, Tier
 
 PROVENANCE = Provenance(
     recorded_at="2026-09-11T00:00:00+00:00",

@@ -1,7 +1,7 @@
 ---
 paths:
   - "streamlit_app.py"
-  - "src/scinumbers_ask/web.py"
+  - "src/numera_ask/web.py"
   - "tests/test_web_driver*.py"
   - "tests/test_streamlit*.py"
 ---

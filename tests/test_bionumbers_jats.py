@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from bionumbers import jats
-from bionumbers.jats import Document, JatsUnreadable, Passage, read_jats, render_for_model
-from bionumbers.records import Location
+from numera_validator import jats
+from numera_validator.jats import Document, JatsUnreadable, Passage, read_jats, render_for_model
+from numera_validator.records import Location
 
 EUROPEPMC = Path(__file__).parent / "fixtures" / "europepmc"
 HAND_WRITTEN = Path(__file__).parent / "fixtures" / "jats"

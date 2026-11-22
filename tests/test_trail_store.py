@@ -27,8 +27,8 @@ import time
 
 import pytest
 
-from scinumbers_ask import trail_store
-from scinumbers_ask.trail_store import TrailHandler, TrailStore, install
+from numera_ask import trail_store
+from numera_ask.trail_store import TrailHandler, TrailStore, install
 
 
 class _Conn:

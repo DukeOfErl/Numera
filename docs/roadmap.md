@@ -95,7 +95,7 @@ it — this section points rather than repeats:
   column written at record time** — ADR-0810. **One agent per session, handed a
   credential and never an identity; if the agent must ever know what is
   permitted, it is handed permissions, never the role** — ADR-0820.
-- **The grant table itself** is `GRANTS` in `src/scinumbers_ask/permissions.py`,
+- **The grant table itself** is `GRANTS` in `src/numera_ask/permissions.py`,
   with the rule for growing it in the comment above.
 - **Operator's steps** — the identity providers, `[auth]` in secrets, the
   `accounts` table from `sql/accounts.sql`, one capped OpenRouter key per tester
@@ -105,7 +105,7 @@ it — this section points rather than repeats:
 any OpenID Connect provider is a sub-table in secrets and gets its own button,
 and only an address the provider says it has verified is admitted (ADR-0880,
 ADR-0890). The helper script below is no longer "left for later": it is
-`scinumbers-enrol`, which mints the capped key and inserts the row in one step
+`numera-enrol`, which mints the capped key and inserts the row in one step
 and names the database branch every time (ADR-0900). Two operator steps remain
 outside the repository and are in the README: creating the Auth0 tenant, and
 publishing the Google consent screen so testers need not be listed by hand.
@@ -198,7 +198,7 @@ Not part of the multi-user push; listed so the board is complete.
 | `add-provider-limit-ending` | 29/31 |
 | `add-answer-shape` | 0/10 — an answer leads with its quantitative conclusion |
 | `add-validator-prototype` | archived 2026-10-15 — question → Europe PMC → one extraction call per paper → blind two-step review, simulated roles, one trust-tier rule (ADR-1520–1540, ADR-0930–0990); `feat/simulated-review` |
-| `add-paper-references` | archived 2026-10-17 — each paper's bibliographic record as CSL-JSON in the store (`review_paper.csl_json`), styled at display by the ask agent (ADR-1750); merged into `dev` as `e424f54`; the deployed Postgres store still needs `bionumbers upgrade-store --data` run against it |
+| `add-paper-references` | archived 2026-10-17 — each paper's bibliographic record as CSL-JSON in the store (`review_paper.csl_json`), styled at display by the ask agent (ADR-1750); merged into `dev` as `e424f54`; the deployed Postgres store still needs `numera-validator upgrade-store --data` run against it |
 | `add-door-demo` | archived 2026-10-04 — the sign-in door plays a three-example demo, the third with a script-drawn chart; citations are grey superscripts on the door and in the app (ADR-1210–1240) |
 | _app-drawn charts_ | not proposed — the agent returns numbers and the application draws the chart. A model-drawn text chart misplaced every bar on its own axis (ADR-1210). Deferred by Yoav; the door's third example stands in with a script-drawn chart, to be redrawn by the app when this lands (ADR-1230) |
 
@@ -219,7 +219,7 @@ are copy-on-write, so the free tier absorbs several.
 
 **`dev` is the one that matters today, and the reason is worse than it looked.**
 An earlier version of this file said `run_label` was separating local runs from
-real feedback. It is not separating anything: `SCINUMBERS_RUN` is set nowhere —
+real feedback. It is not separating anything: `NUMERA_RUN` is set nowhere —
 not in `.streamlit/`, not in any deployment config — so `config.py` and
 `feedback.py` both fall back to `"dev"`, and *every* row in the table says `dev`
 whether it came from a laptop or the deployed app. There is no discriminator at
@@ -241,7 +241,7 @@ The order matters and only in one direction: **create `dev` first**, which
 snapshots the data, and clear `production` after. Neon branches are copy-on-write
 from a point in time, so a later delete on `production` cannot reach `dev`.
 
-**Worth doing anyway: set `SCINUMBERS_RUN` per environment.** The code already
+**Worth doing anyway: set `NUMERA_RUN` per environment.** The code already
 reads it; nothing sets it. Separate branches make it belt-and-braces rather than
 load-bearing, which is the right relationship — a row that says where it came
 from is cheap, and a row that has to be *inferred* from which database it is in
@@ -289,7 +289,7 @@ change that is not happening.
 | `ToolCallLimitMiddleware` | Deferred in `add-ask-agent` for unexpected consequences seen in `interv_preper`. Worth re-checking against the stock middleware, since the project prefers the library's own components |
 | Terraform | Mentioned for a Google Cloud deploy; no decision taken |
 | The door's demo citations | The sign-in door's recorded demo still draws ADR-1240's grey superscripts; the app draws numbered pills since `add-answer-view-redesign` (ADR-1850). Redraw the door's examples as pills so the door shows what the app does. Raised 2026-10-17 |
-| Dashboards over the harvest store (the trust-tier pie chart, with its total, and the review dashboards) | Their own work package and branch, off whichever of `feat/simulated-review` or `dev` holds `bionumbers.tiers` (ADR-0990) by then; kept out of the harvest and review merges. The pie's rule is settled: an issue or a disapproval is its own slice, removed from the tier slices; otherwise the highest approving role; otherwise not yet reviewed; curated on top. Open: whether curated entries stay in the chart. Mockup: https://claude.ai/artifact/KKB2Y2xgzbJAnaqJv1HS9X. Raised 2026-10-15 |
+| Dashboards over the harvest store (the trust-tier pie chart, with its total, and the review dashboards) | Their own work package and branch, off whichever of `feat/simulated-review` or `dev` holds `numera_validator.tiers` (ADR-0990) by then; kept out of the harvest and review merges. The pie's rule is settled: an issue or a disapproval is its own slice, removed from the tier slices; otherwise the highest approving role; otherwise not yet reviewed; curated on top. Open: whether curated entries stay in the chart. Mockup: https://claude.ai/artifact/KKB2Y2xgzbJAnaqJv1HS9X. Raised 2026-10-15 |
 | Harvest beyond Europe PMC: arXiv and bioRxiv/medRxiv | Harvest fetches only Europe PMC JATS for a PMCID, which misses most physics (arXiv) and preprints. Three MCP servers to look at first: `preprint-fulltext` (bioRxiv/medRxiv/arXiv via Europe PMC, openRxiv S3 and ar5iv; a licence on every record; BSD-3, v0.1.0, young), `arxiv-toolkit` (arXiv as Markdown by section; MIT) and `cyanheads/pubmed-mcp-server` (PMC → Europe PMC → Unpaywall; Apache-2.0; the most mature, and a candidate tool for the ask agent). Any new source must still pass the licence gate per paper. Tracked in scout. Raised 2026-10-15 |
 
 ### Evaluation over the store

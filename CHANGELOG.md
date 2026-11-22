@@ -21,6 +21,23 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **The project is named Numera** (ADR-1900). The distribution is `numera`; the packages are
+  `numera_ask` and `numera_validator`; the commands are `numera-ask`, `numera-eval`,
+  `numera-enrol`, `numera-withdraw`, `numera-pending`, `numera-first-use` and `numera-validator`;
+  every setting takes the `NUMERA_` prefix, and the page is titled "Numera". `bionumbers_ingest`
+  and `bionumbers-ingest` keep their names: they adapt BioNumbers' own export (ADR-0400).
+  - **Every old setting name is refused by name**, never read as a fallback: each `SCINUMBERS_*`
+    variable and the validator's `BIONUMBERS_REVIEW_DB_URL` and `BIONUMBERS_OPENROUTER_API_KEY`.
+    The older `BIONUMBERS_ASK_*` names now point straight at their `NUMERA_*` replacement.
+  - **Rename these outside the repository in the same moment the deployment moves to this code**,
+    or the deployed app will refuse to start: the Streamlit Cloud secrets (`SCINUMBERS_*` and the
+    tracing switch) and `~/.config/scinumbers/enrol.env`, now `~/.config/numera/enrol.env`. The
+    Actions secret keeps its name, `SCINUMBERS_TRAIL_READ_URL`: `first-use.yml` exports it as
+    `NUMERA_TRAIL_READ_URL`, so the hourly job keeps working whenever this reaches `main`. A local `.streamlit/secrets.toml` with top-level
+    `SCINUMBERS_TRACING` needs the same rename. `SCINUMBERS_TEST_WORKERS` is not refused; the test
+    loop simply stops reading it.
+  - Open browser sessions and LangGraph checkpoints written under the old module paths do not
+    carry over.
 - **The answer view is redesigned** (ADR-1850, from Yoav's Claude Design canvas):
   - Citations are numbered pills (number, stars, `sim`, ⚠), numbered through the session, with
     the identifier on hover.
@@ -74,6 +91,11 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **The test suite no longer reads the developer's secrets files.** A page test parsed
+  `.streamlit/secrets.toml` through Streamlit's own loader, which copies top-level keys into the
+  environment, so on a machine with hosted tracing configured it switched Langfuse tracing on with
+  the real keys and tried to reach the real trail database. Streamlit is now pointed at an empty
+  secrets file for the whole run, and a test holds that.
 - **The git-tracking guard refuses when git gives no answer.** A timeout or a git that could not
   be started was read as "no git" and the write allowed; it is now refused, and the reader told to
   run it again. An evaluation results file is checked on every append, not only when created.

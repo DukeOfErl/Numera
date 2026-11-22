@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from scinumbers_ask import messages
+from numera_ask import messages
 
 SCRIPT = Path(__file__).parent.parent / "bin" / "keepalive.py"
 

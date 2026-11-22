@@ -1,4 +1,4 @@
-# SciNumbers ask
+# Numera
 
 **How long is an E. coli cell? How many ribosomes does it carry?** Quantitative biology runs on
 numbers like these, and the usual way to get one out of a language model is to ask and hope. A
@@ -67,7 +67,7 @@ with no mode flag inside it.
 
 ### Asking the harvest store
 
-Pointed at the harvest store (`SCINUMBERS_STORE`) instead of a corpus file, the agent answers from
+Pointed at the harvest store (`NUMERA_STORE`) instead of a corpus file, the agent answers from
 the validator's review database: the curated BioNumbers entries, cited by their BNID, and every
 value harvested from a paper, in every domain the store holds, each cited by its paper and its
 number within that paper — `[[PMC2652108-1]]`. The store is opened read-only and read once at start;
@@ -136,12 +136,12 @@ export OPENROUTER_API_KEY=...                  # the model is reached through Op
 this repository** — the data's licensing is unresolved, so nothing derived from it may enter a git
 repository, and the build refuses to write anywhere git would track it.
 
-**3. Start the app.** Point `SCINUMBERS_CORPUS` at where the corpus should go. Finding none
+**3. Start the app.** Point `NUMERA_CORPUS` at where the corpus should go. Finding none
 there and the export beside it, the app says what it is about to do and builds one — about a minute,
 once.
 
 ```bash
-export SCINUMBERS_CORPUS=~/bionumbers/bionumbers.jsonl   # BioNumbers.xls is in that directory
+export NUMERA_CORPUS=~/bionumbers/bionumbers.jsonl   # BioNumbers.xls is in that directory
 uv run streamlit run streamlit_app.py
 ```
 
@@ -156,25 +156,29 @@ your `PATH`:
 
 | Command | What it does |
 | --- | --- |
-| `scinumbers-ask` | the terminal driver: ask a question, see the entries behind the answer |
-| `scinumbers-enrol` | enrol one tester: mint a capped credential and record the account |
-| `scinumbers-eval` | the evaluation harness: `check`, `run`, `report` |
+| `numera-ask` | the terminal driver: ask a question, see the entries behind the answer |
+| `numera-enrol` | enrol one tester: mint a capped credential and record the account |
+| `numera-eval` | the evaluation harness: `check`, `run`, `report` |
 | `bionumbers-ingest` | build a corpus from the published export |
-| `bionumbers` | **declared, not yet built.** The grounding validator's entry point, for a package this repository does not contain — running it raises `ModuleNotFoundError`. Left in place because the name belongs to that work package; see `docs/roadmap.md` |
+| `numera-validator` | the validator prototype: `discover`, `harvest`, `extract`, `load`, `curate`, `status`, `simulate-review`, `upgrade-store` (see [The validator prototype](#the-validator-prototype-numera_validator)) |
 
-A bare `scinumbers-enrol` is `command not found` until the virtualenv is on your
+One package keeps the old name on purpose. `bionumbers_ingest` and its command read BioNumbers' own
+export, so they are named for the source they adapt; everything named for the project says Numera
+(ADR-0400, ADR-1900).
+
+A bare `numera-enrol` is `command not found` until the virtualenv is on your
 path. Three ways, in increasing permanence:
 
 ```bash
-.venv/bin/scinumbers-enrol --help        # no setup; works from the repository root
+.venv/bin/numera-enrol --help        # no setup; works from the repository root
 
 source .venv/bin/activate                # this shell only, then bare names work
-scinumbers-enrol --help
+numera-enrol --help
 
-ln -sf "$PWD/.venv/bin/scinumbers-enrol" ~/.local/bin/   # permanent, one command
+ln -sf "$PWD/.venv/bin/numera-enrol" ~/.local/bin/   # permanent, one command
 ```
 
-The symlink is the one to prefer for `scinumbers-enrol`, because enrolling a
+The symlink is the one to prefer for `numera-enrol`, because enrolling a
 tester is something you do from wherever you happen to be rather than from this
 directory. `~/.local/bin` is on the default path on most systems; `echo $PATH`
 will say. **Do not put `.venv/bin` itself on your `PATH`** — it would shadow
@@ -188,17 +192,17 @@ one of the above.
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `OPENROUTER_API_KEY` | — | required; a question ends as `not_configured` without it |
-| `SCINUMBERS_CORPUS` | — | path to the JSONL corpus; required unless `SCINUMBERS_STORE` is set |
-| `SCINUMBERS_STORE` | — | path to the harvest store (a SQLite file), read instead of a corpus file; see [Asking the harvest store](#asking-the-harvest-store). Setting both is refused |
-| `SCINUMBERS_MODEL` | `anthropic/claude-opus-4.7` | the model, as an OpenRouter slug |
-| `SCINUMBERS_QUESTION_CEILING_USD` | `0.60` | hard per-question limit; the warning is derived at 80% of it |
-| `SCINUMBERS_RUN_BUDGET_USD` | `1.20` | total across every question in a run; where sign-in is configured, per account rather than shared |
-| `SCINUMBERS_RUN` | `dev` | names the run spend is counted against; a new name starts a fresh budget |
-| `SCINUMBERS_CHECKPOINTS` | `checkpoints/ask.sqlite` | where sessions persist |
-| `SCINUMBERS_TRACE` | `logs/trace.jsonl` | the structured trail; `-` for stderr, empty to discard |
-| `SCINUMBERS_MAX_SESSIONS` | `20` | how many browser sessions the deployment holds open at once; the next is told to try later |
-| `SCINUMBERS_SESSION_IDLE_S` | `600` | how long a quiet session keeps its place before it is freed |
-| `SCINUMBERS_TRACING` | off | `langfuse` turns hosted tracing on, and nothing else does; see below |
+| `NUMERA_CORPUS` | — | path to the JSONL corpus; required unless `NUMERA_STORE` is set. Today that is BioNumbers' own export as converted by `bionumbers-ingest`: the name says what the agent reads, not where the entries came from, so a second source in the same format would use it too |
+| `NUMERA_STORE` | — | path to the harvest store (a SQLite file), read instead of a corpus file: numbers harvested from papers, with their reviews, beside the curated BioNumbers entries. See [Asking the harvest store](#asking-the-harvest-store). Setting both is refused |
+| `NUMERA_MODEL` | `anthropic/claude-opus-4.7` | the model, as an OpenRouter slug |
+| `NUMERA_QUESTION_CEILING_USD` | `0.60` | hard per-question limit; the warning is derived at 80% of it |
+| `NUMERA_RUN_BUDGET_USD` | `1.20` | total across every question in a run; where sign-in is configured, per account rather than shared |
+| `NUMERA_RUN` | `dev` | names the run spend is counted against; a new name starts a fresh budget |
+| `NUMERA_CHECKPOINTS` | `checkpoints/ask.sqlite` | where sessions persist |
+| `NUMERA_TRACE` | `logs/trace.jsonl` | the structured trail; `-` for stderr, empty to discard |
+| `NUMERA_MAX_SESSIONS` | `20` | how many browser sessions the deployment holds open at once; the next is told to try later |
+| `NUMERA_SESSION_IDLE_S` | `600` | how long a quiet session keeps its place before it is freed |
+| `NUMERA_TRACING` | off | `langfuse` turns hosted tracing on, and nothing else does; see below |
 | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` | — | all three required when tracing is on; the base URL names the region |
 
 Every variable above is read from the process environment. A hosted deployment has
@@ -211,13 +215,13 @@ below are the exception: a table is not promoted, and is read as `st.secrets`.
 
 ```toml
 OPENROUTER_API_KEY = "sk-or-..."
-SCINUMBERS_MODEL = "anthropic/claude-opus-4.7"
-SCINUMBERS_RUN_BUDGET_USD = "1.20"
+NUMERA_MODEL = "anthropic/claude-opus-4.7"
+NUMERA_RUN_BUDGET_USD = "1.20"
 ```
 
 ### The durable trail (hosted deployments only)
 
-Locally the trail goes to a file (`SCINUMBERS_TRACE`). A Streamlit Cloud
+Locally the trail goes to a file (`NUMERA_TRACE`). A Streamlit Cloud
 container's disk does not survive a redeploy, so the deployment writes it to a
 Neon Postgres database instead. `.streamlit/secrets.toml.example` carries the
 shape, and the three things a URL copied from a provider's console usually gets
@@ -254,14 +258,14 @@ Each question can be sent to [Langfuse](https://langfuse.com) Cloud as one trace
 every tool call, tokens and timings. It is a debugger for one question, not a record — the trail is
 where anything is read back from ([ADR-0750](docs/decisions/0750-feedback-is-recorded-here-not-at-the-tracer.md)).
 
-It is **off unless you say so**: set `SCINUMBERS_TRACING = "langfuse"` and all three Langfuse keys,
+It is **off unless you say so**: set `NUMERA_TRACING = "langfuse"` and all three Langfuse keys,
 as top-level keys in `.streamlit/secrets.toml` (above the first `[section]`) or in the environment.
 The keys alone turn nothing on, an unrecognised value leaves it off and says so once, and a
 `LANGSMITH_TRACING` left in the environment sends nothing anywhere
 ([ADR-1010](docs/decisions/1010-tracing-is-a-project-setting.md)).
 
 - **Found by the question.** A trace's id is derived from the question's identifier, so a trail row
-  or a rating leads straight to it. Traces are named `ask` and tagged `run:<SCINUMBERS_RUN>`;
+  or a rating leads straight to it. Traces are named `ask` and tagged `run:<NUMERA_RUN>`;
   evaluation runs are tagged `eval` as well.
 - **Who asked** appears only as a per-account digest keyed with `[auth]`'s `cookie_secret`, so it
   cannot be recomputed from a guessed address, and only where sign-in is configured. The session
@@ -273,7 +277,7 @@ The keys alone turn nothing on, an unrecognised value leaves it off and says so 
   URL names; `https://cloud.langfuse.com` is the EU.
 - **The free tier's allowance** is 50,000 units a month, a unit being a trace, a span or a score.
   One question measured 37 units (2026-09-25), so roughly 1,300 questions a month; questions with
-  more tool calls cost more. `scinumbers-eval run` shows the month's usage and its own estimate
+  more tool calls cost more. `numera-eval run` shows the month's usage and its own estimate
   before asking anything, and waits for a typed `yes` when more than half is used, when the run
   would not fit, or when either figure cannot be counted. That includes Langfuse being unreachable,
   and the run then cannot proceed unattended. The check is in `run_evaluation`, so any caller of it
@@ -294,7 +298,7 @@ tried.
 **The sign-in door plays a demo** under the button: a question typed out and an
 answer streamed back, on a loop. Each is a question actually put to the agent and its
 answer (ADR-1210), shortened for the door with every edit recorded beside it
-(ADR-1220), in `src/scinumbers_ask/door_demo.json` (ADR-1200). The third shows mouse
+(ADR-1220), in `src/numera_ask/door_demo.json` (ADR-1200). The third shows mouse
 cell volumes as a text chart, drawn by `bin/door-demo-chart` rather than by the app,
 which cannot plot yet (ADR-1230). Each answer stays up
 for 7 s, with the caret blinking, before the next question replaces it; a browser
@@ -478,13 +482,13 @@ gates it. The operator's steps, in order:
    reading the error is the check.
 3. **The `accounts` table** in the same database as the trail, from
    `sql/accounts.sql`.
-4. **One command per tester.** `scinumbers-enrol` mints a capped runtime key at
+4. **One command per tester.** `numera-enrol` mints a capped runtime key at
    OpenRouter and inserts the row in one step (§"The commands, and where they live" says how to
-   get it on your path; `.venv/bin/scinumbers-enrol` always works):
+   get it on your path; `.venv/bin/numera-enrol` always works):
 
    ```bash
    OPENROUTER_MANAGEMENT_KEY=... NEON_API_KEY=... NEON_PROJECT_ID=... \
-     scinumbers-enrol maria@example.org scientist --limit-usd 5 --branch alpha
+     numera-enrol maria@example.org scientist --limit-usd 5 --branch alpha
    ```
 
    The three variables are read for that one invocation and the command keeps
@@ -495,7 +499,7 @@ gates it. The operator's steps, in order:
    a rehearsal costs nothing:
 
    ```bash
-   scinumbers-enrol maria@example.org scientist --limit-usd 5
+   numera-enrol maria@example.org scientist --limit-usd 5
    # -> no branch named. The account has to be acted on in the branch the deployed app reads...
    ```
 
@@ -509,7 +513,7 @@ gates it. The operator's steps, in order:
    existing environment has no idea a command was added:
 
    ```bash
-   scinumbers-withdraw maria@example.org --branch alpha
+   numera-withdraw maria@example.org --branch alpha
    ```
 
    It disables the row and revokes the credential, **in that order**. Either alone
@@ -557,7 +561,7 @@ manager.
 | `OPENROUTER_MANAGEMENT_KEY` | the operator's shell only | openrouter.ai/settings/management-keys | New key. Never in the secrets box: the app has no use for it, and it can mint credentials |
 | `NEON_API_KEY` | the operator's shell only | Neon → organisation **Settings** → **API keys** | New key. Also never in the secrets box |
 | `NEON_PROJECT_ID` | the operator's shell only | Neon → project → **Settings** → **General** | Not a secret; copy it again |
-| Each tester's runtime key | the `accounts` table | minted by `scinumbers-enrol` | **Already stored** — that column is the source of truth, not a copy. Revoke at OpenRouter and re-enrol |
+| Each tester's runtime key | the `accounts` table | minted by `numera-enrol` | **Already stored** — that column is the source of truth, not a copy. Revoke at OpenRouter and re-enrol |
 
 Two consequences worth stating. A **local** `.streamlit/secrets.toml` is not a
 backup of the deployed one: it must carry the branch *this checkout* writes to, so
@@ -582,11 +586,11 @@ on a crash — is holding it.
 shell that asked for it, and nowhere else:
 
 ```bash
-mkdir -p ~/.config/scinumbers
-chmod 700 ~/.config/scinumbers
-touch ~/.config/scinumbers/enrol.env
-chmod 600 ~/.config/scinumbers/enrol.env      # before anything secret is in it
-nano ~/.config/scinumbers/enrol.env           # or your editor
+mkdir -p ~/.config/numera
+chmod 700 ~/.config/numera
+touch ~/.config/numera/enrol.env
+chmod 600 ~/.config/numera/enrol.env      # before anything secret is in it
+nano ~/.config/numera/enrol.env           # or your editor
 ```
 
 Three lines, no quotes and no `export`:
@@ -610,9 +614,9 @@ pass to `--branch`. **Load the file in this shell first**, and let the shell say
 so if you have not:
 
 ```bash
-set -a; source ~/.config/scinumbers/enrol.env; set +a
-: "${NEON_API_KEY:?not set — source ~/.config/scinumbers/enrol.env first}"
-: "${NEON_PROJECT_ID:?not set — source ~/.config/scinumbers/enrol.env first}"
+set -a; source ~/.config/numera/enrol.env; set +a
+: "${NEON_API_KEY:?not set — source ~/.config/numera/enrol.env first}"
+: "${NEON_PROJECT_ID:?not set — source ~/.config/numera/enrol.env first}"
 
 curl -sS -w '\nHTTP %{http_code}\n' https://console.neon.tech/api/v2/projects \
   -H "Authorization: Bearer $NEON_API_KEY"
@@ -656,8 +660,8 @@ wearing the same status code — read the message, not the number.
 Then, in the shell where you are enrolling someone:
 
 ```bash
-set -a; source ~/.config/scinumbers/enrol.env; set +a
-scinumbers-enrol maria@example.org scientist --limit-usd 5 --branch alpha
+set -a; source ~/.config/numera/enrol.env; set +a
+numera-enrol maria@example.org scientist --limit-usd 5 --branch alpha
 ```
 
 **Write it with an editor rather than a heredoc.** Bash keeps a multi-line
@@ -703,20 +707,20 @@ waiting to be enrolled.
 
 #### Checking daily who is stuck
 
-`scinumbers-pending` reads those first and third queries and **prints nothing when
+`numera-pending` reads those first and third queries and **prints nothing when
 nothing is waiting**, which is what makes it usable from `cron`: mail arrives only
 on the days something happened. A monitor that reports "0 pending" every morning is
 one whose output stops being read, and then the morning it says 1 goes unread too.
 
 ```bash
-scinumbers-pending --branch alpha              # silent unless somebody is still stuck
-scinumbers-pending --branch alpha --hours 168  # only the last week
+numera-pending --branch alpha              # silent unless somebody is still stuck
+numera-pending --branch alpha --hours 168  # only the last week
 ```
 
 Daily, from the operator's own crontab (`crontab -e`):
 
 ```cron
-0 9 * * * bash -lc 'set -a; . "$HOME/.config/scinumbers/enrol.env"; set +a;   "$HOME/AI Engineering/BioNumbers/.venv/bin/scinumbers-pending" --branch alpha'
+0 9 * * * bash -lc 'set -a; . "$HOME/.config/numera/enrol.env"; set +a;   "$HOME/AI Engineering/Numera/.venv/bin/numera-pending" --branch alpha'
 ```
 
 **It reports only what is still stuck.** A problem that resolved itself stops
@@ -763,9 +767,9 @@ nothing until it is on `main`.
 
 #### Hearing when a reader first arrives
 
-`scinumbers-first-use` reports each reader the first time they are seen signing in and the first
+`numera-first-use` reports each reader the first time they are seen signing in and the first
 time they ask a question — one line per reader, with both firsts together when they fall in the
-same window — and, like `scinumbers-pending`, **prints nothing when nobody is new**
+same window — and, like `numera-pending`, **prints nothing when nobody is new**
 ([ADR-1250](docs/decisions/1250-first-use-notice-is-a-stateless-window.md)). It keeps no state:
 "first" is read out of the trail (an event in the window and none earlier for that address), so the
 window has to be right. GitHub runs this "hourly" schedule every 4-7 hours, so the workflow looks
@@ -783,14 +787,14 @@ can read three columns of the trail and nothing else**, never the Neon API key
 1. On the Neon branch the deployment writes to (`alpha`), run `sql/first_use_reader.sql` after
    replacing the token `<PASSWORD>` with a real password in single quotes (left unedited it is
    a syntax error, on purpose). Roles are per branch.
-2. Add the repository secret `SCINUMBERS_TRAIL_READ_URL` (that role's URL, `postgresql+psycopg://…`)
+2. Add the repository secret `NUMERA_TRAIL_READ_URL` (that role's URL, `postgresql+psycopg://…`)
    and the variable `FIRST_USE_EXCLUDE` (your own and test addresses, comma-separated).
 3. The workflow exists only once it is on `main`. Run it by hand with **`test`** ticked and check that
    the mail arrives: a `test` run delivered mail on 2026-10-03 with the mention in place (whether
    the mention alone is what did it was not tried)
    ([ADR-1270](docs/decisions/1270-first-use-reaches-the-operator-through-a-standing-issue.md)).
 
-By hand: `SCINUMBERS_TRAIL_READ_URL=… scinumbers-first-use --minutes 1440 --exclude me@example.org`.
+By hand: `NUMERA_TRAIL_READ_URL=… numera-first-use --minutes 1440 --exclude me@example.org`.
 `keepalive-digest` also watches this workflow, so a run that fails or never happens reaches you once a
 day.
 
@@ -817,7 +821,7 @@ are a default-deny table, and nothing about a role reaches the agent, so an
 answer cannot depend on who asked
 ([ADR-0800](docs/decisions/0800-default-deny-and-the-pruning-rule.md)).
 
-A deployment also holds at most `SCINUMBERS_MAX_SESSIONS` sessions open at once;
+A deployment also holds at most `NUMERA_MAX_SESSIONS` sessions open at once;
 the next visitor is told to try again shortly, and no open session is ended to
 make room ([ADR-0790](docs/decisions/0790-the-session-cap-is-a-heartbeat-registry.md)).
 
@@ -847,7 +851,7 @@ suite in parallel and ~160s serially). Testmon follows Python only, so a staged 
 reads — `README.md`, `CLAUDE.md`, `sql/`, `openspec/`, a data file, `pyproject.toml` — runs the **full suite**
 instead; `CHANGELOG.md`, `docs/` and `.github/` run nothing. At *push*, *merge* and in CI the full suite runs
 in parallel. The first commit in a clone builds testmon's database, which is one serial full run (~5 minutes);
-the database is per-checkout and git-ignored. `SCINUMBERS_TEST_WORKERS` overrides the three workers. Three is a memory limit, not a speed one:
+the database is per-checkout and git-ignored. `NUMERA_TEST_WORKERS` overrides the three workers. Three is a memory limit, not a speed one:
 on a 12-core, 8 GB machine six is faster (about 80s against 100–180s) when memory is free, but ran out of
 memory once under ordinary load, and twelve were slower than serial. A checkout with no
 `.venv` prints `NOT RUN` rather than failing, and the push and CI tiers still run everything.
@@ -857,7 +861,7 @@ middleware, the checkpointer and the tool loop are exercised. Two suites are exc
 because they need something the repository does not carry:
 
 ```bash
-SCINUMBERS_CORPUS=... uv run pytest -m corpus    # markers checked against a real corpus
+NUMERA_CORPUS=... uv run pytest -m corpus    # markers checked against a real corpus
 OPENROUTER_API_KEY=...    uv run pytest -m network   # real model calls; costs about $0.01
 ```
 
@@ -868,10 +872,10 @@ back, with no mode flag and nothing the interactive drivers do not also get.
 
 ```bash
 uv sync --extra ask --extra eval
-scinumbers-eval check question-sets/first-set.jsonl      # is the set usable against this corpus?
-scinumbers-eval run   question-sets/first-set.jsonl --repeats 3 \
+numera-eval check question-sets/first-set.jsonl      # is the set usable against this corpus?
+numera-eval run   question-sets/first-set.jsonl --repeats 3 \
     --results evaluations/baseline.results.jsonl         # asks, and appends one line per answer
-scinumbers-eval report question-sets/first-set.jsonl \
+numera-eval report question-sets/first-set.jsonl \
     --results evaluations/baseline.results.jsonl --repeats 3 \
     --sheet evaluations/baseline.html                    # figures, and every answer with its entries
 ```
@@ -918,7 +922,7 @@ layer — a model separating an answer into claims — is deferred to `add-judge
 hand-labelled reference a judge must be validated against came back 29 sound of 30, and cannot gate
 anything.
 
-## The validator prototype (`bionumbers`)
+## The validator prototype (`numera_validator`)
 
 The ask agent answers from a curated corpus. The validator goes the other way: from a **property
 question** to the open-access literature, out of which it extracts candidate numbers with their
@@ -930,23 +934,23 @@ Three commands and a page:
 
 ```bash
 uv sync --extra ask --extra validator          # the review page imports the ask app's sign-in door
-export BIONUMBERS_OPENROUTER_API_KEY=...       # its own OpenRouter key, so its spend is readable apart from the ask app's
+export NUMERA_OPENROUTER_API_KEY=...       # its own OpenRouter key, so its spend is readable apart from the ask app's
 
-bionumbers discover "doubling time" --organism "Escherichia coli" --since 2015 --limit 20
-bionumbers extract <run-id> --ceiling 2 --budget 40
-bionumbers status <run-id>
-bionumbers load <run-id> --db-url "$BIONUMBERS_REVIEW_DB_URL"   # after applying sql/review.sql once
+numera-validator discover "doubling time" --organism "Escherichia coli" --since 2015 --limit 20
+numera-validator extract <run-id> --ceiling 2 --budget 40
+numera-validator status <run-id>
+numera-validator load <run-id> --db-url "$NUMERA_REVIEW_DB_URL"   # after applying sql/review.sql once
 streamlit run review_app.py
 ```
 
-- **Harvest** is the other way in (ADR-0950): `bionumbers harvest <run-id> --pmcids PMC1,PMC2`
+- **Harvest** is the other way in (ADR-0950): `numera-validator harvest <run-id> --pmcids PMC1,PMC2`
   starts a run from papers chosen ahead of any question, and `extract` then asks each one for
   the numbers worth reusing, at most twenty per paper. `--scope` names the domain whose classes
   of value are wanted — `biology` (the default, cells and molecules), `organismal` (bodies,
   physiology, life history, genomes), `biophysics`, `chemistry` or `physics`
   (ADR-1500).
 - **Curate** loads BioNumbers' own entries as the top trust tier, beside the harvested ones:
-  `bionumbers curate --corpus ~/bionumbers/bionumbers.jsonl` keeps the yeast and cytoskeleton
+  `numera-validator curate --corpus ~/bionumbers/bionumbers.jsonl` keeps the yeast and cytoskeleton
   entries that are measured and referenced and that nothing in the record marks doubtful — no
   fused or one-sided range, a readable unit, no "rule of thumb" (ADR-1510).
 - **Discover** searches Europe PMC for open-access research articles with a PMCID — reviews,
@@ -972,7 +976,7 @@ streamlit run review_app.py
   the moment it is given and the write fails closed: a reviewer whose step could not be saved is
   told so and keeps the item. A reviewer can narrow the pool to one domain or topic and can set a
   paper aside; those choices are a person's, and the simulated reviewers never get them.
-- **A simulated review** (`bionumbers simulate-review --reviewer student=<model>@0.6 --reviewer
+- **A simulated review** (`numera-validator simulate-review --reviewer student=<model>@0.6 --reviewer
   scientist=<model>@0.35 ...`) lets models stand in for reviewers until there are people: each
   role reviews its own fixed share of the items, is shown exactly what the page shows a person
   step by step, and may raise an issue instead of deciding. Every row it writes records the role,
@@ -1004,7 +1008,7 @@ sends a question's full text, tool results and answer to Langfuse; nothing is re
 accepted for corpus text. Traces are kept 30 days on the free tier and are never read back by the
 app — ratings and the trail are.
 
-**Enrolment is not managed from the app.** It is one command an operator runs (`scinumbers-enrol`). Adding a tester, assigning a role and issuing a
+**Enrolment is not managed from the app.** It is one command an operator runs (`numera-enrol`). Adding a tester, assigning a role and issuing a
 credential are rows and keys the operator writes by hand (`sql/accounts.sql`); there is no page for
 it, and deliberately no permission that would pretend to gate one.
 
@@ -1040,6 +1044,6 @@ search rather than of selection. The honest remaining gap is that nothing yet ju
   question as a sequence, and which modules may depend on which
 - `openspec/changes/add-ask-agent/proposal.md` — why an agent rather than a search box, what was
   deferred and why
-- `src/scinumbers_ask/events.py` — the port: everything the agent emits and the one command it takes
+- `src/numera_ask/events.py` — the port: everything the agent emits and the one command it takes
 
 To cite BioNumbers itself: Milo et al. *Nucl. Acids Res.* (2010) 38 (suppl 1): D750–D753.

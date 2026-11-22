@@ -26,9 +26,9 @@ from conftest import FIXTURE, agent_with, ask_question
 from streamlit.testing.v1 import AppTest
 
 from agent_doubles import says, scripted
-from scinumbers_ask import allowance, messages, trace, web
-from scinumbers_ask.accounts import Account, EnrolmentUnavailable
-from scinumbers_ask.permissions import Identity, Role
+from numera_ask import allowance, messages, trace, web
+from numera_ask.accounts import Account, EnrolmentUnavailable
+from numera_ask.permissions import Identity, Role
 
 APP = str(Path(__file__).resolve().parents[1] / "streamlit_app.py")
 TIMEOUT = 30
@@ -76,8 +76,8 @@ def page(monkeypatch, repo, config, tmp_path):
     """Build the real script with the door set as a test chooses."""
     built: list[str | None] = []
     monkeypatch.setattr(web, "resources", lambda corpus=None, store=None: repo)
-    monkeypatch.setenv("SCINUMBERS_CORPUS", FIXTURE)
-    monkeypatch.setenv("SCINUMBERS_CHECKPOINTS", str(tmp_path / "c.sqlite"))
+    monkeypatch.setenv("NUMERA_CORPUS", FIXTURE)
+    monkeypatch.setenv("NUMERA_CHECKPOINTS", str(tmp_path / "c.sqlite"))
     # Something, so `admit` reaches `lookup` rather than concluding "no database".
     monkeypatch.setattr(web, "trail_destination", lambda: object())
 
@@ -196,7 +196,7 @@ def test_the_sign_in_door_plays_the_recorded_examples_and_nothing_live(page, cau
     at = page(auth=True, email=None).run()
     frames = _examples(at)
     assert len(frames) == 1, "the door should play its examples once"
-    assert '<div class="title">What can SciNumbers do?</div>' in frames[0].proto.srcdoc
+    assert '<div class="title">What can Numera do?</div>' in frames[0].proto.srcdoc
     assert not at.chat_input, "a question could be asked"
     assert page.built == [], "an agent was built for a visitor who has not signed in"
     assert caught.events() == []
@@ -1006,8 +1006,8 @@ def test_two_sessions_get_two_agents_and_one_repository(monkeypatch, tmp_path):
     """Through the real cached `resources` and the real `agent_for`. The index is
     the expensive thing and stays shared; the agent holds a credential and
     cannot be."""
-    from scinumbers_ask.corpus import load
-    from scinumbers_ask.repository import CorpusRepository
+    from numera_ask.corpus import load
+    from numera_ask.repository import CorpusRepository
 
     web.resources.clear()
     counts = {"indexed": 0, "agents": 0}
@@ -1027,8 +1027,8 @@ def test_two_sessions_get_two_agents_and_one_repository(monkeypatch, tmp_path):
     monkeypatch.setattr(web, "CorpusRepository", counting_repository)
     monkeypatch.setattr(web, "AskAgent", counting_agent)
     monkeypatch.setattr(web.trace, "to_file", lambda spec: None)
-    monkeypatch.setenv("SCINUMBERS_CORPUS", FIXTURE)
-    monkeypatch.setenv("SCINUMBERS_CHECKPOINTS", str(tmp_path / "c.sqlite"))
+    monkeypatch.setenv("NUMERA_CORPUS", FIXTURE)
+    monkeypatch.setenv("NUMERA_CHECKPOINTS", str(tmp_path / "c.sqlite"))
     try:
         one = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
         one.run()  # a rerun of the same session builds nothing new
@@ -1186,7 +1186,7 @@ def test_identity_is_not_configured_when_there_is_no_secrets_file_at_all(monkeyp
 def test_agent_for_holds_one_agent_per_state_and_rebuilds_on_a_new_credential(
     monkeypatch, repo, tmp_path
 ):
-    monkeypatch.setenv("SCINUMBERS_CHECKPOINTS", str(tmp_path / "c.sqlite"))
+    monkeypatch.setenv("NUMERA_CHECKPOINTS", str(tmp_path / "c.sqlite"))
     built: list = []
     monkeypatch.setattr(
         web, "AskAgent", lambda *a, api_key=None, **k: built.append(api_key) or object()
@@ -1231,7 +1231,7 @@ def test_a_signed_in_tester_is_told_whom_to_ask_when_the_allowance_is_spent():
     """The funder-neutral sentence was written so a developer on their own key is
     not told to contact themselves. A signed-in tester is not the funder, so
     the page may -- must -- say whom to ask, and that the allowance renews."""
-    from scinumbers_ask.events import EndReason
+    from numera_ask.events import EndReason
 
     plain = messages.run_over_advice(EndReason.PROVIDER_LIMIT)
     tester = messages.run_over_advice(EndReason.PROVIDER_LIMIT, signed_in=True)
@@ -1260,7 +1260,7 @@ def test_the_page_shows_a_tester_the_tester_s_wording_and_a_developer_the_neutra
 
     at = page(auth=True, email=TESTER.email, enrolled={TESTER.email: TESTER})
     monkeypatch_agent = _spent_agent()
-    import scinumbers_ask.web as w
+    import numera_ask.web as w
 
     original = w.agent_for
     w.agent_for = lambda state, repo_, admission: monkeypatch_agent
@@ -1491,8 +1491,8 @@ def test_one_tester_s_spend_does_not_close_the_door_on_another(repo, config, tmp
     the first tester to reach the run budget refused every other tester's next
     question -- while their own credential was untouched, and the panel showed
     each of them the aggregate as if it were their own spend."""
-    from scinumbers_ask import run_ledger
-    from scinumbers_ask.agent import AskAgent
+    from numera_ask import run_ledger
+    from numera_ask.agent import AskAgent
 
     store = str(tmp_path / "c.sqlite")
     one = AskAgent(repo, config, store, api_key="k1", budget_scope="acct-one")
@@ -1506,8 +1506,8 @@ def test_one_tester_s_spend_does_not_close_the_door_on_another(repo, config, tmp
 def test_without_a_scope_the_budget_is_one_pot_exactly_as_before(repo, config, tmp_path):
     """The terminal, the evaluation harness and an unconfigured page pass no
     scope, and must keep the single deployment-wide budget they have always had."""
-    from scinumbers_ask import run_ledger
-    from scinumbers_ask.agent import AskAgent
+    from numera_ask import run_ledger
+    from numera_ask.agent import AskAgent
 
     store = str(tmp_path / "c.sqlite")
     first = AskAgent(repo, config, store)
@@ -1527,7 +1527,7 @@ def test_the_scope_is_per_account_and_says_nothing_about_who(monkeypatch):
 def test_the_agent_is_handed_the_scope_and_still_no_identity(repo, tmp_path):
     """The scope is a funding fact like the credential beside it, not a person:
     the structural guard in `test_driver_independence` still has to pass."""
-    from scinumbers_ask.agent import AskAgent
+    from numera_ask.agent import AskAgent
 
     agent = AskAgent(repo, web.Config.from_env(), str(tmp_path / "c.sqlite"), budget_scope="s")
     held = {name.lower().lstrip("_") for name in vars(agent)}

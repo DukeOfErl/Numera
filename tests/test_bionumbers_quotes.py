@@ -6,8 +6,8 @@ proof that ran once is a proof about that afternoon -- so the four are here, ove
 fixtures, running on every commit (design D4).
 
 The documents are built from the fixture XML by the crude helper below rather than by
-`bionumbers.jats`: the checker is the instrument every "verified verbatim" claim rests on, and an
-instrument that can only be exercised through the reader it checks against shares the reader's
+`numera_validator.jats`: the checker is the instrument every "verified verbatim" claim rests on, and
+an instrument that can only be exercised through the reader it checks against shares the reader's
 mistakes. The helper only has to produce the shape `verify` was given -- passages with ids, inline
 markup flattened, bibliographic markers kept as `[ref N]` tokens.
 """
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from bionumbers.quotes import (
+from numera_validator.quotes import (
     FOLD,
     Failed,
     Verified,
@@ -342,7 +342,7 @@ def test_the_fold_table_is_fifteen_entries_and_the_micro_sign():
 def test_the_checker_is_written_in_ascii():
     """The table is escapes, and the file is pure ASCII, so it survives a clipboard, a message and
     an editor unchanged -- these artifacts have already been reconstructed from a message once."""
-    from bionumbers import quotes
+    from numera_validator import quotes
 
     assert Path(quotes.__file__).read_text(encoding="utf-8").isascii()
 

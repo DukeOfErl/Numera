@@ -20,8 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from scinumbers_ask.first_use import first_seen
-from scinumbers_ask.trail_store import TrailStore, engine_from_url
+from numera_ask.first_use import first_seen
+from numera_ask.trail_store import TrailStore, engine_from_url
 
 pytestmark = pytest.mark.network
 

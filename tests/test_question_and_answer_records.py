@@ -22,12 +22,12 @@ import pytest
 from conftest import agent_with
 
 from agent_doubles import says, scripted, tool_call
-from scinumbers_ask import trace, trail_store
-from scinumbers_ask.agent import AskAgent
-from scinumbers_ask.corpus import load
-from scinumbers_ask.events import Answer, EndReason
-from scinumbers_ask.repository import CorpusRepository
-from scinumbers_ask.trace import configure
+from numera_ask import trace, trail_store
+from numera_ask.agent import AskAgent
+from numera_ask.corpus import load
+from numera_ask.events import Answer, EndReason
+from numera_ask.repository import CorpusRepository
+from numera_ask.trace import configure
 
 ASKED = "question.asked"
 ANSWER = "answer.given"
@@ -199,7 +199,7 @@ def test_a_crash_mid_answer_still_leaves_the_question_recorded(
     def explode(_message):
         raise TypeError("a bug in this file, not the provider")
 
-    monkeypatch.setattr("scinumbers_ask.agent._text_of", explode)
+    monkeypatch.setattr("numera_ask.agent._text_of", explode)
     agent = agent_with(repo, config, tmp_path, scripted(says("x")))
     with pytest.raises(TypeError, match="a bug in this file"):
         list(agent.ask("s", "a question whose run crashed"))
@@ -466,7 +466,7 @@ def test_no_driver_records_the_question_as_well(repo, config, tmp_path, trail):
     by a driver exists only for that driver -- the evaluation harness is the third
     adapter and would be missing from the data.
     """
-    from scinumbers_ask import web
+    from numera_ask import web
 
     model = scripted(tool_call("search_entries", property="Cell"), says("1 μm [[100002]]"))
     list(web.items_for(agent_with(repo, config, tmp_path, model).ask("s", "how wide?"), repo))
@@ -505,7 +505,7 @@ def test_the_page_says_that_questions_and_answers_are_kept(monkeypatch, repo, co
     """
     from test_web_driver import app
 
-    from scinumbers_ask import web
+    from numera_ask import web
 
     # Literal fragments as well as the sentence: `RECORDS_NOTE` is re-exported,
     # so an empty one would satisfy `in` everywhere and this would pass having
@@ -530,11 +530,11 @@ def test_the_terminal_says_it_too_including_for_a_single_question(
     The note goes to stderr: a pipeline reading the answer off stdout must not
     find this in it.
     """
-    from scinumbers_ask import messages
-    from scinumbers_ask.cli import main
+    from numera_ask import messages
+    from numera_ask.cli import main
 
-    monkeypatch.setattr("scinumbers_ask.cli.AskAgent", lambda *a, **k: _NoModel())
-    monkeypatch.setenv("SCINUMBERS_CORPUS", str(_corpus_path()))
+    monkeypatch.setattr("numera_ask.cli.AskAgent", lambda *a, **k: _NoModel())
+    monkeypatch.setenv("NUMERA_CORPUS", str(_corpus_path()))
     with pytest.raises(SystemExit):
         main(["--ask", "q", "--checkpoints", str(tmp_path / "c.sqlite")])
 
@@ -548,7 +548,7 @@ class _NoModel:
     """An agent that ends at once: this test is about the notice, not an answer."""
 
     def ask(self, session_id, question):
-        from scinumbers_ask.events import QuestionEnded, QuestionStarted
+        from numera_ask.events import QuestionEnded, QuestionStarted
 
         yield QuestionStarted(question_id="q", session_id=session_id, question=question)
         yield QuestionEnded(
@@ -576,11 +576,11 @@ def test_the_terminal_does_not_claim_to_keep_what_it_discards(
     must not be made. Found by the code review, not by the tests: the first
     version printed it unconditionally.
     """
-    from scinumbers_ask import messages
-    from scinumbers_ask.cli import main
+    from numera_ask import messages
+    from numera_ask.cli import main
 
-    monkeypatch.setattr("scinumbers_ask.cli.AskAgent", lambda *a, **k: _NoModel())
-    monkeypatch.setenv("SCINUMBERS_CORPUS", str(_corpus_path()))
+    monkeypatch.setattr("numera_ask.cli.AskAgent", lambda *a, **k: _NoModel())
+    monkeypatch.setenv("NUMERA_CORPUS", str(_corpus_path()))
     with pytest.raises(SystemExit):
         main(["--ask", "q", "--trace", "", "--checkpoints", str(tmp_path / "c.sqlite")])
 

@@ -1,9 +1,9 @@
 ---
 paths:
-  - "src/scinumbers_ask/web.py"
-  - "src/scinumbers_ask/permissions.py"
-  - "src/scinumbers_ask/authorization.py"
-  - "src/scinumbers_ask/accounts.py"
+  - "src/numera_ask/web.py"
+  - "src/numera_ask/permissions.py"
+  - "src/numera_ask/authorization.py"
+  - "src/numera_ask/accounts.py"
   - "streamlit_app.py"
   - "tests/test_web_driver_identity*.py"
   - "tests/test_web_driver_dev_panel.py"
@@ -35,7 +35,7 @@ account, not the role. `agent.py`, `trace.py` and `feedback.py` name none of
 may not import `permissions`, `authorization` or `accounts` —
 `test_driver_independence.py` parses their source and fails on either. A
 verifier opened both doors before those assertions existed: a `role` parameter
-on the constructor, and `import scinumbers_ask.web` reading the registry. If
+on the constructor, and `import numera_ask.web` reading the registry. If
 the agent must one day know what is permitted, hand it **permissions**, never
 the role (ADR-0820).
 

@@ -28,8 +28,8 @@ import json
 import pytest
 from conftest import FIXTURE, write_all_shapes_corpus
 
-from scinumbers_ask.corpus import Entry, load
-from scinumbers_ask.question_set import (
+from numera_ask.corpus import Entry, load
+from numera_ask.question_set import (
     EntryShape,
     Question,
     QuestionSetError,

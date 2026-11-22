@@ -5,7 +5,9 @@ Defines the boundary between the agent and whatever drives it: what the agent em
 accepts, and what must survive being written to disk and read back in a different process. This is
 what lets a terminal, a web application, and an unattended evaluation harness drive the same agent
 without any of them being a special case inside it.
+
 ## Requirements
+
 ### Requirement: The agent communicates through events and commands only
 
 The agent SHALL report its progress by emitting events, and SHALL accept input only as commands. It
@@ -353,6 +355,11 @@ their limit while appearing to preserve it.
 - **THEN** the run does not start
 - **AND** the message does not instruct the reader to rename it
 
+#### Scenario: A name retired twice names the current replacement
+- **WHEN** a run is started with a variable that was renamed, and whose replacement was itself later renamed
+- **THEN** the run does not start
+- **AND** the message names the variable to set now, not the intermediate name that is also retired
+
 ### Requirement: Recording is best-effort and never fails a question
 
 A failure to record SHALL NOT fail, delay or alter the question being answered. The system SHALL
@@ -395,4 +402,3 @@ that nothing was ever recorded. Silence toward the reader, noise toward the oper
 #### Scenario: Recording has been failing for some time
 - **WHEN** writes to the durable destination have been failing
 - **THEN** the number of failures is recoverable without reading a log line by line
-

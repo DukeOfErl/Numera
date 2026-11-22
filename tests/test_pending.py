@@ -16,8 +16,8 @@ from datetime import datetime
 
 import pytest
 
-from scinumbers_ask import neon, pending, trail_store
-from scinumbers_ask.pending import Waiting, main, waiting
+from numera_ask import neon, pending, trail_store
+from numera_ask.pending import Waiting, main, waiting
 
 
 class _Conn:
@@ -108,7 +108,7 @@ def test_an_unenrolled_account_is_reported_as_the_enrolment_queue(monkeypatch, c
     _wire(monkeypatch, _Engine({"unenrolled": [("new@example.org", WHEN, 1)]}))
     assert main(["--branch", "alpha"]) == 0
     said = capsys.readouterr().out
-    assert "new@example.org" in said and "scinumbers-enrol" in said
+    assert "new@example.org" in said and "numera-enrol" in said
 
 
 def test_the_window_is_applied_and_bound_not_interpolated(monkeypatch, capsys):
@@ -149,7 +149,7 @@ def test_no_branch_is_refused_in_this_command_s_own_words(monkeypatch, capsys):
     branch and enrolling a tester the app will never find, and this command writes
     nothing -- an operator debugging a failed cron job should not be told about
     rows."""
-    from scinumbers_ask import enrol as enrol_mod
+    from numera_ask import enrol as enrol_mod
 
     _wire(monkeypatch, _Engine())
     assert main(["--hours", "24"]) == 2

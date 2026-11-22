@@ -1,24 +1,24 @@
 """Web driver entry point: `streamlit run streamlit_app.py`.
 
 A direct script, which is what Streamlit runs and what its own test harness
-drives. Everything that is not a screen element lives in `scinumbers_ask.web`,
+drives. Everything that is not a screen element lives in `numera_ask.web`,
 so the decisions this page makes can be tested without a browser.
 
 The corpus, the checkpoint store and the trail are read from the environment --
-SCINUMBERS_CORPUS (or SCINUMBERS_STORE for the harvest store), SCINUMBERS_CHECKPOINTS,
-SCINUMBERS_TRACE -- since
+NUMERA_CORPUS (or NUMERA_STORE for the harvest store), NUMERA_CHECKPOINTS,
+NUMERA_TRACE -- since
 a Streamlit script is given no arguments of its own.
 """
 
 import streamlit as st
 
-from scinumbers_ask import autobuild, web
-from scinumbers_ask.config import (
+from numera_ask import autobuild, web
+from numera_ask.config import (
     NotConfigured,
     env_setting,
     refuse_retired_env,
 )
-from scinumbers_ask.corpus import CorpusUnavailable
+from numera_ask.corpus import CorpusUnavailable
 
 # Wide, because each answer is now two columns: the prose and the entries it
 # rests on, side by side. The entries table is fixed-width and needs about
@@ -45,8 +45,8 @@ try:
     # hang.
     # The harvest store is read as it is and never built, so autobuild is for a corpus file
     # only. Both named is refused inside `resources` (design D7), not here.
-    store = env_setting("SCINUMBERS_STORE")
-    corpus = env_setting("SCINUMBERS_CORPUS")
+    store = env_setting("NUMERA_STORE")
+    corpus = env_setting("NUMERA_CORPUS")
     if not store:
         corpus = autobuild.corpus_path(
             corpus,

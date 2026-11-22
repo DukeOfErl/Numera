@@ -19,10 +19,10 @@ import urllib.error
 
 import pytest
 
-from scinumbers_ask import accounts, neon
-from scinumbers_ask import enrol as enrol_mod
-from scinumbers_ask.accounts import Account, AlreadyEnrolled
-from scinumbers_ask.enrol import (
+from numera_ask import accounts, neon
+from numera_ask import enrol as enrol_mod
+from numera_ask.accounts import Account, AlreadyEnrolled
+from numera_ask.enrol import (
     CredentialNotWithdrawn,
     KeyLeftBehind,
     MintFailed,
@@ -36,7 +36,7 @@ from scinumbers_ask.enrol import (
     withdraw,
     withdraw_main,
 )
-from scinumbers_ask.permissions import Role
+from numera_ask.permissions import Role
 
 HASH = "abc123hash"
 KEY = "sk-or-v1-secret"

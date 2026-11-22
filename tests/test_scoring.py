@@ -35,13 +35,13 @@ from __future__ import annotations
 import pytest
 from conftest import FIXTURE
 
-from scinumbers_ask.corpus import Entry, load
-from scinumbers_ask.evaluation import Provenance, Result
-from scinumbers_ask.events import EndReason
-from scinumbers_ask.messages import STOP_THE_RUN
-from scinumbers_ask.question_set import Question
-from scinumbers_ask.repository import CorpusRepository
-from scinumbers_ask.scoring import (
+from numera_ask.corpus import Entry, load
+from numera_ask.evaluation import Provenance, Result
+from numera_ask.events import EndReason
+from numera_ask.messages import STOP_THE_RUN
+from numera_ask.question_set import Question
+from numera_ask.repository import CorpusRepository
+from numera_ask.scoring import (
     MIN_PEERS,
     OUTLIER_FACTOR,
     Spread,

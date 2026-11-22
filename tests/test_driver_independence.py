@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-PACKAGE = Path(__file__).resolve().parents[1] / "src" / "scinumbers_ask"
+PACKAGE = Path(__file__).resolve().parents[1] / "src" / "numera_ask"
 
 # The two interactive adapters. `messages` and `entries_table` are shared *by* them
 # -- wording and a table both drivers present -- and belong on the presentation side
@@ -86,9 +86,9 @@ AGENT_CORE = sorted(
 
 def _reached(dotted: str) -> str:
     """The module a dotted import path reaches, with this package's own prefix
-    stripped -- so `scinumbers_ask.web` counts as `web`, not as `scinumbers_ask`.
+    stripped -- so `numera_ask.web` counts as `web`, not as `numera_ask`.
 
-    This was the blind spot a verifier found: `import scinumbers_ask.web as _w`
+    This was the blind spot a verifier found: `import numera_ask.web as _w`
     inside `agent.py` passed every dependency-direction test here, because the
     first segment was the package and never a sibling's name. The relative form
     was caught; the absolute form of the same import was not. An absolute
@@ -120,11 +120,11 @@ def imports_of(module: str) -> set[str]:
 
 
 def test_the_import_rule_sees_the_absolute_form_too():
-    """`import scinumbers_ask.web` and `from .web import x` reach the same module
+    """`import numera_ask.web` and `from .web import x` reach the same module
     and must be read the same way; only one of them was."""
-    assert _reached("scinumbers_ask.web") == "web"
+    assert _reached("numera_ask.web") == "web"
     assert _reached(".web") == "web"
-    assert _reached("scinumbers_ask") == "scinumbers_ask"
+    assert _reached("numera_ask") == "numera_ask"
     assert _reached("streamlit.testing.v1") == "streamlit"
 
 
@@ -304,8 +304,8 @@ def test_only_the_web_driver_knows_the_web_framework():
 
 def test_both_drivers_put_questions_to_the_same_agent():
     """Same class, same method -- not two paths that happen to agree today."""
-    from scinumbers_ask import cli, web
-    from scinumbers_ask.agent import AskAgent
+    from numera_ask import cli, web
+    from numera_ask.agent import AskAgent
 
     assert cli.AskAgent is AskAgent
     assert web.AskAgent is AskAgent
@@ -315,7 +315,7 @@ def test_the_agent_takes_no_parameter_naming_its_caller():
     """It cannot behave one way for a person and another for the evaluation harness."""
     import inspect
 
-    from scinumbers_ask.agent import AskAgent
+    from numera_ask.agent import AskAgent
 
     taken = set(inspect.signature(AskAgent.ask).parameters) | set(
         inspect.signature(AskAgent.__init__).parameters

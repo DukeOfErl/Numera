@@ -12,8 +12,8 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
-from bionumbers.extraction import ProviderRefused
-from bionumbers.openrouter import (
+from numera_validator.extraction import ProviderRefused
+from numera_validator.openrouter import (
     API_KEY_ENV,
     CHARS_PER_TOKEN,
     DEFAULT_MODEL,
@@ -22,8 +22,8 @@ from bionumbers.openrouter import (
     OpenRouterModel,
     strict_schema,
 )
-from bionumbers.records import Frozen
-from bionumbers.spend import OPENROUTER_MODEL, cost
+from numera_validator.records import Frozen
+from numera_validator.spend import OPENROUTER_MODEL, cost
 
 
 class Inner(Frozen):

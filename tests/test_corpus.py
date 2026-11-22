@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from scinumbers_ask.corpus import CorpusOutOfDate, CorpusUnavailable, load
+from numera_ask.corpus import CorpusOutOfDate, CorpusUnavailable, load
 
 FIXTURE = "tests/fixtures/corpus_sample.jsonl"
 
@@ -109,7 +109,7 @@ def test_keywords_given_as_a_string_are_split_not_exploded(tmp_path):
 
 
 def test_amounts_are_validated_rather_than_misread():
-    from scinumbers_ask.config import usd
+    from numera_ask.config import usd
 
     assert usd("0.50") == 500_000
     for bad in ("", "-0.50", "abc"):

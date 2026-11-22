@@ -17,9 +17,9 @@ from europepmc_double import (
     preprint_versions,
 )
 
-from bionumbers.cache import DocumentCache
-from bionumbers.europepmc import VERSION_OF_RECORD, EuropePMC
-from bionumbers.retrieval import (
+from numera_validator.cache import DocumentCache
+from numera_validator.europepmc import VERSION_OF_RECORD, EuropePMC
+from numera_validator.retrieval import (
     ArtifactKind,
     RetrievedDocument,
     SourceIdentifier,

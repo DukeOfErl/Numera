@@ -16,7 +16,7 @@ from conftest import FIXTURE, agent_with, ask_question
 from streamlit.testing.v1 import AppTest
 
 from agent_doubles import says, scripted
-from scinumbers_ask import messages, web
+from numera_ask import messages, web
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = str(ROOT / "streamlit_app.py")
@@ -27,7 +27,7 @@ TIMEOUT = 30
 def capped(monkeypatch, repo, config, tmp_path):
     """The real script with a cap of two, over a scripted agent."""
     monkeypatch.setenv(web.MAX_SESSIONS_ENV, "2")
-    monkeypatch.setenv("SCINUMBERS_CORPUS", FIXTURE)
+    monkeypatch.setenv("NUMERA_CORPUS", FIXTURE)
     monkeypatch.setattr(web, "resources", lambda corpus=None, store=None: repo)
     agent = agent_with(repo, config, tmp_path, scripted(says("an answer")))
     monkeypatch.setattr(web, "agent_for", lambda state, repo, admission: agent)
@@ -167,7 +167,7 @@ def test_a_session_that_keeps_rerunning_keeps_its_place():
 
 
 def test_pruning_a_session_forgets_its_identity_and_its_panel_rows():
-    from scinumbers_ask.permissions import Identity, Role
+    from numera_ask.permissions import Identity, Role
 
     registry, now = _registry()
     handler = web.install_recent_trail()
@@ -202,7 +202,7 @@ def test_nothing_reads_the_client_s_address():
     import ast
 
     forbidden = {"ip_address", "remote_ip", "X-Forwarded-For", "x-forwarded-for"}
-    for path in (ROOT / "src" / "scinumbers_ask" / "web.py", ROOT / "streamlit_app.py"):
+    for path in (ROOT / "src" / "numera_ask" / "web.py", ROOT / "streamlit_app.py"):
         reached = set()
         for node in ast.walk(ast.parse(path.read_text())):
             if isinstance(node, ast.Attribute):

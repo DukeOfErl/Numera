@@ -25,8 +25,8 @@ from conftest import FIXTURE, agent_with, ask_question
 from streamlit.testing.v1 import AppTest
 
 from agent_doubles import says, scripted, tool_call
-from scinumbers_ask import feedback, trace, trail_store, web
-from scinumbers_ask.events import Answer, AnswerEntries, EndReason, QuestionEnded
+from numera_ask import feedback, trace, trail_store, web
+from numera_ask.events import Answer, AnswerEntries, EndReason, QuestionEnded
 
 
 class _RecordingConn:
@@ -85,7 +85,7 @@ def app(monkeypatch, repo, config, tmp_path):
     )
     monkeypatch.setattr(web, "resources", lambda corpus=None, store=None: repo)
     monkeypatch.setattr(web, "agent_for", lambda state, repo, admission: agent)
-    monkeypatch.setenv("SCINUMBERS_CORPUS", FIXTURE)
+    monkeypatch.setenv("NUMERA_CORPUS", FIXTURE)
     # No `resources.clear()`: patching the name replaces the cached function
     # outright, so there is no cache to clear and calling it would raise.
     return AppTest.from_file(APP, default_timeout=TIMEOUT)
@@ -262,7 +262,7 @@ def cites(monkeypatch, repo, config, tmp_path):
     agent = agent_with(repo, config, tmp_path, model)
     monkeypatch.setattr(web, "resources", lambda corpus=None, store=None: repo)
     monkeypatch.setattr(web, "agent_for", lambda state, repo, admission: agent)
-    monkeypatch.setenv("SCINUMBERS_CORPUS", FIXTURE)
+    monkeypatch.setenv("NUMERA_CORPUS", FIXTURE)
     return AppTest.from_file(APP, default_timeout=TIMEOUT)
 
 
@@ -543,7 +543,7 @@ def test_nothing_in_a_rating_is_clickable_while_a_question_is_answered():
     def page():
         import streamlit as st
 
-        from scinumbers_ask import web
+        from numera_ask import web
 
         items = [web.Item(web.Kind.ANSWER, "an answer", question_id="q1")]
         web.draw_feedback(items, "s1", st.session_state, answering=True)
@@ -563,7 +563,7 @@ def test_a_comment_in_progress_is_disabled_rather_than_dropped(tmp_path):
 
         import streamlit as st
 
-        from scinumbers_ask import feedback, web
+        from numera_ask import feedback, web
 
         items = [web.Item(web.Kind.ANSWER, "an answer", question_id="q1")]
         st.session_state.setdefault(feedback.STATE_KEY, {})["q1"] = feedback.Rating(
@@ -630,10 +630,10 @@ def test_the_live_path_splits_the_columns_the_same_way_the_replay_does():
     def page():
         import streamlit as st
 
-        from scinumbers_ask import web
-        from scinumbers_ask.corpus import load
-        from scinumbers_ask.events import Answer, AnswerEntries, EndReason, QuestionEnded
-        from scinumbers_ask.repository import CorpusRepository
+        from numera_ask import web
+        from numera_ask.corpus import load
+        from numera_ask.events import Answer, AnswerEntries, EndReason, QuestionEnded
+        from numera_ask.repository import CorpusRepository
 
         repo = CorpusRepository(load(st.session_state["corpus"]))
         events = [

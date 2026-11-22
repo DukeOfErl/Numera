@@ -25,7 +25,7 @@ BASE = "https://www.ebi.ac.uk/europepmc/webservices/rest"
 IN = "/tmp/claude-1000/suppprobe/gap_results.jsonl"
 OUT = "/tmp/claude-1000/suppprobe/gap_results_backfilled.jsonl"
 MAX_SUPP_MB = 40
-UA = {"User-Agent": "SciNumbers-feasibility-probe/1.0 (research; contact via repo)"}
+UA = {"User-Agent": "Numera-feasibility-probe/1.0 (research; contact via repo)"}
 WORK = "/tmp/claude-1000/suppprobe/_bwork"
 
 

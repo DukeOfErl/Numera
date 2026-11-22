@@ -11,8 +11,8 @@ from decimal import Decimal
 
 import pytest
 
-from bionumbers import readings
-from bionumbers.readings import Agreement, compare, parse
+from numera_validator import readings
+from numera_validator.readings import Agreement, compare, parse
 
 M, U, D, X = (
     Agreement.MATCHES,

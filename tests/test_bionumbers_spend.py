@@ -16,9 +16,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from bionumbers import spend
-from bionumbers.records import Spend
-from bionumbers.spend import (
+from numera_validator import spend
+from numera_validator.records import Spend
+from numera_validator.spend import (
     MODEL,
     PRICES,
     Ceiling,

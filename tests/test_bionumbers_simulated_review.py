@@ -14,9 +14,9 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import create_engine, select
 
-from bionumbers import cli, review, simulated_review, store
-from bionumbers.extraction import ProviderRefused
-from bionumbers.records import (
+from numera_validator import cli, review, simulated_review, store
+from numera_validator.extraction import ProviderRefused
+from numera_validator.records import (
     CandidateKind,
     Claim,
     ClaimKind,
@@ -35,7 +35,7 @@ from bionumbers.records import (
     TableCell,
     TableView,
 )
-from bionumbers.simulated_review import (
+from numera_validator.simulated_review import (
     Chosen,
     Judged,
     Reviewer,
@@ -43,7 +43,7 @@ from bionumbers.simulated_review import (
     reveal,
     screen,
 )
-from bionumbers.spend import Ceiling, Unpriceable
+from numera_validator.spend import Ceiling, Unpriceable
 
 QUESTION = "doubling time of Escherichia coli"
 RUN = "run-1"

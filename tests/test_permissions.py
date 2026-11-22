@@ -8,7 +8,7 @@ outcome. A test that refused only `None` would pass with a table that granted
 everything to everyone.
 
 **Mutation testing cannot reach this module, so seeding stands in for it.**
-A run of `mutmut` 3.8 over `scinumbers_ask.permissions*` (2026-09-17) reported
+A run of `mutmut` 3.8 over `numera_ask.permissions*` (2026-09-17) reported
 *"Filtered for specific mutants, but nothing matches"*: mutmut rewrites function
 bodies, and everything here is an enum body, a `@dataclass` body or a
 module-level dict. `GRANTS` -- the thing most worth mutating in the package --
@@ -38,8 +38,8 @@ from __future__ import annotations
 
 import pytest
 
-from scinumbers_ask.authorization import Refused, allowed, require
-from scinumbers_ask.permissions import GRANTS, Identity, Permission, Role
+from numera_ask.authorization import Refused, allowed, require
+from numera_ask.permissions import GRANTS, Identity, Permission, Role
 
 TESTERS = (Role.STUDENT, Role.SCIENTIST, Role.SENIOR_SCIENTIST)
 OPERATORS = (Role.DEV, Role.ADMIN)

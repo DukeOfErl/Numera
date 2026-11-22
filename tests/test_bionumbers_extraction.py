@@ -24,8 +24,8 @@ import anthropic
 import httpx
 import pytest
 
-from bionumbers import quotes
-from bionumbers.extraction import (
+from numera_validator import quotes
+from numera_validator.extraction import (
     INSTRUCTION,
     MAX_TOKENS,
     ClaimDraft,
@@ -41,8 +41,8 @@ from bionumbers.extraction import (
     user_turn,
     write_results,
 )
-from bionumbers.jats import read_jats
-from bionumbers.records import (
+from numera_validator.jats import read_jats
+from numera_validator.records import (
     CONDITION_FIELDS,
     CandidateKind,
     ClaimKind,
@@ -51,7 +51,7 @@ from bionumbers.records import (
     Provenance,
     Spend,
 )
-from bionumbers.spend import MODEL, Ceiling, Ledger, cost, projected_cost
+from numera_validator.spend import MODEL, Ceiling, Ledger, cost, projected_cost
 
 FIXTURES = Path(__file__).parent / "fixtures" / "europepmc"
 
@@ -269,7 +269,7 @@ def test_the_instruction_follows_the_breakpoint_so_the_paper_prefix_is_shared(ar
 def test_the_two_model_calls_share_the_cached_paper_block(article):
     """Extraction's and the second text's first block must be byte-identical, or the paper is
     written to the cache twice and read from it never."""
-    from bionumbers import distractor
+    from numera_validator import distractor
 
     ours = system_blocks(article)[0]
     theirs = distractor.system_blocks(article)[0]

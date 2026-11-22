@@ -15,7 +15,7 @@ import sys
 from extract import from_xml
 from numfind import find
 
-XMLDIR = "/home/yoavpol/AI Engineering/BioNumbers-feasibility/probes/2026-09-09-retrieval/data"
+XMLDIR = "/home/yoavpol/AI Engineering/Numera-feasibility/probes/2026-09-09-retrieval/data"
 
 # (label, pmcid, value, units, expected_present, why the expectation holds)
 CASES = [

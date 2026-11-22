@@ -7,9 +7,9 @@ import io
 
 import pytest
 
-from scinumbers_ask.corpus import load
-from scinumbers_ask.repository import CorpusRepository
-from scinumbers_ask.trace import configure, start_question
+from numera_ask.corpus import load
+from numera_ask.repository import CorpusRepository
+from numera_ask.trace import configure, start_question
 
 FIXTURE = "tests/fixtures/corpus_sample.jsonl"
 SECOND, COUNT = 100002, 100020
@@ -280,14 +280,14 @@ def test_an_unknown_vocabulary_field_is_recoverable(repo):
 
 
 def test_a_common_name_phrase_does_not_become_an_abbreviation():
-    from scinumbers_ask.repository import _abbreviated_binomials
+    from numera_ask.repository import _abbreviated_binomials
 
     # "African clawed frog Xenopus laevis" must not yield "a. clawed".
     assert _abbreviated_binomials("African clawed frog Xenopus laevis") == {"x. laevis"}
 
 
 def test_a_binomial_followed_by_an_authority_is_still_abbreviated():
-    from scinumbers_ask.repository import _abbreviated_binomials
+    from numera_ask.repository import _abbreviated_binomials
 
     # Requiring the pair to be the final two tokens would lose this one.
     assert _abbreviated_binomials("Peanut Arachis hypogaea L.") == {"a. hypogaea"}
@@ -298,7 +298,7 @@ def test_trace_records_are_emitted_without_explicit_configuration():
 
     # An unconfigured logger would inherit the root's WARNING level and discard
     # every record silently -- the trail vanishing when nobody knows to look.
-    assert logging.getLogger("scinumbers_ask").getEffectiveLevel() == logging.INFO
+    assert logging.getLogger("numera_ask").getEffectiveLevel() == logging.INFO
 
 
 @pytest.mark.parametrize("term", ["E. coli", "E.coli", "e.coli", "E coli", "e coli"])

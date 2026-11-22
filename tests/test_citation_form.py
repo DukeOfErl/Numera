@@ -11,10 +11,10 @@ from __future__ import annotations
 import io
 import json
 
-from scinumbers_ask import bionumbers
-from scinumbers_ask.agent import SYSTEM_PROMPT
-from scinumbers_ask.citations import FORM, citations, format_citation
-from scinumbers_ask.trace import configure, start_question
+from numera_ask import bionumbers
+from numera_ask.agent import SYSTEM_PROMPT
+from numera_ask.citations import FORM, citations, format_citation
+from numera_ask.trace import configure, start_question
 
 
 def records(buf: io.StringIO) -> list[dict]:
@@ -101,7 +101,7 @@ def test_the_two_notations_are_ordered_by_where_they_appear():
 def test_one_implementation_reads_the_source_form():
     """Two parsers for one notation drifted once already. There are two callers now,
     which is the point of the split; a second implementation is not."""
-    from scinumbers_ask import citations as citations_module
+    from numera_ask import citations as citations_module
 
     assert citations_module.cross_references is bionumbers.cross_references
 

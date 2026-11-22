@@ -3,7 +3,7 @@
 -- Run ONCE, by the operator, on the Neon branch the deployment writes to (`alpha`),
 -- as the branch's owner role. Roles are per branch, so `dev` and `production` get
 -- none of this. Then build the connection URL for the new role and store it as the
--- repository secret SCINUMBERS_TRAIL_READ_URL (SQLAlchemy form, `postgresql+psycopg://`).
+-- repository secret NUMERA_TRAIL_READ_URL (SQLAlchemy form, `postgresql+psycopg://`).
 --
 -- **Before running, replace the whole token <PASSWORD> -- angle brackets included --
 -- with your password in single quotes**, e.g. password 'a1b2...'. Left as it is the

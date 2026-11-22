@@ -15,10 +15,10 @@ from agent_doubles import (
     scripted,
     tool_call,
 )
-from scinumbers_ask import messages
-from scinumbers_ask.agent import CONVERSATION_BOUND, SYSTEM_PROMPT, AskAgent
-from scinumbers_ask.config import Config, usd
-from scinumbers_ask.events import (
+from numera_ask import messages
+from numera_ask.agent import CONVERSATION_BOUND, SYSTEM_PROMPT, AskAgent
+from numera_ask.config import Config, usd
+from numera_ask.events import (
     Answer,
     AnswerEntries,
     CitationWarning,
@@ -329,7 +329,7 @@ def test_the_attribute_this_rule_reads_is_on_the_provider_s_own_error(repo, conf
     it -- and the failure that mattered would be silent: every spent key reported
     as an ordinary outage, with the door left open.
     """
-    from scinumbers_ask.agent import _is_out_of_credit
+    from numera_ask.agent import _is_out_of_credit
 
     assert _is_out_of_credit(out_of_credit_error())
     # The expensive direction, and it needs errors that *have* a status: with only
@@ -372,7 +372,7 @@ def test_the_agent_takes_no_parameter_naming_its_caller(repo, config, tmp_path):
 def test_a_session_at_the_bound_refuses_rather_than_dropping_context(
     repo, config, tmp_path, monkeypatch
 ):
-    monkeypatch.setattr("scinumbers_ask.agent.CONVERSATION_BOUND", 2)
+    monkeypatch.setattr("numera_ask.agent.CONVERSATION_BOUND", 2)
     agent = agent_with(repo, config, tmp_path, scripted(says("first"), says("second")))
     run(agent, "s1", "first question")
 
@@ -440,7 +440,7 @@ def _agent_over(repo_double, config, tmp_path, model):
 
 
 def test_a_recoverable_tool_error_is_actually_retried(config, tmp_path):
-    from scinumbers_ask.agent import TOOL_RETRIES
+    from numera_ask.agent import TOOL_RETRIES
 
     failing = _FailingRepo(ValueError("bad argument"))
     model = scripted(tool_call("search_entries", property="x"), says("gave up on that lookup"))
@@ -479,7 +479,7 @@ def test_the_trail_says_where_our_own_defect_was_raised(repo):
 
     Only our own frames are named, so a defect surfacing deep inside a library
     still points at the line of ours that led there rather than at the library."""
-    from scinumbers_ask.agent import _origin
+    from numera_ask.agent import _origin
 
     try:
         repo.vocabulary("not-a-field")
@@ -509,7 +509,7 @@ def test_the_trail_finds_our_frames_by_module_rather_than_by_path(repo):
     """
     import inspect
 
-    from scinumbers_ask import agent as agent_module
+    from numera_ask import agent as agent_module
 
     # The docstring is stripped first: it explains the two failures by name, so a
     # check against the raw source matches the explanation rather than the code.
@@ -518,11 +518,11 @@ def test_the_trail_finds_our_frames_by_module_rather_than_by_path(repo):
     assert "__file__" not in body, "the origin check is back on the filesystem"
 
     # And a sibling package sharing our prefix is not ours.
-    assert not "scinumbers_ask_helpers".startswith(f"{agent_module.__package__}.")
+    assert not "numera_ask_helpers".startswith(f"{agent_module.__package__}.")
 
 
 def test_the_tool_error_message_names_the_type_not_the_exception_text(config):
-    from scinumbers_ask.agent import _tool_error_message
+    from numera_ask.agent import _tool_error_message
 
     message = _tool_error_message(ValueError("secret internal detail"), None)
     assert "ValueError" in message
@@ -531,7 +531,7 @@ def test_the_tool_error_message_names_the_type_not_the_exception_text(config):
 
 
 def test_reaching_the_call_limit_names_the_limit_rather_than_answering(repo, config, tmp_path):
-    from scinumbers_ask.agent import RUN_CALL_LIMIT
+    from numera_ask.agent import RUN_CALL_LIMIT
 
     # A model that only ever asks for another search never terminates on its own.
     model = scripted(tool_call("search_entries", property="Cell"))
@@ -576,7 +576,7 @@ def test_what_was_established_before_the_bound_is_still_presented(repo, config, 
 def test_the_bound_ending_reports_the_count_that_tripped_it(repo, config, tmp_path):
     """The ending already named the bound; it did not say what reached it, so
     nothing downstream could tell a bound set too low from a model that looped."""
-    from scinumbers_ask.agent import RUN_CALL_LIMIT
+    from numera_ask.agent import RUN_CALL_LIMIT
 
     model = scripted(tool_call("search_entries", property="Cell"))
     end = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))[-1]
@@ -588,7 +588,7 @@ def test_an_answer_produced_with_no_calls_left_is_marked(repo, config, tmp_path,
     """An answer reached at the wall stopped searching because it ran out of room,
     not because it was satisfied -- and it is otherwise indistinguishable from one
     produced with calls to spare."""
-    monkeypatch.setattr("scinumbers_ask.agent.RUN_CALL_LIMIT", 3)
+    monkeypatch.setattr("numera_ask.agent.RUN_CALL_LIMIT", 3)
     model = scripted(
         tool_call("search_entries", property="Cell"),
         tool_call("get_entry", entry_id=100001),
@@ -605,7 +605,7 @@ def test_an_answer_produced_with_no_calls_left_is_marked(repo, config, tmp_path,
 
 
 def test_an_answer_with_calls_to_spare_is_not_marked(repo, config, tmp_path, monkeypatch):
-    monkeypatch.setattr("scinumbers_ask.agent.RUN_CALL_LIMIT", 3)
+    monkeypatch.setattr("numera_ask.agent.RUN_CALL_LIMIT", 3)
     model = scripted(
         tool_call("search_entries", property="Cell"),
         says("Cell length is 1.94-2.72 um (BNID 100001)."),
@@ -619,7 +619,7 @@ def test_a_retried_call_is_counted_once(repo, config, tmp_path, monkeypatch):
     """The count has to be the middleware's own, not attempts made here: a provider
     failure that succeeds on retry is one model call against the bound, and counting
     attempts would report a question as cornered when it had every call left."""
-    monkeypatch.setattr("scinumbers_ask.agent.RUN_CALL_LIMIT", 3)
+    monkeypatch.setattr("numera_ask.agent.RUN_CALL_LIMIT", 3)
     model = scripted(says("Cell length is 1.94-2.72 um (BNID 100001)."), failures=1)
     end = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))[-1]
     assert model.attempts == 2, "the double did not actually fail once"
@@ -646,7 +646,7 @@ def test_a_question_the_corpus_does_not_cover_is_presented_as_answered(repo, con
     is rule 2, and a scripted double cannot test that -- it says whatever the test
     tells it to. The live suite covers that half.
     """
-    from scinumbers_ask.citations import citations
+    from numera_ask.citations import citations
 
     model = scripted(
         tool_call("search_entries", property="lifespan", organism="mouse"),
@@ -666,8 +666,8 @@ def test_a_refusal_claims_no_entries_and_no_coverage(repo, config, tmp_path):
     """The presentation must not suggest evidence that is not there: no table, and
     no matched figure, since "0 matched" beside a refusal reads as a measurement of
     the corpus rather than of the search."""
-    from scinumbers_ask.cli import render as render_event
-    from scinumbers_ask.events import AnswerEntries, CitationWarning
+    from numera_ask.cli import render as render_event
+    from numera_ask.events import AnswerEntries, CitationWarning
 
     model = scripted(
         tool_call("search_entries", property="lifespan", organism="mouse"),
@@ -709,14 +709,14 @@ def test_a_blank_answer_is_not_reported_as_answered(repo, config, tmp_path):
 def test_the_user_is_warned_before_the_conversation_bound_bites(
     repo, config, tmp_path, monkeypatch
 ):
-    from scinumbers_ask.events import ConversationWarning
+    from numera_ask.events import ConversationWarning
 
     # The double reports a 14-token prompt, the shape a real response carries. A
     # bound of 18 warns at 13.5, so one completed turn lands past the warning and
     # short of the bound -- the window in which the user can still finish what
     # they were doing. The first question has made no request yet, so there is
     # nothing reported to warn about.
-    monkeypatch.setattr("scinumbers_ask.agent.CONVERSATION_BOUND", 18)
+    monkeypatch.setattr("numera_ask.agent.CONVERSATION_BOUND", 18)
     agent = agent_with(repo, config, tmp_path, scripted(says("a"), says("b"), says("c")))
     assert not any(isinstance(e, ConversationWarning) for e in agent.ask("s", "first"))
 
@@ -741,7 +741,7 @@ def test_a_defect_in_our_own_code_is_not_labelled_a_provider_failure(
     def explode(_message):
         raise TypeError("a bug in this file, not the provider")
 
-    monkeypatch.setattr("scinumbers_ask.agent._text_of", explode)
+    monkeypatch.setattr("numera_ask.agent._text_of", explode)
     # It must escape rather than be reported as PROVIDER_FAILURE, which would send
     # whoever debugs it to the provider instead of to this file.
     with pytest.raises(TypeError, match="a bug in this file"):
@@ -772,7 +772,7 @@ def test_spend_is_read_from_the_shape_openrouter_actually_returns():
     from langchain_core.messages import AIMessage
 
     from agent_doubles import OPENROUTER_RESPONSE_METADATA
-    from scinumbers_ask.spend import SpendLedger
+    from numera_ask.spend import SpendLedger
 
     message = AIMessage(content="ok", response_metadata=OPENROUTER_RESPONSE_METADATA)
     ledger = SpendLedger(model="m", prices=None)
@@ -786,7 +786,7 @@ def test_spend_accumulates_across_several_calls():
     from langchain_core.messages import AIMessage
 
     from agent_doubles import OPENROUTER_RESPONSE_METADATA
-    from scinumbers_ask.spend import SpendLedger
+    from numera_ask.spend import SpendLedger
 
     ledger = SpendLedger(model="m", prices=None)
     for _ in range(3):
@@ -881,8 +881,8 @@ def test_get_entry_returns_the_detail_an_answer_needs_to_cite(repo, config, tmp_
 
 
 def test_get_entry_text_carries_value_units_reference_and_cross_references(repo, config, tmp_path):
-    from scinumbers_ask.tools import build_tools
-    from scinumbers_ask.trace import QuestionTrace
+    from numera_ask.tools import build_tools
+    from numera_ask.trace import QuestionTrace
 
     tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), lambda _e: None)}
     text = tools["get_entry"].invoke({"entry_id": 100001})
@@ -892,8 +892,8 @@ def test_get_entry_text_carries_value_units_reference_and_cross_references(repo,
 
 
 def test_an_unknown_entry_id_says_so_rather_than_inventing(repo, config, tmp_path):
-    from scinumbers_ask.tools import build_tools
-    from scinumbers_ask.trace import QuestionTrace
+    from numera_ask.tools import build_tools
+    from numera_ask.trace import QuestionTrace
 
     seen: list = []
     tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), seen.append)}
@@ -902,8 +902,8 @@ def test_an_unknown_entry_id_says_so_rather_than_inventing(repo, config, tmp_pat
 
 
 def test_an_empty_search_points_the_agent_at_vocabulary_discovery(repo):
-    from scinumbers_ask.tools import build_tools
-    from scinumbers_ask.trace import QuestionTrace
+    from numera_ask.tools import build_tools
+    from numera_ask.trace import QuestionTrace
 
     tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), lambda _e: None)}
     text = tools["search_entries"].invoke({"property": "nothing matches this"})
@@ -913,8 +913,8 @@ def test_an_empty_search_points_the_agent_at_vocabulary_discovery(repo):
 
 
 def test_an_empty_vocabulary_lookup_says_the_corpus_has_nothing_under_that_wording(repo):
-    from scinumbers_ask.tools import build_tools
-    from scinumbers_ask.trace import QuestionTrace
+    from numera_ask.tools import build_tools
+    from numera_ask.trace import QuestionTrace
 
     tools = {t.name: t for t in build_tools(repo, QuestionTrace("q"), lambda _e: None)}
     text = tools["list_values"].invoke({"field": "organism", "contains": "Drosophila"})
@@ -928,8 +928,8 @@ def test_a_search_spanning_kinds_of_quantity_says_so_in_the_tool_result(repo, co
     """The system prompt already forbids presenting a mass and a count as one range.
     This is the same rule where the decision is made, against the rows it applies to
     -- an instruction read before the question is not a control."""
-    from scinumbers_ask.tools import build_tools
-    from scinumbers_ask.trace import start_question
+    from numera_ask.tools import build_tools
+    from numera_ask.trace import start_question
 
     search = next(
         t for t in build_tools(repo, start_question(), lambda e: None) if t.name == "search_entries"
@@ -946,8 +946,8 @@ def test_a_search_spanning_kinds_of_quantity_says_so_in_the_tool_result(repo, co
 def test_an_answer_citing_a_mass_and_a_count_is_shown_the_mismatch(repo, config, tmp_path):
     """End to end, on the pair the requirement names: mass in micrograms against a
     ribosome count. The check is on the units, so it holds whatever the prose says."""
-    from scinumbers_ask.cli import render as render_event
-    from scinumbers_ask.events import AnswerEntries
+    from numera_ask.cli import render as render_event
+    from numera_ask.events import AnswerEntries
 
     model = scripted(
         tool_call("search_entries", organism="e. coli"),
@@ -968,7 +968,7 @@ def test_the_bound_is_the_conversation_size_not_the_number_of_turns(
     """A message is a poor proxy: a retrieved entry's payload runs from 16
     characters to 8,023 across the corpus, so the same turn count can be a few
     thousand tokens or a hundred thousand."""
-    from scinumbers_ask.agent import _conversation_size
+    from numera_ask.agent import _conversation_size
 
     reported = _conversation_size({"prompt_tokens": 9_000}, ["ignored", "messages"])
     assert reported == 9_000, "the provider's own figure was not preferred"
@@ -982,7 +982,7 @@ def test_a_conversation_nobody_has_measured_is_counted_rather_than_called_empty(
     has already met from the other side."""
     from langchain_core.messages import AIMessage, HumanMessage
 
-    from scinumbers_ask.agent import _conversation_size
+    from numera_ask.agent import _conversation_size
 
     messages = [HumanMessage(content="how wide is a cell?" * 200), AIMessage(content="a" * 4000)]
     counted = _conversation_size({}, messages)
@@ -994,9 +994,9 @@ def test_a_conversation_nobody_has_measured_is_counted_rather_than_called_empty(
 def test_the_conversation_bound_stops_a_session_that_is_too_large(
     repo, config, tmp_path, monkeypatch
 ):
-    from scinumbers_ask.events import ConversationWarning
+    from numera_ask.events import ConversationWarning
 
-    monkeypatch.setattr("scinumbers_ask.agent.CONVERSATION_BOUND", 10)
+    monkeypatch.setattr("numera_ask.agent.CONVERSATION_BOUND", 10)
     agent = agent_with(repo, config, tmp_path, scripted(says("a"), says("b")))
     list(agent.ask("s", "first"))
 
@@ -1014,8 +1014,8 @@ def test_the_conversation_bound_stops_a_session_that_is_too_large(
 @pytest.fixture
 def hedged_repo():
     """One entry whose source said `<8`, stored as the interval [8, 8]."""
-    from scinumbers_ask.corpus import Entry
-    from scinumbers_ask.repository import CorpusRepository
+    from numera_ask.corpus import Entry
+    from numera_ask.repository import CorpusRepository
 
     return CorpusRepository(
         (
@@ -1041,8 +1041,8 @@ def hedged_repo():
 @pytest.fixture
 def fused_repo():
     """One entry whose bounds may be two different quantities."""
-    from scinumbers_ask.corpus import Entry
-    from scinumbers_ask.repository import CorpusRepository
+    from numera_ask.corpus import Entry
+    from numera_ask.repository import CorpusRepository
 
     return CorpusRepository(
         (
@@ -1067,8 +1067,8 @@ def fused_repo():
 
 def entry_text(repo, entry_id: int) -> str:
     """What `get_entry` actually hands the model."""
-    from scinumbers_ask.tools import build_tools
-    from scinumbers_ask.trace import QuestionTrace
+    from numera_ask.tools import build_tools
+    from numera_ask.trace import QuestionTrace
 
     tools = build_tools(repo, emit=lambda _e: None, trace=QuestionTrace("q", "run"))
     get_entry = next(t for t in tools if t.name == "get_entry")
@@ -1113,7 +1113,7 @@ def test_retrieval_stops_at_its_own_bound_not_at_the_model_call_limit(repo, conf
     retrievals in one observed question -- $0.27, a fifth of the run budget, with
     the spend ceiling as the only brake."""
     monkeypatch_limit = 3
-    from scinumbers_ask import agent as agent_module
+    from numera_ask import agent as agent_module
 
     original = agent_module.TOOL_CALL_LIMIT
     agent_module.TOOL_CALL_LIMIT = monkeypatch_limit
@@ -1145,8 +1145,8 @@ def test_retrieval_stops_at_its_own_bound_not_at_the_model_call_limit(repo, conf
 def test_a_declined_call_is_still_reported_as_something_that_happened(repo, config, tmp_path):
     """A call the model made and was refused is part of what happened to the
     question, so it belongs in the progress a reader sees and in the count."""
-    from scinumbers_ask.tools import ToolBudget, build_tools
-    from scinumbers_ask.trace import QuestionTrace
+    from numera_ask.tools import ToolBudget, build_tools
+    from numera_ask.trace import QuestionTrace
 
     seen = []
     tools = build_tools(repo, QuestionTrace("q", "run"), seen.append, ToolBudget(1))
@@ -1161,7 +1161,7 @@ def test_a_declined_call_is_still_reported_as_something_that_happened(repo, conf
 def test_an_answer_with_no_retrieval_behind_it_is_reported(repo, config, tmp_path):
     """ "Not in the corpus" and "not looked for" are different statements, and a
     reader cannot tell them apart from the answer."""
-    from scinumbers_ask.events import UngroundedRefusal
+    from numera_ask.events import UngroundedRefusal
 
     model = scripted(says("I could not find anything about that in the corpus."))
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
@@ -1174,7 +1174,7 @@ def test_an_answer_with_no_retrieval_behind_it_is_reported(repo, config, tmp_pat
 def test_an_answer_claiming_searches_it_never_made_is_reported_as_such(repo, config, tmp_path):
     """Observed live: zero tool calls, prose reading "based on my searches through
     the available data". The harness had the truth and the answer did not."""
-    from scinumbers_ask.events import UngroundedRefusal
+    from numera_ask.events import UngroundedRefusal
 
     model = scripted(says("Based on my searches through the available data, this is not covered."))
     events = list(agent_with(repo, config, tmp_path, model).ask("s", "q"))
@@ -1182,7 +1182,7 @@ def test_an_answer_claiming_searches_it_never_made_is_reported_as_such(repo, con
 
 
 def test_an_answer_that_searched_is_not_reported(repo, config, tmp_path):
-    from scinumbers_ask.events import UngroundedRefusal
+    from numera_ask.events import UngroundedRefusal
 
     model = scripted(
         tool_call("search_entries", property="nothing at all"),

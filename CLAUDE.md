@@ -86,6 +86,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-paper-references` | `1750`–`1790` — `1750` written; archived 2026-10-17 |
 | `fix-guard-fails-closed` | `1800`–`1840` — `1800` written; archived 2026-10-17, after `add-paper-references`' `1750`–`1790` |
 | `add-answer-view-redesign` | `1850`–`1890` — `1850` written; reserved 2026-10-17, after `fix-guard-fails-closed`'s `1800`–`1840` |
+| `rename-to-numera` | `1900`–`1940` — `1900` written; reserved 2026-11-19, after `add-answer-view-redesign`'s `1850`–`1890` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets
@@ -115,12 +116,12 @@ is a description of the code.
 ## Architecture
 
 Three work packages, three packages under `src/`, one dependency extra each, so no two branches edit
-the same source tree: `bionumbers_ingest` (`ingest`), `scinumbers_ask` (`ask`), `bionumbers`
+the same source tree: `bionumbers_ingest` (`ingest`), `numera_ask` (`ask`), `numera_validator`
 (`validator`). All three are here now; the validator is a prototype (ADR-1520) and is described in
 its own subsection below.
 
 A fourth extra, `eval`, is **additive to `ask` rather than a package of its own**: the evaluation
-harness lives in `scinumbers_ask` because it is an adapter over that agent, and the extra carries only
+harness lives in `numera_ask` because it is an adapter over that agent, and the extra carries only
 what is new. Install both: `uv sync --extra ask --extra eval`. The extra is currently empty:
 `deepeval` left with the judged layer, which is now `add-judged-faithfulness`, and returns with it.
 A deterministic evaluation run needs none of DeepEval, which is why it is separable at all.
@@ -180,21 +181,21 @@ core, and a test there refuses a name with no file behind it.
 | `scoring.py` | Every score needing no model and no prose parser, as pure functions; the outlier check (ADR-0520) |
 | `report.py` | Figures read out of a results file, never combined across model, prompt or corpus |
 | `answer_sheet.py` | Every answer and the entries that bear on it, as HTML or PDF; never the recorded context |
-| `eval_cli.py` | The evaluation command (`scinumbers-eval`): `check`, `run` and `report` |
+| `eval_cli.py` | The evaluation command (`numera-eval`): `check`, `run` and `report` |
 | `trace.py` | The structured trail, one question id and one session id throughout |
 | `trail_store.py` | The trail's durable destination: one append-only table, written best-effort (ADR-0700, ADR-0710) |
-| `hosted_trace.py` | The hosted tracer (Langfuse): the setting that turns it on, the per-question callback, the refusal of LangSmith's own switch, the rating's copy, and the allowance count. Off unless `SCINUMBERS_TRACING=langfuse` (ADR-1000–1020) |
+| `hosted_trace.py` | The hosted tracer (Langfuse): the setting that turns it on, the per-question callback, the refusal of LangSmith's own switch, the rating's copy, and the allowance count. Off unless `NUMERA_TRACING=langfuse` (ADR-1000–1020) |
 | `feedback.py` | A reader's judgement of an answer, recorded to the trail. **Presentation, not core** — see below |
 | `permissions.py` | `Role`, `Permission`, `Identity`, and `GRANTS` — the default-deny table as data, with the pruning rule above it (ADR-0800) |
 | `authorization.py` | `allowed` / `require` / `Refused`: the one refusal, called inside the operation it guards, never by the page |
 | `accounts.py` | `lookup(engine, email)` and `insert(...)`: enrolment off one row, **fails closed** — the deliberate inverse of `trail_store` (ADR-0780). Both here so the case-folding rule has one home |
-| `store_corpus.py` | The harvest store as a corpus: read-only, labels, readings, tiers. **The one core module that imports `bionumbers`** (ADR-1600), so a corpus-file run never does |
-| `objections.py` | What objecting reviewers wrote, for the Trust cell and the terminal's list. **Presentation**: reviewers' words never reach the agent; imports `bionumbers` only when a store is loaded (ADR-1600, ADR-1630) |
+| `store_corpus.py` | The harvest store as a corpus: read-only, labels, readings, tiers. **The one core module that imports `numera_validator`** (ADR-1600), so a corpus-file run never does |
+| `objections.py` | What objecting reviewers wrote, for the Trust cell and the terminal's list. **Presentation**: reviewers' words never reach the agent; imports `numera_validator` only when a store is loaded (ADR-1600, ADR-1630) |
 | `trust_marks.py` | A tier as stars, `sim` and `⚠`, their legend, and the tier in words for an opened entry. **Presentation**: the model is told a tier in words and never shown a star (ADR-1630, ADR-1850) |
 | `references.py` | A harvested paper's reference in Chicago author-date, from its CSL-JSON, by citeproc-py; first author and year for the evidence list, from the record or BioNumbers' reference string. **Presentation**: the model names no paper and is never handed the authors (ADR-1640, ADR-1850) |
-| `enrol.py` | The two commands that open and close an account: `scinumbers-enrol` mints a capped key and inserts the row, withdrawing the key if the row cannot be written (ADR-0900); `scinumbers-withdraw` disables the row and revokes the key, in that order, so a partial failure leaves a refused account rather than a live one (ADR-1150). A harness module |
-| `pending.py` | The daily check (`scinumbers-pending`): who is **still** stuck at the door, read out of the trail. Resolution is derived from `user_email` and `signin.refused` rather than tracked, so no state is added. **Silent when nobody is stuck** — the contract a cron line rests on. A harness module |
-| `first_use.py` | The hourly check (`scinumbers-first-use`): who was **just seen for the first time**, signing in or asking, read out of the trail with no state kept. Holds a **read-only database URL, never the Neon API key**, and sets its own transaction read-only. **Silent when nobody is new.** The window is computed by the workflow from the previous successful run. A harness module (ADR-1250, ADR-1260, ADR-1290) |
+| `enrol.py` | The two commands that open and close an account: `numera-enrol` mints a capped key and inserts the row, withdrawing the key if the row cannot be written (ADR-0900); `numera-withdraw` disables the row and revokes the key, in that order, so a partial failure leaves a refused account rather than a live one (ADR-1150). A harness module |
+| `pending.py` | The daily check (`numera-pending`): who is **still** stuck at the door, read out of the trail. Resolution is derived from `user_email` and `signin.refused` rather than tracked, so no state is added. **Silent when nobody is stuck** — the contract a cron line rests on. A harness module |
+| `first_use.py` | The hourly check (`numera-first-use`): who was **just seen for the first time**, signing in or asking, read out of the trail with no state kept. Holds a **read-only database URL, never the Neon API key**, and sets its own transaction read-only. **Silent when nobody is new.** The window is computed by the workflow from the previous successful run. A harness module (ADR-1250, ADR-1260, ADR-1290) |
 | `door_demo.py` | The sign-in door's demo: real answers from `door_demo.json`, shortened with every edit recorded, typed and streamed in an iframe. **Presentation**; committed under ADR-1200, real by ADR-1210, shortened by ADR-1220. Its one chart is drawn by `bin/door-demo-chart`, not by the app (ADR-1230); citations are grey superscripts (ADR-1240) |
 | `neon.py` | Neon's control plane: a branch's *name* to its connection URL, so no database url is kept on disk |
 
@@ -236,11 +237,11 @@ batches several into one hop; `question_ceiling` and `run_budget` bound spend;
 `CONVERSATION_BOUND` bounds a session's tokens. Each is configured where it binds
 and reported when it is reached (ADR-0180).
 
-### `bionumbers` — the validator prototype
+### `numera_validator` — the validator prototype
 
 A **fixed pipeline, not an agent** (ADR-1520): discovery → fetch → JATS reader → one structured
 extraction call → mechanical quote check → one retry → one second-text call → JSONL → Postgres → a
-review page. Its own `CLAUDE.md` lives in `src/bionumbers/` with the module table and the four
+review page. Its own `CLAUDE.md` lives in `src/numera_validator/` with the module table and the four
 rules a module will not tell you — the dependency direction holds there too, and only `deployment.py`
 and the root `review_app.py` may import Streamlit or the ask package.
 
@@ -281,9 +282,9 @@ frontmatter matches, so these cost nothing on a session that never goes near the
 | `streamlit-driver.md` | `streamlit_app.py`, `web.py`, their tests | why some things can only be seen through a whole script run |
 | `identity.md` | `web.py`, `permissions.py`, `authorization.py`, `accounts.py`, their tests | where the refusal lives, what the agent is never handed, how a session is keyed |
 | `lint-and-format.md` | `pyproject.toml`, `.pre-commit-config.yaml`, CI | the pin that must move in two places at once |
-| `validator-prototype.md` | `src/bionumbers/**`, `review_app.py`, its tests and change | verify quietly, report only what fails |
+| `validator-prototype.md` | `src/numera_validator/**`, `review_app.py`, its tests and change | verify quietly, report only what fails |
 
-`src/bionumbers_ingest/CLAUDE.md` and `src/bionumbers/CLAUDE.md` load when Claude reads a file in
+`src/bionumbers_ingest/CLAUDE.md` and `src/numera_validator/CLAUDE.md` load when Claude reads a file in
 that package
 — the pipeline's shape, and five things one module will not tell you.
 

@@ -13,7 +13,7 @@ import sqlite3
 import pytest
 from conftest import write_all_shapes_corpus
 
-from scinumbers_ask.eval_cli import main
+from numera_ask.eval_cli import main
 
 FIXTURE_CORPUS = "tests/fixtures/corpus_sample.jsonl"
 
@@ -28,13 +28,13 @@ SUPPORTED = {
 
 @pytest.fixture(autouse=True)
 def _no_corpus_from_the_environment(monkeypatch):
-    """A developer with SCINUMBERS_CORPUS set would otherwise get a different run.
+    """A developer with NUMERA_CORPUS set would otherwise get a different run.
 
     `--corpus` defaults to that variable, so without this the structure-only tests
     below would silently exercise the corpus path against whatever corpus is on
     that machine.
     """
-    monkeypatch.delenv("SCINUMBERS_CORPUS", raising=False)
+    monkeypatch.delenv("NUMERA_CORPUS", raising=False)
 
 
 def write_set(tmp_path, *records):
@@ -81,7 +81,7 @@ def test_a_check_without_a_corpus_says_what_it_did_not_check(tmp_path, capsys):
 def test_an_unusable_set_exits_non_zero_with_the_reason(tmp_path):
     with pytest.raises(SystemExit) as exit_info:
         main(["check", write_set(tmp_path, {**SUPPORTED, "expected_entries": []})])
-    assert "scinumbers-eval:" in str(exit_info.value)
+    assert "numera-eval:" in str(exit_info.value)
     assert "neither expected nor admissible" in str(exit_info.value)
 
 
@@ -114,7 +114,7 @@ def test_a_retired_variable_is_refused_before_anything_is_read(monkeypatch):
     monkeypatch.setenv("BIONUMBERS_ASK_CORPUS", "/somewhere/corpus.jsonl")
     with pytest.raises(SystemExit) as exit_info:
         main(["check", "does-not-matter.jsonl"])
-    assert "SCINUMBERS_CORPUS" in str(exit_info.value)
+    assert "NUMERA_CORPUS" in str(exit_info.value)
 
 
 def test_a_set_that_satisfies_the_corpus_is_reported_as_checked(tmp_path, capsys):
@@ -154,7 +154,7 @@ def test_a_shape_no_question_exercises_is_refused_at_the_command(tmp_path):
 def test_the_corpus_is_resolved_the_way_the_ask_command_resolves_it(tmp_path, monkeypatch, capsys):
     """A configured export used to be read as a corpus and reported as corrupt.
 
-    `scinumbers-ask` goes through `autobuild.corpus_path`, which resolves an `.xls`
+    `numera-ask` goes through `autobuild.corpus_path`, which resolves an `.xls`
     to the corpus beside it; this command called `load` on the configured path, so
     the same environment gave one command a working corpus and the other a JSON
     parse error over HTML. Asserted by watching the resolution, because building a
@@ -167,7 +167,7 @@ def test_the_corpus_is_resolved_the_way_the_ask_command_resolves_it(tmp_path, mo
         announce("resolving")
         return write_all_shapes_corpus(tmp_path)
 
-    monkeypatch.setattr("scinumbers_ask.autobuild.corpus_path", resolve)
+    monkeypatch.setattr("numera_ask.autobuild.corpus_path", resolve)
     questions = [
         {**SUPPORTED, "question_id": f"q{i}", "expected_entries": [i]} for i in range(1, 7)
     ]
@@ -227,9 +227,9 @@ def test_a_report_on_a_file_that_does_not_exist_says_nothing_is_scored(tmp_path,
 def test_a_run_configured_only_for_the_harvest_store_says_why_it_cannot_use_it(
     tmp_path, monkeypatch
 ):
-    """The app reads the store through SCINUMBERS_STORE; evaluation does not yet, and a reader
+    """The app reads the store through NUMERA_STORE; evaluation does not yet, and a reader
     who configured the app should be told that rather than only that a corpus is missing."""
-    monkeypatch.setenv("SCINUMBERS_STORE", str(tmp_path / "store.sqlite"))
+    monkeypatch.setenv("NUMERA_STORE", str(tmp_path / "store.sqlite"))
     with pytest.raises(SystemExit) as exit_info:
         main(["run", write_set(tmp_path, SUPPORTED), "--results", str(tmp_path / "r.jsonl")])
     assert "Evaluation over the store" in str(exit_info.value)

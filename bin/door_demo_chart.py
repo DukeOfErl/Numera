@@ -3,7 +3,7 @@
 
 The third example on the sign-in door shows cell volumes across mouse cell types
 as a text chart. The chart is drawn here, by arithmetic, and pasted into
-`src/scinumbers_ask/door_demo.json`; it is never drawn by a model, because a
+`src/numera_ask/door_demo.json`; it is never drawn by a model, because a
 model placed every bar of a text chart in the wrong place (ADR-1210, ADR-1230).
 Plotting is not a feature of the app yet: this script exists for one example.
 

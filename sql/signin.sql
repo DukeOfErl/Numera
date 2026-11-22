@@ -39,7 +39,7 @@
 -- order by max(at) desc;
 
 -- 3. Signed in, verified, and not enrolled: the enrolment queue. These are people
---    who got through the provider and are waiting on `scinumbers-enrol`.
+--    who got through the provider and are waiting on `numera-enrol`.
 --
 -- select detail->>'email' as address, min(at) as first_tried, max(at) as last_tried
 -- from trail

@@ -50,7 +50,7 @@ same hand that would have had to spot the problem.
 
 ## Impact
 
-- **`src/scinumbers_ask/agent.py`**: the system prompt. One instruction added below the five
+- **`src/numera_ask/agent.py`**: the system prompt. One instruction added below the five
   numbered rules, and a note saying why it sits below them.
 - **`tests/`**: the requirement-to-test mapping in `tests/test_spec_conformance.py`. The live-model
   check is the only test that can observe answer shape, and it can assert the weak form — that the

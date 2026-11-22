@@ -28,7 +28,7 @@ marked there, but read this list as authoritative for your run:
 - **Do not run mutation testing**, and do not run the full suite repeatedly. The
   orchestrator runs the suite once at the end. Verify your own file with
   something cheap — the one test file you were given, or
-  `python -c "import scinumbers_ask.<module>"`.
+  `python -c "import numera_ask.<module>"`.
 - **Do not surface scout or fundraise suggestions.** Those fire at lulls in an
   interactive session; you are not in one.
 

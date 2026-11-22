@@ -11,7 +11,7 @@ Marked `corpus` and skipped by default, because this cannot be checked against t
 six-entry fixture: that fixture holds two of the six entry shapes and no complete
 entry at all, so a set that satisfied it would prove nothing about the real one.
 
-    SCINUMBERS_CORPUS=/path/to/corpus.jsonl uv run pytest -m corpus
+    NUMERA_CORPUS=/path/to/corpus.jsonl uv run pytest -m corpus
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ from pathlib import Path
 
 import pytest
 
-from scinumbers_ask.corpus import load
-from scinumbers_ask.question_set import EntryShape, load_question_set, shapes_of
+from numera_ask.corpus import load
+from numera_ask.question_set import EntryShape, load_question_set, shapes_of
 
 pytestmark = pytest.mark.corpus
 
@@ -31,9 +31,9 @@ FIRST_SET = Path(__file__).resolve().parents[1] / "question-sets" / "first-set.j
 
 @pytest.fixture(scope="module")
 def entries():
-    configured = os.environ.get("SCINUMBERS_CORPUS")
+    configured = os.environ.get("NUMERA_CORPUS")
     if not configured:
-        pytest.skip("set SCINUMBERS_CORPUS to a real corpus")
+        pytest.skip("set NUMERA_CORPUS to a real corpus")
     return load(configured)
 
 

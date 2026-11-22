@@ -1,6 +1,6 @@
 ---
 paths:
-  - "src/bionumbers/**"
+  - "src/numera_validator/**"
   - "review_app.py"
   - "tests/test_bionumbers_*.py"
   - "tests/test_review_app*.py"

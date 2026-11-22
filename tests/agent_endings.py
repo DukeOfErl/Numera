@@ -27,9 +27,9 @@ from collections.abc import Callable
 from langchain_core.messages import AIMessage
 
 from agent_doubles import OutOfCreditModel, costing, says, scripted, tool_call
-from scinumbers_ask.agent import AskAgent
-from scinumbers_ask.config import Config, usd
-from scinumbers_ask.events import EndReason
+from numera_ask.agent import AskAgent
+from numera_ask.config import Config, usd
+from numera_ask.events import EndReason
 
 #: Every ending these builds reach. Asserted as a set so a new `EndReason` with no
 #: build behind it fails loudly rather than passing a count nobody recomputed.
@@ -65,7 +65,7 @@ def ending_builds(repo, config, tmp_path, monkeypatch) -> tuple[Callable, ...]:
         # Must ask once first: with a fresh session the bound is not yet reached,
         # so lowering it alone produced an ordinary answer rather than a refusal.
         # Last in the list, because the patched bound outlives this closure.
-        monkeypatch.setattr("scinumbers_ask.agent.CONVERSATION_BOUND", 1)
+        monkeypatch.setattr("numera_ask.agent.CONVERSATION_BOUND", 1)
         agent = agent_with(repo, config, tmp_path, scripted(says("a"), says("b")), "c.sqlite")
         list(agent.ask("s", "a first question, which fills the conversation"))
         return agent, "s"

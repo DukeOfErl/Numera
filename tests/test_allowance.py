@@ -14,8 +14,8 @@ import urllib.error
 
 import pytest
 
-from scinumbers_ask import allowance
-from scinumbers_ask.allowance import Allowance
+from numera_ask import allowance
+from numera_ask.allowance import Allowance
 
 #: Captured before `conftest` stubs the module attribute for the whole suite.
 #: That stub keeps every other test off the network; this file is where the real

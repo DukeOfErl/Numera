@@ -14,8 +14,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from scinumbers_ask import trail_store
-from scinumbers_ask.accounts import (
+from numera_ask import trail_store
+from numera_ask.accounts import (
     Account,
     AlreadyEnrolled,
     EnrolmentUnavailable,
@@ -25,7 +25,7 @@ from scinumbers_ask.accounts import (
     lookup,
     usable,
 )
-from scinumbers_ask.permissions import Role
+from numera_ask.permissions import Role
 
 
 class _Result:
@@ -153,7 +153,7 @@ def test_an_unreadable_table_raises_rather_than_answering_none(engine):
             ConnectionError('could not translate host name "db.example.invalid"'),
             "db.example.invalid",
         ),
-        (PermissionError('password authentication failed for user "scinumbers"'), "password"),
+        (PermissionError('password authentication failed for user "numera"'), "password"),
     ],
     ids=["a misconfigured address", "an unreachable host", "a refused password"],
 )

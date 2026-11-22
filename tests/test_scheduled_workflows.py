@@ -367,6 +367,8 @@ def test_it_can_be_run_by_hand_with_a_test_input_that_defaults_off():
 def test_the_only_secret_is_the_read_only_url_and_no_mail_credential_exists():
     text = (WORKFLOWS / "first-use.yml").read_text()
     used = set(re.findall(r"secrets\.([A-Z0-9_]+)", text))
+    # The secret's name on GitHub, which the rename to Numera left alone; the job exports it as
+    # `NUMERA_TRAIL_READ_URL` (see test_the_job_hands_the_command_the_variable_it_reads).
     assert used == {"SCINUMBERS_TRAIL_READ_URL"}, (
         f"first-use holds {sorted(used)}: it must hold the read-only URL and nothing else "
         "(not the Neon API key, which can delete the project, and not a mail credential)"
@@ -667,3 +669,16 @@ def test_a_check_that_could_not_read_the_issue_fails_instead_of_reporting_a_quie
     result = quiet_run(sandbox, view(8 * DAY), GH_STUB_VIEW_EXIT="1")
     assert result.returncode != 0
     assert posts(sandbox) == []
+
+
+def test_the_job_hands_the_command_the_variable_it_reads():
+    """The job's environment names what `numera-first-use` reads, whatever the secret is called.
+
+    The rename to Numera changed the variable the command reads; a job still exporting the old
+    one would run the command with no URL, every hour, from the default branch.
+    """
+    from numera_ask.first_use import URL_ENV
+
+    env = load("first-use.yml")["jobs"]["first-use"]["env"]
+    assert URL_ENV in env
+    assert "secrets." in env[URL_ENV]

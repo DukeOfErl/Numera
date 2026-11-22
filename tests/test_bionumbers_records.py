@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from bionumbers.records import (
+from numera_validator.records import (
     CONDITION_FIELDS,
     DISTRACTOR_PREFERENCE,
     CandidateKind,

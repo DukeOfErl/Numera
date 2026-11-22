@@ -6,11 +6,12 @@ enforces, and format_usd writes the sentence a user reads when a run stops.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
-from scinumbers_ask.config import (
+from numera_ask.config import (
     MICRO_PER_USD,
     RENAMED_ENV,
     WITHDRAWN_ENV,
@@ -82,17 +83,17 @@ def test_the_retired_key_is_refused_rather_than_read_as_a_ceiling(monkeypatch):
     so the old name is rejected with the new one named. ADR-0180.
     """
     monkeypatch.setenv("BIONUMBERS_ASK_WARN_USD", "0.50")
-    monkeypatch.delenv("SCINUMBERS_QUESTION_CEILING_USD", raising=False)
+    monkeypatch.delenv("NUMERA_QUESTION_CEILING_USD", raising=False)
 
     with pytest.raises(NotConfigured) as raised:
         Config.from_env()
 
-    assert "SCINUMBERS_QUESTION_CEILING_USD" in str(raised.value)
+    assert "NUMERA_QUESTION_CEILING_USD" in str(raised.value)
 
 
 def test_the_ceiling_comes_from_the_environment(monkeypatch):
     monkeypatch.delenv("BIONUMBERS_ASK_WARN_USD", raising=False)
-    monkeypatch.setenv("SCINUMBERS_QUESTION_CEILING_USD", "0.25")
+    monkeypatch.setenv("NUMERA_QUESTION_CEILING_USD", "0.25")
 
     config = Config.from_env()
 
@@ -131,10 +132,21 @@ def _env_reads() -> str:
     ever give one way, which is worse than no check -- it retires the suspicion
     that would otherwise have found the bug.
     """
-    files = [*(ROOT / "src" / "scinumbers_ask").glob("*.py"), ROOT / "streamlit_app.py"]
+    files = [*(ROOT / "src" / "numera_ask").glob("*.py"), ROOT / "streamlit_app.py"]
     text = "\n".join(f.read_text(encoding="utf-8") for f in files)
+    # A read through a named constant (`env_setting(SETTING)`, `os.environ.get(URL_ENV)`)
+    # is still a read, so a module-level `NAME = "VALUE"` is resolved on the read lines.
+    # The map's own values are dictionary entries, not such assignments, so they still
+    # cannot satisfy this check. `_number` is `web.py`'s tolerant numeric reader over
+    # `env_setting`.
+    constants = dict(re.findall(r'(?m)^([A-Z][A-Z0-9_]*) = "([A-Z][A-Z0-9_]*)"$', text))
+    reads = [
+        line
+        for line in text.splitlines()
+        if "os.environ" in line or "env_setting(" in line or "_number(" in line
+    ]
     return "\n".join(
-        line for line in text.splitlines() if "os.environ" in line or "env_setting(" in line
+        re.sub(r"\b[A-Z][A-Z0-9_]*\b", lambda m: constants.get(m[0], m[0]), line) for line in reads
     )
 
 
@@ -147,6 +159,82 @@ def test_the_replacement_named_is_one_the_code_actually_reads(new):
     nothing.
     """
     assert new in _env_reads()
+
+
+def test_no_replacement_is_itself_retired():
+    """A name retired twice names the variable to set now (ADR-1900).
+
+    `BIONUMBERS_ASK_CORPUS` became `SCINUMBERS_CORPUS` and then `NUMERA_CORPUS`. Left
+    pointing at the intermediate name, the refusal sends the reader to a variable that
+    is refused in turn -- a loop, with each message looking right on its own. Checked
+    over every entry and every withdrawn name's guidance, not one example.
+    """
+    retired = set(RENAMED_ENV) | set(WITHDRAWN_ENV)
+    assert {old: new for old, new in RENAMED_ENV.items() if new in retired} == {}
+    for old, guidance in WITHDRAWN_ENV.items():
+        named = {name for name in retired if re.search(rf"\b{name}\b", guidance)}
+        assert named == set(), f"{old}'s guidance names retired {sorted(named)}"
+
+
+def test_a_name_retired_twice_is_refused_with_the_current_name(monkeypatch):
+    """The scenario end to end, on the corpus variable both renames touched."""
+    monkeypatch.setenv("BIONUMBERS_ASK_CORPUS", "/somewhere/corpus.jsonl")
+
+    with pytest.raises(NotConfigured) as raised:
+        refuse_retired_env()
+
+    assert "NUMERA_CORPUS" in str(raised.value)
+    assert "SCINUMBERS_CORPUS" not in str(raised.value)
+
+
+#: Every `SCINUMBERS_*` setting the code read before rename-to-numera, from a survey of `dev`
+#: at ecc1cf4 -- written out here, not derived from `RENAMED_ENV`, because a test built from
+#: the map loses its case when an entry is deleted. `SCINUMBERS_TEST_WORKERS` is absent on
+#: purpose: only `bin/testloop.py` reads it (ADR-1900).
+RETIRED_BY_NUMERA = (
+    "CORPUS", "STORE", "RUN", "TRACING", "CHECKPOINTS", "TRACE", "TRAIL_READ_URL",
+    "RUN_BUDGET_USD", "QUESTION_CEILING_USD", "MODEL", "MAX_SESSIONS", "SESSION_IDLE_S",
+)  # fmt: skip
+
+
+@pytest.mark.parametrize("suffix", RETIRED_BY_NUMERA)
+def test_each_name_retired_by_the_numera_rename_is_refused(monkeypatch, suffix):
+    """Set the old name and read the new one, as a run would: the refusal itself, not the map."""
+    old, new = f"SCINUMBERS_{suffix}", f"NUMERA_{suffix}"
+    monkeypatch.setenv(old, "anything")
+
+    with pytest.raises(NotConfigured) as raised:
+        env_setting(new)
+
+    assert f"{old} is now {new}" in str(raised.value)
+
+
+def test_no_setting_this_project_names_is_read_past_the_guard():
+    """A `NUMERA_*` setting read with a bare `os.environ` is never refused by its old name.
+
+    `numera-first-use` read its URL that way, so the retired `SCINUMBERS_TRAIL_READ_URL` was
+    silently ignored while the map above claimed to refuse it -- and the read finder further up,
+    which resolves `os.environ.get(URL_ENV)` to the new name, counted it as a read. Found by
+    review on 2026-11-20. Only names this project owns: OpenRouter's, Neon's and LangSmith's own
+    variables are read directly on purpose. `config.py` is the guard itself and is skipped.
+
+    A text match on `os.environ` and `getenv`: a read spelled some other way gets past it, which
+    is why `test_first_use.py` also checks the refusal itself. Seeded both ways on 2026-11-20.
+    """
+    offenders = []
+    for path in [*(ROOT / "src" / "numera_ask").glob("*.py"), ROOT / "streamlit_app.py"]:
+        if path.name == "config.py":
+            continue
+        text = path.read_text(encoding="utf-8")
+        constants = dict(re.findall(r'(?m)^([A-Z][A-Z0-9_]*) = "([A-Z][A-Z0-9_]*)"$', text))
+        for number, line in enumerate(text.splitlines(), 1):
+            if "os.environ" in line or "getenv" in line:
+                names = re.sub(
+                    r"\b[A-Z][A-Z0-9_]*\b", lambda m, c=constants: c.get(m[0], m[0]), line
+                )
+                if "NUMERA_" in names:
+                    offenders.append(f"{path.name}:{number}")
+    assert offenders == []
 
 
 def test_no_retired_name_is_still_being_read():
@@ -198,6 +286,6 @@ def test_a_setting_read_without_a_driver_is_still_refused(monkeypatch):
     monkeypatch.setenv("BIONUMBERS_ASK_TRACE", "/somewhere/trace.jsonl")
 
     with pytest.raises(NotConfigured) as raised:
-        env_setting("SCINUMBERS_TRACE", "logs/trace.jsonl")
+        env_setting("NUMERA_TRACE", "logs/trace.jsonl")
 
-    assert "SCINUMBERS_TRACE" in str(raised.value)
+    assert "NUMERA_TRACE" in str(raised.value)
