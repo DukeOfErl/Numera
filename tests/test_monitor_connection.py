@@ -11,8 +11,8 @@ from __future__ import annotations
 import pytest
 from test_enrol import _Opener
 
-from scinumbers_ask import neon
-from scinumbers_monitor import connection, grant
+from numera_ask import neon
+from numera_monitor import connection, grant
 
 ENV = {
     "NEON_API_KEY": "napi",
@@ -76,7 +76,7 @@ def test_the_view_connects_as_its_own_role_to_the_branch_s_pooled_host():
     opener = _neon(_endpoints(("read_write", "ep-cool-1.eu.aws.neon.tech")))
     url = connection.resolve("alpha", ENV, opener=opener)
     assert url == (
-        "postgresql+psycopg://scinumbers_monitor:pw@ep-cool-1-pooler.eu.aws.neon.tech"
+        "postgresql+psycopg://numera_monitor:pw@ep-cool-1-pooler.eu.aws.neon.tech"
         "/neondb?sslmode=require"
     )
 
@@ -140,8 +140,8 @@ def _granted(password="pw"):
 
 def test_the_role_reads_the_trail_and_two_columns_of_accounts():
     sql = "\n".join(_granted()).lower()
-    assert "grant select on trail to scinumbers_monitor" in sql
-    assert "grant select (email, disabled) on accounts to scinumbers_monitor" in sql
+    assert "grant select on trail to numera_monitor" in sql
+    assert "grant select (email, disabled) on accounts to numera_monitor" in sql
 
 
 def test_nothing_is_granted_wholesale():
@@ -165,7 +165,7 @@ def test_the_password_is_quoted_by_the_server_never_spliced_into_sql():
     grant.grant(engine, "it's")
     assert (grant.ROLE, "it's") in [p for _, p in engine.statements]
     carrying = [sql for sql, _ in engine.statements if "it's" in sql]
-    assert carrying == ["alter role scinumbers_monitor password 'it's'"]
+    assert carrying == ["alter role numera_monitor password 'it's'"]
 
 
 def test_a_new_password_has_the_entropy_neon_requires():

@@ -1,4 +1,4 @@
-# ADR-1300: The monitor is a reader of the trail, not an adapter over the agent
+# ADR-1950: The monitor is a reader of the trail, not an adapter over the agent
 
 - **Status:** accepted
 - **Date:** 2026-10-02
@@ -13,20 +13,20 @@ Streamlit page, which raised the question of where it lives.
 
 Three options were on the table:
 
-- **A module in `scinumbers_ask`.** `test_driver_independence.py` allows exactly
+- **A module in `numera_ask`.** `test_driver_independence.py` allows exactly
   one module there to import Streamlit (`web`). Making room would mean exempting a
   second importer from that test, or listing the view as a driver. It is not a
   driver: it never puts a question to the agent.
 - **A separate repository.** That copies the event names and the table's shape
   into a place where nothing notices when they change. A renamed event would show
   as zero, and a zero looks like data.
-- **A package of its own in this repository, `scinumbers_monitor`.**
+- **A package of its own in this repository, `numera_monitor`.**
 
 ## Decision
 
-`src/scinumbers_monitor/` is its own package and a reader of the trail. The
-dependency direction is plain: it may import from `scinumbers_ask`, and nothing
-there imports it. From `scinumbers_ask` it may take exactly four modules:
+`src/numera_monitor/` is its own package and a reader of the trail. The
+dependency direction is plain: it may import from `numera_ask`, and nothing
+there imports it. From `numera_ask` it may take exactly four modules:
 
 - `neon`, to resolve a branch by name;
 - `hosted_trace`, for `trace_id_for`, so the trace id has one derivation;

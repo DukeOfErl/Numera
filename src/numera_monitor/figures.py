@@ -2,7 +2,7 @@
 
 No database and no page: a row is a plain value, so every figure is testable without
 either, and the module cannot grow a query by accident. It also imports nothing from
-`scinumbers_ask` -- the ending map below is keyed by strings, and a test holds it
+`numera_ask` -- the ending map below is keyed by strings, and a test holds it
 against `EndReason` and against the events the application writes, so the two sides
 cannot drift apart silently.
 

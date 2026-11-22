@@ -342,16 +342,16 @@ goes to a file and an issue, never the run's log (ADR-1280).*
 ```mermaid
 flowchart LR
     op((operator))
-    subgraph mon["scinumbers_monitor — on the operator's machine"]
+    subgraph mon["numera_monitor — on the operator's machine"]
         app[app.py<br/>draws only]
         fig[figures.py<br/>pure functions over rows]
         q[queries.py]
     end
-    subgraph ask["scinumbers_ask — four modules, nothing else"]
+    subgraph ask["numera_ask — four modules, nothing else"]
         pend[pending.waiting<br/>the door rule]
         neon[neon.endpoint_host]
     end
-    pg[("Postgres, as scinumbers_monitor<br/>trail; accounts.email, .disabled")]
+    pg[("Postgres, as numera_monitor<br/>trail; accounts.email, .disabled")]
     lf[("Langfuse")]
 
     op -- "127.0.0.1" --> app
@@ -365,12 +365,12 @@ flowchart LR
 ```
 
 *Caption: what the monitor reads, and as whom. The role's grants are the limit, not
-the queries: it cannot write, and cannot read a key (ADR-1310). Nothing in
-`scinumbers_ask` imports the monitor (ADR-1300). Langfuse is a link, not a source
-(ADR-1320).*
+the queries: it cannot write, and cannot read a key (ADR-1960). Nothing in
+`numera_ask` imports the monitor (ADR-1950). Langfuse is a link, not a source
+(ADR-1970).*
 
 `hosted_trace.trace_id_for` and `trail_store`'s timeouts are the other two modules
-the monitor takes from `scinumbers_ask`. They are left off the drawing because they
+the monitor takes from `numera_ask`. They are left off the drawing because they
 are a derivation and two constants, not a reach. `tests/test_monitor_boundaries.py`
 holds the list.
 

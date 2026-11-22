@@ -21,9 +21,9 @@ from pathlib import Path
 
 import pytest
 
-from scinumbers_ask.events import EndReason
-from scinumbers_monitor import figures
-from scinumbers_monitor.figures import (
+from numera_ask.events import EndReason
+from numera_monitor import figures
+from numera_monitor.figures import (
     ENDING_EVENTS,
     LIMIT_ENDINGS,
     UNIDENTIFIED,
@@ -36,7 +36,7 @@ from scinumbers_monitor.figures import (
     recording,
 )
 
-ASK_SOURCE = Path(__file__).resolve().parents[1] / "src" / "scinumbers_ask"
+ASK_SOURCE = Path(__file__).resolve().parents[1] / "src" / "numera_ask"
 T0 = datetime(2026, 9, 20, 9, 0, tzinfo=UTC)
 _ids = count(1)
 
@@ -94,7 +94,7 @@ def test_every_mapped_event_is_one_the_application_records():
     for path in ASK_SOURCE.glob("*.py"):
         literals |= set(re.findall(r'"([a-z_]+(?:\.[a-z_]+)?)"', path.read_text()))
     missing = sorted(set(ENDING_EVENTS) - literals)
-    assert not missing, f"mapped but never written by scinumbers_ask: {missing}"
+    assert not missing, f"mapped but never written by numera_ask: {missing}"
 
 
 def test_the_two_events_that_carry_their_reason_say_so():

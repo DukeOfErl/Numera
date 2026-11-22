@@ -16,11 +16,11 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from scinumbers_ask import pending
-from scinumbers_monitor import connection, queries
-from scinumbers_monitor.figures import Row
+from numera_ask import pending
+from numera_monitor import connection, queries
+from numera_monitor.figures import Row
 
-APP = Path(__file__).resolve().parents[1] / "src" / "scinumbers_monitor" / "app.py"
+APP = Path(__file__).resolve().parents[1] / "src" / "numera_monitor" / "app.py"
 NOW = datetime.now(UTC)
 
 
@@ -138,11 +138,11 @@ def test_without_a_branch_the_page_refuses(offline, monkeypatch):
 
 def test_missing_settings_are_named_on_the_page(offline, monkeypatch):
     def missing(branch):
-        raise connection.Missing("set SCINUMBERS_MONITOR_DB_PASSWORD before starting the view.")
+        raise connection.Missing("set NUMERA_MONITOR_DB_PASSWORD before starting the view.")
 
     monkeypatch.setattr(connection, "resolve", missing)
     at = _run(monkeypatch, branch="beta")
-    assert any("SCINUMBERS_MONITOR_DB_PASSWORD" in e.value for e in at.error)
+    assert any("NUMERA_MONITOR_DB_PASSWORD" in e.value for e in at.error)
 
 
 def test_reruns_reuse_the_read_and_only_refresh_reads_again(offline, monkeypatch):
@@ -182,7 +182,7 @@ def test_the_recording_row_shows_the_last_row_and_tracer_failures(offline, monke
 
 
 def test_the_door_lists_who_is_waiting(offline, monkeypatch):
-    from scinumbers_ask.pending import Waiting
+    from numera_ask.pending import Waiting
 
     offline["waiting"] = (
         [Waiting(address="lost@x.org", last_seen=NOW, times=2)],

@@ -4,8 +4,8 @@ Never the owner's URL. `neon.connection_url` returns a URL with a password in it
 and for the owner that is a credential the view must not hold even in memory: a
 bug in a page that can only read cannot become a write. So the host is fetched
 on its own (`neon.endpoint_host`) and the password is the one
-`scinumbers-monitor-grant` printed, read from the operator's environment. No URL is
-written to disk (ADR-1310).
+`numera-monitor-grant` printed, read from the operator's environment. No URL is
+written to disk (ADR-1960).
 """
 
 from __future__ import annotations
@@ -15,10 +15,10 @@ import urllib.parse
 import urllib.request
 from collections.abc import Mapping
 
-from scinumbers_ask import neon, trail_store
+from numera_ask import neon, trail_store
 
-ROLE = "scinumbers_monitor"
-PASSWORD_ENV = "SCINUMBERS_MONITOR_DB_PASSWORD"
+ROLE = "numera_monitor"
+PASSWORD_ENV = "NUMERA_MONITOR_DB_PASSWORD"
 REQUIRED_ENV = ("NEON_API_KEY", "NEON_PROJECT_ID", PASSWORD_ENV)
 
 
@@ -45,7 +45,7 @@ def resolve(
     if missing:
         raise Missing(
             f"set {', '.join(missing)} before starting the view. The password is the one "
-            "scinumbers-monitor-grant printed; run it again to get a new one."
+            "numera-monitor-grant printed; run it again to get a new one."
         )
     api_key, project = env["NEON_API_KEY"], env["NEON_PROJECT_ID"]
     branch_id = neon.branch_id(api_key, project, branch, opener=opener)

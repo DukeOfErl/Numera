@@ -13,8 +13,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from test_monitor_role_live import monitor, owner  # noqa: F401  (fixtures)
 
-from scinumbers_ask import pending
-from scinumbers_monitor import figures, queries
+from numera_ask import pending
+from numera_monitor import figures, queries
 
 pytestmark = pytest.mark.network
 

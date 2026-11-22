@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from scinumbers_ask.hosted_trace import trace_id_for
-from scinumbers_monitor.links import TRACER_WINDOW, trace_url
+from numera_ask.hosted_trace import trace_id_for
+from numera_monitor.links import TRACER_WINDOW, trace_url
 
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
 BASE = "https://cloud.langfuse.com"

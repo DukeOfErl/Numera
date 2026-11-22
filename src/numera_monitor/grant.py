@@ -1,7 +1,7 @@
-"""`scinumbers-monitor-grant`: make the view's database role, or rotate its password.
+"""`numera-monitor-grant`: make the view's database role, or rotate its password.
 
-The view connects as `scinumbers_monitor`, a role that can read the trail and who is
-enrolled, and nothing else (ADR-1310). The limit is the database's, not the view's:
+The view connects as `numera_monitor`, a role that can read the trail and who is
+enrolled, and nothing else (ADR-1960). The limit is the database's, not the view's:
 a view that is read-only because nobody wrote a write stays read-only until somebody
 does.
 
@@ -18,7 +18,7 @@ view reads `email` and `disabled`, because `pending.waiting` asks whether an add
 is enrolled and not disabled; Postgres refuses any statement naming another column,
 `select *` included.
 
-Runs as the branch owner, resolved by name through Neon's API like `scinumbers-enrol`
+Runs as the branch owner, resolved by name through Neon's API like `numera-enrol`
 -- no URL on disk. Every run sets a fresh password and prints it once: re-running is
 how it is rotated. Nothing here stores it.
 """
@@ -31,7 +31,7 @@ import secrets
 import string
 import sys
 
-from scinumbers_ask import neon, trail_store
+from numera_ask import neon, trail_store
 
 from .connection import PASSWORD_ENV, ROLE
 
@@ -98,7 +98,7 @@ def grant(engine, password: str, *, database: str = neon.DEFAULT_DATABASE) -> No
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="scinumbers-monitor-grant", description=__doc__)
+    parser = argparse.ArgumentParser(prog="numera-monitor-grant", description=__doc__)
     parser.add_argument("--branch", help="Neon branch name, e.g. dev or alpha")
     parser.add_argument("--database", default=neon.DEFAULT_DATABASE)
     args = parser.parse_args(argv)
@@ -118,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     grant(trail_store.engine_from_url(owner), password, database=args.database)
     print(
         f"{ROLE} is ready on {args.branch}. Its password, shown once:\n\n  {password}\n\n"
-        f"Set {PASSWORD_ENV} to it before running scinumbers-monitor. Running this "
+        f"Set {PASSWORD_ENV} to it before running numera-monitor. Running this "
         "again sets a new one."
     )
     return 0

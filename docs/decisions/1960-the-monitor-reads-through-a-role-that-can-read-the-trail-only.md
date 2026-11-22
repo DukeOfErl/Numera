@@ -1,4 +1,4 @@
-# ADR-1310: The monitor reads through a role that can read the trail and who is enrolled, nothing else
+# ADR-1960: The monitor reads through a role that can read the trail and who is enrolled, nothing else
 
 - **Status:** accepted
 - **Date:** 2026-10-02
@@ -6,7 +6,7 @@
 
 ## Context
 
-`scinumbers-pending` connects as `neondb_owner`, which can read and write
+`numera-pending` connects as `neondb_owner`, which can read and write
 everything. The monitor's spec requires the view to be unable to write and unable
 to read a credential, and requires that limit to belong to the database, not to
 the queries the view happens to issue. `accounts` holds each tester's
@@ -31,9 +31,9 @@ it is undocumented whether Neon's API will reveal a URI for a role made in SQL.
 
 ## Decision
 
-`scinumbers-monitor-grant --branch <name>` (`grant.py`) creates `scinumbers_monitor`
+`numera-monitor-grant --branch <name>` (`grant.py`) creates `numera_monitor`
 in SQL as the branch owner, resolving the owner through Neon's API by branch name,
-as `scinumbers-enrol` does. It grants:
+as `numera-enrol` does. It grants:
 
 - `CONNECT` and `USAGE ON SCHEMA public`;
 - `SELECT ON trail`;
@@ -46,7 +46,7 @@ generated password and prints it once. Re-running is how the password is rotated
 
 The view never asks Neon for a URI. It takes the host from `neon.endpoint_host`,
 the branch's read-write endpoint, which carries no credential. It takes its own
-password from `SCINUMBERS_MONITOR_DB_PASSWORD`. Streamlit is started with
+password from `NUMERA_MONITOR_DB_PASSWORD`. Streamlit is started with
 `--secrets.files` pointing at an empty file: a verifier found that, run from the
 repository root, Streamlit loads `.streamlit/secrets.toml` at server start, and
 that file holds the owner's URL. `test_monitor_cli.py` measures it with

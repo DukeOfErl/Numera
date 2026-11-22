@@ -2,7 +2,7 @@
 
 Nothing here calls Langfuse: no client, no HTTP. Hobby's Metrics API allows 100
 requests a day, and the trail is the record while the tracer is a debugger
-(ADR-1320), so the link is arithmetic on the question id and nothing more.
+(ADR-1970), so the link is arithmetic on the question id and nothing more.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ def trace_url(
         return None
     # Imported here because `trace_id_for` itself imports langfuse lazily; the
     # derivation is Langfuse's own and is never reimplemented.
-    from scinumbers_ask.hosted_trace import trace_id_for
+    from numera_ask.hosted_trace import trace_id_for
 
     return base_url.rstrip("/") + _TRACE_PATH.format(
         project_id=project_id, trace_id=trace_id_for(question_id)

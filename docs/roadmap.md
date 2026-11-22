@@ -138,7 +138,7 @@ on `feat/hosted-tracing` (Langfuse Cloud EU, ADR-1000–1020, 2026-09-25) and mo
 Done at merge. The usage-events table is still to propose, as its own change.
 
 **Reading usage, built separately:** `add-monitor-dashboard` (`feat/monitor-dashboard`,
-ADR-1300–1320) shows use, cost, endings, verdicts and the door queue read straight
+ADR-1950–1320) shows use, cost, endings, verdicts and the door queue read straight
 from the trail, per account through `user_email`. That covers the "queries" half of
 the item below without a new table. **Open, not decided:** whether a separate
 usage-events table is still wanted once the monitor is in use. Also deferred there: a

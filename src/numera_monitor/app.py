@@ -1,8 +1,8 @@
-"""The operator's view of the alpha. Started by `scinumbers-monitor --branch <name>`.
+"""The operator's view of the alpha. Started by `numera-monitor --branch <name>`.
 
 The only module here that imports Streamlit, and it only draws: every figure comes
 from `figures`, every read from `queries` or `pending`. It reads through the
-monitor's own role (ADR-1310), links to Langfuse without calling it (ADR-1320),
+monitor's own role (ADR-1960), links to Langfuse without calling it (ADR-1970),
 and never queries on a timer -- results are cached for ten minutes and fetched
 again only when the operator presses refresh, so a tab left open lets Neon's
 compute suspend as it would without it.
@@ -17,12 +17,12 @@ from datetime import UTC, datetime, timedelta
 
 import streamlit as st
 
-from scinumbers_ask import pending
+from numera_ask import pending
 
 # Absolute, not relative: `streamlit run` executes this file as a script, where a
 # relative import has no package to be relative to.
-from scinumbers_monitor import connection, figures, queries
-from scinumbers_monitor.links import trace_url
+from numera_monitor import connection, figures, queries
+from numera_monitor.links import trace_url
 
 #: The periods offered. The cache is keyed on the label, not on timestamps, so a
 #: rerun inside the cache window does not become a new query.
@@ -41,7 +41,7 @@ def _branch() -> str:
     if not branch:
         # `cli.main` refuses first; this is for someone running `streamlit run`
         # directly, who would otherwise get a page with no branch on it.
-        st.error("No branch named. Start the view with `scinumbers-monitor --branch alpha`.")
+        st.error("No branch named. Start the view with `numera-monitor --branch alpha`.")
         st.stop()
     return branch
 
@@ -80,13 +80,11 @@ def _usd(micro: int | None) -> str:
     return "—" if micro is None else f"${micro / 1_000_000:,.4f}"
 
 
-st.set_page_config(
-    page_title="SciNumbers monitor", page_icon=":material/monitoring:", layout="wide"
-)
+st.set_page_config(page_title="Numera monitor", page_icon=":material/monitoring:", layout="wide")
 branch = _branch()
 
 with st.container(horizontal=True, vertical_alignment="bottom"):
-    st.title(f"SciNumbers monitor · `{branch}`")
+    st.title(f"Numera monitor · `{branch}`")
     period = st.segmented_control("Period", list(PERIODS), default="7 days", required=True)
     if st.button("Refresh", icon=":material/refresh:"):
         st.cache_data.clear()
@@ -158,7 +156,7 @@ with st.container(border=True):
 with st.container(border=True):
     st.subheader(f"Waiting at the door · `{branch}`")
     no_email, not_enrolled = _waiting(branch)
-    st.caption("The same rule as `scinumbers-pending`, over its 30-day window.")
+    st.caption("The same rule as `numera-pending`, over its 30-day window.")
     cols = st.columns(2)
     for col, title, people in (
         (cols[0], "Asked for the confirmation email again", no_email),

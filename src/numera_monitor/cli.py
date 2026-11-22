@@ -1,4 +1,4 @@
-"""`scinumbers-monitor`: start the monitor page for one named branch (ADR-1300).
+"""`numera-monitor`: start the monitor page for one named branch (ADR-1950).
 
 The command only replaces itself with Streamlit; the page reads the trail and
 nothing else. The branch is the one thing it will not guess -- see `BRANCH_REQUIRED`.
@@ -41,7 +41,7 @@ def streamlit_argv(branch: str) -> list[str]:
         "true",
         # No secrets file. Started from the repository root, Streamlit would load
         # `.streamlit/secrets.toml`, and the owner's database URL with it -- the one
-        # credential this view is built never to hold (ADR-1310).
+        # credential this view is built never to hold (ADR-1960).
         "--secrets.files",
         str(NO_SECRETS),
         "--",
@@ -51,7 +51,7 @@ def streamlit_argv(branch: str) -> list[str]:
 
 
 def main(argv: list[str] | None = None, *, exec_=os.execv) -> int:
-    parser = argparse.ArgumentParser(prog="scinumbers-monitor", description=__doc__)
+    parser = argparse.ArgumentParser(prog="numera-monitor", description=__doc__)
     parser.add_argument(
         "--branch", help="REQUIRED, no default: the Neon branch the deployment writes to"
     )

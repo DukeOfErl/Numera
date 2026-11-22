@@ -87,7 +87,7 @@ what let the blocks drift: no branch can see another's copy.
 | `fix-guard-fails-closed` | `1800`–`1840` — `1800` written; archived 2026-10-17, after `add-paper-references`' `1750`–`1790` |
 | `add-answer-view-redesign` | `1850`–`1890` — `1850` written; reserved 2026-10-17, after `fix-guard-fails-closed`'s `1800`–`1840` |
 | `rename-to-numera` | `1900`–`1940` — `1900` written; reserved 2026-11-19, after `add-answer-view-redesign`'s `1850`–`1890` |
-| `add-monitor-dashboard` | `1950`–`1990` — renumbered 2026-11-22 from `1300`–`1340`, which `speed-up-test-loop` holds on `dev`; reserved after `rename-to-numera`'s `1900`–`1940` |
+| `add-monitor-dashboard` | `1950`–`1990` — renumbered 2026-11-22 from `1950`–`1990`, which `speed-up-test-loop` holds on `dev`; reserved after `rename-to-numera`'s `1900`–`1940` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets
@@ -120,7 +120,7 @@ Three work packages, three packages under `src/`, one dependency extra each, so 
 the same source tree: `bionumbers_ingest` (`ingest`), `numera_ask` (`ask`), `numera_validator`
 (`validator`). All three are here now; the validator is a prototype (ADR-1520) and is described in
 its own subsection below.
-A fourth package, `scinumbers_monitor`, is not a work package but a reader of the trail, on
+A fourth package, `numera_monitor`, is not a work package but a reader of the trail, on
 the `ask` extra (below).
 
 A fourth extra, `eval`, is **additive to `ask` rather than a package of its own**: the evaluation
@@ -240,15 +240,15 @@ batches several into one hop; `question_ceiling` and `run_budget` bound spend;
 `CONVERSATION_BOUND` bounds a session's tokens. Each is configured where it binds
 and reported when it is reached (ADR-0180).
 
-### `scinumbers_monitor` — the operator's view
+### `numera_monitor` — the operator's view
 
-A **reader of the trail, not an adapter over the agent** (ADR-1300): its own
-package, so the single-Streamlit-importer rule in `scinumbers_ask` stands. It may
-take from `scinumbers_ask` only `neon`, `hosted_trace`, `pending` and `trail_store`;
+A **reader of the trail, not an adapter over the agent** (ADR-1950): its own
+package, so the single-Streamlit-importer rule in `numera_ask` stands. It may
+take from `numera_ask` only `neon`, `hosted_trace`, `pending` and `trail_store`;
 nothing there imports it; within it only `app` imports Streamlit —
 `tests/test_monitor_boundaries.py` holds all three. It reads as
-`scinumbers_monitor`, a role that can read `trail` and `accounts(email, disabled)`
-and nothing else (ADR-1310), and links to Langfuse without calling it (ADR-1320).
+`numera_monitor`, a role that can read `trail` and `accounts(email, disabled)`
+and nothing else (ADR-1960), and links to Langfuse without calling it (ADR-1970).
 
 | Module | Holds |
 |---|---|
@@ -257,8 +257,8 @@ and nothing else (ADR-1310), and links to Langfuse without calling it (ADR-1320)
 | `app.py` | The page. Draws only; caches reads ten minutes; never polls |
 | `links.py` | A question's Langfuse trace URL, from its id alone |
 | `connection.py` | The role's URL: host from `neon.endpoint_host`, password from the environment |
-| `grant.py` | `scinumbers-monitor-grant`: makes the role in SQL, or rotates its password |
-| `cli.py` | `scinumbers-monitor`: refuses without `--branch`, binds Streamlit to 127.0.0.1 |
+| `grant.py` | `numera-monitor-grant`: makes the role in SQL, or rotates its password |
+| `cli.py` | `numera-monitor`: refuses without `--branch`, binds Streamlit to 127.0.0.1 |
 
 **When `ask` gains or renames an ending event, update `ENDING_EVENTS`** — the
 suite fails until you do, and meanwhile those questions show as unidentified,

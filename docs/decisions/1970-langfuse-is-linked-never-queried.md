@@ -1,4 +1,4 @@
-# ADR-1320: Langfuse is linked from the monitor, never queried
+# ADR-1970: Langfuse is linked from the monitor, never queried
 
 - **Status:** accepted
 - **Date:** 2026-10-02

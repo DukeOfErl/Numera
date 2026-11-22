@@ -55,17 +55,17 @@ no requirement on what is recorded changes.
 
 ## Impact
 
-- **New package** `src/scinumbers_monitor/`, outside `scinumbers_ask`: a reader of
-  the trail, not an adapter over the agent. It imports from `scinumbers_ask` only
+- **New package** `src/numera_monitor/`, outside `numera_ask`: a reader of
+  the trail, not an adapter over the agent. It imports from `numera_ask` only
   `neon` (to resolve a branch name) and `hosted_trace.trace_id_for` (to derive
-  the trace id); nothing in `scinumbers_ask` imports it.
+  the trace id); nothing in `numera_ask` imports it.
 - **No new dependencies.** Runs on the `ask` extra, which already carries
   Streamlit, SQLAlchemy, psycopg and Langfuse (the last only for the trace-id
   derivation).
-- **New console script** `scinumbers-monitor`.
-- **`neon.endpoint_host`**, a small addition to `scinumbers_ask/neon.py`: a
+- **New console script** `numera-monitor`.
+- **`neon.endpoint_host`**, a small addition to `numera_ask/neon.py`: a
   branch's host with no credential, so the view never fetches the owner's URL.
-- **New console script** `scinumbers-monitor-grant`: creates the read-only role
+- **New console script** `numera-monitor-grant`: creates the read-only role
   (or rotates its password). Run once per Neon branch by the operator; the
   password is printed once and never written to the repository.
 - **Neon**: a new role on the `alpha` branch (and `dev`, for development). No
@@ -74,4 +74,4 @@ no requirement on what is recorded changes.
   operator step, no code.
 - **Docs**: README (how to run it), architecture diagram, CLAUDE.md module table,
   CHANGELOG, roadmap (WP4's "usage-events table and its queries" is partly met by
-  reading the trail instead), and ADRs in block `1300`–`1340`.
+  reading the trail instead), and ADRs in block `1950`–`1990`.

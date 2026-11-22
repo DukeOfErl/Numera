@@ -2,7 +2,7 @@
 
 Grants are the database's decision, so no double can say whether they hold. Runs
 against the branch in `.streamlit/secrets.toml` (`dev`) after
-`scinumbers-monitor-grant --branch dev`, with `SCINUMBERS_MONITOR_DB_PASSWORD` set
+`numera-monitor-grant --branch dev`, with `NUMERA_MONITOR_DB_PASSWORD` set
 to the password it printed. Skips without either.
 
 **The same probes run as the owner first, and must not be refused.** That is the
@@ -22,8 +22,8 @@ from urllib.parse import urlsplit
 
 import pytest
 
-from scinumbers_ask.trail_store import engine_from_url
-from scinumbers_monitor.connection import PASSWORD_ENV, monitor_url
+from numera_ask.trail_store import engine_from_url
+from numera_monitor.connection import PASSWORD_ENV, monitor_url
 
 pytestmark = pytest.mark.network
 
@@ -65,7 +65,7 @@ def owner():
 def monitor():
     password = os.environ.get(PASSWORD_ENV)
     if not password:
-        pytest.skip(f"{PASSWORD_ENV} unset; run scinumbers-monitor-grant --branch dev first")
+        pytest.skip(f"{PASSWORD_ENV} unset; run numera-monitor-grant --branch dev first")
     host = urlsplit(_owner_url()).hostname
     engine = engine_from_url(monitor_url(host, password))
     yield engine
@@ -117,4 +117,4 @@ def test_the_monitor_connects_as_itself(monitor):
     from sqlalchemy import text
 
     with monitor.connect() as conn:
-        assert conn.execute(text("select current_user")).scalar() == "scinumbers_monitor"
+        assert conn.execute(text("select current_user")).scalar() == "numera_monitor"

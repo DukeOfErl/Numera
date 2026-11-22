@@ -1,4 +1,4 @@
-"""`scinumbers-monitor`: no branch, no view; with one, a page bound to this machine.
+"""`numera-monitor`: no branch, no view; with one, a page bound to this machine.
 
 The exec is stubbed, so nothing starts. "Another machine cannot connect" is asserted
 here as the address handed to Streamlit, not by a connection attempt -- recorded as
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from scinumbers_monitor import cli
+from numera_monitor import cli
 
 
 class Exec:
@@ -42,7 +42,7 @@ def test_a_branch_starts_streamlit_on_the_app_bound_to_localhost():
 
 def test_the_app_it_starts_exists():
     assert cli.APP.name == "app.py"
-    assert cli.APP.parent.name == "scinumbers_monitor"
+    assert cli.APP.parent.name == "numera_monitor"
 
 
 def test_the_page_is_told_to_load_no_secrets_file(tmp_path, monkeypatch):
@@ -62,12 +62,17 @@ def test_the_page_is_told_to_load_no_secrets_file(tmp_path, monkeypatch):
     (tmp_path / ".streamlit").mkdir()
     (tmp_path / ".streamlit" / "secrets.toml").write_text('owner = "postgresql://owner:pw@h/db"\n')
     monkeypatch.chdir(tmp_path)
-    default = Secrets()
-    default.load_if_toml_exists()
-    assert "owner" in default, "the canary: without the flag the file is read"
 
     original = config.get_option("secrets.files")
     try:
+        # The suite points Streamlit's default locations at an empty file (conftest,
+        # `_streamlit_reads_no_secrets_file_on_this_machine`), so the canary names the
+        # working directory's file itself: the one a run from the repository root reads.
+        config.set_option("secrets.files", [str(tmp_path / ".streamlit" / "secrets.toml")])
+        default = Secrets()
+        default.load_if_toml_exists()
+        assert "owner" in default, "the canary: without the flag the file is read"
+
         config.set_option("secrets.files", [files])
         told = Secrets()
         told.load_if_toml_exists()

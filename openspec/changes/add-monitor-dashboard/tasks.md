@@ -1,6 +1,6 @@
 # Tasks
 
-**ADR block: `1300`–`1340`**, added to CLAUDE.md's allocation table as task 0.1.
+**ADR block: `1950`–`1990`**, added to CLAUDE.md's allocation table as task 0.1.
 The table is the authority; `tasks.md` is the copy an implementer reads.
 `add-first-use-notice` holds `1250`–`1290` on its own branch, and this block sits
 clear of it. Planned: `1300` its own package, a reader of the trail and not an
@@ -17,7 +17,7 @@ when it is wrong, and they get the instrument:
   merely the outcome. Seed it at the end of task group 3.
 - **The read-only role** is a guard. Its live test proves it can fail before it
   is believed: the same assertions run under the owner role must fail (the
-  canary), and under `scinumbers_monitor` must pass.
+  canary), and under `numera_monitor` must pass.
 
 Rendering (`app.py`) is not seeded. A bug there shows itself the moment someone
 looks.
@@ -27,8 +27,8 @@ repository. The implementer's job is to leave the instructions right.
 
 ## 0. Allocation
 
-- [x] 0.1 CLAUDE.md: add `add-monitor-dashboard` | `1300`–`1340` to the ADR
-      table. Write ADR stubs `1300`, `1310`, `1320` from the template and commit
+- [x] 0.1 CLAUDE.md: add `add-monitor-dashboard` | `1950`–`1990` to the ADR
+      table. Write ADR stubs `1950`, `1960`, `1970` from the template and commit
       them first.
 
 ## 1. The read-only role
@@ -37,48 +37,48 @@ repository. The implementer's job is to leave the instructions right.
       Superseded: the view never asks for a URI. It takes the branch's host from
       `neon.endpoint_host` (the endpoints API, which carries no credential) and
       its own password from the environment, so the owner's URL is never in its
-      memory. Recorded in ADR-1310.
-- [x] 1.2 `scinumbers-monitor-grant --branch <name>` (`grant.py`), replacing
+      memory. Recorded in ADR-1960.
+- [x] 1.2 `numera-monitor-grant --branch <name>` (`grant.py`), replacing
       the planned `psql` script: `psql` is not installed on the operator's
       machine. It runs as the branch owner via Neon's API, like
-      `scinumbers-enrol`, and creates the role if absent. It sets a fresh
+      `numera-enrol`, and creates the role if absent. It sets a fresh
       generated password (printed once), and grants `SELECT ON trail` and
       `SELECT (email, disabled) ON accounts` and nothing else, plus
       `default_transaction_read_only = on` and a role `statement_timeout`. No
       default privileges, no `ALL TABLES`. Offline tests in
       `test_monitor_connection.py`.
-- [ ] 1.3 (operator) Run `scinumbers-monitor-grant --branch dev`; set
-      `SCINUMBERS_MONITOR_DB_PASSWORD`.
+- [ ] 1.3 (operator) Run `numera-monitor-grant --branch dev`; set
+      `NUMERA_MONITOR_DB_PASSWORD`.
 - [ ] 1.4 `tests/test_monitor_role_live.py` (live marker, against `dev`):
-      under `scinumbers_monitor`, `select` from `trail` succeeds; `insert` into
+      under `numera_monitor`, `select` from `trail` succeeds; `insert` into
       `trail` is refused; `select email, disabled from accounts` succeeds;
       `select openrouter_key from accounts` and `select * from accounts` are
       refused; `create table` is refused. **Canary first:** the same test parametrised over the owner role
       must fail on the refusals, and the test says so. A test that passes
       for both roles proves nothing.
-- [x] 1.5 Write ADR-1310.
+- [x] 1.5 Write ADR-1960.
 
 ## 2. Package and entry point
 
-- [x] 2.1 `src/scinumbers_monitor/__init__.py` and `connection.py`: build the
+- [x] 2.1 `src/numera_monitor/__init__.py` and `connection.py`: build the
       read-only engine from a branch name (host from `neon.endpoint_host`,
-      password from `SCINUMBERS_MONITOR_DB_PASSWORD`). Apply
+      password from `NUMERA_MONITOR_DB_PASSWORD`). Apply
       `trail_store.CONNECT_TIMEOUT_S` and `POOL_RECYCLE_S` rather than new
       numbers.
-- [x] 2.2 `cli.py` and the `scinumbers-monitor` console script in
+- [x] 2.2 `cli.py` and the `numera-monitor` console script in
       `pyproject.toml`: refuse without `--branch`, with no default, using a
       sentence in `pending.NO_BRANCH`'s pattern. Exec `streamlit run app.py
       --server.address 127.0.0.1 --server.headless true`, passing the branch.
       Test: no branch → non-zero exit and the sentence; with a branch → the argv
       handed to the exec names the branch and binds to localhost (exec stubbed).
-- [x] 2.3 `tests/test_monitor_boundaries.py`: `scinumbers_monitor` imports from
-      `scinumbers_ask` only `neon`, `hosted_trace`, `pending` and `trail_store`
+- [x] 2.3 `tests/test_monitor_boundaries.py`: `numera_monitor` imports from
+      `numera_ask` only `neon`, `hosted_trace`, `pending` and `trail_store`
       (widened from two when the door row reused `pending.waiting`); no
-      `scinumbers_ask` module imports `scinumbers_monitor`; within the package,
+      `numera_ask` module imports `numera_monitor`; within the package,
       only `app` imports Streamlit. Its own import reader, not
       `test_driver_independence`'s: that one strips the package prefix and
       answers a different question (the test's docstring says so).
-- [x] 2.4 Write ADR-1300.
+- [x] 2.4 Write ADR-1950.
 
 ## 3. Queries and figures
 
@@ -89,7 +89,7 @@ repository. The implementer's job is to leave the instructions right.
       requirement, not taken from a run.
 - [x] 3.2 Tests guarding the map: the union of its sets is exactly the
       `EndReason` values; every key is a string literal somewhere in
-      `src/scinumbers_ask/`.
+      `src/numera_ask/`.
 - [x] 3.3 `figures.py`: health figures for a period (questions, distinct
       testers, endings, spend total and per question, limit endings), each rate
       paired with its count; an empty period gives a value that says so, not
@@ -128,7 +128,7 @@ repository. The implementer's job is to leave the instructions right.
       and exercise every row and the drill-down.
 - [ ] 4.5 Run it against `dev` and look at it (run skill). Check the quiet-period
       wording, rates with counts, and the branch name on every row.
-- [x] 4.6 Write ADR-1320.
+- [x] 4.6 Write ADR-1970.
 
 ## 5. Spec conformance
 
@@ -150,19 +150,19 @@ repository. The implementer's job is to leave the instructions right.
 
 ## 7. Documentation and wrap-up
 
-- [x] 7.1 README: what the view is, `scinumbers-monitor --branch alpha`, the
+- [x] 7.1 README: what the view is, `numera-monitor --branch alpha`, the
       role script, the settings (`LANGFUSE_PROJECT_ID`, and the password
       variable if 1.1 needs it).
 - [x] 7.2 `docs/diagrams/architecture.md`: the view as a reader of the trail
       beside the app, the Langfuse link, and the role's reach (following
       `DIAGRAMS.md`).
-- [x] 7.3 CLAUDE.md: a `scinumbers_monitor` paragraph and module table in the
+- [x] 7.3 CLAUDE.md: a `numera_monitor` paragraph and module table in the
       Architecture section.
 - [x] 7.4 CHANGELOG: an Added entry.
 - [x] 7.5 `docs/roadmap.md`: reconcile WP4. "The usage-events table and its
       queries" is met by reading the trail, unless that is decided otherwise;
       note the deferred `question.ended` record (design §4).
-- [ ] 7.6 (operator) Run `scinumbers-monitor-grant --branch alpha`; open the view
+- [ ] 7.6 (operator) Run `numera-monitor-grant --branch alpha`; open the view
       against `alpha`.
 - [ ] 7.7 Full suite green, `openspec validate --strict` passes, and the work is
       committed and handed over for the operator to try before merge.

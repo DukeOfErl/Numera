@@ -31,7 +31,7 @@ See proposal.md for why. The constraints that shape the approach:
 - **`accounts` holds `openrouter_key`.** A role that can read every table can read
   every tester's API key. `pending`'s enrolment query reads only `accounts.email`
   and `accounts.disabled`.
-- **`test_driver_independence.py` allows exactly one module in `scinumbers_ask` to
+- **`test_driver_independence.py` allows exactly one module in `numera_ask` to
   import Streamlit (`web`).**
 
 ## Goals / Non-Goals
@@ -48,7 +48,7 @@ See proposal.md for why. The constraints that shape the approach:
 - Deployment, a sign-in, or more than one viewer. If it is ever hosted, that is a
   new change with its own identity requirement.
 - Any chart sourced from Langfuse. The Langfuse dashboards live in Langfuse.
-- Alerting from this view. Langfuse's two Hobby alerts and `scinumbers-pending`'s
+- Alerting from this view. Langfuse's two Hobby alerts and `numera-pending`'s
   cron mail are the alerting there is.
 - Changing what the application records. In particular, recording a single
   `question.ended` row is considered below and deferred.
@@ -56,15 +56,15 @@ See proposal.md for why. The constraints that shape the approach:
 
 ## Decisions
 
-### 1. Its own package, `scinumbers_monitor`, and not a module of `scinumbers_ask` (ADR-1300)
+### 1. Its own package, `numera_monitor`, and not a module of `numera_ask` (ADR-1950)
 
 The view reads a table. It does not drive the agent, does not put a question to
-it, and has no business being able to. Placing it in `scinumbers_ask` would mean
+it, and has no business being able to. Placing it in `numera_ask` would mean
 either a second Streamlit importer there, breaking the single-importer test, or
 listing it as a driver, which it is not.
 
-As its own package, the dependency direction is plain: `scinumbers_monitor` may
-import from `scinumbers_ask`, and nothing there imports it. It takes four things from there, and nothing else:
+As its own package, the dependency direction is plain: `numera_monitor` may
+import from `numera_ask`, and nothing there imports it. It takes four things from there, and nothing else:
 
 - `neon`, to resolve a branch name. It imports only the standard library.
 - `hosted_trace.trace_id_for`, to derive a trace id. It is Langfuse's own
@@ -73,10 +73,10 @@ import from `scinumbers_ask`, and nothing there imports it. It takes four things
 - `trail_store`'s connect timeout and pool recycle, rather than new numbers.
 
 The four are stated in one place, and a test asserts the package imports
-nothing else from `scinumbers_ask`. If the view reached for `agent` or `web`,
+nothing else from `numera_ask`. If the view reached for `agent` or `web`,
 that is the moment to stop and think.
 
-*Alternatives:* a module in `scinumbers_ask` listed in `PRESENTATION` and
+*Alternatives:* a module in `numera_ask` listed in `PRESENTATION` and
 exempted from the single-importer test (weakens a guard to make room, and puts a
 non-adapter in the adapters' set); a separate repository (duplicates the event
 names and the schema, which then drift unseen).
@@ -85,10 +85,10 @@ No new extra. `ask` already carries Streamlit, SQLAlchemy, psycopg and Langfuse,
 and charts use Streamlit's own (Altair ships with it). Add an extra only if a
 dependency appears that `ask` does not have.
 
-### 2. A role that can read `trail` and nothing else, made in SQL (ADR-1310)
+### 2. A role that can read `trail` and nothing else, made in SQL (ADR-1960)
 
-`scinumbers-monitor-grant` (`grant.py`; first planned as a `psql` script, but `psql`
-is not installed on the operator's machine) creates `scinumbers_monitor` with `LOGIN`, `CONNECT` on
+`numera-monitor-grant` (`grant.py`; first planned as a `psql` script, but `psql`
+is not installed on the operator's machine) creates `numera_monitor` with `LOGIN`, `CONNECT` on
 the database, `USAGE` on `public`, `SELECT` on `trail`, and `SELECT (email,
 disabled)` on `accounts`, a **column-level** grant. The door row reuses
 `pending.waiting()`, and its enrolment query asks `accounts` whether an address
@@ -114,7 +114,7 @@ inherits the role.
 
 **How the view gets the password.** It never asks Neon for a URI. The host comes
 from `neon.endpoint_host` (the branch's read-write endpoint, no credential) and
-the password from `SCINUMBERS_MONITOR_DB_PASSWORD`, so the owner's URL is never
+the password from `NUMERA_MONITOR_DB_PASSWORD`, so the owner's URL is never
 fetched. Streamlit is started with `--secrets.files` pointing at an empty file:
 run from the repository root, it would otherwise load `.streamlit/secrets.toml`,
 and the owner's URL with it. No URL is written to disk.
@@ -122,7 +122,7 @@ and the owner's URL with it. No URL is written to disk.
 *Alternative:* connecting as `neondb_owner`, as `pending` does. It works today,
 and it is exactly the "read-only because nobody wrote a write" the spec forbids.
 
-### 3. Langfuse is linked, never queried (ADR-1320)
+### 3. Langfuse is linked, never queried (ADR-1970)
 
 Each question row carries
 `{LANGFUSE_BASE_URL}/project/{LANGFUSE_PROJECT_ID}/traces/{trace_id_for(question_id)}`.
@@ -163,7 +163,7 @@ set, is **unidentified**, and the view shows its last recorded event.
 Two tests keep the map honest. One asserts that the union of the sets is exactly
 the set of `EndReason` values, so a new reason fails the suite until it is
 mapped. The other asserts that every key is a string literal somewhere in
-`src/scinumbers_ask/`, which catches a rename. A question recorded under an
+`src/numera_ask/`, which catches a rename. A question recorded under an
 ending added later, before the map knows it, still falls into unidentified,
 never into answered. That is the spec's cheap direction.
 
@@ -198,7 +198,7 @@ period. Nothing reruns on a timer. A **Refresh** button clears the cache. A
 dashboard left open therefore issues no queries, and the Neon compute suspends
 as it would without it.
 
-### 7. Started by `scinumbers-monitor --branch <name>`, bound to localhost
+### 7. Started by `numera-monitor --branch <name>`, bound to localhost
 
 The console script refuses without `--branch`, using `pending`'s wording pattern:
 no default, because a silent answer from the wrong branch is worse than none. It
@@ -214,7 +214,7 @@ in the page header and in the title of every row.
   one. → Accepted: it is human-paced and rare. The recording-health row says so
   beside the figure.
 - **[A trace link for a question that was never traced.]** Tracing is per
-  deployment (`SCINUMBERS_TRACING`), and the trail does not record per question
+  deployment (`NUMERA_TRACING`), and the trail does not record per question
   whether a trace was sent. → The link may lead to "not found". Accepted for
   now: the trail cannot say more without an application change.
 - **[The ending map lags a new `EndReason`.]** → The suite fails until it is
@@ -230,9 +230,9 @@ in the page header and in the title of every row.
 ## Migration Plan
 
 Nothing deployed changes. Operator steps, in order: run
-`scinumbers-monitor-grant --branch dev`, then `--branch alpha`. Set
-`SCINUMBERS_MONITOR_DB_PASSWORD` and `LANGFUSE_PROJECT_ID`. Configure the Langfuse dashboards and alerts
-(task 6). Rollback is `drop role scinumbers_monitor` on each branch. The role owns
+`numera-monitor-grant --branch dev`, then `--branch alpha`. Set
+`NUMERA_MONITOR_DB_PASSWORD` and `LANGFUSE_PROJECT_ID`. Configure the Langfuse dashboards and alerts
+(task 6). Rollback is `drop role numera_monitor` on each branch. The role owns
 nothing, so it drops cleanly.
 
 ## Open Questions
