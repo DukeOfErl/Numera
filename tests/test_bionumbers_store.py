@@ -1051,13 +1051,14 @@ def test_the_ddl_is_valid_postgres_and_takes_the_rows_the_store_writes():
 
 def _live_url() -> str:
     """Skipped, not failed, where nothing is configured: a contributor without a database must not
-    see a red suite. The same source the trail store's live tests read."""
+    see a red suite. The review store's own section, as the page reads it (ADR-2000) -- not the
+    trail's `[connections.usage]`, which holds no review tables."""
     if not SECRETS.exists():
         pytest.skip("no .streamlit/secrets.toml; nothing to connect to")
     try:
-        return tomllib.loads(SECRETS.read_text())["connections"]["usage"]["url"]
+        return tomllib.loads(SECRETS.read_text())["connections"]["review"]["url"]
     except (KeyError, tomllib.TOMLDecodeError):
-        pytest.skip("no [connections.usage] url configured")
+        pytest.skip("no [connections.review] url configured")
 
 
 def _sql_statements(sql: str) -> list[str]:

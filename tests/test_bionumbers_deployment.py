@@ -17,63 +17,119 @@ from numera_validator.records import ReviewerRole
 
 
 class TestStoreEngine:
-    """Where the page finds its database: `[connections.review]`, then a URL from the environment,
-    and never the trail's `[connections.usage]` (ADR-2000)."""
+    """Where the page finds its database: `[connections.review]`, then `NUMERA_REVIEW_DB_URL`, and
+    never the trail's `[connections.usage]` (ADR-2000). Through Streamlit's own secrets loader and
+    `st.connection`, over real files: a fake that raises an invented error is how a broken section
+    once passed as "raised" while Streamlit's real error was read as absence."""
+
+    @pytest.fixture
+    def secrets(self, tmp_path, monkeypatch):
+        """Point Streamlit's loader at one file (or none), with nothing cached from another test."""
+        import streamlit as st
+        from streamlit import config
+        from streamlit.runtime.secrets import secrets_singleton
+
+        path = tmp_path / "secrets.toml"
+        original = config.get_option("secrets.files")
+
+        def use(text: str | None) -> None:
+            if text is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_text(text)
+            config.set_option("secrets.files", [str(path)])
+            secrets_singleton._reset()
+            st.cache_resource.clear()
+
+        yield use
+        config.set_option("secrets.files", original)
+        secrets_singleton._reset()
+        st.cache_resource.clear()
 
     @staticmethod
-    def sections(monkeypatch, **configured):
-        """`st.connection` as the secrets would answer it: an engine for each named section, the
-        not-found error Streamlit raises for any other."""
-        from streamlit.errors import StreamlitSecretNotFoundError
+    def sqlite(tmp_path, name: str) -> str:
+        return f"sqlite:///{tmp_path}/{name}.sqlite"
 
-        def connection(name, **kwargs):
-            if name not in configured:
-                raise StreamlitSecretNotFoundError(f"no [connections.{name}]")
-            return SimpleNamespace(engine=configured[name])
+    def test_with_no_secrets_file_the_environment_names_the_store(
+        self, secrets, monkeypatch, tmp_path
+    ):
+        secrets(None)
+        monkeypatch.setenv(deployment.DB_URL_ENV, self.sqlite(tmp_path, "env"))
 
-        monkeypatch.setattr(deployment.st, "connection", connection)
+        assert deployment.store_engine().url.database.endswith("env.sqlite")
 
-    def test_a_plain_url_serves_a_machine_with_no_secrets(self, monkeypatch, tmp_path):
-        self.sections(monkeypatch)
-        monkeypatch.setenv(deployment.DB_URL_ENV, f"sqlite:///{tmp_path}/review.sqlite")
-
-        engine = deployment.store_engine()
-
-        assert engine is not None and engine.url.get_backend_name() == "sqlite"
-
-    def test_the_trail_s_section_is_not_the_review_store(self, monkeypatch, tmp_path):
+    def test_the_trail_s_section_is_not_the_review_store(self, secrets, monkeypatch, tmp_path):
         """The case that failed: a developer's secrets name the trail, and the page opened it."""
-        self.sections(monkeypatch, usage=object())
-        monkeypatch.setenv(deployment.DB_URL_ENV, f"sqlite:///{tmp_path}/review.sqlite")
+        secrets(f'[connections.usage]\nurl = "{self.sqlite(tmp_path, "trail")}"\n')
+        monkeypatch.setenv(deployment.DB_URL_ENV, self.sqlite(tmp_path, "env"))
 
-        engine = deployment.store_engine()
+        assert deployment.store_engine().url.database.endswith("env.sqlite")
 
-        assert engine is not None and engine.url.get_backend_name() == "sqlite"
+    def test_the_review_section_wins_over_the_environment(self, secrets, monkeypatch, tmp_path):
+        secrets(
+            f'[connections.usage]\nurl = "{self.sqlite(tmp_path, "trail")}"\n'
+            f'[connections.review]\nurl = "{self.sqlite(tmp_path, "review")}"\n'
+        )
+        monkeypatch.setenv(deployment.DB_URL_ENV, self.sqlite(tmp_path, "env"))
 
-    def test_the_review_section_wins_over_the_environment(self, monkeypatch, tmp_path):
-        configured = object()
-        self.sections(monkeypatch, review=configured, usage=object())
-        monkeypatch.setenv(deployment.DB_URL_ENV, f"sqlite:///{tmp_path}/other.sqlite")
+        assert deployment.store_engine().url.database.endswith("review.sqlite")
 
-        assert deployment.store_engine() is configured
+    def test_a_misspelled_review_section_is_raised_not_read_as_absent(
+        self, secrets, monkeypatch, tmp_path
+    ):
+        """`URL` for `url`: a store the operator configured and the page cannot open."""
+        secrets(f'[connections.review]\nURL = "{self.sqlite(tmp_path, "review")}"\n')
+        monkeypatch.setenv(deployment.DB_URL_ENV, self.sqlite(tmp_path, "env"))
 
-    def test_a_broken_review_section_is_raised_not_read_as_absent(self, monkeypatch, tmp_path):
-        """Read as absence, a typo in the section would send the page to the environment's store."""
+        from streamlit.errors import StreamlitAPIException
 
-        def broken(name, **kwargs):
-            raise ValueError("Can't load plugin: sqlalchemy.dialects:postgresql.pyscopg")
-
-        monkeypatch.setattr(deployment.st, "connection", broken)
-        monkeypatch.setenv(deployment.DB_URL_ENV, f"sqlite:///{tmp_path}/other.sqlite")
-
-        with pytest.raises(ValueError, match="pyscopg"):
+        # By type: which missing parameter Streamlit names varies from run to run.
+        with pytest.raises(StreamlitAPIException):
             deployment.store_engine()
 
-    def test_neither_means_none(self, monkeypatch):
-        self.sections(monkeypatch, usage=object())
+    def test_a_secrets_file_that_does_not_parse_is_raised_not_read_as_absent(
+        self, secrets, monkeypatch, tmp_path
+    ):
+        from streamlit.errors import StreamlitSecretNotFoundError
+
+        secrets('[connections.review\nurl = "postgresql+psycopg://u:p@h/db"\n')
+        monkeypatch.setenv(deployment.DB_URL_ENV, self.sqlite(tmp_path, "env"))
+
+        with pytest.raises(StreamlitSecretNotFoundError):
+            deployment.store_engine()
+
+    def test_neither_means_none(self, secrets, monkeypatch, tmp_path):
+        secrets(f'[connections.usage]\nurl = "{self.sqlite(tmp_path, "trail")}"\n')
         monkeypatch.delenv(deployment.DB_URL_ENV, raising=False)
 
         assert deployment.store_engine() is None
+
+    @pytest.mark.parametrize(
+        ("url", "has_connect_timeout"),
+        [("postgresql+psycopg://u:p@ep-x.neon.tech/db", True), ("sqlite:///x.sqlite", False)],
+    )
+    def test_the_engine_carries_the_trail_s_timeouts(
+        self, secrets, monkeypatch, url, has_connect_timeout
+    ):
+        """A suspended database fails a rerun after `CONNECT_TIMEOUT_S` instead of hanging it;
+        SQLite takes no `connect_timeout` and would refuse one."""
+        from numera_ask import trail_store
+
+        secrets(f'[connections.review]\nurl = "{url}"\n')
+        seen = {}
+
+        def connection(name, **options):
+            seen.update(name=name, **options)
+            return SimpleNamespace(engine=object())
+
+        monkeypatch.setattr(deployment.st, "connection", connection)
+        deployment.store_engine()
+
+        assert seen["name"] == "review"
+        assert seen["pool_recycle"] == trail_store.POOL_RECYCLE_S
+        assert ("connect_args" in seen) is has_connect_timeout
+        if has_connect_timeout:
+            assert seen["connect_args"] == {"connect_timeout": trail_store.CONNECT_TIMEOUT_S}
 
 
 @pytest.mark.parametrize(

@@ -13,9 +13,13 @@ decision in one place.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 import streamlit as st
 from sqlalchemy import Engine
 
+from numera_ask import trail_store
 from numera_ask.accounts import Account
 from numera_ask.permissions import Role
 from numera_validator import environment, store
@@ -30,21 +34,45 @@ REVIEW_CONNECTION = "review"
 DB_URL_ENV = "NUMERA_REVIEW_DB_URL"
 
 
+def review_section() -> Mapping[str, Any] | None:
+    """`[connections.review]` from the secrets, or None where no file or no such section exists.
+
+    Asked of `secrets_singleton`, the object `st.connection` itself reads. Streamlit raises one
+    type, `StreamlitSecretNotFoundError`, both for "no secrets file anywhere" and for a file that
+    does not parse; the second chains the parse error as its cause. Only the first is absence. A
+    file that does not parse is raised: read as absence, it would send the page to the
+    environment's store while the operator believes the secrets name another (the review of
+    2026-11-22 reproduced it).
+    """
+    from streamlit.errors import StreamlitSecretNotFoundError
+    from streamlit.runtime.secrets import secrets_singleton
+
+    try:
+        connections = secrets_singleton.get("connections")
+    except StreamlitSecretNotFoundError as exc:
+        if exc.__cause__ is None:
+            return None
+        raise
+    section = connections.get(REVIEW_CONNECTION) if connections else None
+    return section if section else None
+
+
 def review_destination() -> Engine | None:
     """The engine `[connections.review]` names, or None where the secrets have no such section.
 
-    `st.connection` caches the engine across sessions, as `web.trail_destination` does for the
-    trail: the page reruns on every click, and a fresh engine would pay TCP, TLS and Postgres auth
-    before each `next_item`. A section that is present but unusable is raised rather than read as
-    absence, so the page cannot quietly fall through to some other store than the one configured.
+    Once the section exists, every error from `st.connection` is raised: a misspelled key there is
+    a store the operator configured and the page cannot open, not an absent one. The engine is
+    cached across sessions by `st.connection`, and built with the trail's timeouts
+    (`trail_store`), which the page had while it shared the trail's engine: no connect timeout
+    would hang a rerun on a suspended database instead of failing it.
     """
-    from streamlit.errors import StreamlitAPIException, StreamlitSecretNotFoundError
-
-    try:
-        return st.connection(REVIEW_CONNECTION, type="sql", pool_pre_ping=True).engine
-    except (StreamlitAPIException, StreamlitSecretNotFoundError):
-        # Absence, by type and not by message, as `web._is_not_configured` decides it.
+    section = review_section()
+    if section is None:
         return None
+    options: dict[str, Any] = {"pool_pre_ping": True, "pool_recycle": trail_store.POOL_RECYCLE_S}
+    if not str(section.get("url", section.get("dialect", ""))).startswith("sqlite"):
+        options["connect_args"] = {"connect_timeout": trail_store.CONNECT_TIMEOUT_S}
+    return st.connection(REVIEW_CONNECTION, type="sql", **options).engine
 
 
 def store_engine() -> Engine | None:
