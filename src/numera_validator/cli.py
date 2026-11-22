@@ -653,7 +653,7 @@ def upgrade_store(args: argparse.Namespace) -> int:
 
 def name_properties(args: argparse.Namespace) -> int:
     """Name every loaded item that has no property yet: the measure of the object (ADR-1700)."""
-    url = args.db_url or os.environ.get(DB_URL_ENV, "")
+    url = args.db_url or environment.read(DB_URL_ENV)
     if not url:
         print(f"Give --db-url or set {DB_URL_ENV} to the review database.", file=sys.stderr)
         return 2

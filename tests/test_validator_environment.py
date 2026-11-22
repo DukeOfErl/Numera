@@ -50,3 +50,23 @@ def test_the_validator_refuses_every_old_corpus_name_the_ask_package_refuses():
     old_corpus_names = {"BIONUMBERS_ASK_CORPUS", "SCINUMBERS_CORPUS"}
     assert {k for k, v in environment.RENAMED.items() if v == "NUMERA_CORPUS"} == old_corpus_names
     assert {k for k, v in RENAMED_ENV.items() if v == "NUMERA_CORPUS"} == old_corpus_names
+
+
+def test_no_module_reads_the_environment_past_the_refusal():
+    """Every read goes through `environment.read`, so a retired name is refused wherever it is read.
+
+    `name-properties` arrived on `feat/property-names` with `os.environ.get(DB_URL_ENV)`, written
+    before the refusal existed; the rebase across the rename carried it in unguarded (2026-11-22).
+    A text match, as in `test_config.py`: a read spelled another way gets past it.
+    """
+    from pathlib import Path
+
+    package = Path(environment.__file__).parent
+    offenders = [
+        f"{path.name}:{number}"
+        for path in sorted(package.glob("*.py"))
+        if path.name != "environment.py"
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if "os.environ" in line or "getenv" in line
+    ]
+    assert offenders == []

@@ -22,9 +22,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from bionumbers import spend, store
-from bionumbers.records import Frozen, ReviewItem
-from bionumbers.spend import Ceiling, CeilingReached, Ledger
+from numera_validator import spend, store
+from numera_validator.records import Frozen, ReviewItem
+from numera_validator.spend import Ceiling, CeilingReached, Ledger
 
 #: Two of the labels the harvest instruction asks for, as the instruction and the backfill word
 #: them. One text so the model that extracts and the model that backfills read the same rule.

@@ -83,7 +83,7 @@ any release; `1.0.0` when it stabilizes.
   joins them into one name ("Average length of F-actin filaments in non-contracting rings"); a
   claim whose parts make no name keeps its value with an empty name, and the run counts it. The
   name is on `review_item.property`
-  for the ask agent to show. `bionumbers name-properties` names a store loaded earlier, one call
+  for the ask agent to show. `numera-validator name-properties` names a store loaded earlier, one call
   per entry without re-reading the paper (ADR-1700).
 - **One model call under the ledger.** The extractor and the simulated review made the same
   eight-step call in two copies; both now go through `spend.call`, so a guard fixed in one is

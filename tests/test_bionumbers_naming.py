@@ -8,9 +8,9 @@ import pytest
 from sqlalchemy import create_engine, select
 from test_bionumbers_store import QUESTION, RUN, a_result, an_item
 
-from bionumbers import naming, store
-from bionumbers.records import ReviewItem
-from bionumbers.spend import Ceiling
+from numera_validator import naming, store
+from numera_validator.records import ReviewItem
+from numera_validator.spend import Ceiling
 
 USAGE = SimpleNamespace(input_tokens=500, output_tokens=30, cache_read_input_tokens=0)
 

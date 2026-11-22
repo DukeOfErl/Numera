@@ -180,8 +180,8 @@ class Claim(Frozen):
     property: str = ""
     """The entry's name for a reader: the measure of the object, joined by the application from
     the two labels the harvest asks for (ADR-1700). Empty where the parts made no name, or where
-    a question was asked; `bionumbers name-properties` names it later. Never a reason to drop a
-    verified value."""
+    a question was asked; `numera-validator name-properties` names it later. Never a reason to drop
+    a verified value."""
     property_class: str = ""
     """Harvest mode only: the class of quantity (`numera_validator.harvest.PROPERTY_CLASSES`)."""
     organism_name: str = ""

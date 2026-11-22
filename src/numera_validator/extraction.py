@@ -580,8 +580,8 @@ def _assemble(
         quote = _quote(doc, checked, ("claim", index, "quote"), draft.quote.text)
         # The harvest's rule (ADR-1700): an entry's name says what was measured and of what.
         # Where the two parts make no name the value is kept and the name left empty for
-        # `bionumbers name-properties`: a verified value costs a paper's extraction to get back,
-        # a name a third of a cent (Yoav, 2026-10-17).
+        # `numera-validator name-properties`: a verified value costs a paper's extraction to get
+        # back, a name a third of a cent (Yoav, 2026-10-17).
         named = naming.property_name(draft.measure, draft.measured_object)
         if draft.candidate_kind not in CLAIMABLE:
             # The spec's rule, enforced here rather than trusted to the instruction: a

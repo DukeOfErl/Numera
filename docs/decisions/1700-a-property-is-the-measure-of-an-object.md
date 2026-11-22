@@ -27,7 +27,7 @@ later; the run's summary counts the unnamed. (The first version of this decision
 morning, dropped such a claim as it drops one with a failed quote. Yoav's objection the same day
 reversed it: a verified value costs a paper's extraction to get back, a name a third of a cent, so
 dropping was the expensive direction dressed as the cheap one.) A store loaded before the parts
-were asked for is named by `bionumbers name-properties`, one call per entry over the entry's own
+were asked for is named by `numera-validator name-properties`, one call per entry over the entry's own
 record and never the paper, and never into `item_json`, which stays what the reviewer saw.
 
 ## Trade-off accepted
