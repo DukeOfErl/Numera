@@ -68,7 +68,7 @@ def usable(email: str) -> str:
     asked for.
 
     Both directions of getting this wrong were paid for. `dev.accounts` holds a
-    row keyed `'yoav.g.pollack@gmail.com\\n'`: it was accepted, it looks right in
+    row keyed by a real address plus `'\\n'`: it was accepted, it looks right in
     every listing that prints it unquoted, and no provider will ever assert a
     claim that matches it -- so the account exists, is enabled, and admits
     nobody. The person meets "not enrolled", the operator looks at the table and

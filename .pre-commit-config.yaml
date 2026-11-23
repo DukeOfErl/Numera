@@ -59,6 +59,14 @@ repos:
   # there is told, not blocked into disabling the hook.
   - repo: local
     hooks:
+      # A personal address committed once stays in the history; removing one would mean
+      # rewriting every branch (weighed and declined, 2026-11-20). Placeholders and the
+      # named exceptions in the script pass; anything else is refused before it is written.
+      - id: no-email-addresses
+        name: no email addresses outside placeholders and the named exceptions
+        entry: bin/check_addresses.py
+        language: system
+        types: [text]
       - id: testloop-commit
         name: tests the change reaches (testmon; full suite if a non-Python file changed)
         entry: bin/testloop.py commit
