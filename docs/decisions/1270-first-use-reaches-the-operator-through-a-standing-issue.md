@@ -1,6 +1,6 @@
 # ADR-1270: The first-use notice is delivered as a comment on one standing issue
 
-- **Status:** accepted
+- **Status:** accepted; amended by [ADR-2050](2050-the-first-use-alert-runs-in-a-private-repository.md) (the issue and the job moved to a private repository)
 - **Date:** 2026-10-02
 - **Pull request:** none yet (`feat/first-use-notice`)
 

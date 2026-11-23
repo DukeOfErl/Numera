@@ -1,6 +1,6 @@
 # ADR-1280: Reader addresses appear in an issue comment, so the repository must stay private
 
-- **Status:** accepted
+- **Status:** superseded by [ADR-2050](2050-the-first-use-alert-runs-in-a-private-repository.md)
 - **Date:** 2026-10-02
 - **Pull request:** none yet (`feat/first-use-notice`)
 

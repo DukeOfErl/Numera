@@ -308,12 +308,12 @@ meant to run unattended would need one.
 sequenceDiagram
     autonumber
     participant Tick as GitHub schedule
-    participant Job as first-use.yml
+    participant Job as first-use.yml (numera-ops)
     participant Cmd as numera-first-use
     participant Trail as the trail (read-only role)
     participant Issue as the "first use" issue
     actor Operator
-    Tick->>Job: hourly, from main only
+    Tick->>Job: hourly, in the private numera-ops repository
     Job->>Cmd: the read-only URL, the excluded addresses
     Cmd->>Trail: set transaction read only, then who was first seen in the window
     Trail-->>Cmd: one row per reader, with each first
@@ -334,7 +334,9 @@ sequenceDiagram
 which is why the window is longer than the interval: a tick that is delayed leaves a
 gap an exact-hour window would lose a reader in, and a repeat costs a line.
 ADR-1250. The job holds a role that can read one table (ADR-1260), and the report
-goes to a file and an issue, never the run's log (ADR-1280).*
+goes to a file and an issue, never the run's log. Job and issue live in the private
+DukeOfErl/numera-ops, not in this public repository; it runs this repository's
+command unchanged (ADR-2050, superseding ADR-1280).*
 
 ## 4. Ingestion: how the published export becomes a corpus
 

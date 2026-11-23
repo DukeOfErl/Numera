@@ -26,6 +26,11 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **The new-tester alert runs in the private `DukeOfErl/numera-ops`**, not here (ADR-2050, superseding
+  ADR-1280). It posts readers' addresses into an issue, and this repository is going public. The job
+  runs `numera-first-use` from this repository unchanged; the workflow and the tests that execute its
+  steps moved with it, and the exclusion list is a masked secret there. `keepalive-digest` watches
+  only `keepalive.yml` now. A test fails if a workflow here reads the trail again.
 - **The repository is `DukeOfErl/Numera`** (renamed from `DukeOfErl/BioNumbers` on 2026-11-23;
   GitHub redirects the old address). The validator identifies itself to Europe PMC and OpenRouter
   as `Numera-validator`, with the new address.

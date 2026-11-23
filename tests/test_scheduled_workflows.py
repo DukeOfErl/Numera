@@ -1,13 +1,13 @@
-"""The scheduled workflows: what runs, what it may hold, and what it says.
+"""The scheduled workflows here: the keepalive's digest, and what no workflow here may do.
 
-Two kinds of check. The shell steps are **executed**, against a stub `gh` and real
-`jq`, because a workflow is only a program and an unexecuted one is the kind that
-fails on the first real run -- the digest was merged once with its logic checked only
-against fixtures of its own making. And the structure is read from the YAML for the
-properties no step can show: that nothing here holds a credential it should not.
+The shell steps are **executed**, against a stub `gh` and real `jq`, because a workflow is only
+a program and an unexecuted one is the kind that fails on the first real run -- the digest was
+merged once with its logic checked only against fixtures of its own making.
 
-Requirement text these map to: "A new reader's arrival reaches the operator on a
-schedule, with no mail account of their own" (`user-identity`, add-first-use-notice).
+The first-use alert moved to the private DukeOfErl/numera-ops on 2026-11-23 (ADR-2050), with its
+tests (`tests/test_workflows.py` there): this repository is public, and that job posts readers'
+addresses. "A new reader's arrival reaches the operator on a schedule, with no mail account of
+their own" (`user-identity`) is recorded in `test_spec_conformance.py` as tested there.
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ import re
 import shutil
 import stat
 import subprocess
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -142,137 +141,56 @@ def runs(*conclusions: str) -> str:
     return f"[{items}]"
 
 
-# -- the digest: one standing issue, both workflows, and the silence of a good day -----
+# -- the digest: one standing issue, the keepalive, and the silence of a good day -------
+
+DIGEST = "keepalive-digest.yml"
+SUMMARY = "Summarise the last 24 hours"
+WRITE = "Write to the standing issue"
+
+
+def test_the_digest_watches_the_keepalive_and_nothing_else():
+    """first-use.yml left with its own digest; a stale entry here would report "no run" daily."""
+    script = step_script(load(DIGEST), "digest", SUMMARY)
+    assert re.search(r"for workflow in keepalive\.yml; do", script)
 
 
 @needs_tools
-def test_the_digest_says_nothing_when_both_workflows_ran_and_passed(sandbox):
-    script = step_script(load("keepalive-digest.yml"), "digest", "Summarise the last 24 hours")
+def test_the_digest_says_nothing_when_the_keepalive_ran_and_passed(sandbox):
     sandbox(
-        script,
-        GH_STUB_RUNS_KEEPALIVE_YML=runs("success", "success"),
-        GH_STUB_RUNS_FIRST_USE_YML=runs("success"),
+        step_script(load(DIGEST), "digest", SUMMARY), GH_STUB_RUNS_KEEPALIVE_YML=runs("success")
     )
     assert (sandbox.dir / "report.md").read_text() == ""
 
 
 @needs_tools
 def test_the_digest_does_not_count_a_cancelled_or_unfinished_run_as_a_failure(sandbox):
-    script = step_script(load("keepalive-digest.yml"), "digest", "Summarise the last 24 hours")
-    sandbox(
-        script,
-        GH_STUB_RUNS_KEEPALIVE_YML=runs("cancelled", ""),
-        GH_STUB_RUNS_FIRST_USE_YML=runs("success"),
-    )
+    script = step_script(load(DIGEST), "digest", SUMMARY)
+    sandbox(script, GH_STUB_RUNS_KEEPALIVE_YML=runs("cancelled", ""))
     assert (sandbox.dir / "report.md").read_text() == ""
 
 
 @needs_tools
-def test_a_failing_first_use_run_is_reported_by_name_and_keepalive_is_not(sandbox):
-    # The reason the digest was widened: GitHub's failure mail is off, so without
-    # this a first-use job that cannot reach the database would be silent.
-    script = step_script(load("keepalive-digest.yml"), "digest", "Summarise the last 24 hours")
-    sandbox(
-        script,
-        GH_STUB_RUNS_KEEPALIVE_YML=runs("success"),
-        GH_STUB_RUNS_FIRST_USE_YML=runs("success", "failure", "timed_out"),
-    )
+def test_a_failing_keepalive_run_is_reported_by_name_with_its_links(sandbox):
+    script = step_script(load(DIGEST), "digest", SUMMARY)
+    sandbox(script, GH_STUB_RUNS_KEEPALIVE_YML=runs("success", "failure", "timed_out"))
     report = (sandbox.dir / "report.md").read_text()
-    assert "first-use.yml" in report and "2 of 3" in report
-    assert "keepalive.yml" not in report
+    assert "keepalive.yml" in report and "2 of 3" in report
     assert report.count("https://example/run/") == 2
 
 
 @needs_tools
-def test_a_workflow_that_did_not_run_at_all_is_reported(sandbox):
+def test_a_keepalive_that_did_not_run_at_all_is_reported(sandbox):
     # A paused schedule looks exactly like a passing one; only "no runs" shows it.
-    script = step_script(load("keepalive-digest.yml"), "digest", "Summarise the last 24 hours")
-    sandbox(
-        script,
-        GH_STUB_RUNS_KEEPALIVE_YML=runs("success"),
-        GH_STUB_RUNS_FIRST_USE_YML="[]",
-    )
+    sandbox(step_script(load(DIGEST), "digest", SUMMARY), GH_STUB_RUNS_KEEPALIVE_YML="[]")
     report = (sandbox.dir / "report.md").read_text()
-    assert "first-use.yml" in report and "no run" in report
-    assert "keepalive.yml" not in report
-
-
-@needs_tools
-def test_both_workflows_failing_are_two_entries_in_one_report(sandbox):
-    script = step_script(load("keepalive-digest.yml"), "digest", "Summarise the last 24 hours")
-    sandbox(
-        script,
-        GH_STUB_RUNS_KEEPALIVE_YML=runs("failure"),
-        GH_STUB_RUNS_FIRST_USE_YML="[]",
-    )
-    report = (sandbox.dir / "report.md").read_text()
-    assert "keepalive.yml" in report and "first-use.yml" in report
-
-
-# -- first-use: delivery ---------------------------------------------------------------
-
-TELL = "Tell the operator"
-
-
-@needs_tools
-def test_a_run_with_nobody_new_delivers_nothing(sandbox):
-    (sandbox.dir / "report.md").write_text("")
-    script = step_script(load("first-use.yml"), "first-use", TELL)
-    result = sandbox(script, TEST="false")
-    assert result.returncode == 0, result.stderr
-    assert posts(sandbox) == [], "a quiet hour must post nothing"
-
-
-@needs_tools
-def test_a_report_becomes_a_comment_on_the_one_standing_issue(sandbox):
-    (sandbox.dir / "report.md").write_text("  new@example.org  signed in\n")
-    script = step_script(load("first-use.yml"), "first-use", TELL)
-    sandbox(
-        script,
-        TEST="false",
-        GH_STUB_ISSUES=issue(42, "first use"),
-        TITLE="first use",
-        OWNER="octocat",
-    )
-    calls = sandbox.calls()
-    assert any(c.startswith("issue comment 42") and "--body-file body.md" in c for c in calls)
-    assert not any(c.startswith("issue create") for c in calls), "one issue, not one per reader"
-
-
-@needs_tools
-def test_every_comment_mentions_the_owner_and_still_carries_the_report(sandbox):
-    # The issue is opened by the Actions bot, so the owner is not "participating" in
-    # it and "Participating and @mentions" mail would never arrive -- except for a
-    # mention, which is exactly what that setting does notify on.
-    (sandbox.dir / "report.md").write_text("  new@example.org  signed in\n")
-    script = step_script(load("first-use.yml"), "first-use", TELL)
-    sandbox(
-        script,
-        TEST="false",
-        GH_STUB_ISSUES=issue(42, "first use"),
-        TITLE="first use",
-        OWNER="octocat",
-    )
-    body = (sandbox.dir / "body.md").read_text()
-    assert body.startswith("@octocat\n")
-    assert "new@example.org  signed in" in body
-
-
-@needs_tools
-def test_the_first_report_also_mentions_the_owner(sandbox):
-    (sandbox.dir / "report.md").write_text("  new@example.org  signed in\n")
-    script = step_script(load("first-use.yml"), "first-use", TELL)
-    sandbox(script, TEST="false", GH_STUB_ISSUES="[]", TITLE="first use", OWNER="octocat")
-    assert (sandbox.dir / "body.md").read_text().startswith("@octocat\n")
-    assert any(c.startswith("issue create") and "--body-file body.md" in c for c in sandbox.calls())
+    assert "keepalive.yml" in report and "no run" in report
 
 
 @needs_tools
 def test_the_digest_mentions_the_owner_when_it_has_something_to_say(sandbox):
-    (sandbox.dir / "report.md").write_text("- `first-use.yml`: 1 of 2 runs failed\n")
-    script = step_script(load("keepalive-digest.yml"), "digest", "Write to the standing issue")
+    (sandbox.dir / "report.md").write_text("- `keepalive.yml`: 1 of 2 runs failed\n")
     sandbox(
-        script,
+        step_script(load(DIGEST), "digest", WRITE),
         GH_STUB_ISSUES=issue(7, "scheduled workflow problems"),
         TITLE="scheduled workflow problems",
         OWNER="octocat",
@@ -286,9 +204,8 @@ def test_the_digest_mentions_the_owner_when_it_has_something_to_say(sandbox):
 @needs_tools
 def test_the_digest_says_nothing_when_it_has_nothing_to_say(sandbox):
     (sandbox.dir / "report.md").write_text("")
-    script = step_script(load("keepalive-digest.yml"), "digest", "Write to the standing issue")
     sandbox(
-        script,
+        step_script(load(DIGEST), "digest", WRITE),
         GH_STUB_ISSUES=issue(7, "scheduled workflow problems"),
         TITLE="scheduled workflow problems",
         OWNER="octocat",
@@ -297,38 +214,10 @@ def test_the_digest_says_nothing_when_it_has_nothing_to_say(sandbox):
 
 
 @needs_tools
-def test_the_first_report_opens_the_standing_issue(sandbox):
-    (sandbox.dir / "report.md").write_text("  new@example.org  signed in\n")
-    script = step_script(load("first-use.yml"), "first-use", TELL)
-    sandbox(script, TEST="false", GH_STUB_ISSUES="[]", TITLE="first use")
-    assert any(c.startswith("issue create") for c in sandbox.calls())
-
-
-@needs_tools
-def test_a_near_miss_title_is_not_the_standing_issue(sandbox):
-    # `"first use" in:title` is a phrase search: it also finds "Improve first use
-    # experience". Posting readers' addresses into an unrelated issue is the cost of
-    # trusting the search, so the title is matched exactly after it.
-    (sandbox.dir / "report.md").write_text("  new@example.org  signed in\n")
-    script = step_script(load("first-use.yml"), "first-use", TELL)
+def test_the_digest_does_not_post_into_a_near_miss_title(sandbox):
+    (sandbox.dir / "report.md").write_text("- `keepalive.yml`: 1 of 2 runs failed\n")
     sandbox(
-        script,
-        TEST="false",
-        GH_STUB_ISSUES=issue(9, "Improve first use experience"),
-        TITLE="first use",
-        OWNER="octocat",
-    )
-    calls = sandbox.calls()
-    assert not any(c.startswith("issue comment 9") for c in calls)
-    assert any(c.startswith("issue create") for c in calls)
-
-
-@needs_tools
-def test_the_digest_does_not_post_into_a_near_miss_title_either(sandbox):
-    (sandbox.dir / "report.md").write_text("- `first-use.yml`: 1 of 2 runs failed\n")
-    script = step_script(load("keepalive-digest.yml"), "digest", "Write to the standing issue")
-    sandbox(
-        script,
+        step_script(load(DIGEST), "digest", WRITE),
         GH_STUB_ISSUES=issue(9, "Notes on scheduled workflow problems in March"),
         TITLE="scheduled workflow problems",
         OWNER="octocat",
@@ -338,347 +227,17 @@ def test_the_digest_does_not_post_into_a_near_miss_title_either(sandbox):
     assert any(c.startswith("issue create") for c in calls)
 
 
-@needs_tools
-def test_the_test_input_posts_a_marked_line_even_when_nobody_is_new(sandbox):
-    (sandbox.dir / "report.md").write_text("")
-    script = step_script(load("first-use.yml"), "first-use", TELL)
-    sandbox(script, TEST="true", GH_STUB_ISSUES=issue(42, "first use"), TITLE="first use")
-    assert any(c.startswith("issue comment 42") for c in sandbox.calls())
-    assert "TEST" in (sandbox.dir / "report.md").read_text()
-
-
-# -- first-use: what it may hold and where it runs -------------------------------------
-
-
-def test_it_runs_every_hour_and_not_on_keepalives_minute():
-    crons = [entry["cron"] for entry in triggers(load("first-use.yml"))["schedule"]]
-    assert len(crons) == 1
-    minute, hour, day, month, weekday = crons[0].split()
-    assert (hour, day, month, weekday) == ("*", "*", "*", "*"), "hourly"
-    keepalive_minute = triggers(load("keepalive.yml"))["schedule"][0]["cron"].split()[0]
-    assert minute != keepalive_minute
-
-
-def test_it_can_be_run_by_hand_with_a_test_input_that_defaults_off():
-    inputs = triggers(load("first-use.yml"))["workflow_dispatch"]["inputs"]
-    assert inputs["test"]["default"] is False
-
-
-def test_the_only_secret_is_the_read_only_url_and_no_mail_credential_exists():
-    text = (WORKFLOWS / "first-use.yml").read_text()
-    used = set(re.findall(r"secrets\.([A-Z0-9_]+)", text))
-    # The secret's name on GitHub, which the rename to Numera left alone; the job exports it as
-    # `NUMERA_TRAIL_READ_URL` (see test_the_job_hands_the_command_the_variable_it_reads).
-    assert used == {"SCINUMBERS_TRAIL_READ_URL"}, (
-        f"first-use holds {sorted(used)}: it must hold the read-only URL and nothing else "
-        "(not the Neon API key, which can delete the project, and not a mail credential)"
-    )
-
-
-def test_it_may_write_issues_and_nothing_else():
-    permissions = load("first-use.yml")["permissions"]
-    writes = {name for name, level in permissions.items() if level == "write"}
-    assert writes == {"issues"}
-    # `actions: read` is there for the run history the window is computed from.
-    assert set(permissions) <= {"contents", "actions", "issues"}
-
-
-def test_the_runner_is_pinned_not_the_floating_label():
-    runner = load("first-use.yml")["jobs"]["first-use"]["runs-on"]
-    assert runner != "ubuntu-latest"
-
-
-def test_two_ticks_cannot_overlap():
-    assert load("first-use.yml")["concurrency"]["cancel-in-progress"] is False
-    assert load("first-use.yml")["concurrency"]["group"]
-
-
-def test_no_address_is_written_into_the_file_and_exclusions_come_from_a_variable():
-    text = (WORKFLOWS / "first-use.yml").read_text()
-    assert not re.search(r"[\w.+-]+@[\w-]+\.[a-z]{2,}", text), "an address is in a committed file"
-    assert "vars.FIRST_USE_EXCLUDE" in text
-
-
-def test_the_report_is_never_printed_to_the_log():
-    # Reader addresses are in the report. The issue is where they belong; the log of
-    # a run is a second, wider place. Any line that prints the file without
-    # redirecting it would put them there.
-    for line in all_run_lines(load("first-use.yml")):
-        if "report.md" in line and re.match(r"\s*(cat|echo|printf|tee)\b", line):
-            assert ">" in line, f"prints the report to the log: {line.strip()}"
-
-
-def test_the_dependencies_of_the_job_that_holds_the_credential_are_exact():
-    # It runs with the database URL in its environment, 24 times a day, outside
-    # `uv.lock`. A floating release would run with that URL.
-    text = (WORKFLOWS / "first-use.yml").read_text()
-    pins = re.findall(r'--with "([^"]+)"', text)
-    assert pins, "the job installs nothing explicitly: check what it runs"
-    assert all("==" in pin for pin in pins), f"unpinned: {pins}"
-
-
-# -- first-use: the window follows the schedule, not the clock ------------------------
-
-ASK = "Ask who is new"
-
-
-def iso_ago(minutes: int) -> str:
-    moment = datetime.now(UTC) - timedelta(minutes=minutes)
-    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def success(*minutes_ago: int) -> str:
-    """Newest first, as `gh run list` returns them."""
-    return "[" + ",".join(f'{{"createdAt":"{iso_ago(m)}"}}' for m in minutes_ago) + "]"
-
-
-def ask(sandbox, runs: str, **env):
-    script = step_script(load("first-use.yml"), "first-use", ASK)
-    return sandbox(script, GH_STUB_RUNS_FIRST_USE_YML=runs, **env)
-
-
-def window_passed(sandbox) -> int | None:
-    calls = sandbox.uv_calls()
-    assert len(calls) == 1, f"expected one command invocation, got {calls}"
-    match = re.search(r"--minutes (\d+)", calls[0])
-    return int(match.group(1)) if match else None
-
-
-#: How much later than the test's own clock the step's `date` may run. The lower
-#: bounds below are exact (the overlap is part of the requirement); the upper bounds
-#: allow for a loaded machine, because one full-suite run failed an earlier, tighter
-#: +2 band once and could not be reproduced in 12 runs under CPU load. What each test
-#: must distinguish is far wider than this (a 3-hour window from a 10-hour one).
-SLACK = 10
-
-
-@needs_tools
-def test_the_window_reaches_back_to_the_previous_successful_run(sandbox):
-    # GitHub fires this "hourly" schedule every 4-7 hours. A fixed look-back saw
-    # about a quarter of arrivals; looking back to the last success misses none.
-    ask(sandbox, success(180))
-    got = window_passed(sandbox)
-    assert 186 <= got <= 186 + SLACK, f"3 hours since the last run plus the overlap; got {got}"
-
-
-@needs_tools
-def test_the_window_keeps_an_overlap_so_a_slow_start_cannot_open_a_gap(sandbox):
-    ask(sandbox, success(2))
-    got = window_passed(sandbox)
-    assert got >= 2 + 6, f"two minutes since the last run needs at least the overlap; got {got}"
-
-
-@needs_tools
-def test_the_newest_success_decides_not_an_older_one(sandbox):
-    ask(sandbox, success(120, 600))
-    got = window_passed(sandbox)
-    assert 126 <= got <= 126 + SLACK, (
-        f"the 2-hour-old success decides, not the 10-hour-old; got {got}"
-    )
-
-
-@needs_tools
-def test_with_no_earlier_success_the_commands_own_default_applies(sandbox):
-    ask(sandbox, "[]")
-    got = window_passed(sandbox)
-    assert got is None, f"no --minutes expected so the command uses its default; got {got}"
-
-
-@needs_tools
-def test_a_long_outage_is_capped_at_a_week(sandbox):
-    ask(sandbox, success(60 * 24 * 30))
-    got = window_passed(sandbox)
-    assert got == 10080, f"a month's outage is capped at a week; got {got}"
-
-
-@needs_tools
-def test_only_successful_runs_of_this_workflow_set_the_window(sandbox):
-    # A failed or cancelled run is not a success, so the next run covers its gap.
-    ask(sandbox, success(60))
-    asked = [c for c in sandbox.calls() if c.startswith("run list")]
-    assert len(asked) == 1
-    assert "--workflow first-use.yml" in asked[0] and "--status success" in asked[0]
-
-
-@needs_tools
-def test_exclusions_are_passed_one_per_address_with_spaces_and_blanks_dropped(sandbox):
-    ask(sandbox, "[]", EXCLUDE="a@example.org, B@example.org,")
-    (call,) = sandbox.uv_calls()
-    assert call.count("--exclude") == 2
-    assert "--exclude a@example.org" in call and "--exclude B@example.org" in call
-
-
-@needs_tools
-def test_the_report_is_written_to_a_file_for_the_next_step(sandbox):
-    ask(sandbox, "[]", UV_STUB_OUT="  new@example.org  signed in")
-    assert "new@example.org" in (sandbox.dir / "report.md").read_text()
-
-
-@needs_tools
-def test_a_failing_command_fails_the_step_rather_than_looking_like_a_quiet_hour(sandbox):
-    result = ask(sandbox, "[]", UV_STUB_EXIT="1")
-    assert result.returncode != 0
-
-
-# -- first-use: the quiet-week message --------------------------------------------------
-
-DAY = 24 * 60
-
-
-def view(created_minutes_ago: int, *comment_minutes_ago: int) -> str:
-    """The standing issue as `gh issue view --json createdAt,comments` returns it."""
-    comments = ",".join(f'{{"createdAt":"{iso_ago(m)}"}}' for m in comment_minutes_ago)
-    return f'{{"createdAt":"{iso_ago(created_minutes_ago)}","comments":[{comments}]}}'
-
-
-def quiet_run(sandbox, issue_view: str, *, runs_json: str = "[]", issues=None, **env):
-    """The delivery step on a run that found nobody new."""
-    (sandbox.dir / "report.md").write_text("")
-    script = step_script(load("first-use.yml"), "first-use", TELL)
-    return sandbox(
-        script,
-        TEST=env.pop("TEST", "false"),
-        TITLE="first use",
-        OWNER="octocat",
-        GH_STUB_ISSUES=issues if issues is not None else issue(42, "first use"),
-        GH_STUB_ISSUE_VIEW=issue_view,
-        GH_STUB_RUNS_FIRST_USE_YML=runs_json,
-        **env,
-    )
-
-
-def heartbeat_body(sandbox) -> str:
-    return (sandbox.dir / "body.md").read_text()
-
-
-@needs_tools
-def test_a_quiet_week_delivers_exactly_one_message(sandbox):
-    quiet_run(sandbox, view(8 * DAY))
-    assert [c for c in posts(sandbox) if c.startswith("issue comment 42")]
-    assert len(posts(sandbox)) == 1
-    assert heartbeat_body(sandbox).startswith("@octocat\n")
-
-
-@needs_tools
-def test_less_than_seven_days_since_the_last_delivery_delivers_nothing(sandbox):
-    quiet_run(sandbox, view(6 * DAY))
-    assert posts(sandbox) == []
-
-
-@needs_tools
-def test_the_seven_days_are_counted_exactly_not_roughly(sandbox):
-    quiet_run(sandbox, view(7 * DAY - 10))
-    assert posts(sandbox) == [], "ten minutes short of seven days"
-
-
-@needs_tools
-def test_ten_minutes_past_seven_days_delivers(sandbox):
-    quiet_run(sandbox, view(7 * DAY + 10))
-    assert len(posts(sandbox)) == 1
-
-
-@needs_tools
-def test_the_newest_comment_decides_whatever_it_was(sandbox):
-    # A report, a test line or an earlier heartbeat are all comments, and any of them
-    # restarts the seven days. The issue is 20 days old; the newest comment is 2 days old.
-    quiet_run(sandbox, view(20 * DAY, 10 * DAY, 2 * DAY))
-    assert posts(sandbox) == []
-
-
-@needs_tools
-def test_old_comments_do_not_postpone_a_message_that_is_due(sandbox):
-    quiet_run(sandbox, view(20 * DAY, 15 * DAY, 9 * DAY))
-    assert len(posts(sandbox)) == 1
-
-
-@needs_tools
-def test_a_message_just_delivered_is_not_repeated_by_the_next_run(sandbox):
-    quiet_run(sandbox, view(30 * DAY, 60))
-    assert posts(sandbox) == []
-
-
-@needs_tools
-def test_with_no_standing_issue_nothing_is_delivered_and_nothing_is_created(sandbox):
-    result = quiet_run(sandbox, "{}", issues="[]")
-    assert result.returncode == 0, "a quiet run with no issue to measure from must succeed quietly"
-    assert posts(sandbox) == []
-
-
-@needs_tools
-def test_a_report_is_delivered_as_before_with_no_quiet_week_message_added(sandbox):
-    (sandbox.dir / "report.md").write_text("  new@example.org  signed in\n")
-    script = step_script(load("first-use.yml"), "first-use", TELL)
-    sandbox(
-        script,
-        TEST="false",
-        TITLE="first use",
-        OWNER="octocat",
-        GH_STUB_ISSUES=issue(42, "first use"),
-        GH_STUB_ISSUE_VIEW=view(30 * DAY),
-    )
-    assert len(posts(sandbox)) == 1
-    body = heartbeat_body(sandbox)
-    assert "new@example.org" in body and "found no new reader" not in body
-
-
-@needs_tools
-def test_a_test_run_posts_its_line_and_no_quiet_week_message(sandbox):
-    quiet_run(sandbox, view(30 * DAY), TEST="true")
-    assert len(posts(sandbox)) == 1
-    body = heartbeat_body(sandbox)
-    assert "TEST" in body and "found no new reader" not in body
-
-
-@needs_tools
-def test_the_message_says_what_the_check_found_and_does_not_claim_nobody_exists(sandbox):
-    quiet_run(sandbox, view(8 * DAY), runs_json=success(60, 600, 1200, 3000))
-    body = heartbeat_body(sandbox)
-    assert "found no new reader" in body
-    assert "last 7 days" in body
-    assert "may be what is wrong" in body
-    assert re.search(r"This check ran at \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC", body)
-    lowered = body.lower()
-    for claim in ("there are no", "no readers exist", "nobody has", "none exist", "no one"):
-        assert claim not in lowered, f"asserts rather than observes: {claim!r}"
-
-
-@needs_tools
-def test_the_message_counts_the_successful_checks_and_this_one(sandbox):
-    # Four earlier successes in the last week, plus the run that is writing this.
-    quiet_run(sandbox, view(8 * DAY), runs_json=success(60, 600, 1200, 3000))
-    assert "5 checks" in heartbeat_body(sandbox)
-
-
-@needs_tools
-def test_with_no_earlier_success_the_message_counts_just_this_check(sandbox):
-    quiet_run(sandbox, view(8 * DAY), runs_json="[]")
-    assert "1 checks" in heartbeat_body(sandbox) or "1 check " in heartbeat_body(sandbox)
-
-
-@needs_tools
-def test_the_count_asks_for_successful_runs_of_this_workflow_in_the_last_week(sandbox):
-    quiet_run(sandbox, view(8 * DAY))
-    asked = [c for c in sandbox.calls() if c.startswith("run list")]
-    assert len(asked) == 1
-    assert "--workflow first-use.yml" in asked[0] and "--status success" in asked[0]
-    assert "--created" in asked[0]
-
-
-@needs_tools
-def test_a_check_that_could_not_read_the_issue_fails_instead_of_reporting_a_quiet_week(sandbox):
-    result = quiet_run(sandbox, view(8 * DAY), GH_STUB_VIEW_EXIT="1")
-    assert result.returncode != 0
-    assert posts(sandbox) == []
-
-
-def test_the_job_hands_the_command_the_variable_it_reads():
-    """The job's environment names what `numera-first-use` reads, whatever the secret is called.
-
-    The rename to Numera changed the variable the command reads; a job still exporting the old
-    one would run the command with no URL, every hour, from the default branch.
-    """
-    from numera_ask.first_use import URL_ENV
-
-    env = load("first-use.yml")["jobs"]["first-use"]["env"]
-    assert URL_ENV in env
-    assert "secrets." in env[URL_ENV]
+# -- what no workflow here may do -----------------------------------------------------------
+
+
+def test_no_workflow_here_reads_the_trail_or_reports_readers():
+    """The repository is public, and so are its issues and Actions logs (ADR-2050). The job
+    that names readers lives in DukeOfErl/numera-ops; this fails if it, or anything like it,
+    comes back."""
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        # What a workflow does, not what its comments say about where the job went.
+        text = "\n".join(
+            line for line in path.read_text().splitlines() if not line.lstrip().startswith("#")
+        )
+        for marker in ("TRAIL_READ_URL", "first_use", "first-use", "FIRST_USE_EXCLUDE"):
+            assert marker not in text, f"{path.name} mentions {marker}"

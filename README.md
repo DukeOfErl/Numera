@@ -777,8 +777,11 @@ back to when the **previous successful run** began, plus six minutes
 ([ADR-1290](docs/decisions/1290-the-first-use-window-follows-the-schedule.md)): nobody falls in a
 gap, and only the overlap repeats. By hand, `--minutes` sets it, defaulting to seven hours.
 
-It is scheduled hourly in `.github/workflows/first-use.yml` and comments on one standing issue, `first use`,
-which mails the owner through GitHub — no mail account. Every comment begins with an `@` mention of
+It is scheduled hourly in the **private repository `DukeOfErl/numera-ops`** (`first-use.yml` there),
+not in this one: this repository is public, and the job names readers
+([ADR-2050](docs/decisions/2050-the-first-use-alert-runs-in-a-private-repository.md)). It checks
+this repository's code out and comments on one standing issue there, `first use`, which mails the
+owner through GitHub — no mail account. Every comment begins with an `@` mention of
 the repository owner, because the Actions bot opens the issue and so the owner would not otherwise be
 "participating" in it. It holds **one secret, the URL of a role that
 can read three columns of the trail and nothing else**, never the Neon API key
@@ -787,16 +790,16 @@ can read three columns of the trail and nothing else**, never the Neon API key
 1. On the Neon branch the deployment writes to (`alpha`), run `sql/first_use_reader.sql` after
    replacing the token `<PASSWORD>` with a real password in single quotes (left unedited it is
    a syntax error, on purpose). Roles are per branch.
-2. Add the repository secret `NUMERA_TRAIL_READ_URL` (that role's URL, `postgresql+psycopg://…`)
-   and the variable `FIRST_USE_EXCLUDE` (your own and test addresses, comma-separated).
-3. The workflow exists only once it is on `main`. Run it by hand with **`test`** ticked and check that
+2. In `DukeOfErl/numera-ops`, add the secrets `NUMERA_TRAIL_READ_URL` (that role's URL,
+   `postgresql+psycopg://…`) and `FIRST_USE_EXCLUDE` (your own and test addresses,
+   comma-separated; a secret, so Actions masks it in the log).
+3. Enable the workflow there. Run it by hand with **`test`** ticked and check that
    the mail arrives: a `test` run delivered mail on 2026-10-03 with the mention in place (whether
    the mention alone is what did it was not tried)
    ([ADR-1270](docs/decisions/1270-first-use-reaches-the-operator-through-a-standing-issue.md)).
 
 By hand: `NUMERA_TRAIL_READ_URL=… numera-first-use --minutes 1440 --exclude me@example.org`.
-`keepalive-digest` also watches this workflow, so a run that fails or never happens reaches you once a
-day.
+`numera-ops` has its own daily digest, so a run that fails or never happens reaches you once a day.
 
 **A quiet week is told apart from a broken check.** After seven days with nothing delivered to you
 — a report, a `test` line or an earlier message of this kind all count — the workflow posts one
@@ -807,11 +810,12 @@ check may be what is wrong
 is nothing to count from, so none is sent until the first post creates it. A comment you write on the
 issue also restarts the week.
 
-**Reader addresses go into that issue comment.** That is fine while the repository is private and
-publishes them if it is not
-([ADR-1280](docs/decisions/1280-reader-addresses-appear-in-an-issue-so-the-repository-stays-private.md));
-the report is written to a file, never to the run's log (the exclusion list, which is your own
-addresses, is the one thing Actions does print).
+**Reader addresses go into that issue comment, in the private `numera-ops`**, never into this
+repository's issues or logs
+([ADR-2050](docs/decisions/2050-the-first-use-alert-runs-in-a-private-repository.md), superseding
+[ADR-1280](docs/decisions/1280-reader-addresses-appear-in-an-issue-so-the-repository-stays-private.md));
+the report is written to a file, never to the run's log, and the exclusion list is a secret there.
+`tests/test_scheduled_workflows.py` fails if a workflow here ever reads the trail again.
 
 **Five roles exist — student, scientist, senior scientist, dev and admin — as
 foundations, built and tested now so that ratings can later be weighted by who
