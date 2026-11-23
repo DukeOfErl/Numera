@@ -1360,11 +1360,18 @@ COVERED.update(
 )
 
 
-# `move-first-use-alerts` (ADR-2050): the delivery left this repository for the private
-# DukeOfErl/numera-ops, with the tests that execute its steps (`tests/test_workflows.py`
-# there). The command it runs is still here and still tested (`test_first_use.py`).
-TESTED_IN_NUMERA_OPS = (
-    "A new reader's arrival reaches the operator on a schedule, with no mail account of their own",
+# ADR-2050: the delivery left this repository for the private DukeOfErl/numera-ops, with the
+# tests that execute its steps (`tests/test_workflows.py` there; off until Numera is public).
+# What stays here is the half this repository still owns: the report names the reader and the
+# first, and the contract the job runs on holds.
+COVERED.update(
+    {
+        "A new reader's arrival reaches the operator on a schedule, "
+        "with no mail account of their own": (
+            "test_first_use.py::test_a_first_sign_in_is_reported_as_a_sign_in_and_not_as_a_question",
+            "test_first_use.py::test_what_the_private_alert_job_relies_on_holds_here",
+        ),
+    }
 )
 
 UNMAPPED: dict[str, str] = {
@@ -1372,7 +1379,6 @@ UNMAPPED: dict[str, str] = {
     **dict.fromkeys(AWAITING_THE_JUDGE, "deferred to add-judged-faithfulness; no judge yet"),
     **dict.fromkeys(AWAITING_THE_PROMPT, "add-answer-shape is unbuilt; the prompt is unchanged"),
     **dict.fromkeys(AWAITING_HARDEN_HARVEST, "harden-harvest is proposed, not built"),
-    **dict.fromkeys(TESTED_IN_NUMERA_OPS, "delivered and tested in DukeOfErl/numera-ops"),
 }
 
 

@@ -759,7 +759,7 @@ start. `.github/workflows/keepalive.yml` runs hourly and `bin/keepalive.py` visi
 app in a headless browser, clicks the sleep screen's button if it is showing, and
 fails unless the door renders. A failed run would mail once an hour, so
 `keepalive-digest.yml` is the notice instead: once a day it comments on one standing
-issue, "keepalive problems", if any run failed or none ran at all (GitHub pauses
+issue, "scheduled workflow problems", if any run failed or none ran at all (GitHub pauses
 scheduled workflows after 60 days without repository activity). Switch GitHub's own
 failure mail off under Settings > Notifications > Actions, or both will reach you.
 It needs no secrets. GitHub runs scheduled workflows from the default branch only, so it does
@@ -792,8 +792,12 @@ can read three columns of the trail and nothing else**, never the Neon API key
    a syntax error, on purpose). Roles are per branch.
 2. In `DukeOfErl/numera-ops`, add the secrets `NUMERA_TRAIL_READ_URL` (that role's URL,
    `postgresql+psycopg://…`) and `FIRST_USE_EXCLUDE` (your own and test addresses,
-   comma-separated; a secret, so Actions masks it in the log).
-3. Enable the workflow there. Run it by hand with **`test`** ticked and check that
+   comma-separated; a secret, and the job masks each address in it before using it, since
+   Actions masks only a secret's whole value).
+3. **When this repository is public**, enable the workflow there: it checks this repository out
+   with no token, so while this one is private every run would fail at checkout. **Until then no
+   alert runs anywhere**: it was switched off here on 2026-11-23, so check by hand
+   (`numera-first-use`, below). Run it by hand with **`test`** ticked and check that
    the mail arrives: a `test` run delivered mail on 2026-10-03 with the mention in place (whether
    the mention alone is what did it was not tried)
    ([ADR-1270](docs/decisions/1270-first-use-reaches-the-operator-through-a-standing-issue.md)).

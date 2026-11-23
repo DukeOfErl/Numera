@@ -35,24 +35,11 @@ def load(name: str) -> dict:
     return yaml.safe_load((WORKFLOWS / name).read_text())
 
 
-def triggers(doc: dict) -> dict:
-    # YAML 1.1 reads the bare key `on` as the boolean True.
-    return doc.get("on") or doc[True]
-
-
 def step_script(doc: dict, job: str, step_name: str) -> str:
     for step in doc["jobs"][job]["steps"]:
         if step.get("name") == step_name:
             return step["run"]
     raise AssertionError(f"no step named {step_name!r} in {job}")
-
-
-def all_run_lines(doc: dict) -> list[str]:
-    lines = []
-    for job in doc["jobs"].values():
-        for step in job["steps"]:
-            lines += step.get("run", "").splitlines()
-    return lines
 
 
 STUB_GH = """#!/usr/bin/env bash
@@ -64,31 +51,15 @@ case "$1 $2" in
     for i in "$@"; do [ "$prev" = "--jq" ] && expr="$i"; prev="$i"; done
     echo "${GH_STUB_ISSUES:-[]}" | jq -r "$expr"
     ;;
-  "issue view")
-    [ -n "${GH_STUB_VIEW_EXIT:-}" ] && exit "$GH_STUB_VIEW_EXIT"
-    expr=""; for i in "$@"; do [ "$p3" = "--jq" ] && expr="$i"; p3="$i"; done
-    # Not `${VAR:-{}}`: that expansion ends at the first `}`, so a set value would
-    # gain a stray one and `jq` would see invalid JSON.
-    v="$GH_STUB_ISSUE_VIEW"; [ -n "$v" ] || v='{}'
-    echo "$v" | jq -r "$expr"
-    ;;
   "run list")
     # `--workflow NAME` selects which fixture to return.
     for i in "$@"; do last="$prev"; prev="$i"; [ "$last" = "--workflow" ] && wf="$i"; done
-    wf="${wf:-$4}"
     var="GH_STUB_RUNS_$(echo "$wf" | tr '.-' '__' | tr a-z A-Z)"
     out="${!var:-[]}"
     expr=""; for i in "$@"; do [ "$p2" = "--jq" ] && expr="$i"; p2="$i"; done
     if [ -n "$expr" ]; then echo "$out" | jq -r "$expr"; else echo "$out"; fi
     ;;
 esac
-"""
-
-
-STUB_UV = """#!/usr/bin/env bash
-echo "$@" >> "$UV_CALLS"
-echo "${UV_STUB_OUT:-}"
-exit "${UV_STUB_EXIT:-0}"
 """
 
 
@@ -101,17 +72,11 @@ def sandbox(tmp_path):
     stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
     calls = tmp_path / "calls.log"
     calls.write_text("")
-    uv_stub = bin_dir / "uv"
-    uv_stub.write_text(STUB_UV)
-    uv_stub.chmod(uv_stub.stat().st_mode | stat.S_IEXEC)
-    uv_calls = tmp_path / "uv_calls.log"
-    uv_calls.write_text("")
 
     def run(script: str, **env) -> subprocess.CompletedProcess:
         full = {
             "PATH": f"{bin_dir}:{os.environ['PATH']}",
             "GH_CALLS": str(calls),
-            "UV_CALLS": str(uv_calls),
             "TITLE": "the title",
             **env,
         }
@@ -121,17 +86,11 @@ def sandbox(tmp_path):
 
     run.dir = tmp_path
     run.calls = lambda: calls.read_text().splitlines()
-    run.uv_calls = lambda: uv_calls.read_text().splitlines()
     return run
 
 
 def issue(number: int, title: str) -> str:
     return f'[{{"number":{number},"title":"{title}"}}]'
-
-
-def posts(sandbox) -> list[str]:
-    """What was written to GitHub: comments and new issues, not the reads before them."""
-    return [c for c in sandbox.calls() if c.startswith(("issue comment", "issue create"))]
 
 
 def runs(*conclusions: str) -> str:
@@ -230,14 +189,31 @@ def test_the_digest_does_not_post_into_a_near_miss_title(sandbox):
 # -- what no workflow here may do -----------------------------------------------------------
 
 
+#: What a job that names readers would mention: the alert's command, setting and exclusions,
+#: `numera-pending` (which also lists readers' addresses, from the Neon control plane) and the
+#: key it needs. A text match over what runs, so a name not on this list gets past it.
+READER_MARKERS = (
+    "TRAIL_READ_URL",
+    "first_use",
+    "first-use",
+    "FIRST_USE_EXCLUDE",
+    "numera-pending",
+    "numera_ask.pending",
+    "NEON_API_KEY",
+)
+
+
 def test_no_workflow_here_reads_the_trail_or_reports_readers():
     """The repository is public, and so are its issues and Actions logs (ADR-2050). The job
-    that names readers lives in DukeOfErl/numera-ops; this fails if it, or anything like it,
-    comes back."""
-    for path in sorted(WORKFLOWS.glob("*.yml")):
+    that names readers lives in DukeOfErl/numera-ops; this fails if it, or a job like it --
+    `numera-pending` included -- comes back, in a workflow or a composite action."""
+    github = ROOT / ".github"
+    files = sorted([*github.rglob("*.yml"), *github.rglob("*.yaml")])
+    assert any(path.parent == WORKFLOWS for path in files), "found no workflows to check"
+    for path in files:
         # What a workflow does, not what its comments say about where the job went.
         text = "\n".join(
             line for line in path.read_text().splitlines() if not line.lstrip().startswith("#")
         )
-        for marker in ("TRAIL_READ_URL", "first_use", "first-use", "FIRST_USE_EXCLUDE"):
-            assert marker not in text, f"{path.name} mentions {marker}"
+        for marker in READER_MARKERS:
+            assert marker not in text, f"{path.relative_to(ROOT)} mentions {marker}"

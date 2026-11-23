@@ -23,7 +23,8 @@ command stays, the operator runs it by hand, and a first reader goes unnoticed u
 
 The job, its standing issue and a digest of its own live in the private `DukeOfErl/numera-ops`.
 It checks this repository's code out and runs `numera_ask.first_use` unchanged; it holds the
-read-only trail URL and, now as a secret so Actions masks it, the exclusion list. It holds **no
+read-only trail URL and, now as a secret, the exclusion list, each address of which the job masks
+itself (Actions masks a secret's whole value only, not the addresses split out of it). It holds **no
 credential to this repository**: the checkout needs none once this repository is public, which is
 why the switch-over happens at the moment of going public, with the alert disabled here from
 2026-11-23 until then.
@@ -35,6 +36,11 @@ they prove ("A new reader's arrival reaches the operator…", `user-identity`) i
 workflow here reads the trail or names `first-use` again.
 
 ## Trade-off accepted
+
+**No alert runs anywhere until this repository is public.** It was disabled here on 2026-11-23,
+and `numera-ops` cannot check out a private repository without the token it deliberately does not
+hold. Meanwhile the operator runs `numera-first-use` by hand; a reader first seen in that time is
+reported by the first run after the switch-over only if the window reaches back that far.
 
 **Numera's suite no longer tests the delivery.** A change to the command that breaks the job is
 caught only when `numera-ops` runs, and that suite runs only on a push there. The job runs this
