@@ -12,6 +12,8 @@ any release; `1.0.0` when it stabilizes.
 
 ### Added
 
+- **The README says the code carries no licence** (all rights reserved, by choice), and which
+  material here belongs to others: the open-access paper fixtures and the BioNumbers-derived data.
 - **A commit that adds an email address is refused** (`bin/check_addresses.py`, a pre-commit
   hook). Placeholders on the reserved example domains pass, and so do the named exceptions: the
   open-access paper fixtures, and the privacy policy's contact line. A personal address in a

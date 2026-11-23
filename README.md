@@ -1060,3 +1060,16 @@ search rather than of selection. The honest remaining gap is that nothing yet ju
 - `src/numera_ask/events.py` — the port: everything the agent emits and the one command it takes
 
 To cite BioNumbers itself: Milo et al. *Nucl. Acids Res.* (2010) 38 (suppl 1): D750–D753.
+
+## Licence
+
+**No licence is granted.** The code is published to be read; all rights are reserved, © 2026
+DukeOfErl. That is a deliberate choice for a portfolio repository, not an oversight — ask if you
+want to reuse something.
+
+Some material here was never ours to license. The open-access papers under
+`tests/fixtures/europepmc/` keep the licences stated in each file. BioNumbers is the work of its
+authors: the six-entry test fixture, the question set and the values quoted in the evaluation
+findings are used with their permission, and the database itself is not in this repository
+(ADR-0170).
+
