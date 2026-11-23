@@ -21,6 +21,9 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **The repository is `DukeOfErl/Numera`** (renamed from `DukeOfErl/BioNumbers` on 2026-11-23;
+  GitHub redirects the old address). The validator identifies itself to Europe PMC and OpenRouter
+  as `Numera-validator`, with the new address.
 - **The review page has its own secrets section**, `[connections.review]` (ADR-2000). It read the
   trail's `[connections.usage]` before, so from a checkout whose secrets point the trail at Neon it
   opened a database with no review tables and failed. With no review section it uses

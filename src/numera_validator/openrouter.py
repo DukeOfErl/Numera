@@ -60,7 +60,7 @@ CHARS_PER_TOKEN = 3.0
 
 #: Sent as OpenRouter's app attribution headers; optional, and not a credential.
 APP_HEADERS = {
-    "HTTP-Referer": "https://github.com/DukeOfErl/BioNumbers",
+    "HTTP-Referer": "https://github.com/DukeOfErl/Numera",
     "X-Title": "Numera validator prototype",
 }
 
