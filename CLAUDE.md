@@ -89,6 +89,7 @@ what let the blocks drift: no branch can see another's copy.
 | `rename-to-numera` | `1900`–`1940` — `1900` written; reserved 2026-11-19, after `add-answer-view-redesign`'s `1850`–`1890` |
 | `add-monitor-dashboard` | `1950`–`1990` — renumbered 2026-11-22 from `1300`–`1340`, which `speed-up-test-loop` holds on `dev`; reserved after `rename-to-numera`'s `1900`–`1940` |
 | `review-store-section` | `2000`–`2040` — `2000` written; reserved 2026-11-22, after `add-monitor-dashboard`'s `1950`–`1990` on `feat/monitor-dashboard` |
+| `chore/first-use-alerts-to-numera-ops` (no OpenSpec change: the requirement's text is unchanged; where it is delivered moved) | `2050`–`2090` — `2050` written; reserved 2026-11-23, after `review-store-section`'s `2000`–`2040` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets
@@ -197,7 +198,7 @@ core, and a test there refuses a name with no file behind it.
 | `references.py` | A harvested paper's reference in Chicago author-date, from its CSL-JSON, by citeproc-py; first author and year for the evidence list, from the record or BioNumbers' reference string. **Presentation**: the model names no paper and is never handed the authors (ADR-1640, ADR-1850) |
 | `enrol.py` | The two commands that open and close an account: `numera-enrol` mints a capped key and inserts the row, withdrawing the key if the row cannot be written (ADR-0900); `numera-withdraw` disables the row and revokes the key, in that order, so a partial failure leaves a refused account rather than a live one (ADR-1150). A harness module |
 | `pending.py` | The daily check (`numera-pending`): who is **still** stuck at the door, read out of the trail. Resolution is derived from `user_email` and `signin.refused` rather than tracked, so no state is added. **Silent when nobody is stuck** — the contract a cron line rests on. A harness module |
-| `first_use.py` | The hourly check (`numera-first-use`): who was **just seen for the first time**, signing in or asking, read out of the trail with no state kept. Holds a **read-only database URL, never the Neon API key**, and sets its own transaction read-only. **Silent when nobody is new.** The window is computed by the workflow from the previous successful run. A harness module (ADR-1250, ADR-1260, ADR-1290) |
+| `first_use.py` | The hourly check (`numera-first-use`): who was **just seen for the first time**, signing in or asking, read out of the trail with no state kept. Holds a **read-only database URL, never the Neon API key**, and sets its own transaction read-only. **Silent when nobody is new.** The window is computed by the workflow from the previous successful run; that workflow lives in the private DukeOfErl/numera-ops, and nothing here schedules the module (ADR-2050). A harness module (ADR-1250, ADR-1260, ADR-1290) |
 | `door_demo.py` | The sign-in door's demo: real answers from `door_demo.json`, shortened with every edit recorded, typed and streamed in an iframe. **Presentation**; committed under ADR-1200, real by ADR-1210, shortened by ADR-1220. Its one chart is drawn by `bin/door-demo-chart`, not by the app (ADR-1230); citations are grey superscripts (ADR-1240) |
 | `neon.py` | Neon's control plane: a branch's *name* to its connection URL, so no database url is kept on disk |
 

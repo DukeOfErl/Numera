@@ -253,3 +253,39 @@ def test_the_retired_url_name_is_refused_by_name(monkeypatch, capsys):
 
     assert main([]) == 2
     assert "SCINUMBERS_TRAIL_READ_URL is now NUMERA_TRAIL_READ_URL" in capsys.readouterr().err
+
+
+#: What DukeOfErl/numera-ops's `first-use.yml` installs to run this module, exactly. Moving
+#: `uv.lock` fails the test below; move that workflow's `--with` pins with it (ADR-2050).
+OPS_JOB_PINS = {"sqlalchemy": "2.0.52", "psycopg": "3.3.5"}
+
+
+def test_what_the_private_alert_job_relies_on_holds_here():
+    """The job in numera-ops runs this module from `dev` with nothing of its own but a
+    workflow, so a rename here breaks it on the next tick and only its digest would say so.
+    The contract: the module path, the variable it reads, the two flags it passes, and the
+    driver versions it pins (ADR-2050)."""
+    import argparse
+    import tomllib
+
+    assert first_use.__name__ == "numera_ask.first_use"
+    assert URL_ENV == "NUMERA_TRAIL_READ_URL"
+
+    options = set()
+    real = argparse.ArgumentParser.add_argument
+
+    def spy(self, *names, **kwargs):
+        options.update(names)
+        return real(self, *names, **kwargs)
+
+    argparse.ArgumentParser.add_argument = spy
+    try:
+        with pytest.raises(SystemExit):
+            main(["--help"])
+    finally:
+        argparse.ArgumentParser.add_argument = real
+    assert {"--minutes", "--exclude"} <= options
+
+    lock = tomllib.loads((Path(__file__).resolve().parents[1] / "uv.lock").read_text())
+    locked = {p["name"]: p["version"] for p in lock["package"]}
+    assert {name: locked[name] for name in OPS_JOB_PINS} == OPS_JOB_PINS

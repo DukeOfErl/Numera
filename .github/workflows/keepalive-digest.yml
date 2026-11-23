@@ -1,7 +1,7 @@
 name: keepalive-digest
 
-# One mail a day instead of one per failed hour. `keepalive` and `first-use` run
-# hourly and fail loudly, but GitHub's own failure mail is switched off for the account
+# One mail a day instead of one per failed hour. `keepalive` runs hourly and fails
+# loudly, but GitHub's own failure mail is switched off for the account
 # (Settings > Notifications > Actions > "Don't notify"), so this is the notice:
 # it looks back over the last 24 hours and writes to ONE standing issue, which is
 # what mails the owner. Nothing to say, nothing written.
@@ -11,7 +11,8 @@ name: keepalive-digest
 # workflows after 60 days without repository activity, and a stopped check looks
 # exactly like a passing one.
 #
-# Like `keepalive`, this runs from the default branch only.
+# Like `keepalive`, this runs from the default branch only. `first-use` moved to the
+# private DukeOfErl/numera-ops on 2026-11-23, with a digest of its own (ADR-2050).
 on:
   schedule:
     - cron: "43 6 * * *"
@@ -29,7 +30,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       TITLE: "scheduled workflow problems"
-      # Mentioned in every comment, for the reason `first-use.yml` gives: the bot
+      # Mentioned in every comment: the bot
       # opens this issue, so only a mention reaches "Participating and @mentions".
       OWNER: ${{ github.repository_owner }}
     steps:
@@ -37,7 +38,7 @@ jobs:
         run: |
           since=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
           : > report.md
-          for workflow in keepalive.yml first-use.yml; do
+          for workflow in keepalive.yml; do
             gh run list --workflow "$workflow" --created ">=$since" --limit 100 \
               --json conclusion,url > runs.json
             # `cancelled` and in-progress runs are neither: only a conclusion that

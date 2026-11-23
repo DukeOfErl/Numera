@@ -456,25 +456,6 @@ COVERED: dict[str, tuple[str, ...]] = {
         "test_first_use_live.py::test_the_grants_alone_refuse_a_write_even_if_the_transaction_is_made_writable",
         "test_first_use_live.py::test_the_role_cannot_read_another_table",
     ),
-    "A new reader's arrival reaches the operator on a schedule, "
-    "with no mail account of their own": (
-        "test_scheduled_workflows.py::test_it_runs_every_hour_and_not_on_keepalives_minute",
-        "test_scheduled_workflows.py::test_a_report_becomes_a_comment_on_the_one_standing_issue",
-        "test_scheduled_workflows.py::test_the_first_report_opens_the_standing_issue",
-        "test_scheduled_workflows.py::test_a_run_with_nobody_new_delivers_nothing",
-        # The quiet-week message (add-first-use-heartbeat): measured from the last
-        # delivery on the standing issue, observed rather than asserted, never after a
-        # failed read.
-        "test_scheduled_workflows.py::test_a_quiet_week_delivers_exactly_one_message",
-        "test_scheduled_workflows.py::test_less_than_seven_days_since_the_last_delivery_delivers_nothing",
-        "test_scheduled_workflows.py::test_the_newest_comment_decides_whatever_it_was",
-        "test_scheduled_workflows.py::test_a_message_just_delivered_is_not_repeated_by_the_next_run",
-        "test_scheduled_workflows.py::test_with_no_standing_issue_nothing_is_delivered_and_nothing_is_created",
-        "test_scheduled_workflows.py::test_the_message_says_what_the_check_found_and_does_not_claim_nobody_exists",
-        "test_scheduled_workflows.py::test_a_check_that_could_not_read_the_issue_fails_instead_of_reporting_a_quiet_week",
-        "test_scheduled_workflows.py::test_the_only_secret_is_the_read_only_url_and_no_mail_credential_exists",
-        "test_first_use.py::test_a_first_sign_in_is_reported_as_a_sign_in_and_not_as_a_question",
-    ),
     "The operator can see who is stuck at the door, and only who is still stuck": (
         "test_pending.py::test_nothing_waiting_prints_nothing_at_all",
         "test_pending.py::test_a_request_for_the_email_is_reported_with_what_to_do",
@@ -1378,6 +1359,20 @@ COVERED.update(
     }
 )
 
+
+# ADR-2050: the delivery left this repository for the private DukeOfErl/numera-ops, with the
+# tests that execute its steps (`tests/test_workflows.py` there; off until Numera is public).
+# What stays here is the half this repository still owns: the report names the reader and the
+# first, and the contract the job runs on holds.
+COVERED.update(
+    {
+        "A new reader's arrival reaches the operator on a schedule, "
+        "with no mail account of their own": (
+            "test_first_use.py::test_a_first_sign_in_is_reported_as_a_sign_in_and_not_as_a_question",
+            "test_first_use.py::test_what_the_private_alert_job_relies_on_holds_here",
+        ),
+    }
+)
 
 UNMAPPED: dict[str, str] = {
     **dict.fromkeys(TESTED_BUT_UNNAMED, "tested, but no test named yet -- task 10.9"),
