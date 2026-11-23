@@ -52,7 +52,7 @@ FULL_TEXTS = {
 FULL_TEXT_MISSING = "PPR1090496"
 FULL_TEXT_MISSING_FIXTURE = "fulltext_missing_PPR1090496.json"
 
-USER_AGENT = "BioNumbers-validator/0.1 (research prototype; fixtures)"
+USER_AGENT = "Numera-validator/0.1 (research prototype; fixtures)"
 
 
 def main() -> None:

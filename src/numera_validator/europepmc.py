@@ -38,9 +38,7 @@ DEFAULT_BASE_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest"
 
 VERSION_OF_RECORD = "version of record"
 
-USER_AGENT = (
-    "BioNumbers-validator/0.1 (research prototype; https://github.com/DukeOfErl/BioNumbers)"
-)
+USER_AGENT = "Numera-validator/0.1 (research prototype; https://github.com/DukeOfErl/Numera)"
 
 #: The publication types discovery will not read, in the spelling the query sends. One list, two
 #: enforcement points -- the query clause below and `_exclusion_reason` -- so the index's filter

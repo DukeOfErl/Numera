@@ -495,3 +495,14 @@ def page(*records: dict, next_cursor: str = "") -> str:
 
 def core_record(name: str) -> dict:
     return json.loads(fixture(name))["resultList"]["result"][0]
+
+
+def test_the_user_agent_names_the_project_and_its_repository():
+    """Europe PMC asks clients to identify themselves; a stale name points them at nothing.
+    Renamed with the repository on 2026-11-23."""
+    from numera_validator.europepmc import USER_AGENT
+    from numera_validator.openrouter import APP_HEADERS
+
+    assert USER_AGENT.startswith("Numera-validator/")
+    assert "https://github.com/DukeOfErl/Numera)" in USER_AGENT
+    assert APP_HEADERS["HTTP-Referer"] == "https://github.com/DukeOfErl/Numera"

@@ -21,6 +21,9 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **The repository is `DukeOfErl/Numera`** (renamed from `DukeOfErl/BioNumbers` on 2026-11-23;
+  GitHub redirects the old address). The validator identifies itself to Europe PMC and OpenRouter
+  as `Numera-validator`, with the new address.
 - **The project is named Numera** (ADR-1900). The distribution is `numera`; the packages are
   `numera_ask` and `numera_validator`; the commands are `numera-ask`, `numera-eval`,
   `numera-enrol`, `numera-withdraw`, `numera-pending`, `numera-first-use` and `numera-validator`;
