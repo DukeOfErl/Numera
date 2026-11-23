@@ -38,8 +38,9 @@ from numera_validator import deployment, environment, review, store
 #: and this is the likeliest first-deploy mistake, the same one `web.admit` reports for the
 #: accounts table.
 NO_STORE = (
-    "This deployment has no review database: add a [connections.usage] section to Streamlit's "
-    "secrets and create the tables from sql/review.sql. There is nothing to review until then."
+    "This deployment has no review database: add a [connections.review] section to Streamlit's "
+    "secrets, or set NUMERA_REVIEW_DB_URL, and create the tables from sql/review.sql. There is "
+    "nothing to review until then."
 )
 
 #: The chosen box says so in its heading; the other says nothing.

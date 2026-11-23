@@ -800,7 +800,7 @@ def test_the_walk_over_the_page_sees_a_token_that_is_there(page):
 
 
 def test_a_retired_setting_is_a_sentence_on_the_page_not_a_traceback(monkeypatch):
-    """The store comes from the environment here (no `[connections.usage]` in the empty secrets),
+    """The store comes from the environment here (no `[connections.review]` in the empty secrets),
     so a retired name refuses at `store_engine` -- said as the ask page says it (ADR-1900)."""
     monkeypatch.setenv("BIONUMBERS_REVIEW_DB_URL", "sqlite:///old.sqlite")
 
@@ -808,3 +808,10 @@ def test_a_retired_setting_is_a_sentence_on_the_page_not_a_traceback(monkeypatch
 
     assert not at.exception
     assert any("BIONUMBERS_REVIEW_DB_URL is now NUMERA_REVIEW_DB_URL" in e.value for e in at.error)
+
+
+def test_the_no_store_sentence_names_the_section_the_page_reads():
+    """Following the advice must change something: the trail's section is never the store
+    (ADR-2000)."""
+    assert "[connections.review]" in NO_STORE and "NUMERA_REVIEW_DB_URL" in NO_STORE
+    assert "connections.usage" not in NO_STORE
