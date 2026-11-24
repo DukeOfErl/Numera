@@ -28,6 +28,12 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **A commit that changes a file tests only read runs the tests that name it, not the whole suite.**
+  `README.md`, an OpenSpec spec or a workflow now runs the few test files whose strings name it
+  (11–45 s against ~160 s); a file the app, a script or a test helper names, one nothing names,
+  and one a tool reads (`pyproject.toml`, `uv.lock`, `.gitignore`) still run the full suite.
+  `CLAUDE.md` runs nothing. This also closes a blind spot: a commit changing only a workflow under
+  `.github/` ran no test at all, though one reads every workflow (ADR-2110).
 - **The new-tester alert runs in the private `DukeOfErl/numera-ops`**, not here (ADR-2050, superseding
   ADR-1280). It posts readers' addresses into an issue, and this repository is going public. The job
   runs `numera-first-use` from this repository unchanged; the workflow and the tests that execute its

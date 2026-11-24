@@ -23,81 +23,270 @@ def testloop():
     return module
 
 
+def sources(testloop, files: dict[str, str]) -> dict:
+    """A made-up repository: path -> source text, as `plan` receives it."""
+    return {path: testloop.string_mentions(text) for path, text in files.items()}
+
+
+NOBODY = {"tests/test_other.py": "def test_x():\n    assert True\n"}
+
+
 @pytest.mark.parametrize(
     "path",
     ["src/numera_ask/units.py", "tests/test_units.py", "src/bionumbers_ingest/cleaning.py"],
 )
 def test_python_under_src_and_tests_is_left_to_testmon(testloop, path):
-    assert testloop.reasons_for_full_suite([path]) == []
+    plan = testloop.plan([path], sources(testloop, NOBODY))
+    assert plan == testloop.Plan(full=[], named_tests=[], testmon=True)
+
+
+def test_a_file_named_by_one_test_runs_that_test_and_no_other(testloop):
+    repo = {
+        "tests/test_readme.py": 'TEXT = (ROOT / "README.md").read_text()\n',
+        **NOBODY,
+    }
+    plan = testloop.plan(["README.md"], sources(testloop, repo))
+    assert plan == testloop.Plan(full=[], named_tests=["tests/test_readme.py"], testmon=False)
+
+
+def test_a_file_no_test_names_runs_the_full_suite(testloop):
+    # Named nowhere may mean read where the hook cannot see -- a glob, a computed path.
+    plan = testloop.plan(["README.md"], sources(testloop, NOBODY))
+    assert plan.full and "README.md" in plan.full[0]
+    assert plan.named_tests == []
+
+
+@pytest.mark.parametrize(
+    "reader",
+    [
+        "src/numera_ask/web.py",  # the app reads it, and testmon cannot follow a read
+        "bin/door-demo-chart",  # a script, not Python by extension
+        "tests/conftest.py",  # a helper: every test that uses it reads the file
+        "tests/store_double.py",
+    ],
+)
+def test_a_file_named_by_code_or_a_test_helper_runs_the_full_suite(testloop, reader):
+    repo = {
+        reader: 'PATH = HERE / "door_demo.json"\n',
+        "tests/test_door.py": 'PATH = HERE / "door_demo.json"\n',
+    }
+    plan = testloop.plan(["src/numera_ask/door_demo.json"], sources(testloop, repo))
+    assert plan.full and reader in plan.full[0]
+    assert plan.named_tests == []
 
 
 @pytest.mark.parametrize(
     "path",
     [
-        "README.md",  # quoted by wording tests
-        "CLAUDE.md",
-        "sql/accounts.sql",
-        "src/numera_ask/door_demo.json",  # a data file inside src/: not Python
-        "tests/fixtures/entries.json",  # likewise inside tests/
-        "openspec/specs/user-identity/spec.md",
-        ".claude/rules/testing.md",
-        "bin/keepalive.py",  # Python, but outside src/ and tests/, and a test loads it
-        "pyproject.toml",
+        "pyproject.toml",  # pytest's options, the dependencies
         "uv.lock",
-        ".gitignore",
-        ".pre-commit-config.yaml",
+        ".gitignore",  # git reads it when a test asks what is tracked
+        ".python-version",
+        ".streamlit/config.toml",  # Streamlit reads it in every page test
+        "bin/keepalive.py",  # Python outside src/ and tests/: imported, not named
+        "streamlit_app.py",
     ],
 )
-def test_a_file_a_test_may_read_forces_the_full_suite(testloop, path):
-    assert testloop.reasons_for_full_suite([path]) == [path]
+def test_a_file_a_tool_reads_runs_the_full_suite_even_when_a_test_names_it(testloop, path):
+    repo = {"tests/test_names_it.py": f'P = ROOT / "{path}"\n'}
+    plan = testloop.plan([path], sources(testloop, repo))
+    assert plan.full and path in plan.full[0]
 
 
-@pytest.mark.parametrize(
-    "path", ["CHANGELOG.md", "docs/decisions/0010-x.md", ".github/workflows/checks.yml"]
-)
+@pytest.mark.parametrize("path", ["CHANGELOG.md", "CLAUDE.md", "docs/decisions/0010-x.md"])
 def test_files_no_test_reads_need_no_tests(testloop, path):
     assert testloop.inert(path)
-    assert testloop.reasons_for_full_suite([path]) == []
+    assert testloop.plan([path], sources(testloop, NOBODY)) == testloop.Plan([], [], False)
 
 
 def test_a_prefix_is_not_a_substring(testloop):
-    # `docs_notes/` and `.github-old/` are not `docs/` and `.github/`.
-    assert testloop.reasons_for_full_suite(["docs_notes/x.md", ".github-old/x.yml"]) != []
+    # `docs_notes/` is not `docs/`.
+    assert not testloop.inert("docs_notes/x.md")
+    assert not testloop.inert("src/numera_validator/CLAUDE.md")  # a path, not a name
+    assert testloop.plan(["docs_notes/x.md"], sources(testloop, NOBODY)).full
     assert not testloop.selectable("src/x.pyc")
     assert not testloop.selectable("mysrc/x.py")
 
 
-def test_one_unvouched_file_among_selectable_ones_names_only_itself(testloop):
-    staged = ["src/numera_ask/units.py", "README.md", "CHANGELOG.md", "tests/test_units.py"]
-    assert testloop.reasons_for_full_suite(staged) == ["README.md"]
+def test_python_and_a_named_file_together_run_testmon_and_the_named_tests(testloop):
+    repo = {"tests/test_readme.py": 'TEXT = (ROOT / "README.md").read_text()\n', **NOBODY}
+    staged = ["src/numera_ask/units.py", "README.md", "CHANGELOG.md"]
+    plan = testloop.plan(staged, sources(testloop, repo))
+    assert plan == testloop.Plan(full=[], named_tests=["tests/test_readme.py"], testmon=True)
+
+
+def test_one_file_that_needs_the_full_suite_outweighs_the_rest(testloop):
+    repo = {"tests/test_readme.py": 'TEXT = (ROOT / "README.md").read_text()\n', **NOBODY}
+    plan = testloop.plan(["README.md", "pyproject.toml"], sources(testloop, repo))
+    assert len(plan.full) == 1 and "pyproject.toml" in plan.full[0]
 
 
 def test_nothing_staged_needs_nothing(testloop):
-    assert testloop.reasons_for_full_suite([]) == []
+    assert testloop.plan([], sources(testloop, NOBODY)) == testloop.Plan([], [], False)
 
 
-# -- the tripwire: the inert list is a claim about the tests, so check the tests -------
+# -- what counts as naming a file ---------------------------------------------------
+#
+# The dimension these read is *how* a string holds the name, so each negative case holds
+# the same name in a form that is not a path.
 
-#: tests that mention an "inert" path, and why that does not make it a dependency.
-#: A new mention is a new reason to look, which is the point.
+FILE = "openspec/specs/user-identity/spec.md"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'P = ROOT / "openspec/specs/user-identity/spec.md"',  # the whole path
+        'P = HERE / "spec.md"',  # the name alone
+        'SPECS = ROOT.joinpath("openspec", "specs").rglob("*.md")',  # a directory above it
+        'P = ROOT / "openspec"',
+        'P = f"{ROOT}/openspec/specs/{name}/spec.md"',  # inside an f-string
+        'assert ok, "see openspec/specs for the wording"',  # a path-shaped word in prose
+        'CMD = "cat $ROOT/openspec/specs/*.md"',  # the path in the middle of a word
+    ],
+)
+def test_a_string_that_holds_the_path_or_a_directory_above_it_names_the_file(testloop, source):
+    assert testloop.names(testloop.string_mentions(source), FILE)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'assert ok, "the specs changed"',  # a directory's bare name as a word, not a path
+        '"""Reads openspec/specs/user-identity/spec.md."""',  # a docstring is prose
+        "# ROOT / 'openspec'",  # a comment is not a string
+        'P = ROOT / "openspec-old"',  # a prefix is not a segment
+        'P = ROOT / "my_spec.md"',
+    ],
+)
+def test_the_same_words_not_as_a_path_do_not_name_the_file(testloop, source):
+    assert not testloop.names(testloop.string_mentions(source), FILE)
+
+
+def test_a_bare_directory_name_counts_only_as_a_whole_string(testloop):
+    assert testloop.names(testloop.string_mentions('P = HERE / "specs"'), FILE)
+    assert not testloop.names(testloop.string_mentions('m = "specs are fine"'), FILE)
+
+
+def test_a_file_that_is_not_python_is_read_as_words(testloop):
+    script = "#!/bin/sh\ncat openspec/specs/user-identity/spec.md\n"
+    assert testloop.names(testloop.string_mentions(script), FILE)
+
+
+# -- against this repository -----------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def tracked(testloop):
+    return testloop.tracked_sources()
+
+
+def test_a_workflow_change_runs_the_test_that_reads_the_workflows(testloop, tracked):
+    """The blind spot this replaced: `.github/` was called inert, the tripwire grepped for
+    the string ".github/", and `test_scheduled_workflows.py` reads every workflow through
+    `ROOT / ".github" / "workflows"` -- so a commit editing a workflow ran no test at all."""
+    plan = testloop.plan([".github/workflows/checks.yml"], tracked)
+    assert "tests/test_scheduled_workflows.py" in plan.named_tests or plan.full
+
+
+def test_a_readme_change_runs_the_test_that_quotes_the_readme(testloop, tracked):
+    plan = testloop.plan(["README.md"], tracked)
+    assert "tests/test_web_driver.py" in plan.named_tests or plan.full
+
+
+def test_the_hook_does_not_count_itself_as_a_reader(testloop, tracked):
+    # Its lists of paths are configuration; were they reads, every path on them would
+    # run the full suite.
+    assert "bin/testloop.py" not in tracked
+
+
+def test_scripts_without_an_extension_count_as_readers(tracked):
+    # A test runs `bin/door-demo-chart`; what it reads, the test reads.
+    assert {"bin/door-demo-chart", "bin/last-question"} <= set(tracked)
+
+
+# -- what the commit hook actually starts ---------------------------------------------
+
+
+@pytest.fixture
+def started(testloop, monkeypatch):
+    """Every pytest the hook starts, as its argument list; `exits` sets their statuses."""
+    calls: list[list[str]] = []
+    exits: list[int] = []
+
+    def run(args, **kwargs):
+        if "pytest" in args:
+            calls.append(args[args.index("pytest") + 1 :])
+            return subprocess.CompletedProcess(args, exits.pop(0) if exits else 0)
+        return subprocess.CompletedProcess(args, 0, stdout="")
+
+    repo = {"tests/test_readme.py": 'TEXT = (ROOT / "README.md").read_text()\n', **NOBODY}
+    monkeypatch.setattr(testloop.subprocess, "run", run)
+    monkeypatch.setattr(testloop, "tracked_sources", lambda: sources(testloop, repo))
+    monkeypatch.setattr(testloop, "ROOT", Path("/nowhere"))  # no .testmondata: no stat surprises
+    return calls, exits
+
+
+PYTHON = Path("/venv/bin/python")
+
+
+def test_a_named_file_starts_only_the_tests_that_name_it(testloop, started):
+    calls, _ = started
+    assert testloop.commit(PYTHON, ["README.md"]) == 0
+    assert calls == [["-q", "tests/test_readme.py"]]
+
+
+def test_a_file_that_needs_the_full_suite_starts_the_full_suite(testloop, started):
+    calls, _ = started
+    testloop.commit(PYTHON, ["pyproject.toml"])
+    assert len(calls) == 1 and "-n" in calls[0] and "tests/test_readme.py" not in calls[0]
+
+
+def test_python_and_a_named_file_start_testmon_then_the_named_tests(testloop, started):
+    calls, _ = started
+    testloop.commit(PYTHON, ["src/numera_ask/units.py", "README.md"])
+    assert calls == [["--testmon-forceselect", "-q"], ["-q", "tests/test_readme.py"]]
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (1, 1),  # a named test failed: the commit is refused
+        (5, 0),  # nothing collected -- every test in the file deselected by a marker
+    ],
+)
+def test_the_named_run_s_status_is_the_commit_s(testloop, started, status, expected):
+    calls, exits = started
+    exits.append(status)
+    assert testloop.commit(PYTHON, ["README.md"]) == expected
+
+
+# -- the tripwire: the inert list is a claim about the code, so check the code ---------
+
+#: code that names an "inert" path, and why that does not make it a dependency. A new
+#: mention is a new reason to look, which is the point.
 KNOWN_MENTIONS = {
-    # asks git whether `docs/` is *tracked*; no edit inside it changes that answer.
-    "docs/": {"test_answer_sheet.py"},
+    "docs/": {
+        # asks git whether `docs/` is *tracked*; no edit inside it changes that answer.
+        "tests/test_answer_sheet.py",
+        # messages pointing the reader at docs/roadmap.md, not reads of it.
+        "src/numera_ask/corpus.py",
+        "src/numera_ask/eval_cli.py",
+    },
 }
 
 
-def test_no_test_reads_a_path_the_hook_calls_inert(testloop):
-    tokens = sorted(testloop.INERT_FILES | set(testloop.INERT_PREFIXES))
-    for token in tokens:
+def test_no_code_reads_a_path_the_hook_calls_inert(testloop, tracked):
+    for token in sorted(testloop.INERT_FILES | set(testloop.INERT_PREFIXES)):
         mentioning = {
-            p.name
-            for p in (ROOT / "tests").glob("*.py")
-            if p.name != Path(__file__).name and token in p.read_text(encoding="utf-8")
+            path
+            for path, mentions in tracked.items()
+            if path != "tests/test_testloop.py" and testloop.names(mentions, token.rstrip("/"))
         }
         assert mentioning == KNOWN_MENTIONS.get(token, set()), (
-            f"{token!r} is called inert but tests mention it: {sorted(mentioning)}. "
-            "Either a test now reads it (remove it from the inert list) or the mention "
-            "is harmless (add it to KNOWN_MENTIONS with the reason)."
+            f"{token!r} is called inert but this code names it: {sorted(mentioning)}. "
+            "Either it reads it (remove it from the inert list) or the mention is "
+            "harmless (add it to KNOWN_MENTIONS with the reason)."
         )
 
 

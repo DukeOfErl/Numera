@@ -90,7 +90,7 @@ what let the blocks drift: no branch can see another's copy.
 | `add-monitor-dashboard` | `1950`–`1990` — renumbered 2026-11-22 from `1300`–`1340`, which `speed-up-test-loop` holds on `dev`; reserved after `rename-to-numera`'s `1900`–`1940` |
 | `review-store-section` | `2000`–`2040` — `2000` written; reserved 2026-11-22, after `add-monitor-dashboard`'s `1950`–`1990` on `feat/monitor-dashboard` |
 | `chore/first-use-alerts-to-numera-ops` (no OpenSpec change: the requirement's text is unchanged; where it is delivered moved) | `2050`–`2090` — `2050` written; reserved 2026-11-23, after `review-store-section`'s `2000`–`2040` |
-| `chore/cheaper-test-loop` (no OpenSpec change: tooling, no behaviour of the app) | `2100`–`2140` — `2100` written; reserved 2026-11-24, after `chore/first-use-alerts-to-numera-ops`' `2050`–`2090` |
+| `chore/cheaper-test-loop` (no OpenSpec change: tooling, no behaviour of the app) | `2100`–`2140` — `2100`, `2110` written; reserved 2026-11-24, after `chore/first-use-alerts-to-numera-ops`' `2050`–`2090` |
 
 Gaps between blocks are deliberate — room to widen without renumbering. The last
 two rows are reserved **before their changes exist**, because a change gets

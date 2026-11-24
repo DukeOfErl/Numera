@@ -10,6 +10,10 @@
 - **Amended 2026-11-24 by [ADR-2100](2100-commit-tier-runs-at-commit-only.md):** the commit
   tier had no `stages:`, so it also ran at push and merge and the full suite ran twice there. It
   now runs at commit only.
+- **Amended 2026-11-24 by [ADR-2110](2110-commit-tier-runs-the-tests-that-name-a-file.md):** a
+  staged file that is not selectable Python runs the test files that name it, not the full suite,
+  unless code, a helper or a tool reads it or nothing names it. `.github/` left the inert list (a
+  test reads it, and the grep below could not see that); `CLAUDE.md` joined it.
 
 ## Context
 
