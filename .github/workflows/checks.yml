@@ -46,9 +46,11 @@ jobs:
       - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
-      # Both extras. `--extra ask` alone leaves the ingester's tests failing at
-      # import, and the offline suite covers both packages.
-      - run: uv sync --extra ask --extra ingest
+      # Every extra the offline suite imports. `--extra ask` alone leaves the ingester's
+      # tests failing at import, and without `validator` every test of `numera_validator`
+      # failed at import (`anthropic`, `pint`) from the validator's merge on 2026-10-15
+      # until 2026-11-24. `sheet` (weasyprint) is left out: no test imports it.
+      - run: uv sync --extra ask --extra ingest --extra validator
       # `addopts` already deselects the `network` and `corpus` markers, so nothing
       # here reaches a provider or needs the 21 MB corpus. That is also the limit of
       # what a green tick means: the marked suites -- a real model call, and the
