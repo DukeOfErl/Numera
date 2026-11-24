@@ -101,6 +101,40 @@ def test_no_test_reads_a_path_the_hook_calls_inert(testloop):
         )
 
 
+# -- which tier runs at which git hook ------------------------------------------------
+#
+# Read from `.pre-commit-config.yaml` with pre-commit's own rule: a hook with no `stages:`
+# (and no `default_stages:`) runs at every installed hook type. That rule is how the
+# commit tier came to run at push and merge too, and the full suite ran twice each time.
+
+
+def _testloop_hooks_by_hook_type() -> dict[str, list[str]]:
+    import yaml
+
+    config = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
+    installed = config["default_install_hook_types"]
+    default = config.get("default_stages", installed)
+    hooks = [
+        hook
+        for repo in config["repos"]
+        for hook in repo["hooks"]
+        if hook.get("entry", "").startswith("bin/testloop.py")  # mirrored hooks have none
+    ]
+    return {
+        hook_type: [h["id"] for h in hooks if hook_type in h.get("stages", default)]
+        for hook_type in installed
+    }
+
+
+def test_each_git_hook_runs_exactly_one_tier_of_the_suite():
+    assert _testloop_hooks_by_hook_type() == {
+        "pre-commit": ["testloop-commit"],
+        # The full suite at push and merge is kept (Yoav, 2026-11-24): once, not twice.
+        "pre-push": ["testloop-full"],
+        "pre-merge-commit": ["testloop-full"],
+    }
+
+
 def test_workers_default_is_capped_not_all_cores(testloop, monkeypatch):
     monkeypatch.delenv(testloop.WORKERS_ENV, raising=False)
     monkeypatch.setattr(testloop.os, "cpu_count", lambda: 64)

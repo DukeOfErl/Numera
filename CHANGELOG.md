@@ -111,6 +111,10 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **A push or a merge runs the full suite once, not twice.** The commit-time test hook had no
+  stage restriction, so it also ran at push and merge, was handed a range that nearly always held a
+  non-Python file, fell back to the full suite, and the push hook then ran the same suite again.
+  It now runs at commit only; push and merge still run the full suite (ADR-2100).
 - **The test suite no longer reads the developer's secrets files.** A page test parsed
   `.streamlit/secrets.toml` through Streamlit's own loader, which copies top-level keys into the
   environment, so on a machine with hosted tracing configured it switched Langfuse tracing on with
