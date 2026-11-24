@@ -158,16 +158,22 @@ def _labels(items: list[Any]) -> dict[str, str]:
     """Each item's label: `PMCID-n`, suffixed `.k` for the k-th extraction of the same paper.
 
     Extractions are ordered by when they were loaded into the store -- the first of the run's
-    items for that paper in SQLite's insertion order (`rowid`), then the run id -- because the
-    store is insert-only, so a run loaded later always sorts later and an existing label never
-    moves. Ordering by when a run was *made* would relabel the moment an older run was restored
-    (design D3).
+    items for that paper in SQLite's insertion order (`rowid`) -- because the store is
+    insert-only, so a run loaded later always sorts later and an existing label never moves. No
+    tie-break is needed: two runs' first rows cannot share a rowid. Ordering by when a run was
+    *made* would relabel the moment an older run was restored (design D3).
 
     **Not by `created_at`**, which is what this read until 2026-11-24: that is the wall clock at
     load, and a clock that steps back between two loads (WSL2 does, on resync) put the later run
     first and gave every earlier label a `.2` -- the flake behind five tests that read an entry
-    by its label. A row's position in the table cannot step back. A `VACUUM` may renumber rowids
-    but keeps their order, and so does restoring the store from its `.dump`.
+    by its label. A row's position in the table cannot step back.
+
+    **Defined for a SQLite file filled by `load_run`**, which is the only store this module reads.
+    Postgres has no rowid, and an unordered copy from Postgres into such a file would put runs in
+    copy order: a copy must insert in the source's load order. Checked 2026-11-24 on SQLite 3.45.1:
+    200 rows inserted out of key order kept their order through `VACUUM` and through a restore from
+    Python's `iterdump`, which is what `~/scinumbers-data/backup.sh` writes. The `sqlite3` command
+    line's `.dump` was not tested.
     """
     loaded: dict[tuple[str, str], int] = {}
     for row in items:
@@ -175,7 +181,7 @@ def _labels(items: list[Any]) -> dict[str, str]:
         if key not in loaded or row.load_order < loaded[key]:
             loaded[key] = row.load_order
     runs_of: dict[str, list[str]] = defaultdict(list)
-    for pmcid, run_id in sorted(loaded, key=lambda key: (loaded[key], key[1])):
+    for pmcid, run_id in sorted(loaded, key=lambda key: loaded[key]):
         runs_of[pmcid].append(run_id)
 
     labels: dict[str, str] = {}

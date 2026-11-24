@@ -8,8 +8,12 @@
   clock at load, and a clock stepping back between two loads put the later run first and moved
   every earlier label (`PMC1000001-2` became `PMC1000001-2.2`), which made five tests flaky and could
   have made a saved citation name another value. `tests/test_store_corpus.py` reproduces it with a
-  clock that steps back on every reading. Measured on the review store that day: no paper has more
-  than one run, so no existing label moved.
+  clock that steps back on every reading. Measured 2026-11-24 on `Numera-review/harvest-demo.sqlite`
+  (opened read-only): `SELECT pmcid FROM review_item GROUP BY pmcid HAVING COUNT(DISTINCT run_id) > 1`
+  returns no rows across its 48 papers, so the order of runs decides no existing label and none
+  moved. **Accepted limit:** the order is defined for a SQLite file filled by `load_run`. Postgres
+  has no rowid, so a SQLite store ever built by copying from Postgres must insert in load order, or
+  labels follow the copy.
 
 ## Context
 
