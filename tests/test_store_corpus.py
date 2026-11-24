@@ -14,6 +14,7 @@ import json
 import sqlite3
 import subprocess
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -277,6 +278,58 @@ def test_a_saved_id_still_names_its_value_after_later_extractions_are_added(tmp_
     assert reloaded[saved].value == 488.0
     assert reloaded[saved].entry_id == "PMC1000001-1", "an existing label does not move"
     assert reloaded[f"{older}-PMC1000001-1-item"].entry_id == "PMC1000001-1.3"
+
+
+class _ClockSteppingBack(datetime):
+    """Each reading a second earlier than the last: the WSL2 clock after a resync, at its worst."""
+
+    readings = 0
+
+    @classmethod
+    def now(cls, tz=None):
+        cls.readings += 1
+        return datetime(2026, 11, 24, 12, 0, tzinfo=UTC) - timedelta(seconds=cls.readings)
+
+
+def test_a_run_loaded_later_is_suffixed_even_when_the_clock_went_back_between_loads(
+    tmp_path, monkeypatch
+):
+    """D3: a run loaded later always sorts later, so an existing label never moves.
+
+    The flake seen 2026-11-17 to 11-24 ("No entry PMC1000001-2", and four other tests that read an
+    entry by its label): labels were ordered by each run's earliest `created_at`, which is the wall
+    clock at load. A clock stepping back between loading RUN_A and RUN_B put B first, and every one
+    of A's labels gained a `.2`. On the real store that would make a saved citation name another
+    value.
+    """
+    monkeypatch.setattr(review_store, "datetime", _ClockSteppingBack)
+    path = store_double.build(tmp_path / "store.sqlite")
+    by_label = {e.entry_id: e for e in store_corpus.load(path)}
+    assert by_label["PMC1000001-1"].record_id == f"{store_double.RUN_A}-PMC1000001-1-item"
+    assert by_label["PMC1000001-1.2"].record_id == f"{store_double.RUN_B}-PMC1000001-1-item"
+
+
+def test_a_run_topped_up_after_a_later_run_keeps_its_labels(store_path):
+    """D3 again, through the path `load_run` documents: a re-run of a load inserts only the items
+    not yet present. RUN_A gaining a value after RUN_B was loaded must not hand RUN_B the
+    unsuffixed labels -- a run sorts by its *first* row, which no later insert can move."""
+    engine = review_store.engine_from_url(f"sqlite:///{store_path}")
+    (template, *_) = [i for i in store_double.run_a() if i.paper.pmcid == "PMC1000001"]
+    late = template.model_copy(
+        update={
+            "item_id": f"{store_double.RUN_A}-PMC1000001-9-item",
+            "claim": template.claim.model_copy(
+                update={"claim_id": f"{store_double.RUN_A}-PMC1000001-9"}
+            ),
+        }
+    )
+    store_double.load(engine, store_double.RUN_A, [late])
+    engine.dispose()
+
+    by_label = {e.entry_id: e for e in store_corpus.load(store_path)}
+    assert by_label["PMC1000001-1"].record_id == f"{store_double.RUN_A}-PMC1000001-1-item"
+    assert by_label["PMC1000001-9"].record_id == late.item_id
+    assert by_label["PMC1000001-1.2"].record_id == f"{store_double.RUN_B}-PMC1000001-1-item"
 
 
 def test_two_values_that_would_share_a_label_stop_the_load(store_path):

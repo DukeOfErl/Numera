@@ -27,11 +27,10 @@ from __future__ import annotations
 import re
 import sqlite3
 from collections import defaultdict
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy import create_engine, inspect, literal_column, select, text
 
 from numera_validator import readings, store, tiers
 from numera_validator.quotes import fold
@@ -91,7 +90,8 @@ def load(setting: str | Path | None) -> tuple[Entry, ...]:
                     store.review_item.c.pmcid,
                     store.review_item.c.claim_id,
                     store.review_item.c.item_json,
-                    store.review_item.c.created_at,
+                    # SQLite's own insertion order: the store is insert-only, so it only grows.
+                    literal_column("review_item.rowid").label("load_order"),
                 )
             ).all()
         trust = tiers.by_item(engine)
@@ -157,16 +157,23 @@ def _curated(row: Any) -> Entry:
 def _labels(items: list[Any]) -> dict[str, str]:
     """Each item's label: `PMCID-n`, suffixed `.k` for the k-th extraction of the same paper.
 
-    Extractions are ordered by when they were loaded into the store -- the earliest `created_at`
-    of the run's items for that paper, then the run id -- because the store is insert-only, so a
-    run loaded later always sorts later and an existing label never moves. Ordering by when a run
-    was *made* would relabel the moment an older run was restored (design D3).
+    Extractions are ordered by when they were loaded into the store -- the first of the run's
+    items for that paper in SQLite's insertion order (`rowid`), then the run id -- because the
+    store is insert-only, so a run loaded later always sorts later and an existing label never
+    moves. Ordering by when a run was *made* would relabel the moment an older run was restored
+    (design D3).
+
+    **Not by `created_at`**, which is what this read until 2026-11-24: that is the wall clock at
+    load, and a clock that steps back between two loads (WSL2 does, on resync) put the later run
+    first and gave every earlier label a `.2` -- the flake behind five tests that read an entry
+    by its label. A row's position in the table cannot step back. A `VACUUM` may renumber rowids
+    but keeps their order, and so does restoring the store from its `.dump`.
     """
-    loaded: dict[tuple[str, str], datetime] = {}
+    loaded: dict[tuple[str, str], int] = {}
     for row in items:
         key = (row.pmcid, row.run_id)
-        if key not in loaded or row.created_at < loaded[key]:
-            loaded[key] = row.created_at
+        if key not in loaded or row.load_order < loaded[key]:
+            loaded[key] = row.load_order
     runs_of: dict[str, list[str]] = defaultdict(list)
     for pmcid, run_id in sorted(loaded, key=lambda key: (loaded[key], key[1])):
         runs_of[pmcid].append(run_id)

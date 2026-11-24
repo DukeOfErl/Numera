@@ -111,6 +111,12 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **A harvested value's label no longer depends on the clock.** When a paper had been extracted
+  more than once, the runs were ordered by the time each was loaded, so a system clock stepping
+  back between two loads swapped them, and every label of the earlier run gained a `.2`. That was
+  the intermittent failure in the store tests, and on a real store it would have made a saved
+  citation name a different value. Runs are now ordered by their position in the store, which only
+  grows. No label in the current review store moves.
 - **The test suite no longer reads the developer's secrets files.** A page test parsed
   `.streamlit/secrets.toml` through Streamlit's own loader, which copies top-level keys into the
   environment, so on a machine with hosted tracing configured it switched Langfuse tracing on with
