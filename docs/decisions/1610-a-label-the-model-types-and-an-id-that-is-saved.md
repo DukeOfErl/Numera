@@ -3,6 +3,17 @@
 - **Status:** accepted
 - **Date:** 2026-10-15
 - **Pull request:** not yet opened — branch `feat/ask-over-store` (`add-ask-over-store`)
+- **Amended 2026-11-24** (`fix/store-label-order`): runs are ordered by each run's first row in
+  SQLite's insertion order (`rowid`), not by `review_item.created_at`. `created_at` is the wall
+  clock at load, and a clock stepping back between two loads put the later run first and moved
+  every earlier label (`PMC1000001-2` became `PMC1000001-2.2`), which made five tests flaky and could
+  have made a saved citation name another value. `tests/test_store_corpus.py` reproduces it with a
+  clock that steps back on every reading. Measured 2026-11-24 on `Numera-review/harvest-demo.sqlite`
+  (opened read-only): `SELECT pmcid FROM review_item GROUP BY pmcid HAVING COUNT(DISTINCT run_id) > 1`
+  returns no rows across its 48 papers, so the order of runs decides no existing label and none
+  moved. **Accepted limit:** the order is defined for a SQLite file filled by `load_run`. Postgres
+  has no rowid, so a SQLite store ever built by copying from Postgres must insert in load order, or
+  labels follow the copy.
 
 ## Context
 
@@ -34,7 +45,7 @@ Option 4.
 - **The label** is `PMCID-n` (`PMC2652108-1`), cited as `[[PMC2652108-1]]`. When a paper has been
   extracted more than once, the extraction loaded first keeps bare labels and the k-th is suffixed
   `.k` (`PMC2652108-1.2`), runs ordered by when they were loaded into the store
-  (`review_item.created_at`). The store is insert-only, so an existing label never moves. Each
+  (the first row's `rowid`; `review_item.created_at` until the amendment above). The store is insert-only, so an existing label never moves. Each
   extraction's values stay separate entries; none is merged or dropped. A duplicate label after that rule stops the load.
   The citation parser recognises exactly this shape (`citations.LABEL`), and the loader checks every
   label it makes against the same pattern.

@@ -113,6 +113,13 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **A harvested value's label no longer depends on the clock.** When a paper had been extracted
+  more than once, the runs were ordered by the time each was loaded, so a system clock stepping
+  back between two loads swapped them, and every label of the earlier run gained a `.2`. That was
+  the intermittent failure in the store tests, and on a real store it would have made a saved
+  citation name a different value. Runs are now ordered by their position in the store, which only
+  grows. No label in the current review store moves: none of its 48 papers has two runs (the query is
+  in ADR-1610's amendment).
 - **A commit changing a workflow under `.github/` runs the tests.** `.github/` was on the list of
   paths no test reads, but one test reads every workflow; the check behind that list grepped for
   the text `.github/` and could not see `ROOT / ".github"`. It now reads the code's string
