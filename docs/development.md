@@ -1,7 +1,7 @@
 # Developing Numera
 
 How to run Numera locally, the command-line tools, every setting, the tests, the evaluation harness
-and the validator's commands. The [README](../README.md) says what the project is; hosting it with
+and the harvesting and review pipeline. The [README](../README.md) says what the project is; hosting it with
 sign-in is in the [deployment guide](deployment.md).
 
 ## Running it locally
@@ -56,7 +56,7 @@ your `PATH`:
 | `numera-first-use` | list readers seen for the first time; silent when nobody is new |
 | `numera-eval` | the evaluation harness: `check`, `run`, `report` |
 | `bionumbers-ingest` | build a corpus from the published export |
-| `numera-validator` | the validator prototype: `discover`, `harvest`, `extract`, `load`, `curate`, `status`, `simulate-review`, `upgrade-store` (see [The validator](#the-validator)) |
+| `numera-validator` | the harvesting and review pipeline: `harvest`, `extract`, `load`, `curate`, `simulate-review`, `status`, `upgrade-store`, and the dormant `discover` (see [Harvesting and review](#harvesting-and-review)) |
 
 One package keeps the old name on purpose. `bionumbers_ingest` and its command read BioNumbers' own
 export, so they are named for the source they adapt; everything named for the project says Numera
@@ -176,73 +176,75 @@ results file holds corpus text, which must not be committed (ADR-0170). The harn
 it would track the path and refuses to write if it would — and the answer sheet, which tabulates
 entries, takes the same refusal.
 
-## The validator
+## Harvesting and review
 
-What the validator is for is in the [README](../README.md#where-the-numbers-come-from).
+The pipeline that fills the paper database, and the page where its numbers are reviewed. The
+[README](../README.md#where-the-numbers-come-from) says why it works this way. It is a prototype:
+it ran in October 2026 to fill the current database and is not running continuously.
 
-The current database was filled by the harvest path (`harvest` → `extract` → `load`, with `curate`
-and `simulate-review`). The question-driven path (`discover` → `extract`) is kept but is no longer
-the direction (ADR-0950). The pipeline is a prototype and is not running continuously.
-
-The basic flow, from a question to the review page:
+Its package and command are still called `numera_validator` / `numera-validator`, after its first
+version, which went from a question to the literature (`discover`). That path is kept in the code
+but is no longer used (ADR-0950): papers are now harvested ahead of any question.
 
 ```bash
-uv sync --extra ask --extra validator          # the review page imports the ask app's sign-in door
-export NUMERA_OPENROUTER_API_KEY=...       # its own OpenRouter key, so its spend is readable apart from the ask app's
+uv sync --extra ask --extra validator          # the review page imports the ask app's sign-in
+export NUMERA_OPENROUTER_API_KEY=...           # its own OpenRouter key, so its spend is readable apart from the ask app's
+export NUMERA_REVIEW_DB_URL=...                # the store: a SQLite URL locally, Postgres when hosted
 
-numera-validator discover "doubling time" --organism "Escherichia coli" --since 2015 --limit 20
-numera-validator extract <run-id> --ceiling 2 --budget 40
-numera-validator status <run-id>
-numera-validator load <run-id> --db-url "$NUMERA_REVIEW_DB_URL"   # after applying sql/review.sql once
-streamlit run review_app.py
+numera-validator harvest <run-id> --pmcids PMC1,PMC2 --scope biology --topic "..."
+numera-validator extract <run-id>                                  # $2 per paper, $40 per run by default
+numera-validator status  <run-id>
+numera-validator load    <run-id>                                  # into the store; apply sql/review.sql once first
+numera-validator curate  --corpus ~/bionumbers/bionumbers.jsonl    # the curated BioNumbers tier
+numera-validator simulate-review --reviewer student=<model>@0.6 --reviewer scientist=<model>@0.35
+streamlit run review_app.py --server.port 8502
 ```
 
-The review page finds its store in `[connections.review]` in `.streamlit/secrets.toml`, or else in
-`NUMERA_REVIEW_DB_URL`. It never uses the trail's `[connections.usage]`, which holds no review
-tables (ADR-2000). Where the secrets have `[auth]`, the page signs readers in as the ask app does,
-so run it on the port `redirect_uri` names (`--server.port 8502`).
+The ask app reads the same store when `NUMERA_STORE` points at it (a SQLite file; see
+[Configuration](#configuration)).
 
-- **Discover** searches Europe PMC for open-access research articles with a PMCID — reviews,
-  editorials, comments and preprints excluded by metadata — fetches each paper's JATS XML into
-  `data/europepmc/`, and records the licence. A paper without XML is recorded with the status the
-  service gave, never as an error and never as "states nothing".
-- **Harvest** is the other way in (ADR-0950): `numera-validator harvest <run-id> --pmcids PMC1,PMC2`
-  starts a run from papers chosen ahead of any question, and `extract` then asks each one for
-  the numbers worth reusing, at most twenty per paper. `--scope` names the domain whose classes
-  of value are wanted — `biology` (the default, cells and molecules), `organismal` (bodies,
-  physiology, life history, genomes), `biophysics`, `chemistry` or `physics`
-  (ADR-1500).
+- **Harvest** starts a run from papers chosen by hand (`--pmcids`, or `--pmcid-file` with one per
+  line), fetching each paper's JATS XML from Europe PMC into `data/europepmc/` and recording its
+  licence. `--scope` names the domain whose classes of value are wanted: `biology` (the default,
+  cells and molecules), `organismal` (bodies, physiology, life history, genomes), `biophysics`,
+  `chemistry` or `physics` (ADR-1500). `--topic` is what the papers are about, for a reviewer to
+  choose by.
 - **Extract** reads each paper into passages (table cells carry their headers; citation markers stay
-  visible as `[ref N]`) and makes **one** structured call per paper — the paper in a cached prefix,
-  no tools, no agent loop. Every quote is checked mechanically against the paper; a failure goes
-  back to the model once, a second failure drops the claim. A second call picks the other text a
-  reviewer will see. Each paper ends in one of six named states; the spend ceiling is **$2 per
-  paper** and the call that would cross it is not made.
-- **Curate** loads BioNumbers' own entries as the top trust tier, beside the harvested ones:
-  `numera-validator curate --corpus ~/bionumbers/bionumbers.jsonl` keeps the yeast and cytoskeleton
-  entries that are measured and referenced and that nothing in the record marks doubtful — no
-  fused or one-sided range, a readable unit, no "rule of thumb" (ADR-1510).
+  visible as `[ref N]`) and makes **one** structured call per paper, asking for the numbers worth
+  reusing, at most twenty: the paper in a cached prefix, no tools, no agent loop. Every quote is
+  checked mechanically against the paper; a failure goes back to the model once, a second failure
+  drops the claim. A second call picks the other text a reviewer will see. Each paper ends in one of
+  six named states; the call that would cross the spend ceiling is not made.
+- **Load** writes a run's results into the store. **Upgrade-store** adds columns a store loaded by an
+  older version lacks (for example each paper's bibliographic record, ADR-1750).
+- **Curate** loads BioNumbers' own entries as the top trust tier, beside the harvested ones. It keeps
+  the yeast and cytoskeleton entries that are measured and referenced and that nothing in the record
+  marks doubtful: no fused or one-sided range, a readable unit, no "rule of thumb" (ADR-1510).
 - **The review page** shows one claim at a time, in two steps. First the question, the citation
   and **two texts** from the paper side by side, each as the paper wrote it with nothing in it
   emphasised; when a text is a table cell, the whole table is drawn beneath the two texts with its
   caption, both texts' cells marked alike. The reviewer chooses the text that states a value for
-  the quantity by clicking it and writes the value they read; how that reading stands to the stored
-  value is said in one line once it is revealed. Only then is the stored entry revealed — the value as the paper
-  states it, the paper's own term, the conditions and method each quoted with where it came from
-  (beside the value, from Methods, by reference, supplementary only, not stated) — and the reviewer
-  approves or disapproves. An issue can be raised at either step. The second text is a distractor
-  or a second legitimate occurrence; which it was is stored and never shown. Each step is written
-  the moment it is given and the write fails closed: a reviewer whose step could not be saved is
-  told so and keeps the item. A reviewer can narrow the pool to one domain or topic and can set a
-  paper aside; those choices are a person's, and the simulated reviewers never get them.
-- **A simulated review** (`numera-validator simulate-review --reviewer student=<model>@0.6 --reviewer
-  scientist=<model>@0.35 ...`) lets models stand in for reviewers until there are people: each
-  role reviews its own fixed share of the items, is shown exactly what the page shows a person
-  step by step, and may raise an issue instead of deciding. Every row it writes records the role,
-  the model and the model that actually answered, and anything built on those rows must be
-  labelled as simulated. It is bounded at $0.10 per decision
-  and $2 per run by default, and running it again continues where it stopped.
+  the quantity by clicking it and writes the value they read. Only then is the stored entry
+  revealed (the value as the paper states it, the paper's own term, the conditions and method each
+  quoted with where it came from) and the reviewer approves or disapproves. An issue can be raised
+  at either step. The second text is a distractor or a second legitimate occurrence; which it was is
+  stored and never shown. Each step is written the moment it is given and the write fails closed: a
+  reviewer whose step could not be saved is told so and keeps the item. A reviewer can narrow the
+  pool to one domain or topic and can set a paper aside; the simulated reviewers never get those
+  choices. The page is a separate Streamlit script, not part of the ask app, and has not been
+  deployed. It finds its store in `[connections.review]` in `.streamlit/secrets.toml`, or else in
+  `NUMERA_REVIEW_DB_URL`, never in the trail's `[connections.usage]` (ADR-2000). Where the secrets
+  have `[auth]`, it signs readers in as the ask app does, so run it on the port `redirect_uri` names.
+- **A simulated review** lets models stand in for reviewers until there are people: each role
+  reviews its own fixed share of the items, is shown exactly what the page shows a person step by
+  step, and may raise an issue instead of deciding. Every row it writes records the role, the model
+  asked for and the model that answered, and anything built on those rows must be labelled as
+  simulated. It is bounded at $0.10 per decision and $2 per run by default, and running it again
+  continues where it stopped. Every decision in the current store is simulated.
+- **Discover** (dormant) searches Europe PMC for open-access research articles for a property and an
+  organism, then hands them to `extract`. It found the right paper 4 times in 32, which is why
+  harvesting replaced it.
 
 What it does not read: supplementary files, figure images, PDFs. What it does not do: verify an
-existing BioNumbers entry (that is `add-grounding-validator`), score reviewer agreement, or route to
-cheaper models. Sequence diagrams: [`architecture.md` §7](diagrams/architecture.md#7-the-validator-prototype-from-a-question-to-review-items).
+existing BioNumbers entry, score agreement between reviewers, or route to cheaper models. Sequence
+diagrams: [`architecture.md` §7](diagrams/architecture.md#7-the-validator-prototype-from-a-question-to-review-items).
