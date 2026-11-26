@@ -107,6 +107,36 @@ Comments are read by the people running the app and are **never sent to the mode
 written by strangers, and a tool whose wrong answers look like its right ones must not take
 instructions that way.
 
+## Running it
+
+Requires Python 3.12+, [uv](https://docs.astral.sh/uv/) and an [OpenRouter](https://openrouter.ai)
+API key. The database of harvested papers is not distributed, so to try Numera yourself, run it
+over the BioNumbers download.
+
+```bash
+uv sync --extra ask --extra ingest
+export OPENROUTER_API_KEY=...
+```
+
+**Get the corpus.** Download the BioNumbers database from
+<https://bionumbers.hms.harvard.edu/resources.aspx> and put `BioNumbers.xls` in a directory
+**outside this repository**: its licensing is unresolved, so nothing derived from it may be
+committed.
+
+```bash
+export NUMERA_CORPUS=~/bionumbers/bionumbers.jsonl   # BioNumbers.xls is in ~/bionumbers/
+uv run streamlit run streamlit_app.py
+```
+
+The first start builds the corpus from the download, which takes about a minute. Then ask
+something: `What is the minimal inhibitory concentration of kanamycin for E. coli?` is a good first
+question, because the source says `<8` and the answer says so rather than reporting 8 as a
+measurement.
+
+Configuration, the command-line tools, the harvesting pipeline and the tests are in the
+[development guide](docs/development.md); hosting it with sign-in is in the [deployment
+guide](docs/deployment.md).
+
 ## The platform
 
 ![Numera platform architecture](docs/diagrams/platform-architecture.png)
@@ -190,36 +220,6 @@ point apart and looked like a tie.
 
 Earlier runs are in [`docs/evaluations/`](docs/evaluations/). How to run an evaluation is in the
 [development guide](docs/development.md#evaluating-the-answers).
-
-## Running it
-
-Requires Python 3.12+, [uv](https://docs.astral.sh/uv/) and an [OpenRouter](https://openrouter.ai)
-API key. The database of harvested papers is not distributed, so to try Numera yourself, run it
-over the BioNumbers download.
-
-```bash
-uv sync --extra ask --extra ingest
-export OPENROUTER_API_KEY=...
-```
-
-**Get the corpus.** Download the BioNumbers database from
-<https://bionumbers.hms.harvard.edu/resources.aspx> and put `BioNumbers.xls` in a directory
-**outside this repository**: its licensing is unresolved, so nothing derived from it may be
-committed.
-
-```bash
-export NUMERA_CORPUS=~/bionumbers/bionumbers.jsonl   # BioNumbers.xls is in ~/bionumbers/
-uv run streamlit run streamlit_app.py
-```
-
-The first start builds the corpus from the download, which takes about a minute. Then ask
-something: `What is the minimal inhibitory concentration of kanamycin for E. coli?` is a good first
-question, because the source says `<8` and the answer says so rather than reporting 8 as a
-measurement.
-
-Configuration, the command-line tools, the harvesting pipeline and the tests are in the
-[development guide](docs/development.md); hosting it with sign-in is in the [deployment
-guide](docs/deployment.md).
 
 ## What it does not do
 
