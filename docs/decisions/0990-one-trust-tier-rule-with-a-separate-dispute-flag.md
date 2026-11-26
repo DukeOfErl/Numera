@@ -27,7 +27,7 @@ separately (chosen).
 
 ## Decision
 
-`bionumbers.tiers.trust_of(decisions)` returns a `Trust`: `tier` is `CURATED` for a curated entry,
+`numera_validator.tiers.trust_of(decisions)` returns a `Trust`: `tier` is `CURATED` for a curated entry,
 otherwise the highest `ReviewerRole` among decisions with `approved` true and an empty `issue`,
 otherwise `NONE`; `disputed` is true when any decision has `approved` false or a non-empty issue;
 `simulated` is true when the decision that set the tier was a model's in a person's role. An open

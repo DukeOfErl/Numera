@@ -45,6 +45,11 @@ memory. Anything a worker needs, its brief has to carry: see
 
 This project follows the user-level documentation-upkeep conventions with one substitution: there is no `docs/REQUIREMENTS.md`. The behavioral spec — what the app must do, kept implementation-agnostic — lives in **`openspec/specs/`**, maintained through the OpenSpec workflow rather than as a hand-written document. Write behavioral requirements as spec deltas on a change; they are promoted into `openspec/specs/` when the change is archived. See [ADR-0030](docs/decisions/0030-openspec-specs-as-the-behavioral-record.md). Wherever the conventions say to update `docs/REQUIREMENTS.md`, update the OpenSpec specs instead.
 
+The README is a portfolio front page, not a manual (`.claude/rules/readme.md`). Where the
+conventions say to update `README.md` for a change, update `docs/development.md` or
+`docs/deployment.md` instead, and touch the README only if the change is worth a line to a
+first-time reader.
+
 ## Parallel branches and ADR numbers
 
 Two branches numbering ADRs from the current highest id both claim the same
@@ -287,6 +292,7 @@ frontmatter matches, so these cost nothing on a session that never goes near the
 | `identity.md` | `web.py`, `permissions.py`, `authorization.py`, `accounts.py`, their tests | where the refusal lives, what the agent is never handed, how a session is keyed |
 | `lint-and-format.md` | `pyproject.toml`, `.pre-commit-config.yaml`, CI | the pin that must move in two places at once |
 | `validator-prototype.md` | `src/numera_validator/**`, `review_app.py`, its tests and change | verify quietly, report only what fails |
+| `readme.md` | `README.md` | the README is a portfolio front page: value first, core only, plain language; detail goes to `docs/development.md` / `docs/deployment.md` |
 
 `src/bionumbers_ingest/CLAUDE.md` and `src/numera_validator/CLAUDE.md` load when Claude reads a file in
 that package

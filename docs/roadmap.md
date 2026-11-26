@@ -5,11 +5,29 @@ transcript. **This file records decisions already taken.** It is not a proposal:
 each work package below was agreed in conversation, and the detail belongs in its
 OpenSpec change once that change is written.
 
-Last reconciled: 2026-09-16, against the session that ran 2026-09-12 → 2026-09-16.
+Last reconciled: 2026-11-26. Before that, 2026-09-16; the WP sections below keep
+the reasoning from then, with their state brought up to date.
 
 The governing goal is **multi-user alpha on a hosted deployment**: a handful of
 named testers asking real questions, leaving usable judgements, against a corpus
 whose answers can be traced afterwards.
+
+## Where things stand (2026-11-26)
+
+- **The app answers first from the harvest store**: values extracted from
+  open-access papers (452 from 48 papers, five domains), with 423 curated
+  BioNumbers entries beside them as the top trust tier (`add-ask-over-store`,
+  ADR-1600). A corpus file of the full BioNumbers export still works, and is what
+  an outside reader runs, since the store is not distributed.
+- **The harvest and review pipeline is dormant.** It filled the store between
+  2026-10-03 and 2026-10-09; nothing in it has changed since 2026-10-17 apart from
+  the rename. Every review decision in the store (967) is simulated. Its
+  follow-up is `harden-harvest` (0/19); `feat/property-names` is pushed and
+  deliberately unmerged.
+- **The deployment is behind `dev`.** `deploy/streamlit-cloud` was last updated
+  2026-10-04 and is 166 commits behind: it predates the store, the answer-view
+  redesign and the rename, and reads the BioNumbers corpus only. Bringing it up to
+  `dev` comes next. The review page has never been deployed.
 
 ## Order, and why it is this order
 
@@ -58,8 +76,7 @@ readers to name a problematic entry's ID, and those comments are the evidence fo
 whether per-entry rating is worth building. Nothing here forecloses it.
 
 ### WP2.5 — The question and the answer in the trail
-**`add-question-and-answer-records`**, implemented 2026-09-16 on
-`feat/question-and-answer-records`. ADR block `0840`–`0870`;
+**`add-question-and-answer-records`**, archived 2026-09-16. ADR block `0840`–`0870`;
 [ADR-0840](decisions/0840-what-a-question-s-trail-keeps.md) is the decision and
 carries the reasoning this entry used to hold.
 
@@ -77,11 +94,9 @@ the answer it judged; 2b shows the evidence behind it.
 ratings already on `dev` predate it and name questions whose words were never
 kept anywhere; those columns are null for them for ever.
 
-## Next
-
 ### WP3 — Auth, roles and the session cap
-Built as `add-user-identity` on `feat/user-identity` (2026-09-16); moves to Done
-at merge. The reasoning that used to live here is now where an implementer reads
+`add-user-identity`, archived 2026-09-16; then `add-open-enrolment` (2026-09-28),
+`add-account-withdrawal` and `add-one-way-in` (both 2026-09-29). The reasoning that used to live here is now where an implementer reads
 it — this section points rather than repeats:
 
 - **What the system must do:** `openspec/specs/user-identity/spec.md`, plus the
@@ -99,7 +114,7 @@ it — this section points rather than repeats:
   with the rule for growing it in the comment above.
 - **Operator's steps** — the identity providers, `[auth]` in secrets, the
   `accounts` table from `sql/accounts.sql`, one capped OpenRouter key per tester
-  — are in `README.md` §"Sign-in and enrolment".
+  — are in [`deployment.md`](deployment.md#sign-in-and-enrolment).
 
 **Since `add-open-enrolment` (2026-09-18):** sign-in is no longer Google-only —
 any OpenID Connect provider is a sub-table in secrets and gets its own button,
@@ -107,7 +122,7 @@ and only an address the provider says it has verified is admitted (ADR-0880,
 ADR-0890). The helper script below is no longer "left for later": it is
 `numera-enrol`, which mints the capped key and inserts the row in one step
 and names the database branch every time (ADR-0900). Two operator steps remain
-outside the repository and are in the README: creating the Auth0 tenant, and
+outside the repository and are in `docs/deployment.md`: creating the Auth0 tenant, and
 publishing the Google consent screen so testers need not be listed by hand.
 
 Kept here because it is operational reference an ADR would bury: OpenRouter's
@@ -129,13 +144,15 @@ of Streamlit Cloud's terms about accepting third-party credentials.
 
 Left for later, on purpose: the deletion path and any retention limit for what is
 kept about a person (the spec says why: nobody to ask yet); re-reading enrolment
-mid-session; withdrawal, re-keying and role changes from the command rather than
-from `sql/accounts.sql`. The helper script itself has landed — see above.
+mid-session; re-keying and role changes from the command rather than from
+`sql/accounts.sql`. Withdrawal has since landed as `numera-withdraw` (ADR-1150).
+
+## Next
 
 ### WP4 — Usage events + hosted tracing
-Depends on WP1 and WP3. **Split:** hosted tracing is built as `add-hosted-tracing`
-on `feat/hosted-tracing` (Langfuse Cloud EU, ADR-1000–1020, 2026-09-25) and moves to
-Done at merge. The usage-events table is still to propose, as its own change.
+Depends on WP1 and WP3. **Split:** hosted tracing is done — `add-hosted-tracing`,
+archived 2026-09-25 (Langfuse Cloud EU, ADR-1000–1020). The usage-events table is
+still to propose, as its own change.
 
 **Both the tally table and a hosted tracer were agreed — they are not
 alternatives.** The table is the system of record; the tracer is a debugger.
@@ -194,9 +211,16 @@ Not part of the multi-user push; listed so the board is complete.
 
 | Change | State |
 |---|---|
-| `add-answer-evaluation` | 23/43 — the evaluation harness and its judged layer |
-| `add-provider-limit-ending` | 29/31 |
-| `add-answer-shape` | 0/10 — an answer leads with its quantitative conclusion |
+| `add-answer-evaluation` | archived 2026-09-17 — the deterministic harness; the judged layer moved to `add-judged-faithfulness` |
+| `add-judged-faithfulness` | 0/28 — a model judging an answer's claims one by one |
+| `add-provider-limit-ending` | 29/32 |
+| `add-answer-shape` | 0/11 — an answer leads with its quantitative conclusion |
+| `add-harvest-prototype` | archived 2026-10-15 — papers harvested ahead of any question, five domains, the curated tier (ADR-1500, ADR-1510) |
+| `add-ask-over-store` | archived 2026-10-17 — the ask agent answers from the harvest store, tiers as stars (ADR-1600–1640) |
+| `add-answer-view-redesign` | archived 2026-11-17 — numbered citation pills, the evidence list, an entry opened in place (ADR-1850) |
+| `rename-to-numera` | archived 2026-11-22 (ADR-1900) |
+| `harden-harvest` | 0/19 — the harvest pipeline's follow-up; `feat/property-names` holds its group 6, unmerged |
+| _monitor dashboard_ | `feat/monitor-dashboard`, pushed, unmerged |
 | `add-validator-prototype` | archived 2026-10-15 — question → Europe PMC → one extraction call per paper → blind two-step review, simulated roles, one trust-tier rule (ADR-1520–1540, ADR-0930–0990); `feat/simulated-review` |
 | `add-paper-references` | archived 2026-10-17 — each paper's bibliographic record as CSL-JSON in the store (`review_paper.csl_json`), styled at display by the ask agent (ADR-1750); merged into `dev` as `e424f54`; the deployed Postgres store still needs `numera-validator upgrade-store --data` run against it |
 | `add-door-demo` | archived 2026-10-04 — the sign-in door plays a three-example demo, the third with a script-drawn chart; citations are grey superscripts on the door and in the app (ADR-1210–1240) |
@@ -273,7 +297,7 @@ change that is not happening.
   invited testers, what is kept about a person is shown **once, before use**,
   where a person will read it, which is the right shape for it and the wrong
   shape for a side panel. The `user-identity` spec carries the condition.
-  README's "what the trail keeps about you" is the thorough version meanwhile.
+  `docs/deployment.md`'s "what it keeps about you" is the thorough version meanwhile.
   (2026-09-16)
 - **The dev panel is shown to an unconfigured deployment** (no `[auth]`), because
   that is a developer's machine and the panel holds only the session's own
@@ -334,8 +358,8 @@ what it reports would be wrong in three ways:
 from the store means paper passages, some under NC/ND licences — the results path
 guard (ADR-0170, ADR-0250) applies exactly as it does to corpus text.
 
-**Start when:** `add-ask-over-store` has merged, and either the demo is past or a
-claim about the store's answers needs a figure behind it.
+**Start when:** a claim about the store's answers needs a figure behind it.
+(`add-ask-over-store` merged 2026-10-17 and the demo is past.)
 
 ### Relevance before trust
 

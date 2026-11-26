@@ -28,6 +28,11 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **The README is a short front page for a first-time reader.** It leads with answering from
+  harvested papers, trust ratings and review, adds the platform diagram, and drops stale claims
+  (test count, dead links, the course-review section). Configuration, commands, tests and the
+  validator's commands moved to `docs/development.md`; hosting, sign-in, enrolment and the
+  operator's checks moved to `docs/deployment.md`.
 - **A commit that changes only `CLAUDE.md` runs no tests.** No code reads it, and a test now fails
   if any starts naming it (ADR-2110).
 - **The new-tester alert runs in the private `DukeOfErl/numera-ops`**, not here (ADR-2050, superseding
