@@ -856,9 +856,11 @@ uv run pre-commit install                      # once per clone: lint and tests 
 **The test loop has two tiers** ([ADR-1300](docs/decisions/1300-two-tier-test-loop.md)). At *commit*, only the
 tests the change reaches run (pytest-testmon: a few seconds to about a minute, against ~80s for the whole
 suite in parallel and ~160s serially). Testmon follows Python only, so a staged change to anything a test merely
-reads — `README.md`, `CLAUDE.md`, `sql/`, `openspec/`, a data file, `pyproject.toml` — runs the **full suite**
-instead; `CHANGELOG.md`, `docs/` and `.github/` run nothing. At *push*, *merge* and in CI the full suite runs
-in parallel. The first commit in a clone builds testmon's database, which is one serial full run (~5 minutes);
+reads — `README.md`, `sql/`, `openspec/`, `.github/`, a data file, `pyproject.toml` — runs the **full suite**
+instead; `CHANGELOG.md`, `CLAUDE.md` and `docs/` run nothing, and a test fails if any code starts naming
+one of them ([ADR-2110](docs/decisions/2110-the-inert-list-is-checked-by-what-code-names.md)). At *push*,
+*merge* and in CI the full suite runs in parallel, once
+([ADR-2100](docs/decisions/2100-commit-tier-runs-at-commit-only.md)). The first commit in a clone builds testmon's database, which is one serial full run (~5 minutes);
 the database is per-checkout and git-ignored. `NUMERA_TEST_WORKERS` overrides the three workers. Three is a memory limit, not a speed one:
 on a 12-core, 8 GB machine six is faster (about 80s against 100–180s) when memory is free, but ran out of
 memory once under ordinary load, and twelve were slower than serial. A checkout with no

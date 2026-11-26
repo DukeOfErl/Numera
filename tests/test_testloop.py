@@ -5,8 +5,10 @@ merely *reads* must fall back to the full suite -- a hook that passes on a chang
 nothing checked is the failure this exists to prevent.
 """
 
+import ast
 import importlib.util
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -35,7 +37,7 @@ def test_python_under_src_and_tests_is_left_to_testmon(testloop, path):
     "path",
     [
         "README.md",  # quoted by wording tests
-        "CLAUDE.md",
+        ".github/workflows/checks.yml",  # test_scheduled_workflows loads every workflow
         "sql/accounts.sql",
         "src/numera_ask/door_demo.json",  # a data file inside src/: not Python
         "tests/fixtures/entries.json",  # likewise inside tests/
@@ -52,9 +54,7 @@ def test_a_file_a_test_may_read_forces_the_full_suite(testloop, path):
     assert testloop.reasons_for_full_suite([path]) == [path]
 
 
-@pytest.mark.parametrize(
-    "path", ["CHANGELOG.md", "docs/decisions/0010-x.md", ".github/workflows/checks.yml"]
-)
+@pytest.mark.parametrize("path", ["CHANGELOG.md", "CLAUDE.md", "docs/decisions/0010-x.md"])
 def test_files_no_test_reads_need_no_tests(testloop, path):
     assert testloop.inert(path)
     assert testloop.reasons_for_full_suite([path]) == []
@@ -76,29 +76,163 @@ def test_nothing_staged_needs_nothing(testloop):
     assert testloop.reasons_for_full_suite([]) == []
 
 
-# -- the tripwire: the inert list is a claim about the tests, so check the tests -------
+# -- the tripwire: the inert list is a claim about the code, so check the code ---------
+#
+# Read from string literals, not grepped: the old check grepped test files for ".github/",
+# and `test_scheduled_workflows.py` reads every workflow through `ROOT / ".github" /
+# "workflows"` -- no ".github/" anywhere -- so `.github/` sat on the inert list while a test
+# read it (ADR-2110). A segment counts wherever it stands in a string, which over-matches
+# (a path in a message); here that costs a KNOWN_MENTIONS line, never a missed reader.
+# Docstrings and comments are prose and are skipped.
 
-#: tests that mention an "inert" path, and why that does not make it a dependency.
-#: A new mention is a new reason to look, which is the point.
+
+def _segment(token: str) -> re.Pattern:
+    return re.compile(rf"(?<![\w.-]){re.escape(token)}(?![\w-])")
+
+
+def _strings(path: Path) -> list[str]:
+    """The strings a source holds: literals for Python, the whole text for a shell script."""
+    text = path.read_text(encoding="utf-8", errors="replace")
+    first = text.splitlines()[0] if text else ""
+    if path.suffix != ".py" and first.startswith("#!") and "python" not in first:
+        return [text]
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return [text]
+    docstrings = {
+        id(node.body[0].value)
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+    }
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and id(node) not in docstrings:
+            if isinstance(node.value, str):
+                found.append(node.value)
+            elif isinstance(node.value, bytes):
+                found.append(node.value.decode("utf-8", errors="replace"))
+    return found
+
+
+def _names(path: Path, token: str) -> bool:
+    pattern = _segment(token)
+    return any(pattern.search(s) for s in _strings(path))
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'P = ROOT / ".github" / "workflows"',  # the miss that kept `.github/` inert
+        'P = ROOT / ".github/workflows/checks.yml"',
+        'run("ls .github/workflows", shell=True)',  # a leading dot inside a longer string
+        'P = f"{ROOT}/.github/x.yml"',
+        'P = b".github/x.yml"',
+        '#!/bin/sh\ncat ".github/workflows/checks.yml"\n',  # a quoted path in a shell script
+        "#!/bin/sh\nls .github\n",  # a script that happens to parse as Python: `ls . github`
+    ],
+)
+def test_the_tripwire_sees_a_path_however_the_code_spells_it(tmp_path, source):
+    script = tmp_path / ("script" if source.startswith("#!") else "code.py")
+    script.write_text(source)
+    assert _names(script, ".github")
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'P = ROOT / ".github-old"',  # a longer name, not the segment
+        'P = ROOT / "my.github"',
+        '"""Reads .github/workflows."""',  # a docstring is prose
+        "# ROOT / '.github'",  # a comment is not a string
+    ],
+)
+def test_the_tripwire_does_not_see_the_name_where_it_is_not_a_path(tmp_path, source):
+    script = tmp_path / "code.py"
+    script.write_text(source)
+    assert not _names(script, ".github")
+
+
+def test_the_tripwire_would_have_caught_github_on_the_inert_list():
+    # The canary against this repository: if this stops holding, the check has gone blind.
+    assert _names(ROOT / "tests" / "test_scheduled_workflows.py", ".github")
+
+
+#: code that names an "inert" path, and why that does not make it a dependency. A new
+#: mention is a new reason to look, which is the point.
 KNOWN_MENTIONS = {
-    # asks git whether `docs/` is *tracked*; no edit inside it changes that answer.
-    "docs/": {"test_answer_sheet.py"},
+    "docs": {
+        # asks git whether `docs/` is *tracked*; no edit inside it changes that answer.
+        "tests/test_answer_sheet.py",
+        # messages pointing the reader at docs/roadmap.md, not reads of it.
+        "src/numera_ask/corpus.py",
+        "src/numera_ask/eval_cli.py",
+    },
 }
 
+#: These list the inert paths as their subject, not as files they read.
+NOT_READERS = {"bin/testloop.py", "tests/test_testloop.py"}
 
-def test_no_test_reads_a_path_the_hook_calls_inert(testloop):
-    tokens = sorted(testloop.INERT_FILES | set(testloop.INERT_PREFIXES))
-    for token in tokens:
-        mentioning = {
-            p.name
-            for p in (ROOT / "tests").glob("*.py")
-            if p.name != Path(__file__).name and token in p.read_text(encoding="utf-8")
-        }
+
+def _tracked_readers() -> list[str]:
+    listed = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, text=True, check=True
+    ).stdout.split("\0")
+    return [
+        p
+        for p in listed
+        if p and (p.endswith(".py") or p.startswith("bin/")) and p not in NOT_READERS
+        if (ROOT / p).is_file()
+    ]
+
+
+def test_no_code_names_a_path_the_hook_calls_inert(testloop):
+    readers = _tracked_readers()
+    assert "tests/test_scheduled_workflows.py" in readers, "the reader list has gone empty"
+    for token in sorted(testloop.INERT_FILES | {p.rstrip("/") for p in testloop.INERT_PREFIXES}):
+        mentioning = {p for p in readers if _names(ROOT / p, token)}
         assert mentioning == KNOWN_MENTIONS.get(token, set()), (
-            f"{token!r} is called inert but tests mention it: {sorted(mentioning)}. "
-            "Either a test now reads it (remove it from the inert list) or the mention "
-            "is harmless (add it to KNOWN_MENTIONS with the reason)."
+            f"{token!r} is called inert but this code names it: {sorted(mentioning)}. "
+            "Either it reads it (remove it from the inert list) or the mention is "
+            "harmless (add it to KNOWN_MENTIONS with the reason)."
         )
+
+
+# -- which tier runs at which git hook ------------------------------------------------
+#
+# Read from `.pre-commit-config.yaml` with pre-commit's own rule: a hook with no `stages:`
+# (and no `default_stages:`) runs at every installed hook type. That rule is how the
+# commit tier came to run at push and merge too, and the full suite ran twice each time.
+
+
+def _testloop_hooks_by_hook_type() -> dict[str, list[str]]:
+    import yaml
+
+    config = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
+    installed = config["default_install_hook_types"]
+    default = config.get("default_stages", installed)
+    hooks = [
+        hook
+        for repo in config["repos"]
+        for hook in repo["hooks"]
+        if hook.get("entry", "").startswith("bin/testloop.py")  # mirrored hooks have none
+    ]
+    return {
+        hook_type: [h["id"] for h in hooks if hook_type in h.get("stages", default)]
+        for hook_type in installed
+    }
+
+
+def test_each_git_hook_runs_exactly_one_tier_of_the_suite():
+    assert _testloop_hooks_by_hook_type() == {
+        "pre-commit": ["testloop-commit"],
+        # The full suite at push and merge is kept (Yoav, 2026-11-24): once, not twice.
+        "pre-push": ["testloop-full"],
+        "pre-merge-commit": ["testloop-full"],
+    }
 
 
 def test_workers_default_is_capped_not_all_cores(testloop, monkeypatch):

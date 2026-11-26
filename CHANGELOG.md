@@ -28,6 +28,8 @@ any release; `1.0.0` when it stabilizes.
 
 ### Changed
 
+- **A commit that changes only `CLAUDE.md` runs no tests.** No code reads it, and a test now fails
+  if any starts naming it (ADR-2110).
 - **The new-tester alert runs in the private `DukeOfErl/numera-ops`**, not here (ADR-2050, superseding
   ADR-1280). It posts readers' addresses into an issue, and this repository is going public. The job
   runs `numera-first-use` from this repository unchanged; the workflow and the tests that execute its
@@ -111,6 +113,14 @@ any release; `1.0.0` when it stabilizes.
 
 ### Fixed
 
+- **A commit changing a workflow under `.github/` runs the tests.** `.github/` was on the list of
+  paths no test reads, but one test reads every workflow; the check behind that list grepped for
+  the text `.github/` and could not see `ROOT / ".github"`. It now reads the code's string
+  literals, and a workflow change runs the full suite (ADR-2110).
+- **A push or a merge runs the full suite once, not twice.** The commit-time test hook had no
+  stage restriction, so it also ran at push and merge, was handed a range that nearly always held a
+  non-Python file, fell back to the full suite, and the push hook then ran the same suite again.
+  It now runs at commit only; push and merge still run the full suite (ADR-2100).
 - **The test suite no longer reads the developer's secrets files.** A page test parsed
   `.streamlit/secrets.toml` through Streamlit's own loader, which copies top-level keys into the
   environment, so on a machine with hosted tracing configured it switched Langfuse tracing on with

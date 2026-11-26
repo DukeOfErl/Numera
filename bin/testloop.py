@@ -34,13 +34,16 @@ ROOT = Path(__file__).resolve().parent.parent
 SELECTABLE_PREFIXES = ("src/", "tests/")
 
 #: **No test reads these.** Anything else non-Python is assumed to be read by some
-#: test, because that was true often enough (README, CLAUDE.md, openspec/, sql/,
+#: test, because that was true often enough (README, openspec/, sql/, `.github/`,
 #: `.claude/`, `bin/keepalive.py`) that the safe default is the full suite, and
 #: because the failure of guessing wrong is a commit that nothing checked.
-#: `tests/test_testloop.py` greps the test files for each of these and fails when
-#: one starts naming a path here, so the list cannot go stale unseen.
-INERT_PREFIXES = ("docs/", ".github/")
-INERT_FILES = frozenset({"CHANGELOG.md"})
+#: `tests/test_testloop.py` reads the string literals of every tracked source and fails
+#: when one starts naming a path here, so the list cannot go stale unseen (ADR-2110).
+#: `.github/` was here until 2026-11-24: the old check grepped for ".github/", and the
+#: test that loads every workflow spells it `ROOT / ".github" / "workflows"`, so a
+#: commit changing only a workflow ran no test. `CLAUDE.md` joined: no code names it.
+INERT_PREFIXES = ("docs/",)
+INERT_FILES = frozenset({"CHANGELOG.md", "CLAUDE.md"})
 
 #: **Three, because the limit on this machine is memory, not cores.** Measured on a 12-core,
 #: 7.8 GB machine: with the memory free, six workers took the suite from 158s to 81s, and

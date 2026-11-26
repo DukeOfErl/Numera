@@ -7,6 +7,13 @@
   memory free, but was killed once by the out-of-memory killer (exit 137) under ordinary load
   on the 7.8 GB machine, mid-commit; three finished every full run in about 100-180 s. The
   rest of this decision stands.
+- **Amended 2026-11-24 by [ADR-2100](2100-commit-tier-runs-at-commit-only.md):** the commit
+  tier had no `stages:`, so it also ran at push and merge and the full suite ran twice there. It
+  now runs at commit only.
+- **Amended 2026-11-24 by [ADR-2110](2110-the-inert-list-is-checked-by-what-code-names.md):**
+  `.github/` left the inert list (a test reads it, and the grep described below could not see
+  that); `CLAUDE.md` joined it. The tripwire now reads string literals rather than grepping.
+  Running only the tests that name a changed file was tried and rejected.
 
 ## Context
 

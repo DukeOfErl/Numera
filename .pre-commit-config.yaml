@@ -67,6 +67,10 @@ repos:
         entry: bin/check_addresses.py
         language: system
         types: [text]
+      # Commit only. Without `stages:` it also ran at push and merge, was handed a range
+      # that nearly always held a non-Python file, fell back to the full suite -- and
+      # `testloop-full` then ran the same suite again: two identical runs per push and
+      # per merge (ADR-2100).
       - id: testloop-commit
         name: tests the change reaches (testmon; full suite if a non-Python file changed)
         entry: bin/testloop.py commit
@@ -74,6 +78,7 @@ repos:
         pass_filenames: true
         require_serial: true
         verbose: true
+        stages: [pre-commit]
       # The full suite, in parallel, where a mistake leaves the machine or lands on
       # an integration branch. CI runs the same thing on the pushed commit; this
       # catches it a minute earlier and without a round trip.
