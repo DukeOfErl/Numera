@@ -6,10 +6,11 @@ plausible number arrives with no way to tell whether it was recalled, interpolat
 
 Numera answers only from numbers it can point to, and **rates how far each one has been checked**.
 Citing a source is not enough on its own: a number extracted from a paper can still be misread. So
-every number in an answer cites its entry, and every entry carries a trust rating: hand-curated
-[BioNumbers](https://bionumbers.hms.harvard.edu) values at the top, then values extracted from
-open-access papers and approved by a reviewer, down to ones nobody has checked yet. Where its sources do not cover a question, it says so rather than answering from the
-model's own knowledge. It is for people who need a figure they can defend.
+every number in an answer cites its entry, and every entry extracted from a paper carries a trust
+rating: highest when an expert has reviewed it (alongside hand-curated databases such as
+[BioNumbers](https://bionumbers.hms.harvard.edu)), then when general scientific reviewers have, down
+to ones nobody has checked yet. Where its sources do not cover a question, it says so rather than
+answering from the model's own knowledge. It is for people who need a figure they can defend.
 
 It has two sides:
 
