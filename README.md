@@ -16,8 +16,9 @@ It has two sides:
 
 - **Ask.** A scientist asks a question in plain language. An agent searches the entries, answers,
   and lists the entries it used beside the answer, each with its source and its trust rating.
-- **Review.** People check the extracted numbers against the paper they came from, and their
-  verdicts set each entry's rating. Until there are enough reviewers, models stand in for them,
+- **Review.** People check each extracted number against the paper it came from, shown only the
+  short passages that matter rather than the whole paper, and their verdicts set the entry's
+  rating. Until there are enough reviewers, models stand in for them,
   and everything they decide is labelled as simulated.
 
 Four commitments shape the design:
