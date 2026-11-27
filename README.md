@@ -200,23 +200,29 @@ unresolved, so the harness refuses to write anywhere git would track.
 
 ### What it measures, by example
 
-Ten questions, three repeats each, 2026-09-17 — the run that chose the default model
-([full findings](docs/evaluations/2026-09-17-three-models.md)). Questions are tiered: `basic` is one
-property of one organism, `compound` needs a comparison or a calculation.
+Ten questions, three repeats each, five models: run on 2026-09-17 and 2026-09-21 and re-scored
+together on 2026-09-22 ([three models](docs/evaluations/2026-09-17-three-models.md),
+[Nemotron](docs/evaluations/2026-09-21-nemotron.md),
+[re-scoring](docs/evaluations/2026-09-22-expected-list-triage.md)). Questions are tiered: `basic` is
+one property of one organism, `compound` needs a comparison or a calculation.
 
-| | Haiku 4.5 | **Opus 4.7** | MiniMax M2.7 |
-|---|---:|---:|---:|
-| Expected entries reaching the table | 53% | **65%** | 9% |
-| — on `basic` questions | 70% | 68% | 12% |
-| — on `compound` questions | 31% | **62%** | 6% |
-| Unsupported questions correctly declined | 4 of 6 | **6 of 6** | 6 of 6 |
-| Cost per 30 questions | $0.40 | $2.89 | $0.29 |
+| | **Opus 4.7** | Nemotron 3 Ultra | Haiku 4.5 | Nemotron 3.5 Lightning | MiniMax M2.7 |
+|---|---:|---:|---:|---:|---:|
+| Expected entries reaching the evidence list | **64%** | 60% | 51% | 34% | 9% |
+| — on `basic` questions | 65% | 61% | **66%** | 46% | 11% |
+| — on `compound` questions | **62%** | 58% | 31% | 18% | 6% |
+| Cost per 30 questions | $2.89 | $0.40 | $0.40 | **$0.05** | $0.29 |
 
-**The whole of Opus's lead is the compound questions** — on lookups the two Claude models are a tie.
-So the model choice buys multi-organism comparisons and calculations, not better lookups, which is
-what the tiering exists to show. The figure that is not about coverage: Haiku answered two of the six
-unsupported questions with a quantity instead of saying the corpus does not hold it, which is the
-failure this app is most meant to avoid.
+**The model choice is a decision about compound questions.** On lookups Opus, Haiku and Nemotron 3
+Ultra are within five points of each other; on comparisons and calculations Opus reaches 62% and
+Haiku 31%, which is why Opus is the default. **Nemotron 3 Ultra comes close for a seventh of the
+price**: 58% on compound questions for what Haiku costs, though it is weaker on lookups, and that is
+one run.
+
+The figure that is not about coverage: Haiku answered two of six unanswerable questions with a
+quantity instead of saying the corpus does not hold it, which is the failure this app is most meant
+to avoid. Opus and MiniMax declined all six. Nemotron's refusals have to be read rather than counted,
+because they quote the size of what they searched; the findings go through them.
 
 Read no single repeat. The same comparison at one repeat each, that morning, had the two models a
 point apart and looked like a tie.
