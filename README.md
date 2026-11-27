@@ -4,18 +4,21 @@
 numbers like these, and the usual way to get one out of a language model is to ask and hope. A
 plausible number arrives with no way to tell whether it was recalled, interpolated, or invented.
 
-Numera answers only from numbers it can point to: values extracted from open-access papers, each
-with the passage it came from, and the hand-curated [BioNumbers](https://bionumbers.hms.harvard.edu)
-database. Every number in an answer cites the entry behind it, and every entry shows how far it has
-been checked. Where its sources do not cover a question, it says so rather than answering from the
-model's own knowledge. It is for people who need a figure they can defend.
+Numera answers only from numbers it can point to, and **rates how far each one has been checked**.
+Citing a source is not enough on its own: a number extracted from a paper can still be misread. So
+every number in an answer cites its entry, and every entry extracted from a paper carries a trust
+rating: highest when an expert has reviewed it (alongside hand-curated databases such as
+[BioNumbers](https://bionumbers.hms.harvard.edu)), then when general scientific reviewers have, down
+to ones nobody has checked yet. Where its sources do not cover a question, it says so rather than
+answering from the model's own knowledge. It is for people who need a figure they can defend.
 
 It has two sides:
 
 - **Ask.** A scientist asks a question in plain language. An agent searches the entries, answers,
   and lists the entries it used beside the answer, each with its source and its trust rating.
-- **Review.** People check the extracted numbers against the paper they came from, and their
-  verdicts set each entry's rating. Until there are enough reviewers, models stand in for them,
+- **Review.** People check each extracted number against the paper it came from, shown only the
+  short passages that matter rather than the whole paper, and their verdicts set the entry's
+  rating. Until there are enough reviewers, models stand in for them,
   and everything they decide is labelled as simulated.
 
 Four commitments shape the design:
@@ -77,15 +80,15 @@ one is calling, so it cannot behave one way for a person and another for a test.
 
 ### Where the numbers come from
 
-The first version went from a question to the literature: search for papers, then extract the
-number. It found the right paper 4 times in 32, because a paper that mentions a property and an
-organism rarely measures them. So the pipeline turned round. **Papers are harvested ahead of any
-question**: a model reads each open-access paper once and extracts the numbers a scientist outside
-the study would want to reuse, with the exact sentence or table cell each came from. Every quote is
-then checked mechanically against the paper's text, and a value whose quote cannot be found is
-dropped. So far that is about 450 values from 48 papers, across cell biology, physiology,
-biophysics, chemistry and physics, beside 420 curated BioNumbers entries on yeast and the
-cytoskeleton.
+**Papers are harvested ahead of any question**: a model reads each open-access paper once and
+extracts the numbers a scientist outside the study would want to reuse, with the exact sentence or
+table cell each came from (reading figures is a future feature). Every quote is then checked
+mechanically against the paper's text, and a value whose quote cannot be found is dropped.
+Harvesting comes before the question because searching per question did not work: a paper that
+mentions a property and an organism rarely measures them, and a first version that searched found
+the right paper 4 times in 32. For the first prototype, this includes about 450 values from 48
+papers, across cell biology, physiology, biophysics, chemistry and physics, beside 420 curated
+BioNumbers entries on yeast and the cytoskeleton.
 
 **Trust is earned afterwards, through review.** The review screen is built so that clicking
 "approve" is not enough. The reviewer first sees two passages from the paper, with nothing
@@ -106,90 +109,6 @@ a complaint can be read next to exactly what the agent retrieved for it.
 Comments are read by the people running the app and are **never sent to the model**. They are text
 written by strangers, and a tool whose wrong answers look like its right ones must not take
 instructions that way.
-
-## The platform
-
-![Numera platform architecture](docs/diagrams/platform-architecture.png)
-
-The goal was a real multi-user app, hosted on a zero budget, without building a front end from
-scratch. Each service does one job, and each was picked because its free tier covers it:
-
-- **Streamlit Community Cloud** hosts the app. The whole interface is Python, which is what made a
-  polished front end affordable for one developer. But the platform has no notion of a user, and
-  its disk is wiped on every redeploy, which is why everything below it exists.
-- **Auth0** signs readers in, by email or with their Google account. Only a confirmed address gets
-  in, and only if the operator has given it access.
-- **Neon** (serverless Postgres) holds what must survive a redeploy: the accounts, the **trail**
-  (an audit log of every question, its answer, the evidence behind it and any rating, so any answer
-  can be checked afterwards) and the reviewers' decisions.
-- **OpenRouter** reaches the models through one API, so switching between Opus, Sonnet, Haiku or an
-  open model is a setting. Each tester gets their own API key with its own spending cap.
-- **Langfuse** (optional) traces a single question in full: every prompt, tool call, token and
-  timing. It is for debugging an answer, not for keeping records; the trail does that.
-- **GitHub** holds the code, deploys the app, and runs the scheduled jobs that keep it awake.
-- The **developer machine** runs the harvesting pipeline that fills the paper database.
-
-## What else is in here
-
-The parts a first-time visitor would not see from the screen. The details are in the [deployment
-guide](docs/deployment.md), the [development guide](docs/development.md) and the [decision
-records](docs/decisions/).
-
-- **Spend is capped per question, per budget period, and per tester**, each tester through their
-  own key. A question that hits its cap shows what it had found, marked incomplete.
-- **Sign-in and roles.** Five roles, from student to admin; anything not explicitly allowed is
-  refused. Nothing about the reader's role reaches the agent, so an answer cannot depend on who
-  asked. Giving a tester access, or taking it away, is one command that also issues or revokes
-  their capped key.
-- **The sign-in page plays a demo**: real questions put to the agent and their real answers
-  (shortened), typed out and streamed in a loop, so a visitor sees what the app does before signing
-  in.
-- **The app notices people who cannot get in.** A daily check lists anyone stuck at sign-in (never
-  got the confirmation email, or confirmed but not yet given access), and an alert says when a new
-  reader first signs in or asks. Both stay silent when there is nothing to report, so their
-  messages are worth opening.
-- **It stays awake on a free tier.** Streamlit hibernates an idle app after 12 hours; a scheduled
-  job visits it with a headless browser and wakes it, and reports once a day if that failed.
-- **About 3,000 tests** drive the real agent with scripted models instead of mocking the
-  framework, and need no API key. Defects are seeded on purpose to check the tests would catch them.
-- **Decisions are written down as they are made:** 90-odd [architecture decision
-  records](docs/decisions/), and the app's behaviour specified in [OpenSpec](openspec/specs/).
-
-## Evaluating the answers
-
-An evaluation harness puts a fixed set of questions to the same agent the web page uses, and
-records everything that came back. Scores are computed afterwards from those records, so a scoring
-rule can be fixed and the whole baseline re-scored without paying for the questions again. The runs
-so far were over the BioNumbers database; evaluating over the harvested papers is planned.
-
-**Results never enter the repository.** Every result contains BioNumbers text, whose licence is
-unresolved, so the harness refuses to write anywhere git would track.
-
-### What it measures, by example
-
-Ten questions, three repeats each, 2026-09-17 — the run that chose the default model
-([full findings](docs/evaluations/2026-09-17-three-models.md)). Questions are tiered: `basic` is one
-property of one organism, `compound` needs a comparison or a calculation.
-
-| | Haiku 4.5 | **Opus 4.7** | MiniMax M2.7 |
-|---|---:|---:|---:|
-| Expected entries reaching the table | 53% | **65%** | 9% |
-| — on `basic` questions | 70% | 68% | 12% |
-| — on `compound` questions | 31% | **62%** | 6% |
-| Unsupported questions correctly declined | 4 of 6 | **6 of 6** | 6 of 6 |
-| Cost per 30 questions | $0.40 | $2.89 | $0.29 |
-
-**The whole of Opus's lead is the compound questions** — on lookups the two Claude models are a tie.
-So the model choice buys multi-organism comparisons and calculations, not better lookups, which is
-what the tiering exists to show. The figure that is not about coverage: Haiku answered two of the six
-unsupported questions with a quantity instead of saying the corpus does not hold it, which is the
-failure this app is most meant to avoid.
-
-Read no single repeat. The same comparison at one repeat each, that morning, had the two models a
-point apart and looked like a tie.
-
-Earlier runs are in [`docs/evaluations/`](docs/evaluations/). How to run an evaluation is in the
-[development guide](docs/development.md#evaluating-the-answers).
 
 ## Running it
 
@@ -220,6 +139,96 @@ measurement.
 Configuration, the command-line tools, the harvesting pipeline and the tests are in the
 [development guide](docs/development.md); hosting it with sign-in is in the [deployment
 guide](docs/deployment.md).
+
+## The platform
+
+![Numera platform architecture](docs/diagrams/platform-architecture.png)
+
+The goal was a real multi-user app, hosted on a zero budget, without building a front end from
+scratch. Each service does one job, and each was picked because its free tier covers it:
+
+- **Streamlit Community Cloud** hosts the app. The whole interface is Python, which is what made a
+  polished front end affordable for one developer. But the platform has no notion of a user, and
+  its disk is wiped on every redeploy, which is why everything below it exists.
+- **Auth0** signs readers in, by email or with their Google account. Only a confirmed address gets
+  in, and only if the operator has given it access.
+- **Neon** (serverless Postgres) holds what must survive a redeploy: the accounts, the **trail**
+  (an audit log of every question, its answer, the evidence behind it and any rating, so any answer
+  can be checked afterwards) and the reviewers' decisions.
+- **OpenRouter** reaches the models through one API, so switching between Opus, Sonnet, Haiku or an
+  open model is a setting. Each tester gets their own API key with its own spending cap.
+- **Langfuse** (optional) traces a single question in full: every prompt, tool call, token and
+  timing. It is for debugging an answer, not for keeping records; the trail does that.
+- **GitHub** holds the code, deploys the app, and runs the scheduled jobs that keep it awake.
+- For now, the **developer machine** runs the harvesting pipeline that fills the paper database.
+
+## What else is in here
+
+The parts a first-time visitor would not see from the screen. The details are in the [deployment
+guide](docs/deployment.md), the [development guide](docs/development.md) and the [decision
+records](docs/decisions/).
+
+- **Spend is capped per question, per budget period, and per tester**, each tester through their
+  own key. A question that hits its cap shows what it had found, marked incomplete.
+- **Sign-in and roles.** Five roles, from student to admin; anything not explicitly allowed is
+  refused. Nothing about the reader's role reaches the agent, so an answer cannot depend on who
+  asked. Giving a tester access, or taking it away, is one command that also issues or revokes
+  their capped key.
+- **The sign-in page plays a demo**: real questions put to the agent and their real answers
+  (shortened), typed out and streamed in a loop, so a visitor sees what the app does before signing
+  in.
+- **The app notices log-in difficulties (and alerts of new users).** A daily check lists anyone stuck at sign-in (never
+  got the confirmation email, or confirmed but not yet given access), and an alert says when a new
+  reader first signs in or asks. Both stay silent when there is nothing to report, so their
+  messages are worth opening.
+- **It stays awake on a free tier.** Streamlit hibernates an idle app after 12 hours; a scheduled
+  job visits it with a headless browser and wakes it, and reports once a day if that failed.
+- **About 3,000 tests** drive the real agent with scripted models instead of mocking the
+  framework, and need no API key. Defects are seeded on purpose to check the tests would catch them.
+- **Decisions are written down as they are made:** 90-odd [architecture decision
+  records](docs/decisions/), and the app's behaviour specified in [OpenSpec](openspec/specs/).
+
+## Evaluating the answers
+
+An evaluation harness puts a fixed set of questions to the same agent the web page uses, and
+records everything that came back. Scores are computed afterwards from those records, so a scoring
+rule can be fixed and the whole baseline re-scored without paying for the questions again. The runs
+so far were over the BioNumbers database as ground truth; evaluating over the harvested papers is planned.
+
+**Results never enter the repository.** Every result contains BioNumbers text, whose licence is
+unresolved, so the harness refuses to write anywhere git would track.
+
+### What it measures, by example
+
+Ten questions, three repeats each, five models: run on 2026-09-17 and 2026-09-21 and re-scored
+together on 2026-09-22 ([three models](docs/evaluations/2026-09-17-three-models.md),
+[Nemotron](docs/evaluations/2026-09-21-nemotron.md),
+[re-scoring](docs/evaluations/2026-09-22-expected-list-triage.md)). Questions are tiered: `basic` is
+one property of one organism, `compound` needs a comparison or a calculation.
+
+| | **Opus 4.7** | Nemotron 3 Ultra | Haiku 4.5 | Nemotron 3.5 Lightning | MiniMax M2.7 |
+|---|---:|---:|---:|---:|---:|
+| Expected entries reaching the evidence list | **64%** | 60% | 51% | 34% | 9% |
+| — on `basic` questions | 65% | 61% | **66%** | 46% | 11% |
+| — on `compound` questions | **62%** | 58% | 31% | 18% | 6% |
+| Cost per 30 questions | $2.89 | $0.40 | $0.40 | **$0.05** | $0.29 |
+
+**The model choice is a decision about compound questions.** On lookups Opus, Haiku and Nemotron 3
+Ultra are within five points of each other; on comparisons and calculations Opus reaches 62% and
+Haiku 31%, which is why Opus is the default. **Nemotron 3 Ultra comes close for a seventh of the
+price**: 58% on compound questions for what Haiku costs, though it is weaker on lookups, and that is
+one run.
+
+The figure that is not about coverage: Haiku answered two of six unanswerable questions with a
+quantity instead of saying the corpus does not hold it, which is the failure this app is most meant
+to avoid. Opus and MiniMax declined all six. Nemotron's refusals have to be read rather than counted,
+because they quote the size of what they searched; the findings go through them.
+
+Read no single repeat. The same comparison at one repeat each, that morning, had the two models a
+point apart and looked like a tie.
+
+Earlier runs are in [`docs/evaluations/`](docs/evaluations/). How to run an evaluation is in the
+[development guide](docs/development.md#evaluating-the-answers).
 
 ## What it does not do
 
