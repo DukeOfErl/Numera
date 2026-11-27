@@ -1,9 +1,10 @@
 # Architecture diagrams
 
-Seven diagrams, one story each, following `DIAGRAMS.md`. Sections 1–3b are the ask agent, 4 and 5
-the ingester that builds its corpus, and 6 the evaluation harness that measures it. Colour, where it
-is used, encodes kind of thing: orange for an external input, blue for a deterministic component,
-grey for an output artefact.
+Fourteen diagrams, one story each, following `DIAGRAMS.md`. Sections 1–3d are the ask agent and
+the operations around it, 4 and 5 the ingester that builds its corpus, 6 the evaluation harness that
+measures it, and 7–7d the harvest store: how it is filled, reviewed, and read by the agent. Colour,
+where it is used, encodes kind of thing: orange for an external API, blue for a deterministic
+component, grey for a model call.
 
 ## 1. The agent's graph
 
@@ -47,7 +48,7 @@ the behaviour lives. Their nesting order is the list order, outermost first:
 | 2 | `ToolErrorMiddleware` | wraps tools | Turns a raised tool error into something the agent can react to |
 | 3 | `ToolRetryMiddleware` | wraps tools | Retries a failing tool. **Inner to 2 deliberately** — the other order converts every exception to a `ToolMessage` before retry sees one, so retries silently never happen |
 | 4 | `ModelCallLimitMiddleware` | node hooks | Bounds model calls per question; `exit_behavior="error"` so the limit is named rather than injected as an answer |
-| 5 | `SpendGate` | wraps model | Innermost, so every retry attempt passes through it. Declines the call when a limit is reached — not asking the model to stop, not issuing the request (ADR-0120) |
+| 5 | `SpendGate` | wraps model; also an `after_model` node | Innermost, so every retry attempt passes through it. Declines the call when a limit is reached — not asking the model to stop, not issuing the request (ADR-0120) |
 
 The retrieval bound is not here at all: it lives in the tools themselves
 (`ToolBudget`, ADR-0260), because a model batches several tool calls into one hop
@@ -96,6 +97,7 @@ flowchart TB
         fb[feedback.py]
         tm[trust_marks.py]
         refs[references.py]
+        obj[objections.py]
     end
     subgraph core["Agent core"]
         agent[agent.py]
@@ -136,7 +138,9 @@ flowchart TB
     table --> tm
     tm --> corpus
     sc --> corpus
-    sc -- "the only import of<br/>numera_validator (ADR-1600)" --> bn
+    sc -- "the agent core's only import of<br/>numera_validator (ADR-1600)" --> bn
+    web --> obj
+    obj -. "reviewers' words, only<br/>when a store is loaded" .-> bn
     trace -. "logging handler" .-> store
     store -. "best-effort" .-> pg
     web -- "supplies the engine" --> store
@@ -302,7 +306,7 @@ naming its caller (ADR-0110). Its own modules are section 6. It carries one rule
 the interactive drivers do not — it may not reach for a terminal, or the thing
 meant to run unattended would need one.
 
-## 3d. What happens each hour when a reader may have just arrived
+## 3d. What happens when a reader may have just arrived
 
 ```mermaid
 sequenceDiagram
@@ -313,13 +317,14 @@ sequenceDiagram
     participant Trail as the trail (read-only role)
     participant Issue as the "first use" issue
     actor Operator
-    Tick->>Job: hourly, in the private numera-ops repository
-    Job->>Cmd: the read-only URL, the excluded addresses
+    Tick->>Job: "hourly", which GitHub runs every 4–7 hours, in the private numera-ops repository
+    Job->>Job: the window: since the previous successful run began, plus six minutes
+    Job->>Cmd: the read-only URL, the excluded addresses, the window
     Cmd->>Trail: set transaction read only, then who was first seen in the window
     Trail-->>Cmd: one row per reader, with each first
     alt nobody new
         Cmd-->>Job: nothing at all, exit 0
-        Note over Job,Issue: a quiet hour touches GitHub not at all
+        Note over Job,Issue: a quiet run touches GitHub not at all
     else somebody new
         Cmd-->>Job: one line per reader, to a file
         Job->>Issue: a comment on the one open issue
@@ -330,10 +335,10 @@ sequenceDiagram
     end
 ```
 
-*Caption: the command keeps no state. "First" is read out of the trail each hour,
-which is why the window is longer than the interval: a tick that is delayed leaves a
-gap an exact-hour window would lose a reader in, and a repeat costs a line.
-ADR-1250. The job holds a role that can read one table (ADR-1260), and the report
+*Caption: the command keeps no state. "First" is read out of the trail on each run
+(ADR-1250). GitHub fires this "hourly" schedule only every 4–7 hours, so the window
+is not a fixed length: it reaches back to when the previous successful run began, plus
+six minutes, so nobody falls in a gap and only the overlap repeats (ADR-1290). The job holds a role that can read one table (ADR-1260), and the report
 goes to a file and an issue, never the run's log. Job and issue live in the private
 DukeOfErl/numera-ops, not in this public repository; it runs this repository's
 command unchanged (ADR-2050, superseding ADR-1280).*
@@ -442,21 +447,20 @@ to write if it would (ADR-0170, ADR-0250).
 **What is not here:** the judged layer, which reads a results file and writes
 judgements to a file of its own. It is deferred to `add-judged-faithfulness`.
 
-## 7. The validator prototype: from a question to review items
+## 7. The harvest pipeline: from papers to review items
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Operator
-    participant CLI as numera-validator discover / extract
+    participant CLI as numera-validator harvest / extract
     participant EPMC as Europe PMC
     participant Reader as jats.py
     participant Model as one extraction call
     participant Check as quotes.verify
     participant Second as one second-text call
-    Operator->>CLI: a property question, an organism
-    CLI-->>EPMC: search: open access, research articles, PMCID
-    CLI-->>EPMC: full text per paper (cached on disk)
+    Operator->>CLI: papers chosen by hand (PMCIDs), a scope
+    CLI-->>EPMC: full text per paper, and its licence (cached on disk)
     CLI->>Reader: XML → passages with ids
     alt no methods section
         Reader-->>CLI: NOT_A_RESEARCH_ARTICLE, no call
@@ -472,7 +476,9 @@ sequenceDiagram
 ```
 
 *Caption: one paper's path through a fixed pipeline with at most three model
-calls and no tools (ADR-1520). Every quote a reviewer will see has passed the
+calls and no tools (ADR-1520). Runs start from papers chosen by hand (ADR-0950);
+the first version started from a property question and searched Europe PMC
+(`discover`), which is kept but no longer used. Every quote a reviewer will see has passed the
 checker; a paper ends in exactly one named state (ADR-1530), and a call that would
 cross the $2 ceiling is not made.*
 
@@ -488,8 +494,8 @@ type, or a second legitimate occurrence — is stored on the item and never show
 
 ```mermaid
 flowchart LR
-    papers["Papers chosen by hand<br/><i>harvest --scope biology / biophysics /<br/>chemistry / physics</i>"]
-    extract["extract<br/><i>the pipeline of §7, no question</i>"]
+    papers["Papers chosen by hand<br/><i>harvest --scope biology / organismal /<br/>biophysics / chemistry / physics</i>"]
+    extract["extract<br/><i>the pipeline of §7</i>"]
     items[("review_item<br/>quote-verified")]
     review["review<br/><i>people, or models standing in<br/>for them, labelled simulated</i>"]
     corpus[("BioNumbers corpus<br/><i>external, never committed</i>")]
@@ -513,7 +519,7 @@ sequenceDiagram
     participant Page as review_app.py
     participant Door as web.admit
     participant Store as store.py
-    participant DB as Neon Postgres
+    participant DB as the review store
     Reviewer->>Page: opens the review page
     Page->>Door: which door? (no credential needed)
     Door-->>Page: open, with the account, or closed
@@ -535,7 +541,9 @@ sequenceDiagram
     end
 ```
 
-*Caption: the door is the ask app's, imported; the store is not the trail's. A
+*Caption: the door is the ask app's, imported; the store is not the trail's. It is
+whatever `[connections.review]` or `NUMERA_REVIEW_DB_URL` names: a SQLite file
+locally, Postgres when hosted (ADR-2000). The page has not been deployed yet. A
 decision is two writes on one row (ADR-0970): the choice and the value read go
 in before the stored value is shown, so the reading cannot have been steered by
 it. Each write fails closed (ADR-0930), which is the opposite of the trail's
@@ -586,18 +594,22 @@ flowchart LR
     loader["store_corpus<br/><i>labels · readings · tiers</i>"]
     entry["Entry<br/><i>+ harvest details, + tier</i>"]
     model["the model<br/><i>tier in words</i>"]
-    marks["trust_marks · references<br/><i>stars, # and ⚠; Chicago references</i>"]
+    marks["trust_marks · references<br/><i>stars, sim and ⚠; Chicago references</i>"]
+    obj["objections<br/><i>what objecting reviewers wrote</i>"]
     reader["the reader<br/><i>pill · evidence list · opened entry</i>"]
     store -- "claims, papers,<br/>decisions → tier" --> loader --> entry
     entry -- "get_entry / search" --> model
     entry -- "tier, paper's record" --> marks --> reader
     model -- "[[PMC…-n]]" --> reader
+    store -- "objections" --> obj --> reader
 ```
 
 *Caption: the store's claims and papers become entries, and its decisions become one tier per
 entry by ADR-0990's rule. The model is told the tier in words; the reader is shown it as stars,
 drawn by the application (ADR-1630). The review's own text — the passage that tests a reviewer,
-and anything a reviewer wrote — is put into no entry, so it reaches neither. What is saved about
+and anything a reviewer wrote — is put into no entry, so the model never sees it. What objecting
+reviewers wrote does reach the reader, by its own path (`objections.py`, presentation, ADR-1630):
+in the Trust cell and the opened entry. What is saved about
 an answer is the store's item id beside each label (ADR-1610). A paper's record, with its
 authors, goes the same way as the tier: formatted for the reader (ADR-1640), never shown to the
 model, which is told to cite entries and name no paper.*
