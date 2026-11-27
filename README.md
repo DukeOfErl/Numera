@@ -80,15 +80,15 @@ one is calling, so it cannot behave one way for a person and another for a test.
 
 ### Where the numbers come from
 
-The first version went from a question to the literature: search for papers, then extract the
-number. It found the right paper 4 times in 32, because a paper that mentions a property and an
-organism rarely measures them. So the pipeline turned round. **Papers are harvested ahead of any
-question**: a model reads each open-access paper once and extracts the numbers a scientist outside
-the study would want to reuse, with the exact sentence or table cell each came from. Every quote is
-then checked mechanically against the paper's text, and a value whose quote cannot be found is
-dropped. So far that is about 450 values from 48 papers, across cell biology, physiology,
-biophysics, chemistry and physics, beside 420 curated BioNumbers entries on yeast and the
-cytoskeleton.
+**Papers are harvested ahead of any question**: a model reads each open-access paper once and
+extracts the numbers a scientist outside the study would want to reuse, with the exact sentence or
+table cell each came from (reading figures is a future feature). Every quote is then checked
+mechanically against the paper's text, and a value whose quote cannot be found is dropped.
+Harvesting comes before the question because searching per question did not work: a paper that
+mentions a property and an organism rarely measures them, and a first version that searched found
+the right paper 4 times in 32. For the first prototype, this includes about 450 values from 48
+papers, across cell biology, physiology, biophysics, chemistry and physics, beside 420 curated
+BioNumbers entries on yeast and the cytoskeleton.
 
 **Trust is earned afterwards, through review.** The review screen is built so that clicking
 "approve" is not enough. The reviewer first sees two passages from the paper, with nothing
@@ -160,7 +160,7 @@ scratch. Each service does one job, and each was picked because its free tier co
 - **Langfuse** (optional) traces a single question in full: every prompt, tool call, token and
   timing. It is for debugging an answer, not for keeping records; the trail does that.
 - **GitHub** holds the code, deploys the app, and runs the scheduled jobs that keep it awake.
-- The **developer machine** runs the harvesting pipeline that fills the paper database.
+- For now, the **developer machine** runs the harvesting pipeline that fills the paper database.
 
 ## What else is in here
 
@@ -177,7 +177,7 @@ records](docs/decisions/).
 - **The sign-in page plays a demo**: real questions put to the agent and their real answers
   (shortened), typed out and streamed in a loop, so a visitor sees what the app does before signing
   in.
-- **The app notices people who cannot get in.** A daily check lists anyone stuck at sign-in (never
+- **The app notices log-in difficulties (and alerts of new users).** A daily check lists anyone stuck at sign-in (never
   got the confirmation email, or confirmed but not yet given access), and an alert says when a new
   reader first signs in or asks. Both stay silent when there is nothing to report, so their
   messages are worth opening.
@@ -193,7 +193,7 @@ records](docs/decisions/).
 An evaluation harness puts a fixed set of questions to the same agent the web page uses, and
 records everything that came back. Scores are computed afterwards from those records, so a scoring
 rule can be fixed and the whole baseline re-scored without paying for the questions again. The runs
-so far were over the BioNumbers database; evaluating over the harvested papers is planned.
+so far were over the BioNumbers database as ground truth; evaluating over the harvested papers is planned.
 
 **Results never enter the repository.** Every result contains BioNumbers text, whose licence is
 unresolved, so the harness refuses to write anywhere git would track.
