@@ -4,10 +4,11 @@
 numbers like these, and the usual way to get one out of a language model is to ask and hope. A
 plausible number arrives with no way to tell whether it was recalled, interpolated, or invented.
 
-Numera answers only from numbers it can point to: values extracted from open-access papers, each
-with the passage it came from, and the hand-curated [BioNumbers](https://bionumbers.hms.harvard.edu)
-database. Every number in an answer cites the entry behind it, and every entry shows how far it has
-been checked. Where its sources do not cover a question, it says so rather than answering from the
+Numera answers only from numbers it can point to, and **rates how far each one has been checked**.
+Citing a source is not enough on its own: a number extracted from a paper can still be misread. So
+every number in an answer cites its entry, and every entry carries a trust rating: hand-curated
+[BioNumbers](https://bionumbers.hms.harvard.edu) values at the top, then values extracted from
+open-access papers and approved by a reviewer, down to ones nobody has checked yet. Where its sources do not cover a question, it says so rather than answering from the
 model's own knowledge. It is for people who need a figure they can defend.
 
 It has two sides:
